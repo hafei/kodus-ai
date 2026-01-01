@@ -1,5 +1,89 @@
 ---
-description:
-globs:
+description: Build and test commands for Kodus AI codebase
+globs: ["**/*.ts"]
 alwaysApply: true
 ---
+
+## Development Commands
+
+```bash
+# First-time setup
+yarn setup
+
+# Start all services in Docker
+yarn docker:start
+
+# Start with local databases
+yarn docker:up --profile local-db
+
+# Stop services
+yarn docker:down
+
+# View logs
+yarn docker:logs
+
+# Health check
+yarn dev:health-check
+```
+
+## Build & Test Commands
+
+```bash
+# Build all
+yarn build
+
+# Build individual app
+yarn build:api
+
+# Run tests
+yarn test
+
+# Run tests in watch mode
+yarn test:watch
+
+# Type check
+yarn typecheck
+
+# Lint
+yarn lint
+
+# Format
+yarn format
+```
+
+## Database Commands
+
+```bash
+# Generate migration
+yarn migration:generate MigrationName
+
+# Run migrations
+yarn migration:run
+
+# Revert migration
+yarn migration:revert
+
+# Seed database
+yarn seed
+```
+
+## Code Quality
+
+Always run `yarn lint` and `yarn typecheck` before committing.
+Tests run automatically on PR via GitHub Actions.
+
+## Testing
+
+Tests require `--runInBand --detectOpenHandles --forceExit` flags (included in `yarn test`).
+
+## Docker
+
+Use `CHOKIDAR_USEPOLLING=true` for file watching in Docker containers.
+Set `NODE_OPTIONS=--max-old-space-size=4096` for memory management.
+
+## Package Development
+
+For `packages/kodus-common` and `packages/kodus-flow` development:
+```bash
+yarn dev:yalc
+```
