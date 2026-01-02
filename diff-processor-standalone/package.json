@@ -1,0 +1,23 @@
+{
+    "name": "diff-processor-standalone",
+    "version": "1.0.0",
+    "description": "Kodus AI Diff 处理核心算法 - 简化可移植版本",
+    "main": "src/patch-processor.ts",
+    "scripts": {
+        "test": "npx ts-node src/test-patch-processor.ts",
+        "build": "tsc",
+        "start": "node dist/test-patch-processor.js"
+    },
+    "keywords": [
+        "diff",
+        "patch",
+        "code-review",
+        "llm"
+    ],
+    "license": "MIT",
+    "devDependencies": {
+        "typescript": "^5.0.0",
+        "ts-node": "^10.9.0",
+        "@types/node": "^20.0.0"
+    }
+}
