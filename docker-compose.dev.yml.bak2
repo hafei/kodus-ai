@@ -133,13 +133,13 @@ services:
     rabbitmq:
         profiles:
             - local-db
-        image: rabbitmq-delayed
+        image: rabbitmq:3-management
         container_name: rabbitmq
         ports:
             - '5672:5672'
             - '15672:15672'
         environment:
-            RABBITMQ_DEFAULT_USER: ${API_RABBITMQ_USER:-    }
+            RABBITMQ_DEFAULT_USER: ${API_RABBITMQ_USER:-user}
             RABBITMQ_DEFAULT_PASS: ${API_RABBITMQ_PASSWORD:-password}
         volumes:
             - rabbitmq_data:/var/lib/rabbitmq
