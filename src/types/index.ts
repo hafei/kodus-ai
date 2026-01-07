@@ -1,5 +1,14 @@
-export type Severity = 'info' | 'warning' | 'error';
-export type OutputFormat = 'terminal' | 'json' | 'markdown';
+export type Severity = 'info' | 'warning' | 'error' | 'critical';
+export type OutputFormat = 'terminal' | 'json' | 'markdown' | 'prompt';
+export type IssueCategory =
+  | 'security_vulnerability'
+  | 'performance'
+  | 'code_quality'
+  | 'best_practices'
+  | 'style'
+  | 'bug'
+  | 'complexity'
+  | 'maintainability';
 
 export interface AuthResponse {
   accessToken: string;
@@ -33,6 +42,15 @@ export interface ReviewConfig {
   };
   rulesOnly?: boolean;
   fast?: boolean;
+  files?: FileContent[];
+}
+
+export interface CodeFix {
+  type: 'replace' | 'insert' | 'delete';
+  startLine: number;
+  endLine: number;
+  oldCode: string;
+  newCode: string;
 }
 
 export interface ReviewIssue {
@@ -40,9 +58,13 @@ export interface ReviewIssue {
   line: number;
   endLine?: number;
   severity: Severity;
+  category?: IssueCategory;
   message: string;
   suggestion?: string;
+  recommendation?: string;
   ruleId?: string;
+  fixable?: boolean;
+  fix?: CodeFix;
 }
 
 export interface ReviewResult {
@@ -91,6 +113,20 @@ export interface FileDiff {
   diff: string;
 }
 
+export interface FileContent {
+  path: string;
+  content: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
+  diff: string;
+}
+
+export interface ProjectContext {
+  cursorRules?: string;
+  claudeRules?: string;
+  kodusRules?: string;
+  customContext?: string;
+}
+
 export interface GlobalOptions {
   format: OutputFormat;
   output?: string;
@@ -98,6 +134,10 @@ export interface GlobalOptions {
   quiet: boolean;
   org?: string;
   repo?: string;
+  interactive?: boolean;
+  promptOnly?: boolean;
+  fix?: boolean;
+  context?: string;
 }
 
 export class ApiError extends Error {

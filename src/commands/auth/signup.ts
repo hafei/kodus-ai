@@ -2,6 +2,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { authService } from '../../services/auth.service.js';
+import { telemetryService } from '../../services/telemetry.service.js';
 
 export async function signupAction(): Promise<void> {
   const spinner = ora();
@@ -54,8 +55,24 @@ export async function signupAction(): Promise<void> {
     spinner.succeed(chalk.green('Account created!'));
     console.log(chalk.dim('\nPlease check your email to verify your account.'));
 
+    // Track successful signup
+    telemetryService.track('auth_signup_success');
+
   } catch (error) {
     spinner.fail(chalk.red('Signup failed'));
+
+    // Track failed signup
+    try {
+      await telemetryService.track('auth_signup_failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } catch (telemetryError) {
+      // Silently ignore telemetry errors to not hide the original error
+      if (process.env.KODUS_VERBOSE) {
+        console.log(chalk.dim('Debug - Telemetry failed'));
+      }
+    }
+
     if (error instanceof Error) {
       console.error(chalk.red(error.message));
     }

@@ -22,9 +22,15 @@ class ReviewService {
     return api.config.get(token, effectiveOrg, effectiveRepo);
   }
 
-  async analyze(diff: string, config?: RemoteConfig, rulesOnly?: boolean, fast?: boolean): Promise<ReviewResult> {
+  async analyze(
+    diff: string,
+    config?: RemoteConfig,
+    rulesOnly?: boolean,
+    fast?: boolean,
+    options?: { files?: string[]; staged?: boolean; commit?: string; branch?: string }
+  ): Promise<ReviewResult> {
     const token = await authService.getValidToken();
-    
+
     const reviewConfig: ReviewConfig | undefined = config
       ? {
           severity: config.severity,
@@ -33,6 +39,18 @@ class ReviewService {
           fast,
         }
       : undefined;
+
+    // Se não for modo fast, incluir arquivos completos
+    if (reviewConfig && !fast) {
+      reviewConfig.files = await gitService.getFullFileContents(
+        options?.files,
+        {
+          staged: options?.staged,
+          commit: options?.commit,
+          branch: options?.branch,
+        }
+      );
+    }
 
     return api.review.analyze(diff, token, reviewConfig);
   }

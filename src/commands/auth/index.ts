@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import { loginAction } from './login.js';
-import { signupAction } from './signup.js';
 import { logoutAction } from './logout.js';
 import { statusAction } from './status.js';
 import { tokenAction } from './token.js';
@@ -14,11 +13,6 @@ authCommand
   .option('-e, --email <email>', 'Email address')
   .option('-p, --password <password>', 'Password')
   .action(loginAction);
-
-authCommand
-  .command('signup')
-  .description('Create a new account')
-  .action(signupAction);
 
 authCommand
   .command('logout')

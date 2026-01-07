@@ -16,7 +16,7 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -27,25 +27,49 @@ async function request<T>(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'Request failed' })) as { message?: string };
-    throw new ApiError(response.status, errorData.message || 'Request failed');
+    const errorMessage = errorData.message || `Request failed with status ${response.status}`;
+
+    if (process.env.KODUS_VERBOSE) {
+      console.error('API Error:', { status: response.status, url, errorData });
+    }
+
+    throw new ApiError(response.status, errorMessage);
   }
 
-  return response.json() as Promise<T>;
+  const json = await response.json() as any;
+
+  // API retorna { data: {...}, statusCode, type }
+  // Extrair apenas o .data se existir
+  if (json && typeof json === 'object' && 'data' in json) {
+    return json.data as T;
+  }
+
+  return json as T;
 }
 
 class RealAuthApi implements IAuthApi {
   async login(email: string, password: string): Promise<AuthResponse> {
-    return request<AuthResponse>('/auth/login', {
+    const response = await request<{ accessToken: string; refreshToken: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
+
+    // Mapear resposta da API para formato esperado pelo CLI
+    return {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      expiresIn: 3600, // Default: 1 hora
+      user: {
+        id: 'unknown', // API não retorna user info no login
+        email,
+        orgs: [],
+      },
+    };
   }
 
   async signup(email: string, password: string): Promise<AuthResponse> {
-    return request<AuthResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
+    // Signup não é permitido via CLI - só via app.kodus.io
+    throw new Error('Signup is not available via CLI. Please sign up at https://app.kodus.io');
   }
 
   async refresh(refreshToken: string): Promise<AuthResponse> {
@@ -75,15 +99,40 @@ class RealAuthApi implements IAuthApi {
   }
 
   async verify(accessToken: string): Promise<{ valid: boolean; user?: any }> {
+    // SECURITY NOTE: This performs basic client-side JWT validation without signature verification.
+    // This is acceptable for a CLI client where:
+    // 1. The token is securely stored locally and only accessed by the user
+    // 2. The API validates the token signature on every request
+    // 3. We only check format and expiration to avoid unnecessary API calls
+    //
+    // For production security, all authorization decisions MUST be made by the API
+    // after validating the token signature.
+
+    if (!accessToken || !accessToken.startsWith('eyJ')) {
+      return { valid: false };
+    }
+
     try {
-      const response = await request<{ id: string; email: string; orgs: string[] }>('/auth/me', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      // Decode JWT payload (without signature validation)
+      const parts = accessToken.split('.');
+      if (parts.length !== 3) {
+        return { valid: false };
+      }
+
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+
+      // Check expiration
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        return { valid: false };
+      }
+
       return {
         valid: true,
-        user: response,
+        user: {
+          id: payload.sub || 'unknown',
+          email: payload.email || 'unknown',
+          orgs: [],
+        },
       };
     } catch (error) {
       if (process.env.KODUS_VERBOSE) {
@@ -96,7 +145,24 @@ class RealAuthApi implements IAuthApi {
 
 class RealReviewApi implements IReviewApi {
   async analyze(diff: string, accessToken: string, config?: ReviewConfig): Promise<ReviewResult> {
-    return request<ReviewResult>('/cli/review', {
+    // SECURITY NOTE: We extract organizationId from JWT and send as teamId query param.
+    // The backend MUST validate the JWT signature and verify that the authenticated user
+    // has permission to access this team. The backend should NOT trust the teamId parameter
+    // alone - it should cross-check it against the validated token claims.
+
+    // Extract organizationId from JWT
+    let teamId: string | undefined;
+    try {
+      const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString());
+      teamId = payload.organizationId;
+    } catch (error) {
+      // Ignore if cannot decode
+    }
+
+    // Build URL with teamId query string
+    const endpoint = teamId ? `/cli/review?teamId=${encodeURIComponent(teamId)}` : '/cli/review';
+
+    return request<ReviewResult>(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

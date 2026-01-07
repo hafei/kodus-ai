@@ -1,5 +1,7 @@
 import { simpleGit, SimpleGit } from 'simple-git';
-import type { FileDiff } from '../types/index.js';
+import fs from 'fs/promises';
+import path from 'path';
+import type { FileDiff, FileContent } from '../types/index.js';
 
 class GitService {
   private git: SimpleGit;
@@ -65,6 +67,12 @@ class GitService {
     return this.git.diff([`${commitSha}^`, commitSha]);
   }
 
+  async getDiffForBranch(branchName: string): Promise<string> {
+    // Compara branch atual contra branch especificado (ex: main)
+    // Usa three-dot notation pra pegar diff desde o merge base
+    return this.git.diff([`${branchName}...HEAD`]);
+  }
+
   async getDiffForFiles(files: string[]): Promise<string> {
     const diffs: string[] = [];
     
@@ -119,6 +127,84 @@ class GitService {
     }
 
     return files;
+  }
+
+  async getFullFileContents(explicitFiles?: string[], options?: {
+    staged?: boolean;
+    commit?: string;
+    branch?: string;
+  }): Promise<FileContent[]> {
+    // 1. Identificar arquivos a processar
+    let filesToRead: string[];
+
+    // Fetch modified files once upfront to avoid N+1 performance issue
+    const allModifiedFiles = await this.getModifiedFiles();
+    const modifiedFilesMap = new Map(allModifiedFiles.map(f => [f.file, f]));
+
+    if (explicitFiles && explicitFiles.length > 0) {
+      // Arquivos explícitos fornecidos
+      filesToRead = explicitFiles;
+    } else {
+      // Detectar automaticamente via getModifiedFiles()
+      filesToRead = allModifiedFiles.map(f => f.file);
+    }
+
+    // 2. Para cada arquivo, ler conteúdo E diff
+    const fileContents: FileContent[] = [];
+
+    for (const filePath of filesToRead) {
+      try {
+        // Determinar status do arquivo
+        const fileInfo = modifiedFilesMap.get(filePath);
+        const status = fileInfo?.status || 'modified';
+
+        // Pular arquivos deletados (não tem conteúdo)
+        if (status === 'deleted') continue;
+
+        // Pegar diff específico desse arquivo
+        let fileDiff: string;
+        if (options?.branch) {
+          // Diff entre branch e HEAD
+          fileDiff = await this.git.diff([`${options.branch}...HEAD`, '--', filePath]);
+        } else if (options?.commit) {
+          // Diff do commit específico
+          fileDiff = await this.git.diff([`${options.commit}^`, options.commit, '--', filePath]);
+        } else if (options?.staged) {
+          // Diff staged apenas
+          fileDiff = await this.git.diff(['--cached', '--', filePath]);
+        } else {
+          // Diff completo (staged + unstaged)
+          const stagedDiff = await this.git.diff(['--cached', '--', filePath]);
+          const unstagedDiff = await this.git.diff(['--', filePath]);
+          fileDiff = `${stagedDiff}\n${unstagedDiff}`.trim();
+        }
+
+        // Ler conteúdo do arquivo
+        let content: string;
+
+        if (options?.commit) {
+          // Ler do commit específico
+          content = await this.git.show([`${options.commit}:${filePath}`]);
+        } else {
+          // Ler do working tree (fs.readFile)
+          // Para branch comparison, lê a versão atual (HEAD)
+          const fullPath = path.resolve(filePath);
+          content = await fs.readFile(fullPath, 'utf-8');
+        }
+
+        fileContents.push({
+          path: filePath,
+          content,
+          status,
+          diff: fileDiff,
+        });
+      } catch (error) {
+        // Arquivo pode ser binário ou inacessível - pular silenciosamente
+        continue;
+      }
+    }
+
+    return fileContents;
   }
 
   async getCurrentBranch(): Promise<string> {

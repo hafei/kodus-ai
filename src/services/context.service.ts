@@ -1,0 +1,120 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { simpleGit } from 'simple-git';
+import type { ProjectContext } from '../types/index.js';
+
+/**
+ * Context Service - Reads project context files
+ * Similar to CodeRabbit CLI reading .cursorrules, claude.md, etc.
+ */
+class ContextService {
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async readFile(filePath: string): Promise<string | undefined> {
+    try {
+      const exists = await this.fileExists(filePath);
+      if (!exists) return undefined;
+
+      const content = await fs.readFile(filePath, 'utf-8');
+      return content.trim();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async getRepoRoot(): Promise<string> {
+    try {
+      const git = simpleGit();
+      const root = await git.revparse(['--show-toplevel']);
+      return root.trim();
+    } catch {
+      // Fallback to current directory
+      return process.cwd();
+    }
+  }
+
+  async readProjectContext(customContextPath?: string): Promise<ProjectContext> {
+    const repoRoot = await this.getRepoRoot();
+    const context: ProjectContext = {};
+
+    // Read .cursorrules
+    const cursorRulesPath = path.join(repoRoot, '.cursorrules');
+    context.cursorRules = await this.readFile(cursorRulesPath);
+
+    // Read claude.md or .claude.md
+    const claudeMdPath = path.join(repoRoot, 'claude.md');
+    const dotClaudeMdPath = path.join(repoRoot, '.claude.md');
+    context.claudeRules = await this.readFile(claudeMdPath) || await this.readFile(dotClaudeMdPath);
+
+    // Read .kodus.md or .kodus/rules.md
+    const kodusMdPath = path.join(repoRoot, '.kodus.md');
+    const kodusRulesPath = path.join(repoRoot, '.kodus', 'rules.md');
+    context.kodusRules = await this.readFile(kodusMdPath) || await this.readFile(kodusRulesPath);
+
+    // Read custom context file if specified
+    if (customContextPath) {
+      const customPath = path.isAbsolute(customContextPath)
+        ? customContextPath
+        : path.join(repoRoot, customContextPath);
+      context.customContext = await this.readFile(customPath);
+    }
+
+    return context;
+  }
+
+  /**
+   * Formats project context for inclusion in review requests
+   */
+  formatContextForReview(context: ProjectContext): string {
+    const parts: string[] = [];
+
+    if (context.cursorRules) {
+      parts.push('=== Cursor Rules (.cursorrules) ===');
+      parts.push(context.cursorRules);
+      parts.push('');
+    }
+
+    if (context.claudeRules) {
+      parts.push('=== Claude Rules (claude.md) ===');
+      parts.push(context.claudeRules);
+      parts.push('');
+    }
+
+    if (context.kodusRules) {
+      parts.push('=== Kodus Rules (.kodus.md) ===');
+      parts.push(context.kodusRules);
+      parts.push('');
+    }
+
+    if (context.customContext) {
+      parts.push('=== Custom Context ===');
+      parts.push(context.customContext);
+      parts.push('');
+    }
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Enriches diff with project context
+   */
+  async enrichDiffWithContext(diff: string, customContextPath?: string): Promise<string> {
+    const context = await this.readProjectContext(customContextPath);
+    const formattedContext = this.formatContextForReview(context);
+
+    if (!formattedContext) {
+      return diff;
+    }
+
+    return `${formattedContext}\n=== Code Changes ===\n${diff}`;
+  }
+}
+
+export const contextService = new ContextService();

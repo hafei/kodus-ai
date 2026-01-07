@@ -3,6 +3,7 @@ import { reviewCommand } from './commands/review.js';
 import { authCommand } from './commands/auth/index.js';
 import { configCommand } from './commands/config.js';
 import { upgradeCommand } from './commands/upgrade.js';
+import { telemetryCommand } from './commands/telemetry.js';
 
 const program = new Command();
 
@@ -21,6 +22,7 @@ program.addCommand(reviewCommand);
 program.addCommand(authCommand);
 program.addCommand(configCommand);
 program.addCommand(upgradeCommand);
+program.addCommand(telemetryCommand);
 
 export { program };
 
