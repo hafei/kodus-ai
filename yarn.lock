@@ -359,7 +359,7 @@
   resolved "https://registry.npmjs.org/@borewit/text-codec/-/text-codec-0.2.1.tgz#5d171538907a8cb395fdc2eb5e8f7947d96c7f2f"
   integrity sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==
 
-"@cacheable/utils@^2.3.2":
+"@cacheable/utils@^2.3.3":
   version "2.3.3"
   resolved "https://registry.npmjs.org/@cacheable/utils/-/utils-2.3.3.tgz#56f0c0a3b2cad85f32ee2de3c73ff05d455e2c6c"
   integrity sha512-JsXDL70gQ+1Vc2W/KUFfkAJzgb4puKwwKehNLuB+HrNKWf91O736kGfxn4KujXCCSuh6mRRL4XEB0PkAFjWS0A==
@@ -616,7 +616,7 @@
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
 
-"@faker-js/faker@^10.1.0":
+"@faker-js/faker@^10.2.0":
   version "10.2.0"
   resolved "https://registry.npmjs.org/@faker-js/faker/-/faker-10.2.0.tgz#91028d4086969825795de331c305e8b91414bcb7"
   integrity sha512-rTXwAsIxpCqzUnZvrxVh3L0QA0NzToqWBLAhV+zDV3MIIwiQhAZHMdPCIaj5n/yADu/tyk12wIPgL6YHGXJP+g==
@@ -1275,20 +1275,20 @@
   resolved "https://registry.npmjs.org/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
-"@langchain/anthropic@^1.3.3":
-  version "1.3.7"
-  resolved "https://registry.npmjs.org/@langchain/anthropic/-/anthropic-1.3.7.tgz#a0a51faea2b6a46ddb42c9fd82f58af1343f24a3"
-  integrity sha512-tuj877NsygqpQXdv1QCnhcycRNntZnv8S86oY4/0TEkq4aKqyB8VfCcKxcf03EdKufdPkF6phmWY59czV2CM0g==
+"@langchain/anthropic@^1.3.8":
+  version "1.3.8"
+  resolved "https://registry.npmjs.org/@langchain/anthropic/-/anthropic-1.3.8.tgz#b1e534a699e4912624efcadc09f97e0f518038f2"
+  integrity sha512-liCcRIkoA07s7bVbGpimCwGSIN8JfMdhV+7fji/7jyPI5P6T2TM1vTIL/D6cGMcEiq7DKQK8mTkmO98cv/DpPA==
   dependencies:
     "@anthropic-ai/sdk" "^0.71.0"
     zod "^3.25.76 || ^4"
 
-"@langchain/classic@1.0.7":
-  version "1.0.7"
-  resolved "https://registry.npmjs.org/@langchain/classic/-/classic-1.0.7.tgz#e55470dd0b96df48bcb4740dc9455d89a9d1cb8d"
-  integrity sha512-Na8d3Jg/5YwwB2V5sg2Ic9uKcn2ZNqiN1XgxItb/gRgOXrGZ2E4f3eCOAQQlbjpsU3wYhiRCE1e56SGq3NhGPw==
+"@langchain/classic@1.0.9":
+  version "1.0.9"
+  resolved "https://registry.npmjs.org/@langchain/classic/-/classic-1.0.9.tgz#bdb19539db47469370727f32e1bf63c52777426b"
+  integrity sha512-UQ6JFLvPPPHHq+c3bM3UjadsugYP013qzk6FMoULpj2oNsVU4Fd66R+V6p1R7gQQRmN4Y7DWRLePn2NzgVYFIA==
   dependencies:
-    "@langchain/openai" "1.2.0"
+    "@langchain/openai" "1.2.2"
     "@langchain/textsplitters" "1.0.1"
     handlebars "^4.7.8"
     js-yaml "^4.1.1"
@@ -1300,13 +1300,13 @@
   optionalDependencies:
     langsmith ">=0.4.0 <1.0.0"
 
-"@langchain/community@1.1.1":
-  version "1.1.1"
-  resolved "https://registry.npmjs.org/@langchain/community/-/community-1.1.1.tgz#26ec003af4dbb6e7f2eb49a87e428d1283341c7d"
-  integrity sha512-sIgINJN7lW3HDayp8P/9ly5dLsvEA4etorAeIB6l49eY8ECQR4g5rwjxPFoG2Vm8SsboW1cJHwOVSxelh/Kw9Q==
+"@langchain/community@1.1.4":
+  version "1.1.4"
+  resolved "https://registry.npmjs.org/@langchain/community/-/community-1.1.4.tgz#11d09daf5a7a069f0709b0887a930b68d05176ed"
+  integrity sha512-rTy6qQcBmYpmu4ZtICpyLMpZd5EVtkTdCWvmkWcu9BfeKl9u1b+4w54sYRHGMxXzS059xy4hr9eXqBPZGVlo9w==
   dependencies:
-    "@langchain/classic" "1.0.7"
-    "@langchain/openai" "1.2.0"
+    "@langchain/classic" "1.0.9"
+    "@langchain/openai" "1.2.2"
     binary-extensions "^2.2.0"
     flat "^5.0.2"
     js-yaml "^4.1.1"
@@ -1314,10 +1314,10 @@
     uuid "^10.0.0"
     zod "^3.25.76 || ^4"
 
-"@langchain/core@^1.1.8":
-  version "1.1.12"
-  resolved "https://registry.npmjs.org/@langchain/core/-/core-1.1.12.tgz#cd7aad4d118a7808ed66adf138d4a774816d0280"
-  integrity sha512-sHWLvhyLi3fntlg3MEPB89kCjxEX7/+imlIYJcp6uFGCAZfGxVWklqp22HwjT1szorUBYrkO8u0YA554ReKxGQ==
+"@langchain/core@^1.1.13":
+  version "1.1.13"
+  resolved "https://registry.npmjs.org/@langchain/core/-/core-1.1.13.tgz#a4962d469d1b9bc98ea44851edc3198dc56fc127"
+  integrity sha512-CmTES4DNfNs7PisGm/is4RxOf1NAWCkhi+RrBBHb/gB5nZVFd+dfmXSomKoiBQ1DOdCUz1k9RX4DzSUbwg1swg==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
@@ -1330,32 +1330,32 @@
     uuid "^10.0.0"
     zod "^3.25.76 || ^4"
 
-"@langchain/google-common@2.1.7":
-  version "2.1.7"
-  resolved "https://registry.npmjs.org/@langchain/google-common/-/google-common-2.1.7.tgz#76eed712a4b4bf69b12128d8c0a5e704c9224264"
-  integrity sha512-iQB1V3QQM4+GyWGfQcoPemoW6SLtko4vP0qRbJvIJTX8bDl58J4X0XREH6cDam9ApgJq/OHIYUStia77rRO+XQ==
+"@langchain/google-common@2.1.8":
+  version "2.1.8"
+  resolved "https://registry.npmjs.org/@langchain/google-common/-/google-common-2.1.8.tgz#e4c97ebfff2279d47f96d9ceb01635ef224fcd3d"
+  integrity sha512-He4i2MXlhV+L9VWJ9E8qG9xQwABlHDk9KoL+3TbAsdlkQ/6Zc0PK+6iO5y700x2rt3/JqcyLcJhqENShYclYTA==
   dependencies:
     uuid "^10.0.0"
 
-"@langchain/google-gauth@2.1.7", "@langchain/google-gauth@^2.1.3":
-  version "2.1.7"
-  resolved "https://registry.npmjs.org/@langchain/google-gauth/-/google-gauth-2.1.7.tgz#d58cd827fad5b488abc606a4d6aad274fd2ec24c"
-  integrity sha512-MT4E7ij0saxWFC5L/M9QMcEezN+WJRIu/Unw/+91R4kjf96+hiwUXoiIrFOlbZjOw9h2fYKFnh5m52rDimVhHQ==
+"@langchain/google-gauth@2.1.8", "@langchain/google-gauth@^2.1.8":
+  version "2.1.8"
+  resolved "https://registry.npmjs.org/@langchain/google-gauth/-/google-gauth-2.1.8.tgz#a92b8a587693b1a6b7fa5d09614ddbab93ae513c"
+  integrity sha512-TBaHduBEJ/RRsYmaM9fE2U3fIT2NNV7cp8oQ9Q8cjN7UM5IKhMG0p+f7MhkeVOmlc05Lt8MRz0wrxknPMCjrrg==
   dependencies:
-    "@langchain/google-common" "2.1.7"
+    "@langchain/google-common" "2.1.8"
     google-auth-library "^10.1.0"
 
-"@langchain/google-vertexai@^2.1.3":
-  version "2.1.7"
-  resolved "https://registry.npmjs.org/@langchain/google-vertexai/-/google-vertexai-2.1.7.tgz#0a383ddaa80804462f0201f8203a42c00a9e1a7e"
-  integrity sha512-/KYe3fETM0xheu1bYmZfMmZolRyp+S5RYFR1IbGUdOb8jrmOXge9w5Q9wJEcPfhspZT3TleghStg8Jjhi6bX7w==
+"@langchain/google-vertexai@^2.1.8":
+  version "2.1.8"
+  resolved "https://registry.npmjs.org/@langchain/google-vertexai/-/google-vertexai-2.1.8.tgz#33f788c3ea8963ad379a244595bd183e54bd42de"
+  integrity sha512-sgCCIS+ffHxP/tOGkQ9kPOB4hRvJe0lpbRmf9dCXD0SRj0DtWaxkgmzaz/pXje5Nj6vAYFFNPBoCbZNlH8Ic2Q==
   dependencies:
-    "@langchain/google-gauth" "2.1.7"
+    "@langchain/google-gauth" "2.1.8"
 
-"@langchain/openai@1.2.0":
-  version "1.2.0"
-  resolved "https://registry.npmjs.org/@langchain/openai/-/openai-1.2.0.tgz#18ea4258192d81010492fb89d7816b877a77b3ef"
-  integrity sha512-r2g5Be3Sygw7VTJ89WVM/M94RzYToNTwXf8me1v+kgKxzdHbd/8XPYDFxpXEp3REyPgUrtJs+Oplba9pkTH5ug==
+"@langchain/openai@1.2.2":
+  version "1.2.2"
+  resolved "https://registry.npmjs.org/@langchain/openai/-/openai-1.2.2.tgz#693e84b4f23d3d0c41a45ecad21af3a22bfb59fa"
+  integrity sha512-ByGtj9nJlyL2UPR7BAxtM34g8JA0qEfDKZq7ZisLW23ju+da1ZRAKogoEqoEHHSxl5fAt2LXcydsIYx0qgCDgg==
   dependencies:
     js-tiktoken "^1.0.12"
     openai "^6.10.0"
@@ -1380,7 +1380,7 @@
   dependencies:
     "@lukeed/csprng" "^1.1.0"
 
-"@modelcontextprotocol/sdk@^1.25.1":
+"@modelcontextprotocol/sdk@^1.25.1", "@modelcontextprotocol/sdk@^1.25.2":
   version "1.25.2"
   resolved "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.25.2.tgz#2284560b4e044b4ce5f328ee180931110cb8c5cf"
   integrity sha512-LZFeo4F9M5qOhC/Uc1aQSrBHxMrvxett+9KLHt7OhcExtoiRN9DKgbZffMP/nxjutWDQpfMDfP3nkHI4X9ijww==
@@ -1981,10 +1981,13 @@
   resolved "https://registry.npmjs.org/@opentelemetry/api/-/api-1.9.0.tgz#d03eba68273dc0f7509e2a3d5cba21eae10379fe"
   integrity sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==
 
-"@opentelemetry/context-async-hooks@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/context-async-hooks/-/context-async-hooks-2.2.0.tgz#5465f6fad6350f52cf9d95a92907a3a464d50644"
-  integrity sha512-qRkLWiUEZNAmYapZ7KGS5C4OmBLcP/H2foXeOEaowYCR0wi89fHejrfYfbuLVCMLp/dWZXKvQusdbUEZjERfwQ==
+"@opentelemetry/configuration@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/configuration/-/configuration-0.209.0.tgz#1b38bf570af2a3e025171e166e128bf7b526a983"
+  integrity sha512-naJLdv5PDvz2CEZh0XfLM5vZgPc/y+Xr4UW+Gj6jm3AkcGaknIUHSD54lA3G3s6Y32mkQbhlxMTbM97KUwsogQ==
+  dependencies:
+    "@opentelemetry/core" "2.3.0"
+    yaml "^2.0.0"
 
 "@opentelemetry/context-async-hooks@2.3.0", "@opentelemetry/context-async-hooks@^2.2.0":
   version "2.3.0"
@@ -2005,131 +2008,131 @@
   dependencies:
     "@opentelemetry/semantic-conventions" "^1.29.0"
 
-"@opentelemetry/exporter-logs-otlp-grpc@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-grpc/-/exporter-logs-otlp-grpc-0.208.0.tgz#787034569b3030c92da236284b3a62f66e344e78"
-  integrity sha512-AmZDKFzbq/idME/yq68M155CJW1y056MNBekH9OZewiZKaqgwYN4VYfn3mXVPftYsfrCM2r4V6tS8H2LmfiDCg==
+"@opentelemetry/exporter-logs-otlp-grpc@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-grpc/-/exporter-logs-otlp-grpc-0.209.0.tgz#fa3911fb5d0f8f3a210bdb335bb4a35142eed868"
+  integrity sha512-dQFCxgti3PDjjulxi9tGKqh86YQOZoVKy21m1fEJX9lEn+Afq1Qo1lR86+8Bc+PuBA9EFs1csAV8Z7BNuOvCPA==
   dependencies:
     "@grpc/grpc-js" "^1.7.1"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-grpc-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/sdk-logs" "0.208.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-grpc-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/sdk-logs" "0.209.0"
 
-"@opentelemetry/exporter-logs-otlp-http@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-http/-/exporter-logs-otlp-http-0.208.0.tgz#198d6e735e961a79352a3d032a28da295db802dc"
-  integrity sha512-jOv40Bs9jy9bZVLo/i8FwUiuCvbjWDI+ZW13wimJm4LjnlwJxGgB+N/VWOZUTpM+ah/awXeQqKdNlpLf2EjvYg==
+"@opentelemetry/exporter-logs-otlp-http@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-http/-/exporter-logs-otlp-http-0.209.0.tgz#49a79dc1509299694e4716f05f94fe4439549b21"
+  integrity sha512-8sI1bDnoIRzCmT5zX2pNY2I+jD0UEoBr54dzvuzi1oz8Tt0Q9H6d8Bfn5+WoJJaGByewbSwoe8EtaBgSK74jKQ==
   dependencies:
-    "@opentelemetry/api-logs" "0.208.0"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/sdk-logs" "0.208.0"
+    "@opentelemetry/api-logs" "0.209.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/sdk-logs" "0.209.0"
 
-"@opentelemetry/exporter-logs-otlp-proto@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-proto/-/exporter-logs-otlp-proto-0.208.0.tgz#d7f7894f349b3b141d325fc9ab0a90bcad228893"
-  integrity sha512-Wy8dZm16AOfM7yddEzSFzutHZDZ6HspKUODSUJVjyhnZFMBojWDjSNgduyCMlw6qaxJYz0dlb0OEcb4Eme+BfQ==
+"@opentelemetry/exporter-logs-otlp-proto@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-proto/-/exporter-logs-otlp-proto-0.209.0.tgz#a5f18188292410af2d3c14cdbeea7649550578c4"
+  integrity sha512-wf8Nt5BTyT6ZjKA7c9zMhTTcsPedVXQ+j2oTuKB2uzvr13zgVrbRJ2U4Z6jBoiYst4d+qR7Iga7rGI51KWrjbw==
   dependencies:
-    "@opentelemetry/api-logs" "0.208.0"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-logs" "0.208.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
+    "@opentelemetry/api-logs" "0.209.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-logs" "0.209.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
 
-"@opentelemetry/exporter-metrics-otlp-grpc@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-grpc/-/exporter-metrics-otlp-grpc-0.208.0.tgz#667a7db1d219977b78070fab2e3c9212349e7c25"
-  integrity sha512-YbEnk7jjYmvhIwp2xJGkEvdgnayrA2QSr28R1LR1klDPvCxsoQPxE6TokDbQpoCEhD3+KmJVEXfb4EeEQxjymg==
-  dependencies:
-    "@grpc/grpc-js" "^1.7.1"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/exporter-metrics-otlp-http" "0.208.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-grpc-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-metrics" "2.2.0"
-
-"@opentelemetry/exporter-metrics-otlp-http@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-http/-/exporter-metrics-otlp-http-0.208.0.tgz#95bebb720f25b700d6464919634bb3665eae7b34"
-  integrity sha512-QZ3TrI90Y0i1ezWQdvreryjY0a5TK4J9gyDLIyhLBwV+EQUvyp5wR7TFPKCAexD4TDSWM0t3ulQDbYYjVtzTyA==
-  dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-metrics" "2.2.0"
-
-"@opentelemetry/exporter-metrics-otlp-proto@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-proto/-/exporter-metrics-otlp-proto-0.208.0.tgz#09e923df3c6ab0d0f32ffdc213ec90f6d06f7af8"
-  integrity sha512-CvvVD5kRDmRB/uSMalvEF6kiamY02pB46YAqclHtfjJccNZFxbkkXkMMmcJ7NgBFa5THmQBNVQ2AHyX29nRxOw==
-  dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/exporter-metrics-otlp-http" "0.208.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-metrics" "2.2.0"
-
-"@opentelemetry/exporter-prometheus@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-prometheus/-/exporter-prometheus-0.208.0.tgz#a3d7545a64ff105391f47c89eb6101ea251bdc07"
-  integrity sha512-Rgws8GfIfq2iNWCD3G1dTD9xwYsCof1+tc5S5X0Ahdb5CrAPE+k5P70XCWHqrFFurVCcKaHLJ/6DjIBHWVfLiw==
-  dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-metrics" "2.2.0"
-
-"@opentelemetry/exporter-trace-otlp-grpc@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-grpc/-/exporter-trace-otlp-grpc-0.208.0.tgz#c687b50ec8dd6f066128fec6caf0c58e3c87716c"
-  integrity sha512-E/eNdcqVUTAT7BC+e8VOw/krqb+5rjzYkztMZ/o+eyJl+iEY6PfczPXpwWuICwvsm0SIhBoh9hmYED5Vh5RwIw==
+"@opentelemetry/exporter-metrics-otlp-grpc@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-grpc/-/exporter-metrics-otlp-grpc-0.209.0.tgz#9bd3d028501993e247637926d962928ed6c49b07"
+  integrity sha512-YaqQlwSbpyS3yHyVdY7D/FNjq8XzJw9cshyDs++HkPXK7fTat9NqbBio33n3zx1rEW+eEdHzlnaSxkATZxBa5w==
   dependencies:
     "@grpc/grpc-js" "^1.7.1"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-grpc-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/exporter-metrics-otlp-http" "0.209.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-grpc-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-metrics" "2.3.0"
 
-"@opentelemetry/exporter-trace-otlp-http@0.208.0", "@opentelemetry/exporter-trace-otlp-http@^0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-http/-/exporter-trace-otlp-http-0.208.0.tgz#3b58caa80ab31597472902d84fbc933d35cf4d59"
-  integrity sha512-jbzDw1q+BkwKFq9yxhjAJ9rjKldbt5AgIy1gmEIJjEV/WRxQ3B6HcLVkwbjJ3RcMif86BDNKR846KJ0tY0aOJA==
+"@opentelemetry/exporter-metrics-otlp-http@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-http/-/exporter-metrics-otlp-http-0.209.0.tgz#3825983e8af8800bc081beba8e44eb43dc21b23f"
+  integrity sha512-XVRnuoaQJ9UNNk6Us/GTs20B+dN6gq0q/pb2Is72XJPnVjszLGyNoteQrlexDFos1OS6vnmTs/FnmIvcrsYy5A==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-metrics" "2.3.0"
 
-"@opentelemetry/exporter-trace-otlp-proto@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-proto/-/exporter-trace-otlp-proto-0.208.0.tgz#e64d00d333b483299b89936102b1a5d075c48175"
-  integrity sha512-q844Jc3ApkZVdWYd5OAl+an3n1XXf3RWHa3Zgmnhw3HpsM3VluEKHckUUEqHPzbwDUx2lhPRVkqK7LsJ/CbDzA==
+"@opentelemetry/exporter-metrics-otlp-proto@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-proto/-/exporter-metrics-otlp-proto-0.209.0.tgz#614e989b9593a46ff766d0618f3340998d36d1cd"
+  integrity sha512-XyN2inpV9N1OP0Nq+lEjYnf5W6tx2xC4cNxSJ9QI4E+EpY5ND6tRenVSsPOtNbAaWEsH2Bny+I90WUei7UW0MA==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/exporter-metrics-otlp-http" "0.209.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-metrics" "2.3.0"
 
-"@opentelemetry/exporter-zipkin@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/exporter-zipkin/-/exporter-zipkin-2.2.0.tgz#92cd6438fcd92d2202a58ae9540673c888b6741a"
-  integrity sha512-VV4QzhGCT7cWrGasBWxelBjqbNBbyHicWWS/66KoZoe9BzYwFB72SH2/kkc4uAviQlO8iwv2okIJy+/jqqEHTg==
+"@opentelemetry/exporter-prometheus@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-prometheus/-/exporter-prometheus-0.209.0.tgz#71a47b2066124be24770576a921bd4083d1353bd"
+  integrity sha512-+exk5rU32/OFvvgdT4g8OV4jyuhON4tzLXXhEYBPQv0WrlcD6DJT2iw4F+2QLiMONOIgSV+f0NTo+0HZKFUa/g==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-metrics" "2.3.0"
+
+"@opentelemetry/exporter-trace-otlp-grpc@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-grpc/-/exporter-trace-otlp-grpc-0.209.0.tgz#8ec646a30fdd386a7d2be87c6aa46deb493e81eb"
+  integrity sha512-UVPX9BGDpqc6on4TaWEB8kZl8ofKtuD+/l1uorEqeU4agl1iHjPFHcn39u4Q5DrArSKK+8Ob7yIM0wLehvJkhQ==
+  dependencies:
+    "@grpc/grpc-js" "^1.7.1"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-grpc-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
+
+"@opentelemetry/exporter-trace-otlp-http@0.209.0", "@opentelemetry/exporter-trace-otlp-http@^0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-http/-/exporter-trace-otlp-http-0.209.0.tgz#5cc17df6e483901ae9b5a71c11ed86aa83909dfd"
+  integrity sha512-mqTGX3brr+aoDZgrx+m/9OKgCAh/Ufv0OpqmozN9L9z39IGtkvcMMjFGio061PjOB9fBzrsB8jYapYscVeve2g==
+  dependencies:
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
+
+"@opentelemetry/exporter-trace-otlp-proto@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-proto/-/exporter-trace-otlp-proto-0.209.0.tgz#d13878fa4d5be04e6c8ea7c589988d88bf6dab3d"
+  integrity sha512-+bZvcwc/XahdFor3Wa3Yz8HmTkQLzZh369XuHWuujrkrkC0bW3/7ZfViWUR7lieneuTu2BWFbMu3N1wj2euCAg==
+  dependencies:
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
+
+"@opentelemetry/exporter-zipkin@2.3.0":
+  version "2.3.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/exporter-zipkin/-/exporter-zipkin-2.3.0.tgz#e186649ee051d7319e5d2812ffb450ab968fb85e"
+  integrity sha512-v26Cf5HX7fnKxjiQ7gnKTx0pHuuUNzicIQgFbn9GsD54ozy55+ESQmk4cBUSBOBtnEdUpTx3GEHA65ksJvzRcA==
+  dependencies:
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
     "@opentelemetry/semantic-conventions" "^1.29.0"
 
 "@opentelemetry/instrumentation-amqplib@0.55.0":
@@ -2343,7 +2346,7 @@
     import-in-the-middle "^2.0.0"
     require-in-the-middle "^8.0.0"
 
-"@opentelemetry/instrumentation@>=0.52.0 <1":
+"@opentelemetry/instrumentation@0.209.0", "@opentelemetry/instrumentation@>=0.52.0 <1":
   version "0.209.0"
   resolved "https://registry.npmjs.org/@opentelemetry/instrumentation/-/instrumentation-0.209.0.tgz#93bf7dbcd10242c629ebd73d7017287dfecfac90"
   integrity sha512-Cwe863ojTCnFlxVuuhG7s6ODkAOzKsAEthKAcI4MDRYz1OmGWYnmSl4X2pbyS+hBxVTdvfZePfoEA01IjqcEyw==
@@ -2352,65 +2355,57 @@
     import-in-the-middle "^2.0.0"
     require-in-the-middle "^8.0.0"
 
-"@opentelemetry/otlp-exporter-base@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/otlp-exporter-base/-/otlp-exporter-base-0.208.0.tgz#1a932355628087555a317b7207637d4e893c1a5d"
-  integrity sha512-gMd39gIfVb2OgxldxUtOwGJYSH8P1kVFFlJLuut32L6KgUC4gl1dMhn+YC2mGn0bDOiQYSk/uHOdSjuKp58vvA==
+"@opentelemetry/otlp-exporter-base@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/otlp-exporter-base/-/otlp-exporter-base-0.209.0.tgz#02af0a168516272b59bd0d7b636b1cb05ee0bdf4"
+  integrity sha512-co5H3wptA8itNf14dOBQBtNlEagMnRf52eo3BC8PwnROrcDfuPw27CjhkxX0+7ywoyOOunwzMWzvig2Qe/Gqlg==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
 
-"@opentelemetry/otlp-grpc-exporter-base@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/otlp-grpc-exporter-base/-/otlp-grpc-exporter-base-0.208.0.tgz#c68cb5f4758d0fe4f158188ed5423076c6a229a1"
-  integrity sha512-fGvAg3zb8fC0oJAzfz7PQppADI2HYB7TSt/XoCaBJFi1mSquNUjtHXEoviMgObLAa1NRIgOC1lsV1OUKi+9+lQ==
+"@opentelemetry/otlp-grpc-exporter-base@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/otlp-grpc-exporter-base/-/otlp-grpc-exporter-base-0.209.0.tgz#94e444bd87cb5ac0625fcb7cc834ffc59ba2a226"
+  integrity sha512-4U+9twc/yzTWWFWLaNkL9nl4i163/+y1KuonLY/57IHEdLsSkEW74A1XMRC9+4CgYpRxtEEiT4Gi9yUl49CFJQ==
   dependencies:
     "@grpc/grpc-js" "^1.7.1"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/otlp-exporter-base" "0.208.0"
-    "@opentelemetry/otlp-transformer" "0.208.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/otlp-exporter-base" "0.209.0"
+    "@opentelemetry/otlp-transformer" "0.209.0"
 
-"@opentelemetry/otlp-transformer@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/otlp-transformer/-/otlp-transformer-0.208.0.tgz#c59f48a569d17766d91c61807db7b04e4be490ac"
-  integrity sha512-DCFPY8C6lAQHUNkzcNT9R+qYExvsk6C5Bto2pbNxgicpcSWbe2WHShLxkOxIdNcBiYPdVHv/e7vH7K6TI+C+fQ==
+"@opentelemetry/otlp-transformer@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/otlp-transformer/-/otlp-transformer-0.209.0.tgz#692b6decee4b7db08477feb7fa8e3430a984dd8d"
+  integrity sha512-YITtvJIrzEa1Okbjv9lwJluZVXYM6SuafpQTi0hOTCosa7lu/EA7azvpoJx12EReBZqBm+3Wh0Zabm/01RjNJA==
   dependencies:
-    "@opentelemetry/api-logs" "0.208.0"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-logs" "0.208.0"
-    "@opentelemetry/sdk-metrics" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
-    protobufjs "^7.3.0"
+    "@opentelemetry/api-logs" "0.209.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-logs" "0.209.0"
+    "@opentelemetry/sdk-metrics" "2.3.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
+    protobufjs "8.0.0"
 
-"@opentelemetry/propagator-b3@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/propagator-b3/-/propagator-b3-2.2.0.tgz#fc1067b5fa618d06b6104d4c5b2a3c8ff7f09d55"
-  integrity sha512-9CrbTLFi5Ee4uepxg2qlpQIozoJuoAZU5sKMx0Mn7Oh+p7UrgCiEV6C02FOxxdYVRRFQVCinYR8Kf6eMSQsIsw==
+"@opentelemetry/propagator-b3@2.3.0":
+  version "2.3.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/propagator-b3/-/propagator-b3-2.3.0.tgz#cefb21f0fc95fd590c782eebbd62ca55268599b0"
+  integrity sha512-afilfxwb6THEpZknzwDknGR6YL3xe4u7lq8drf18wAdXhtXjK1mHb8DuhbjR55v0j+U1oiToEmAS1TwY4xj46w==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
 
-"@opentelemetry/propagator-jaeger@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/propagator-jaeger/-/propagator-jaeger-2.2.0.tgz#c94b973320fffb44fba450978cbf23f68ced9cd3"
-  integrity sha512-FfeOHOrdhiNzecoB1jZKp2fybqmqMPJUXe2ZOydP7QzmTPYcfPeuaclTLYVhK3HyJf71kt8sTl92nV4YIaLaKA==
+"@opentelemetry/propagator-jaeger@2.3.0":
+  version "2.3.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/propagator-jaeger/-/propagator-jaeger-2.3.0.tgz#4056de2c3a3fc8a39122a196188a407730e15e2b"
+  integrity sha512-1SPtVuU5wF9NSrkpdu78B2Nta+Vi7xjRRZ2OGhmV1Ju8TSsTL4LCrty9uBxPdkGI4J/HISwRsaMt8GdM4P3HqA==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
 
 "@opentelemetry/redis-common@^0.38.2":
   version "0.38.2"
   resolved "https://registry.npmjs.org/@opentelemetry/redis-common/-/redis-common-0.38.2.tgz#cefa4f3e79db1cd54f19e233b7dfb56621143955"
   integrity sha512-1BCcU93iwSRZvDAgwUxC/DV4T/406SkMfxGqu5ojc3AvNI+I9GhV7v0J1HljsczuuhcnFLYqD5VmwVXfCGHzxA==
 
-"@opentelemetry/resources@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/resources/-/resources-2.2.0.tgz#b90a950ad98551295b76ea8a0e7efe45a179badf"
-  integrity sha512-1pNQf/JazQTMA0BiO5NINUzH0cbLbbl7mntLa4aJNmCCXSj0q03T5ZXXL0zw4G55TjdL9Tz32cznGClf+8zr5A==
-  dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/semantic-conventions" "^1.29.0"
-
-"@opentelemetry/resources@2.3.0", "@opentelemetry/resources@^2.2.0":
+"@opentelemetry/resources@2.3.0", "@opentelemetry/resources@^2.2.0", "@opentelemetry/resources@^2.3.0":
   version "2.3.0"
   resolved "https://registry.npmjs.org/@opentelemetry/resources/-/resources-2.3.0.tgz#bfa1c9363b028e322cd4b4d597dc05e8a7cc92a8"
   integrity sha512-shlr2l5g+87J8wqYlsLyaUsgKVRO7RtX70Ckd5CtDOWtImZgaUDmf4Z2ozuSKQLM2wPDR0TE/3bPVBNJtRm/cQ==
@@ -2418,61 +2413,54 @@
     "@opentelemetry/core" "2.3.0"
     "@opentelemetry/semantic-conventions" "^1.29.0"
 
-"@opentelemetry/sdk-logs@0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/sdk-logs/-/sdk-logs-0.208.0.tgz#013494e23412c1594a694a358211cd150144c525"
-  integrity sha512-QlAyL1jRpOeaqx7/leG1vJMp84g0xKP6gJmfELBpnI4O/9xPX+Hu5m1POk9Kl+veNkyth5t19hRlN6tNY1sjbA==
+"@opentelemetry/sdk-logs@0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/sdk-logs/-/sdk-logs-0.209.0.tgz#2f7b4a7e79b678569bcb68792faf3f489fcd59c8"
+  integrity sha512-dGlYTZaLQaj1GlKWIcWDQofSyKu+Nbq28Rcqo6meQ60OhSune1Wn+dnOQPwQnI6nfhWoTxGR00EJm1UCrkR2Gg==
   dependencies:
-    "@opentelemetry/api-logs" "0.208.0"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
+    "@opentelemetry/api-logs" "0.209.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/resources" "2.3.0"
 
-"@opentelemetry/sdk-metrics@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/sdk-metrics/-/sdk-metrics-2.2.0.tgz#3824133f0d681d778aff0f52b02a87ec6750fc2d"
-  integrity sha512-G5KYP6+VJMZzpGipQw7Giif48h6SGQ2PFKEYCybeXJsOCB4fp8azqMAAzE5lnnHK3ZVwYQrgmFbsUJO/zOnwGw==
+"@opentelemetry/sdk-metrics@2.3.0":
+  version "2.3.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/sdk-metrics/-/sdk-metrics-2.3.0.tgz#dd15effe00b0654dd40dacf1a7d332262c4e84ea"
+  integrity sha512-P+bYQgJHf6hRKgsR7xDnbNPDP+x1DwGtse6gHAPZ/iwMGbtQPVvhyFK1lseow5o3kLxNEaQv4lDqAF/vpRdXxA==
   dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/resources" "2.3.0"
 
-"@opentelemetry/sdk-node@^0.208.0":
-  version "0.208.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/sdk-node/-/sdk-node-0.208.0.tgz#213153f7a37c32df5088965e1ba25522ee2bbc76"
-  integrity sha512-pbAqpZ7zTMFuTf3YecYsecsto/mheuvnK2a/jgstsE5ynWotBjgF5bnz5500W9Xl2LeUfg04WMt63TWtAgzRMw==
+"@opentelemetry/sdk-node@^0.209.0":
+  version "0.209.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/sdk-node/-/sdk-node-0.209.0.tgz#72f15a33a963d6557ff9957a0e8fa504159eb282"
+  integrity sha512-r1f8i6Gl/hpWnFP6rARBL6ZLOdheJin6HfTwgkjXmLH7T3+Ef7f2ATF8ERyqvP1ESY/gEyeBc0o6dQs3MjaO6Q==
   dependencies:
-    "@opentelemetry/api-logs" "0.208.0"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/exporter-logs-otlp-grpc" "0.208.0"
-    "@opentelemetry/exporter-logs-otlp-http" "0.208.0"
-    "@opentelemetry/exporter-logs-otlp-proto" "0.208.0"
-    "@opentelemetry/exporter-metrics-otlp-grpc" "0.208.0"
-    "@opentelemetry/exporter-metrics-otlp-http" "0.208.0"
-    "@opentelemetry/exporter-metrics-otlp-proto" "0.208.0"
-    "@opentelemetry/exporter-prometheus" "0.208.0"
-    "@opentelemetry/exporter-trace-otlp-grpc" "0.208.0"
-    "@opentelemetry/exporter-trace-otlp-http" "0.208.0"
-    "@opentelemetry/exporter-trace-otlp-proto" "0.208.0"
-    "@opentelemetry/exporter-zipkin" "2.2.0"
-    "@opentelemetry/instrumentation" "0.208.0"
-    "@opentelemetry/propagator-b3" "2.2.0"
-    "@opentelemetry/propagator-jaeger" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/sdk-logs" "0.208.0"
-    "@opentelemetry/sdk-metrics" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
-    "@opentelemetry/sdk-trace-node" "2.2.0"
+    "@opentelemetry/api-logs" "0.209.0"
+    "@opentelemetry/configuration" "0.209.0"
+    "@opentelemetry/context-async-hooks" "2.3.0"
+    "@opentelemetry/core" "2.3.0"
+    "@opentelemetry/exporter-logs-otlp-grpc" "0.209.0"
+    "@opentelemetry/exporter-logs-otlp-http" "0.209.0"
+    "@opentelemetry/exporter-logs-otlp-proto" "0.209.0"
+    "@opentelemetry/exporter-metrics-otlp-grpc" "0.209.0"
+    "@opentelemetry/exporter-metrics-otlp-http" "0.209.0"
+    "@opentelemetry/exporter-metrics-otlp-proto" "0.209.0"
+    "@opentelemetry/exporter-prometheus" "0.209.0"
+    "@opentelemetry/exporter-trace-otlp-grpc" "0.209.0"
+    "@opentelemetry/exporter-trace-otlp-http" "0.209.0"
+    "@opentelemetry/exporter-trace-otlp-proto" "0.209.0"
+    "@opentelemetry/exporter-zipkin" "2.3.0"
+    "@opentelemetry/instrumentation" "0.209.0"
+    "@opentelemetry/propagator-b3" "2.3.0"
+    "@opentelemetry/propagator-jaeger" "2.3.0"
+    "@opentelemetry/resources" "2.3.0"
+    "@opentelemetry/sdk-logs" "0.209.0"
+    "@opentelemetry/sdk-metrics" "2.3.0"
+    "@opentelemetry/sdk-trace-base" "2.3.0"
+    "@opentelemetry/sdk-trace-node" "2.3.0"
     "@opentelemetry/semantic-conventions" "^1.29.0"
 
-"@opentelemetry/sdk-trace-base@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/sdk-trace-base/-/sdk-trace-base-2.2.0.tgz#ddef9a0afd01a623d8625a3529f2137b05e67d0b"
-  integrity sha512-xWQgL0Bmctsalg6PaXExmzdedSp3gyKV8mQBwK/j9VGdCDu2fmXIb2gAehBKbkXCpJ4HPkgv3QfoJWRT4dHWbw==
-  dependencies:
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/resources" "2.2.0"
-    "@opentelemetry/semantic-conventions" "^1.29.0"
-
-"@opentelemetry/sdk-trace-base@2.3.0", "@opentelemetry/sdk-trace-base@^2.2.0":
+"@opentelemetry/sdk-trace-base@2.3.0", "@opentelemetry/sdk-trace-base@^2.2.0", "@opentelemetry/sdk-trace-base@^2.3.0":
   version "2.3.0"
   resolved "https://registry.npmjs.org/@opentelemetry/sdk-trace-base/-/sdk-trace-base-2.3.0.tgz#fa104711bdbf9af68e110a746aa03e711e72fdac"
   integrity sha512-B0TQ2e9h0ETjpI+eGmCz8Ojb+lnYms0SE3jFwEKrN/PK4aSVHU28AAmnOoBmfub+I3jfgPwvDJgomBA5a7QehQ==
@@ -2481,16 +2469,7 @@
     "@opentelemetry/resources" "2.3.0"
     "@opentelemetry/semantic-conventions" "^1.29.0"
 
-"@opentelemetry/sdk-trace-node@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.npmjs.org/@opentelemetry/sdk-trace-node/-/sdk-trace-node-2.2.0.tgz#a2666a087d96fc31888169ad5f4cc1448b35cd8c"
-  integrity sha512-+OaRja3f0IqGG2kptVeYsrZQK9nKRSpfFrKtRBq4uh6nIB8bTBgaGvYQrQoRrQWQMA5dK5yLhDMDc0dvYvCOIQ==
-  dependencies:
-    "@opentelemetry/context-async-hooks" "2.2.0"
-    "@opentelemetry/core" "2.2.0"
-    "@opentelemetry/sdk-trace-base" "2.2.0"
-
-"@opentelemetry/sdk-trace-node@^2.2.0":
+"@opentelemetry/sdk-trace-node@2.3.0", "@opentelemetry/sdk-trace-node@^2.3.0":
   version "2.3.0"
   resolved "https://registry.npmjs.org/@opentelemetry/sdk-trace-node/-/sdk-trace-node-2.3.0.tgz#e86ca849b809cc9e15321fc1969dcd313e551415"
   integrity sha512-oGsG3vIiC8zYjOWE4CgtS6d2gQhp4pT04AI9UL1wtJOxTSNVZiiIPgHnOp/qKJSwkD4YJHSohi6inSilPmGM2Q==
@@ -2643,97 +2622,97 @@
     detect-libc "^2.0.3"
     node-abi "^3.73.0"
 
-"@sentry/cli-darwin@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-darwin/-/cli-darwin-3.0.3.tgz#789b6f73de536f0b4bebff874d61017679edbf5f"
-  integrity sha512-aSRtAc2BZQpxccPVykgxy6JFR/KcJ8P8szxBuu+9Sk+GHi/inrY7y5+yIHWiiZ8Zs3Vkq17c8Q+vumQMBiaKmA==
+"@sentry/cli-darwin@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-darwin/-/cli-darwin-3.1.0.tgz#dd7b1e4e14e731206bc1b18717cfbc264845dbc8"
+  integrity sha512-xT1WlCHenGGO29Lq/wKaIthdqZzNzZhlPs7dXrzlBx9DyA2Jnl0g7WEau0oWi8GyJGVRXCJMiCydR//Tb5qVwA==
 
-"@sentry/cli-linux-arm64@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-linux-arm64/-/cli-linux-arm64-3.0.3.tgz#c9976101a561d8a69adfe792820e015f73473df2"
-  integrity sha512-knBC4IpSo23euWbp0PxiVXmwIZPpa8qP1mPrCWd4t0Is5wooBR2F/TgRm3dFZpTXU+YLuKSlCvzOCOLi1W7mNg==
+"@sentry/cli-linux-arm64@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-linux-arm64/-/cli-linux-arm64-3.1.0.tgz#cdacbea691c98d3954832871816d3b0e4f3c72c9"
+  integrity sha512-Jm/iHLKiHxrZYlAq2tT07amiegEVCOAQT9Unilr6djjcZzS2tcI9ThSRQvjP9tFpFRKop+NyNGE3XHXf69r00g==
 
-"@sentry/cli-linux-arm@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-linux-arm/-/cli-linux-arm-3.0.3.tgz#c8879f1699679fc57360e07ac2547287cb3a7391"
-  integrity sha512-GuVXHrzvJCgCoR3tX/QUNyTL7OdUT6FuPqURQWppef23VNS3wkOSjYu4SKh/EO826jJMGzlK1ytflbETx/z2xw==
+"@sentry/cli-linux-arm@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-linux-arm/-/cli-linux-arm-3.1.0.tgz#1d01dd5a00e9a5bd8aa26d433cc55d2f64b4a6c3"
+  integrity sha512-kbP3/8/Ct/Jbm569KDXbFIyMyPypIegObvIT7LdSsfdYSZdBd396GV7vUpSGKiLUVVN0xjn8OqQ48AVGfjmuMg==
 
-"@sentry/cli-linux-i686@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-linux-i686/-/cli-linux-i686-3.0.3.tgz#b76b71dad2177507e8b47a5e264b8a66bb2a8066"
-  integrity sha512-NIbjkNQdKG9gV3q9yb5Iz4+N9q7IHLdreumsALrlDUlM4X/HW5IQupfhYRwxqXVgqwOU/SiV5u6XXS59gIXX8A==
+"@sentry/cli-linux-i686@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-linux-i686/-/cli-linux-i686-3.1.0.tgz#c785a4df8b9e89ffee0c2e5b867d89bae81df970"
+  integrity sha512-f/PK/EGK5vFOy7LC4Riwb+BEE20Nk7RbEFEMjvRq26DpETCrZYUGlbpIKvJFKOaUmr79aAkFCA/EjJiYfcQP2Q==
 
-"@sentry/cli-linux-x64@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-linux-x64/-/cli-linux-x64-3.0.3.tgz#ba2e2a2bda5f19be29b402620ba1fe7f656a9af9"
-  integrity sha512-u2k3EEe+LmKFgF/v6QMvffg+prtny28G5mPBB4eHzJb3RnAt2V1+6dGJc/mDKdnltY7uyDfgIJTEZeGmiVyAWA==
+"@sentry/cli-linux-x64@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-linux-x64/-/cli-linux-x64-3.1.0.tgz#dda9400547a40933838edf42a1080626eef7bef8"
+  integrity sha512-T+v8x1ujhixZrOrH0sVhsW6uLwK4n0WS+B+5xV46WqUKe32cbYotursp2y53ROjgat8SQDGeP/VnC0Qa3Y2fEA==
 
-"@sentry/cli-win32-arm64@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-win32-arm64/-/cli-win32-arm64-3.0.3.tgz#f9c90d8177130d117559e3ebedb18637f7765de8"
-  integrity sha512-ZJ7eHkkAE6lRaLnvo17nPzFF3eBKNWURZ/BpSGJ7KsTmzLetUA6lU7XPYwlwRTWIVn49SdZFdgS5ThFmcs0pwA==
+"@sentry/cli-win32-arm64@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-win32-arm64/-/cli-win32-arm64-3.1.0.tgz#435a9f836de0e6fad706fb18cfa74b6f0f468ca0"
+  integrity sha512-2DIPq6aW2DC34EDC9J0xwD+9BpFnKdFGdIcQUZMS+5pXlU6V7o8wpZxZAM8TdYNmsPkkQGKp7Dhl/arWpvNgrw==
 
-"@sentry/cli-win32-i686@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-win32-i686/-/cli-win32-i686-3.0.3.tgz#31a9e0463c6429ca3a1f71bf2f9d28f79aaf9fa2"
-  integrity sha512-y1+Mdwrvm7P2HDqUzHmyBaMOtEA6U59OX/fVcZ9LfWXDg9vK4+UrFccNpbLZSV+uyfCI7q80op9v+uWrTelfTw==
+"@sentry/cli-win32-i686@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-win32-i686/-/cli-win32-i686-3.1.0.tgz#0a862b5593f7d8490659c5b80ed542cba14bf3bc"
+  integrity sha512-2NuywEiiZn6xJ1yAV2xjv/nuHiy6kZU5XR3RSAIrPdEZD1nBoMsH/gB2FufQw58Ziz/7otFcX+vtGpJjbIT5mQ==
 
-"@sentry/cli-win32-x64@3.0.3":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli-win32-x64/-/cli-win32-x64-3.0.3.tgz#de066a999d13b15e58a6d1af0f5d11f88b48f505"
-  integrity sha512-+8TfjfJRiiRS1vaCCMpIKWj6fonQzJdQs3lWSvtjyYQyrzca4JlWcAFdGOmt+7h0HbVIF0dt0YznrAyXfoi6zg==
+"@sentry/cli-win32-x64@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli-win32-x64/-/cli-win32-x64-3.1.0.tgz#0d491cf897c1414eddab122abfcdbf4a43575898"
+  integrity sha512-Ip405Yqdrr+l9TImsZOJz6c9Nb4zvXcmtOIBKLHc9cowpfXfmlqsHbDp7Xh4+k4L0uLr9i+8ilgQ6ypcuF4UCg==
 
-"@sentry/cli@^3.0.1":
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/@sentry/cli/-/cli-3.0.3.tgz#dec32b0453098fad75d01d87a191c3b42eab02a0"
-  integrity sha512-JZiRmzAgAK1HCtmCBnb7Ppko3Lrxfk2Uqi+qxr2lBwOHdLtiNNJB0Jajnpd3tykRMfqufe5R1TfijSpE/I1Saw==
+"@sentry/cli@^3.1.0":
+  version "3.1.0"
+  resolved "https://registry.npmjs.org/@sentry/cli/-/cli-3.1.0.tgz#67ca7d5f65cb36633379bf1f5bcdfacc4db5948d"
+  integrity sha512-ngnx6E8XjXpg1uzma45INfKCS8yurb/fl3cZdXTCa2wmek8b4N6WIlmOlTKFTBrV54OauF6mloJxAlpuzoQR6g==
   dependencies:
     progress "^2.0.3"
     proxy-from-env "^1.1.0"
     undici "^6.22.0"
     which "^2.0.2"
   optionalDependencies:
-    "@sentry/cli-darwin" "3.0.3"
-    "@sentry/cli-linux-arm" "3.0.3"
-    "@sentry/cli-linux-arm64" "3.0.3"
-    "@sentry/cli-linux-i686" "3.0.3"
-    "@sentry/cli-linux-x64" "3.0.3"
-    "@sentry/cli-win32-arm64" "3.0.3"
-    "@sentry/cli-win32-i686" "3.0.3"
-    "@sentry/cli-win32-x64" "3.0.3"
+    "@sentry/cli-darwin" "3.1.0"
+    "@sentry/cli-linux-arm" "3.1.0"
+    "@sentry/cli-linux-arm64" "3.1.0"
+    "@sentry/cli-linux-i686" "3.1.0"
+    "@sentry/cli-linux-x64" "3.1.0"
+    "@sentry/cli-win32-arm64" "3.1.0"
+    "@sentry/cli-win32-i686" "3.1.0"
+    "@sentry/cli-win32-x64" "3.1.0"
 
-"@sentry/core@10.32.1":
-  version "10.32.1"
-  resolved "https://registry.npmjs.org/@sentry/core/-/core-10.32.1.tgz#2a5c245b5e16063456cf44c7fe926c6ffb6116dd"
-  integrity sha512-PH2ldpSJlhqsMj2vCTyU0BI2Fx1oIDhm7Izo5xFALvjVCS0gmlqHt1udu6YlKn8BtpGH6bGzssvv5APrk+OdPQ==
+"@sentry/core@10.33.0":
+  version "10.33.0"
+  resolved "https://registry.npmjs.org/@sentry/core/-/core-10.33.0.tgz#ea4964fbec290503b419ccaf1a313924d30ad1c8"
+  integrity sha512-ehH1VSUclIHZKEZVdv+klofsFIh8FFzqA6AAV23RtLepptzA8wqQzUGraEuSN25sYcNmYJ0jti5U0Ys+WZv5Dw==
 
-"@sentry/nestjs@^10.32.1":
-  version "10.32.1"
-  resolved "https://registry.npmjs.org/@sentry/nestjs/-/nestjs-10.32.1.tgz#931052d6068fd81572e1ff898960c21b00920a6b"
-  integrity sha512-StgRg8AojiCbH+Q7uhO/9DOhfpjw6SxtsTWwNoioLfHIx968btdQPhALrHji0xXR8DYDBf+bk99P1KdqgDDh/w==
+"@sentry/nestjs@^10.33.0":
+  version "10.33.0"
+  resolved "https://registry.npmjs.org/@sentry/nestjs/-/nestjs-10.33.0.tgz#baba641b115991ddde9279ef101731e734a941ee"
+  integrity sha512-vWqcCeXWpSOYHS/VQvQmXR4FLtMURQItHBkUWLMsDS3pd/1iBUspcVPfM+CUEf2uYsIreocukujikh4Ih7jPsA==
   dependencies:
     "@opentelemetry/api" "^1.9.0"
     "@opentelemetry/core" "^2.2.0"
     "@opentelemetry/instrumentation" "^0.208.0"
     "@opentelemetry/instrumentation-nestjs-core" "0.55.0"
     "@opentelemetry/semantic-conventions" "^1.37.0"
-    "@sentry/core" "10.32.1"
-    "@sentry/node" "10.32.1"
+    "@sentry/core" "10.33.0"
+    "@sentry/node" "10.33.0"
 
-"@sentry/node-core@10.32.1":
-  version "10.32.1"
-  resolved "https://registry.npmjs.org/@sentry/node-core/-/node-core-10.32.1.tgz#252f327aa091db6924d4c5fdadfd21367df99ad9"
-  integrity sha512-w56rxdBanBKc832zuwnE+zNzUQ19fPxfHEtOhK8JGPu3aSwQYcIxwz9z52lOx3HN7k/8Fj5694qlT3x/PokhRw==
+"@sentry/node-core@10.33.0":
+  version "10.33.0"
+  resolved "https://registry.npmjs.org/@sentry/node-core/-/node-core-10.33.0.tgz#0b776897aabf22c4a369c53a27718765da57f46d"
+  integrity sha512-73J1yLMdtjyadtcsrZ5VBYIyWrJ5gHh5dRsJlfm6XMD3ZFHQQ9Fwd6mwnSY+X+VLJaNq7RtoNECij6LLqE4R0g==
   dependencies:
     "@apm-js-collab/tracing-hooks" "^0.3.1"
-    "@sentry/core" "10.32.1"
-    "@sentry/opentelemetry" "10.32.1"
-    import-in-the-middle "^2"
+    "@sentry/core" "10.33.0"
+    "@sentry/opentelemetry" "10.33.0"
+    import-in-the-middle "^2.0.1"
 
-"@sentry/node@10.32.1", "@sentry/node@^10.32.1":
-  version "10.32.1"
-  resolved "https://registry.npmjs.org/@sentry/node/-/node-10.32.1.tgz#0d402f9c2ccd5e969a56d325645acd1acfb46b22"
-  integrity sha512-oxlybzt8QW0lx/QaEj1DcvZDRXkgouewFelu/10dyUwv5So3YvipfvWInda+yMLmn25OggbloDQ0gyScA2jU3g==
+"@sentry/node@10.33.0", "@sentry/node@^10.33.0":
+  version "10.33.0"
+  resolved "https://registry.npmjs.org/@sentry/node/-/node-10.33.0.tgz#8e7b94d8d41c9966e1e1d5d6594bfcbc0029108d"
+  integrity sha512-HZ7U0igIXs8nHSeh0YAe9C3eE/fjkHOprctQHwoYpRrZelsKO8NsvZU0K/1+knFr36vFj7jtt1QlF/UjCQZD+Q==
   dependencies:
     "@opentelemetry/api" "^1.9.0"
     "@opentelemetry/context-async-hooks" "^2.2.0"
@@ -2765,27 +2744,27 @@
     "@opentelemetry/sdk-trace-base" "^2.2.0"
     "@opentelemetry/semantic-conventions" "^1.37.0"
     "@prisma/instrumentation" "6.19.0"
-    "@sentry/core" "10.32.1"
-    "@sentry/node-core" "10.32.1"
-    "@sentry/opentelemetry" "10.32.1"
-    import-in-the-middle "^2"
+    "@sentry/core" "10.33.0"
+    "@sentry/node-core" "10.33.0"
+    "@sentry/opentelemetry" "10.33.0"
+    import-in-the-middle "^2.0.1"
     minimatch "^9.0.0"
 
-"@sentry/opentelemetry@10.32.1", "@sentry/opentelemetry@^10.32.1":
-  version "10.32.1"
-  resolved "https://registry.npmjs.org/@sentry/opentelemetry/-/opentelemetry-10.32.1.tgz#c82955c914875ce5d81e6737dc2c05438eec8a2d"
-  integrity sha512-YLssSz5Y+qPvufrh2cDaTXDoXU8aceOhB+YTjT8/DLF6SOj7Tzen52aAcjNaifawaxEsLCC8O+B+A2iA+BllvA==
+"@sentry/opentelemetry@10.33.0", "@sentry/opentelemetry@^10.33.0":
+  version "10.33.0"
+  resolved "https://registry.npmjs.org/@sentry/opentelemetry/-/opentelemetry-10.33.0.tgz#3a901803a90653e5781f684584e6f74520ac0dfb"
+  integrity sha512-v/6mAYLxtfcKLCw6Ktk46T6fWEQBVWB9Ah81axr8OvuIomK71jkv1zb0v7D8ot0ESesJ3JF6I/aKhfxpyLInSQ==
   dependencies:
-    "@sentry/core" "10.32.1"
+    "@sentry/core" "10.33.0"
 
-"@sentry/profiling-node@^10.32.1":
-  version "10.32.1"
-  resolved "https://registry.npmjs.org/@sentry/profiling-node/-/profiling-node-10.32.1.tgz#5c8ff3a48ffe386087714395dd83b6ff1f7b1239"
-  integrity sha512-UDSZayQw4K5wv/XNHoB+i+KrnlCStLb0H2lsypF4dgQFCrHXmbwhMh9ieofVGk5bxdmXoL3lSE+3W9cJbpqy2A==
+"@sentry/profiling-node@^10.33.0":
+  version "10.33.0"
+  resolved "https://registry.npmjs.org/@sentry/profiling-node/-/profiling-node-10.33.0.tgz#34fe93ed671301808f66281dfc30e2089788aa08"
+  integrity sha512-tI09WT5U6cSHK3P1l3Q+AIhsUft3TL2C3oZXJjDGLK4WDUngN1kBf2Ge6upiRDwztzg3Iz6U14ck6RAfTTJ4kg==
   dependencies:
     "@sentry-internal/node-cpu-profiler" "^2.2.0"
-    "@sentry/core" "10.32.1"
-    "@sentry/node" "10.32.1"
+    "@sentry/core" "10.33.0"
+    "@sentry/node" "10.33.0"
 
 "@sinclair/typebox@^0.34.0":
   version "0.34.47"
@@ -2821,10 +2800,10 @@
   resolved "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz#a79b55dbaf8604812f52d140b2c9ab41bc150bb8"
   integrity sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==
 
-"@swc/cli@^0.7.9":
-  version "0.7.9"
-  resolved "https://registry.npmjs.org/@swc/cli/-/cli-0.7.9.tgz#67615740ccd3bf2ed807ce24fffef502906ba939"
-  integrity sha512-AFQu3ZZ9IcdClTknxbug08S9ed/q8F3aYkO5NoZ+6IjQ5UEo1s2HN1GRKNvUslYx2EoVYxd+6xGcp6C7wwtxyQ==
+"@swc/cli@^0.7.10":
+  version "0.7.10"
+  resolved "https://registry.npmjs.org/@swc/cli/-/cli-0.7.10.tgz#3ac167a4d2f89266d6559cfb48b9ad72b8be5c97"
+  integrity sha512-QQ36Q1VwGTT2YzvMeNe/j1x4DKS277DscNhWc57dIwQn//C+zAgvuSupMB/XkmYqPKQX+8hjn5/cHRJrMvWy0Q==
   dependencies:
     "@swc/counter" "^0.1.3"
     "@xhmikosr/bin-wrapper" "^13.0.5"
@@ -3197,10 +3176,17 @@
   dependencies:
     "@types/node" "*"
 
-"@types/node@*", "@types/node@>=13.7.0", "@types/node@^25.0.3":
+"@types/node@*", "@types/node@>=13.7.0":
   version "25.0.3"
   resolved "https://registry.npmjs.org/@types/node/-/node-25.0.3.tgz#79b9ac8318f373fbfaaf6e2784893efa9701f269"
   integrity sha512-W609buLVRVmeW693xKfzHeIV6nJGGz98uCPfeXI1ELMLXVeKYZ9m15fAMSaUPBHYLGFsVRcMmSCksQOrZV9BYA==
+  dependencies:
+    undici-types "~7.16.0"
+
+"@types/node@^25.0.8":
+  version "25.0.8"
+  resolved "https://registry.npmjs.org/@types/node/-/node-25.0.8.tgz#e54e00f94fe1db2497b3e42d292b8376a2678c8d"
+  integrity sha512-powIePYMmC3ibL0UJ2i2s0WIbq6cg6UyVFQxSCpaPxxzAaziRfimGivjdF943sSGV6RADVbk0Nvlm5P/FB44Zg==
   dependencies:
     undici-types "~7.16.0"
 
@@ -3362,100 +3348,100 @@
   dependencies:
     "@types/yargs-parser" "*"
 
-"@typescript-eslint/eslint-plugin@8.52.0", "@typescript-eslint/eslint-plugin@^8.51.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.52.0.tgz#9a9f1d2ee974ed77a8b1bda94e77123f697ee8b4"
-  integrity sha512-okqtOgqu2qmZJ5iN4TWlgfF171dZmx2FzdOv2K/ixL2LZWDStL8+JgQerI2sa8eAEfoydG9+0V96m7V+P8yE1Q==
+"@typescript-eslint/eslint-plugin@8.53.0", "@typescript-eslint/eslint-plugin@^8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.53.0.tgz#afb966c66a2fdc6158cf81118204a971a36d0fc5"
+  integrity sha512-eEXsVvLPu8Z4PkFibtuFJLJOTAV/nPdgtSjkGoPpddpFk3/ym2oy97jynY6ic2m6+nc5M8SE1e9v/mHKsulcJg==
   dependencies:
     "@eslint-community/regexpp" "^4.12.2"
-    "@typescript-eslint/scope-manager" "8.52.0"
-    "@typescript-eslint/type-utils" "8.52.0"
-    "@typescript-eslint/utils" "8.52.0"
-    "@typescript-eslint/visitor-keys" "8.52.0"
+    "@typescript-eslint/scope-manager" "8.53.0"
+    "@typescript-eslint/type-utils" "8.53.0"
+    "@typescript-eslint/utils" "8.53.0"
+    "@typescript-eslint/visitor-keys" "8.53.0"
     ignore "^7.0.5"
     natural-compare "^1.4.0"
     ts-api-utils "^2.4.0"
 
-"@typescript-eslint/parser@8.52.0", "@typescript-eslint/parser@^8.51.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/parser/-/parser-8.52.0.tgz#9fae9f5f13ebb1c8f31a50c34381bfd6bf96a05f"
-  integrity sha512-iIACsx8pxRnguSYhHiMn2PvhvfpopO9FXHyn1mG5txZIsAaB6F0KwbFnUQN3KCiG3Jcuad/Cao2FAs1Wp7vAyg==
+"@typescript-eslint/parser@8.53.0", "@typescript-eslint/parser@^8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/parser/-/parser-8.53.0.tgz#d8bed6f12dc74e03751e5f947510ff2b165990c6"
+  integrity sha512-npiaib8XzbjtzS2N4HlqPvlpxpmZ14FjSJrteZpPxGUaYPlvhzlzUZ4mZyABo0EFrOWnvyd0Xxroq//hKhtAWg==
   dependencies:
-    "@typescript-eslint/scope-manager" "8.52.0"
-    "@typescript-eslint/types" "8.52.0"
-    "@typescript-eslint/typescript-estree" "8.52.0"
-    "@typescript-eslint/visitor-keys" "8.52.0"
+    "@typescript-eslint/scope-manager" "8.53.0"
+    "@typescript-eslint/types" "8.53.0"
+    "@typescript-eslint/typescript-estree" "8.53.0"
+    "@typescript-eslint/visitor-keys" "8.53.0"
     debug "^4.4.3"
 
-"@typescript-eslint/project-service@8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/project-service/-/project-service-8.52.0.tgz#5fb4c16af4eda6d74c70cbc62f5d3f77b96e4cbe"
-  integrity sha512-xD0MfdSdEmeFa3OmVqonHi+Cciab96ls1UhIF/qX/O/gPu5KXD0bY9lu33jj04fjzrXHcuvjBcBC+D3SNSadaw==
+"@typescript-eslint/project-service@8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/project-service/-/project-service-8.53.0.tgz#327c67c61c16a1c8b12a440b0779b41eb77cc7df"
+  integrity sha512-Bl6Gdr7NqkqIP5yP9z1JU///Nmes4Eose6L1HwpuVHwScgDPPuEWbUVhvlZmb8hy0vX9syLk5EGNL700WcBlbg==
   dependencies:
-    "@typescript-eslint/tsconfig-utils" "^8.52.0"
-    "@typescript-eslint/types" "^8.52.0"
+    "@typescript-eslint/tsconfig-utils" "^8.53.0"
+    "@typescript-eslint/types" "^8.53.0"
     debug "^4.4.3"
 
-"@typescript-eslint/scope-manager@8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/scope-manager/-/scope-manager-8.52.0.tgz#9884ff690fad30380ccabfb08af1ac200af6b4e5"
-  integrity sha512-ixxqmmCcc1Nf8S0mS0TkJ/3LKcC8mruYJPOU6Ia2F/zUUR4pApW7LzrpU3JmtePbRUTes9bEqRc1Gg4iyRnDzA==
+"@typescript-eslint/scope-manager@8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/scope-manager/-/scope-manager-8.53.0.tgz#f922fcbf0d42e72f065297af31779ccf19de9a97"
+  integrity sha512-kWNj3l01eOGSdVBnfAF2K1BTh06WS0Yet6JUgb9Cmkqaz3Jlu0fdVUjj9UI8gPidBWSMqDIglmEXifSgDT/D0g==
   dependencies:
-    "@typescript-eslint/types" "8.52.0"
-    "@typescript-eslint/visitor-keys" "8.52.0"
+    "@typescript-eslint/types" "8.53.0"
+    "@typescript-eslint/visitor-keys" "8.53.0"
 
-"@typescript-eslint/tsconfig-utils@8.52.0", "@typescript-eslint/tsconfig-utils@^8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.52.0.tgz#0296751c22ed05c83787a6eaec65ae221bd8b8ed"
-  integrity sha512-jl+8fzr/SdzdxWJznq5nvoI7qn2tNYV/ZBAEcaFMVXf+K6jmXvAFrgo/+5rxgnL152f//pDEAYAhhBAZGrVfwg==
+"@typescript-eslint/tsconfig-utils@8.53.0", "@typescript-eslint/tsconfig-utils@^8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.53.0.tgz#105279d7969a7abdc8345cc9c57cff83cf910f8f"
+  integrity sha512-K6Sc0R5GIG6dNoPdOooQ+KtvT5KCKAvTcY8h2rIuul19vxH5OTQk7ArKkd4yTzkw66WnNY0kPPzzcmWA+XRmiA==
 
-"@typescript-eslint/type-utils@8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/type-utils/-/type-utils-8.52.0.tgz#6e554113f8a074cf9b2faa818d2ebfccb867d6c5"
-  integrity sha512-JD3wKBRWglYRQkAtsyGz1AewDu3mTc7NtRjR/ceTyGoPqmdS5oCdx/oZMWD5Zuqmo6/MpsYs0wp6axNt88/2EQ==
+"@typescript-eslint/type-utils@8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/type-utils/-/type-utils-8.53.0.tgz#81a0de5c01fc68f6df0591d03cd8226bda01c91f"
+  integrity sha512-BBAUhlx7g4SmcLhn8cnbxoxtmS7hcq39xKCgiutL3oNx1TaIp+cny51s8ewnKMpVUKQUGb41RAUWZ9kxYdovuw==
   dependencies:
-    "@typescript-eslint/types" "8.52.0"
-    "@typescript-eslint/typescript-estree" "8.52.0"
-    "@typescript-eslint/utils" "8.52.0"
+    "@typescript-eslint/types" "8.53.0"
+    "@typescript-eslint/typescript-estree" "8.53.0"
+    "@typescript-eslint/utils" "8.53.0"
     debug "^4.4.3"
     ts-api-utils "^2.4.0"
 
-"@typescript-eslint/types@8.52.0", "@typescript-eslint/types@^8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/types/-/types-8.52.0.tgz#1eb0a16b324824bc23b89d109a267c38c9213c4a"
-  integrity sha512-LWQV1V4q9V4cT4H5JCIx3481iIFxH1UkVk+ZkGGAV1ZGcjGI9IoFOfg3O6ywz8QqCDEp7Inlg6kovMofsNRaGg==
+"@typescript-eslint/types@8.53.0", "@typescript-eslint/types@^8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/types/-/types-8.53.0.tgz#1adcad3fa32bc2c4cbf3785ba07a5e3151819efb"
+  integrity sha512-Bmh9KX31Vlxa13+PqPvt4RzKRN1XORYSLlAE+sO1i28NkisGbTtSLFVB3l7PWdHtR3E0mVMuC7JilWJ99m2HxQ==
 
-"@typescript-eslint/typescript-estree@8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/typescript-estree/-/typescript-estree-8.52.0.tgz#2ad7721c671be2127951286cb7f44c4ce55b0591"
-  integrity sha512-XP3LClsCc0FsTK5/frGjolyADTh3QmsLp6nKd476xNI9CsSsLnmn4f0jrzNoAulmxlmNIpeXuHYeEQv61Q6qeQ==
+"@typescript-eslint/typescript-estree@8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/typescript-estree/-/typescript-estree-8.53.0.tgz#7805b46b7a8ce97e91b7bb56fc8b1ba26ca8ef52"
+  integrity sha512-pw0c0Gdo7Z4xOG987u3nJ8akL9093yEEKv8QTJ+Bhkghj1xyj8cgPaavlr9rq8h7+s6plUJ4QJYw2gCZodqmGw==
   dependencies:
-    "@typescript-eslint/project-service" "8.52.0"
-    "@typescript-eslint/tsconfig-utils" "8.52.0"
-    "@typescript-eslint/types" "8.52.0"
-    "@typescript-eslint/visitor-keys" "8.52.0"
+    "@typescript-eslint/project-service" "8.53.0"
+    "@typescript-eslint/tsconfig-utils" "8.53.0"
+    "@typescript-eslint/types" "8.53.0"
+    "@typescript-eslint/visitor-keys" "8.53.0"
     debug "^4.4.3"
     minimatch "^9.0.5"
     semver "^7.7.3"
     tinyglobby "^0.2.15"
     ts-api-utils "^2.4.0"
 
-"@typescript-eslint/utils@8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/utils/-/utils-8.52.0.tgz#b249be8264899b80d996fa353b4b84da4662f962"
-  integrity sha512-wYndVMWkweqHpEpwPhwqE2lnD2DxC6WVLupU/DOt/0/v+/+iQbbzO3jOHjmBMnhu0DgLULvOaU4h4pwHYi2oRQ==
+"@typescript-eslint/utils@8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/utils/-/utils-8.53.0.tgz#bf0a4e2edaf1afc9abce209fc02f8cab0b74af13"
+  integrity sha512-XDY4mXTez3Z1iRDI5mbRhH4DFSt46oaIFsLg+Zn97+sYrXACziXSQcSelMybnVZ5pa1P6xYkPr5cMJyunM1ZDA==
   dependencies:
     "@eslint-community/eslint-utils" "^4.9.1"
-    "@typescript-eslint/scope-manager" "8.52.0"
-    "@typescript-eslint/types" "8.52.0"
-    "@typescript-eslint/typescript-estree" "8.52.0"
+    "@typescript-eslint/scope-manager" "8.53.0"
+    "@typescript-eslint/types" "8.53.0"
+    "@typescript-eslint/typescript-estree" "8.53.0"
 
-"@typescript-eslint/visitor-keys@8.52.0":
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/@typescript-eslint/visitor-keys/-/visitor-keys-8.52.0.tgz#50361c48a6302676230fe498f80f6decce4bf673"
-  integrity sha512-ink3/Zofus34nmBsPjow63FP5M7IGff0RKAgqR6+CFpdk22M7aLwC9gOcLGYqr7MczLPzZVERW9hRog3O4n1sQ==
+"@typescript-eslint/visitor-keys@8.53.0":
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/@typescript-eslint/visitor-keys/-/visitor-keys-8.53.0.tgz#9a785664ddae7e3f7e570ad8166e48dbc9c6cf02"
+  integrity sha512-LZ2NqIHFhvFwxG0qZeLL9DvdNAHPGCY5dIRwBhyYeU+LfLhcStE1ImjsuTG/WaVh3XysGaeLW8Rqq7cGkPCFvw==
   dependencies:
-    "@typescript-eslint/types" "8.52.0"
+    "@typescript-eslint/types" "8.53.0"
     eslint-visitor-keys "^4.2.1"
 
 "@ucast/core@^1.0.0", "@ucast/core@^1.4.1", "@ucast/core@^1.6.1":
@@ -4316,7 +4302,7 @@ bluebird@3.0.5:
   resolved "https://registry.npmjs.org/bluebird/-/bluebird-3.0.5.tgz#2ff9d07c9b3edb29d6d280fe07528365e7ecd392"
   integrity sha512-5o9RE3ued60EEv6gcT5L2APn/4zSpAwzeH65fuF+d/K3/LGZ9JpGIlDU2HeI4NujAY5Wh7mUBM5UF3Zuh8bBhQ==
 
-body-parser@^2.2.1:
+body-parser@^2.2.1, body-parser@^2.2.2:
   version "2.2.2"
   resolved "https://registry.npmjs.org/body-parser/-/body-parser-2.2.2.tgz#1a32cdb966beaf68de50a9dfbe5b58f83cb8890c"
   integrity sha512-oP5VkATKlNwcgvxi0vM0p/D3n2C3EReYVX+DNYs5TjZFn/oQt2j+4sVJtSMr18pdRr8wjTcBl6LoV+FUwzPmNA==
@@ -4450,13 +4436,13 @@ bytes@3.1.2, bytes@^3.1.2, bytes@~3.1.2:
   resolved "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz#8b0beeb98605adf1b128fa4386403c009e0221a5"
   integrity sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==
 
-cache-manager@^7.2.7:
-  version "7.2.7"
-  resolved "https://registry.npmjs.org/cache-manager/-/cache-manager-7.2.7.tgz#17271c6bfd63ec6fc93dfe300882065acd29e1d8"
-  integrity sha512-TKeeb9nSybk1e9E5yAiPVJ6YKdX9FYhwqqy8fBfVKAFVTJYZUNmeIvwjURW6+UikNsO6l2ta27thYgo/oumDsw==
+cache-manager@^7.2.8:
+  version "7.2.8"
+  resolved "https://registry.npmjs.org/cache-manager/-/cache-manager-7.2.8.tgz#a9d41f3dd3b4c9b56858f868b490477efe85823f"
+  integrity sha512-0HDaDLBBY/maa/LmUVAr70XUOwsiQD+jyzCBjmUErYZUKdMS9dT59PqW59PpVqfGM7ve6H0J6307JTpkCYefHQ==
   dependencies:
-    "@cacheable/utils" "^2.3.2"
-    keyv "^5.5.4"
+    "@cacheable/utils" "^2.3.3"
+    keyv "^5.5.5"
 
 cacheable-lookup@^7.0.0:
   version "7.0.0"
@@ -4591,7 +4577,7 @@ cjs-module-lexer@^1.2.2:
   resolved "https://registry.npmjs.org/cjs-module-lexer/-/cjs-module-lexer-1.4.3.tgz#0f79731eb8cfe1ec72acd4066efac9d61991b00d"
   integrity sha512-9z8TZaGM1pfswYeXrUpzPrkx8UnWYdhJclsiYMm6x/w5+nN+8Tf/LnAgfLGQCm59qAOxU8WwHEq2vNwF6i4j+Q==
 
-cjs-module-lexer@^2.1.0:
+cjs-module-lexer@^2.1.0, cjs-module-lexer@^2.2.0:
   version "2.2.0"
   resolved "https://registry.npmjs.org/cjs-module-lexer/-/cjs-module-lexer-2.2.0.tgz#b3ca5101843389259ade7d88c77bd06ce55849ca"
   integrity sha512-4bHTS2YuzUvtoLjdy+98ykbNB5jS0+07EvFNXerqZQJ89F7DI6ET7OQo/HJuW6K0aVsKA9hj9/RVb2kQVOrPDQ==
@@ -5091,10 +5077,10 @@ diff@^4.0.1:
   resolved "https://registry.npmjs.org/diff/-/diff-4.0.2.tgz#60f3aecb89d5fae520c11aa19efc2bb982aade7d"
   integrity sha512-58lmxKSA4BNyLz+HHMUzlOEpg09FV+ev6ZMe3vJihgdxzgcwZ8VoEEPmALCZG9LmqfVoNMMKpttIYTVG6uDY7A==
 
-diff@^8.0.2:
-  version "8.0.2"
-  resolved "https://registry.npmjs.org/diff/-/diff-8.0.2.tgz#712156a6dd288e66ebb986864e190c2fc9eddfae"
-  integrity sha512-sSuxWU5j5SR9QQji/o2qMvqRNYRDOcBTgsJ/DeCf4iSN4gW+gNMXM7wFIP+fdXZxoNiAnHUTGjCr+TSWXdRDKg==
+diff@^8.0.3:
+  version "8.0.3"
+  resolved "https://registry.npmjs.org/diff/-/diff-8.0.3.tgz#c7da3d9e0e8c283bb548681f8d7174653720c2d5"
+  integrity sha512-qejHi7bcSD4hQAZE0tNAawRK1ZtafHDmMTMkrrIGgSLl7hTnQHmKCeB45xAcbfTqK2zowkM3j3bHt/4b/ARbYQ==
 
 dir-glob@^3.0.1:
   version "3.0.1"
@@ -5471,13 +5457,13 @@ eslint-plugin-import@^2.32.0:
     string.prototype.trimend "^1.0.9"
     tsconfig-paths "^3.15.0"
 
-eslint-plugin-prettier@^5.5.4:
-  version "5.5.4"
-  resolved "https://registry.npmjs.org/eslint-plugin-prettier/-/eslint-plugin-prettier-5.5.4.tgz#9d61c4ea11de5af704d4edf108c82ccfa7f2e61c"
-  integrity sha512-swNtI95SToIz05YINMA6Ox5R057IMAmWZ26GqPxusAp1TZzj+IdY9tXNWWD3vkF/wEqydCONcwjTFpxybBqZsg==
+eslint-plugin-prettier@^5.5.5:
+  version "5.5.5"
+  resolved "https://registry.npmjs.org/eslint-plugin-prettier/-/eslint-plugin-prettier-5.5.5.tgz#9eae11593faa108859c26f9a9c367d619a0769c0"
+  integrity sha512-hscXkbqUZ2sPithAuLm5MXL+Wph+U7wHngPBv9OMWwlP8iaflyxpjTYZkmdgB4/vPIhemRlBEoLrH7UC1n7aUw==
   dependencies:
-    prettier-linter-helpers "^1.0.0"
-    synckit "^0.11.7"
+    prettier-linter-helpers "^1.0.1"
+    synckit "^0.11.12"
 
 eslint-plugin-unused-imports@^4.3.0:
   version "4.3.0"
@@ -6457,7 +6443,7 @@ import-fresh@^3.2.1, import-fresh@^3.3.0:
     parent-module "^1.0.0"
     resolve-from "^4.0.0"
 
-import-in-the-middle@^2, import-in-the-middle@^2.0.0:
+import-in-the-middle@^2.0.0:
   version "2.0.1"
   resolved "https://registry.npmjs.org/import-in-the-middle/-/import-in-the-middle-2.0.1.tgz#8d1aa2db18374f2c811de2aa4756ebd6e9859243"
   integrity sha512-bruMpJ7xz+9jwGzrwEhWgvRrlKRYCRDBrfU+ur3FcasYXLJDxTruJ//8g2Noj+QFyRBeqbpj8Bhn4Fbw6HjvhA==
@@ -6466,6 +6452,16 @@ import-in-the-middle@^2, import-in-the-middle@^2.0.0:
     acorn-import-attributes "^1.9.5"
     cjs-module-lexer "^1.2.2"
     module-details-from-path "^1.0.3"
+
+import-in-the-middle@^2.0.1:
+  version "2.0.3"
+  resolved "https://registry.npmjs.org/import-in-the-middle/-/import-in-the-middle-2.0.3.tgz#2ba36d716faa3531a7946c4ee52a8e553f6ee0bd"
+  integrity sha512-BhJ3Rc6x+kA3EE0apAuGc4rsihsUrEj31lCkXRfwGzLKqgzlSyBLvthIinsvLg6J4bCCTgVAoAgD+KwkISjmBQ==
+  dependencies:
+    acorn "^8.15.0"
+    acorn-import-attributes "^1.9.5"
+    cjs-module-lexer "^2.2.0"
+    module-details-from-path "^1.0.4"
 
 import-local@^3.2.0:
   version "3.2.0"
@@ -7401,7 +7397,7 @@ keyv@^4.5.3, keyv@^4.5.4:
   dependencies:
     json-buffer "3.0.1"
 
-keyv@^5.5.4, keyv@^5.5.5:
+keyv@^5.5.5:
   version "5.5.5"
   resolved "https://registry.npmjs.org/keyv/-/keyv-5.5.5.tgz#a975b32fc03e300a0e443c705b103d8b05220834"
   integrity sha512-FA5LmZVF1VziNc0bIdCSA1IoSVnDCqE8HJIZZv2/W8YmoAM50+tnUgJR/gQZwEeIMleuIOnRnHA/UaZRNeV4iQ==
@@ -7413,10 +7409,10 @@ kind-of@^6.0.2:
   resolved "https://registry.npmjs.org/kind-of/-/kind-of-6.0.3.tgz#07c05034a6c349fa06e24fa35aa76db4580ce4dd"
   integrity sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==
 
-langsmith@0.4.4:
-  version "0.4.4"
-  resolved "https://registry.npmjs.org/langsmith/-/langsmith-0.4.4.tgz#e01defade8e063a56e09f50ff134e3afb4fee970"
-  integrity sha512-rpLzrklyL7fIP/8wwrSv2tKDwMJTvkhgWeKxDvmbAB2n/p5FzqujEWCpA//u9hnrdmXZc1dCJZ+iqN6KgaEoEA==
+langsmith@0.4.6:
+  version "0.4.6"
+  resolved "https://registry.npmjs.org/langsmith/-/langsmith-0.4.6.tgz#eead78cbf52f8e31a84923784e3fee7a4bb4dbd8"
+  integrity sha512-9aYop1fEwA8RgFuvv8XPeV9ieeSnKnVRn3bNemkFQCyINLAxfNHC547bVMW8i8MuS1F1pgKwopqhLNf80qS1bQ==
   dependencies:
     "@types/uuid" "^10.0.0"
     chalk "^4.1.2"
@@ -7896,10 +7892,10 @@ mongoose-paginate@^5.0.3:
   dependencies:
     bluebird "3.0.5"
 
-mongoose@^9.1.1:
-  version "9.1.2"
-  resolved "https://registry.npmjs.org/mongoose/-/mongoose-9.1.2.tgz#86a2b8af1607a8c9d69eacab2b04a7ed9d0c6121"
-  integrity sha512-EdxZ/l+wLIPymy/ODxulg13CaUPpt8RenGmuoNAuRhA5Dgk/QERkUm3U0wOEbAi6ULG08bGDo9sy2tKX0KwxIg==
+mongoose@^9.1.3:
+  version "9.1.3"
+  resolved "https://registry.npmjs.org/mongoose/-/mongoose-9.1.3.tgz#9724c18f31b2115ae2a52d6d5cb8b405e29d2d38"
+  integrity sha512-vIKt/qjdgXt0C/75g8/ROLY+o5rrVsjqwmo1C9qpGYIpJQI9KLZjuBXJTyL+8RXH2cGFumADCd7PIE3mry3ibw==
   dependencies:
     kareem "3.0.0"
     mongodb "~7.0"
@@ -8659,7 +8655,7 @@ postgres-interval@^1.1.0:
   dependencies:
     xtend "^4.0.0"
 
-posthog-node@^5.18.1:
+posthog-node@^5.20.0:
   version "5.20.0"
   resolved "https://registry.npmjs.org/posthog-node/-/posthog-node-5.20.0.tgz#9244a270ccf6a64db26a64fab65499990356f307"
   integrity sha512-LkR5KfrvEQTnUtNKN97VxFB00KcYG1Iz8iKg8r0e/i7f1eQhg1WSZO+Jp1B4bvtHCmdpIE4HwYbvCCzFoCyjVg==
@@ -8671,7 +8667,7 @@ prelude-ls@^1.2.1:
   resolved "https://registry.npmjs.org/prelude-ls/-/prelude-ls-1.2.1.tgz#debc6489d7a6e6b0e7611888cec880337d316396"
   integrity sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==
 
-prettier-linter-helpers@^1.0.0:
+prettier-linter-helpers@^1.0.1:
   version "1.0.1"
   resolved "https://registry.npmjs.org/prettier-linter-helpers/-/prettier-linter-helpers-1.0.1.tgz#6a31f88a4bad6c7adda253de12ba4edaea80ebcd"
   integrity sha512-SxToR7P8Y2lWmv/kTzVLC1t/GDI2WGjMwNhLLE9qtH8Q13C+aEmuRlzDst4Up4s0Wc8sF2M+J57iB3cMLqftfg==
@@ -8707,7 +8703,25 @@ promise-breaker@^6.0.0:
   resolved "https://registry.npmjs.org/promise-breaker/-/promise-breaker-6.0.0.tgz#107d2b70f161236abdb4ac5a736c7eb8df489d0f"
   integrity sha512-BthzO9yTPswGf7etOBiHCVuugs2N01/Q/94dIPls48z2zCmrnDptUUZzfIb+41xq0MnYZ/BzmOd6ikDR4ibNZA==
 
-protobufjs@^7.3.0, protobufjs@^7.5.3:
+protobufjs@8.0.0:
+  version "8.0.0"
+  resolved "https://registry.npmjs.org/protobufjs/-/protobufjs-8.0.0.tgz#d884102c1fe8d0b1e2493789ad37bc7ea47c0893"
+  integrity sha512-jx6+sE9h/UryaCZhsJWbJtTEy47yXoGNYI4z8ZaRncM0zBKeRqjO2JEcOUYwrYGb1WLhXM1FfMzW3annvFv0rw==
+  dependencies:
+    "@protobufjs/aspromise" "^1.1.2"
+    "@protobufjs/base64" "^1.1.2"
+    "@protobufjs/codegen" "^2.0.4"
+    "@protobufjs/eventemitter" "^1.1.0"
+    "@protobufjs/fetch" "^1.1.0"
+    "@protobufjs/float" "^1.0.2"
+    "@protobufjs/inquire" "^1.1.0"
+    "@protobufjs/path" "^1.1.2"
+    "@protobufjs/pool" "^1.1.0"
+    "@protobufjs/utf8" "^1.1.0"
+    "@types/node" ">=13.7.0"
+    long "^5.0.0"
+
+protobufjs@^7.5.3:
   version "7.5.4"
   resolved "https://registry.npmjs.org/protobufjs/-/protobufjs-7.5.4.tgz#885d31fe9c4b37f25d1bb600da30b1c5b37d286a"
   integrity sha512-CvexbZtbov6jW2eXAvLukXjXUW1TzFaivC46BpWc/3BpcCysb5Vffu+B3XHMm8lVEuy2Mm4XGex8hBSg1yapPg==
@@ -9573,7 +9587,7 @@ superagent@^10.3.0:
     mime "2.6.0"
     qs "^6.14.1"
 
-supertest@^7.1.4:
+supertest@^7.2.2:
   version "7.2.2"
   resolved "https://registry.npmjs.org/supertest/-/supertest-7.2.2.tgz#dac3ee25a2aa59942a7f641e50c838a7c8819204"
   integrity sha512-oK8WG9diS3DlhdUkcFn4tkNIiIbBx9lI2ClF8K+b2/m8Eyv47LSawxUzZQSNKUrVb2KsqeTDCcjAAVPYaSLVTA==
@@ -9608,10 +9622,10 @@ supports-preserve-symlinks-flag@^1.0.0:
   resolved "https://registry.npmjs.org/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz#6eda4bd344a3c94aea376d4cc31bc77311039e09"
   integrity sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==
 
-swc-loader@^0.2.6:
-  version "0.2.6"
-  resolved "https://registry.npmjs.org/swc-loader/-/swc-loader-0.2.6.tgz#bf0cba8eeff34bb19620ead81d1277fefaec6bc8"
-  integrity sha512-9Zi9UP2YmDpgmQVbyOPJClY0dwf58JDyDMQ7uRc4krmc72twNI2fvlBWHLqVekBpPc7h5NJkGVT1zNDxFrqhvg==
+swc-loader@^0.2.7:
+  version "0.2.7"
+  resolved "https://registry.npmjs.org/swc-loader/-/swc-loader-0.2.7.tgz#2d1611ab314c5d8342d74aa5e5901b3fbf490de2"
+  integrity sha512-nwYWw3Fh9ame3Rtm7StS9SBLpHRRnYcK7bnpF3UKZmesAK0gw2/ADvlURFAINmPvKtDLzp+GBiP9yLoEjg6S9w==
   dependencies:
     "@swc/counter" "^0.1.3"
 
@@ -9620,7 +9634,14 @@ symbol-observable@4.0.0:
   resolved "https://registry.npmjs.org/symbol-observable/-/symbol-observable-4.0.0.tgz#5b425f192279e87f2f9b937ac8540d1984b39205"
   integrity sha512-b19dMThMV4HVFynSAM1++gBHAbk2Tc/osgLIBZMKsyqh34jb2e8Os7T6ZW/Bt3pJFdBTd2JwAnAAEQV7rSNvcQ==
 
-synckit@^0.11.7, synckit@^0.11.8:
+synckit@^0.11.12:
+  version "0.11.12"
+  resolved "https://registry.npmjs.org/synckit/-/synckit-0.11.12.tgz#abe74124264fbc00a48011b0d98bdc1cffb64a7b"
+  integrity sha512-Bh7QjT8/SuKUIfObSXNHNSK6WHo6J1tHCqJsuaFDP7gP0fkzSfTxI8y85JrppZ0h8l0maIgc2tfuZQ6/t3GtnQ==
+  dependencies:
+    "@pkgr/core" "^0.2.9"
+
+synckit@^0.11.8:
   version "0.11.11"
   resolved "https://registry.npmjs.org/synckit/-/synckit-0.11.11.tgz#c0b619cf258a97faa209155d9cd1699b5c998cb0"
   integrity sha512-MeQTA1r0litLUf0Rp/iisCaL8761lKAZHaimlbGK4j0HysC4PLfqygQj9srcs0m2RdtDYnF8UuYyKpbjHYp7Jw==
@@ -10008,15 +10029,15 @@ types-ramda@^0.31.0:
   dependencies:
     ts-toolbelt "^9.6.0"
 
-typescript-eslint@^8.51.0:
-  version "8.52.0"
-  resolved "https://registry.npmjs.org/typescript-eslint/-/typescript-eslint-8.52.0.tgz#b8c156b6f2b4dee202a85712ff6a37f614476413"
-  integrity sha512-atlQQJ2YkO4pfTVQmQ+wvYQwexPDOIgo+RaVcD7gHgzy/IQA+XTyuxNM9M9TVXvttkF7koBHmcwisKdOAf2EcA==
+typescript-eslint@^8.53.0:
+  version "8.53.0"
+  resolved "https://registry.npmjs.org/typescript-eslint/-/typescript-eslint-8.53.0.tgz#c35ca6403cd381753aee325f67e10d6101d55f04"
+  integrity sha512-xHURCQNxZ1dsWn0sdOaOfCSQG0HKeqSj9OexIxrz6ypU6wHYOdX2I3D2b8s8wFSsSOYJb+6q283cLiLlkEsBYw==
   dependencies:
-    "@typescript-eslint/eslint-plugin" "8.52.0"
-    "@typescript-eslint/parser" "8.52.0"
-    "@typescript-eslint/typescript-estree" "8.52.0"
-    "@typescript-eslint/utils" "8.52.0"
+    "@typescript-eslint/eslint-plugin" "8.53.0"
+    "@typescript-eslint/parser" "8.53.0"
+    "@typescript-eslint/typescript-estree" "8.53.0"
+    "@typescript-eslint/utils" "8.53.0"
 
 typescript@5.9.3, typescript@^5.9.3:
   version "5.9.3"
@@ -10569,7 +10590,7 @@ yallist@^3.0.2:
   resolved "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz#dbb7daf9bfd8bac9ab45ebf602b8cbad0d5d08fd"
   integrity sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==
 
-yaml@^2.2.1, yaml@^2.8.1:
+yaml@^2.0.0, yaml@^2.2.1, yaml@^2.8.1:
   version "2.8.2"
   resolved "https://registry.npmjs.org/yaml/-/yaml-2.8.2.tgz#5694f25eca0ce9c3e7a9d9e00ce0ddabbd9e35c5"
   integrity sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A==
