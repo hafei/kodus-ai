@@ -293,3 +293,60 @@ export class EmailService {
         }
     }
 }
+
+let emailServiceInstance: EmailService | null = null;
+
+function getEmailServiceInstance(): EmailService {
+    if (!emailServiceInstance) {
+        const { ConfigService } = require('@nestjs/config');
+        emailServiceInstance = new EmailService(new ConfigService());
+    }
+    return emailServiceInstance;
+}
+
+export async function sendInvite(user, adminUserEmail, invite, logger?) {
+    const emailService = getEmailServiceInstance();
+    return emailService.sendInvite(user, adminUserEmail, invite, logger);
+}
+
+export async function sendForgotPasswordEmail(
+    email: string,
+    name: string,
+    token: string,
+    logger?,
+) {
+    const emailService = getEmailServiceInstance();
+    return emailService.sendForgotPasswordEmail(email, name, token, logger);
+}
+
+export async function sendKodyRulesNotification(
+    users: Array<{ email: string; name: string }>,
+    rules: Array<string>,
+    organizationName: string,
+    logger?,
+) {
+    const emailService = getEmailServiceInstance();
+    return emailService.sendKodyRulesNotification(
+        users,
+        rules,
+        organizationName,
+        logger,
+    );
+}
+
+export async function sendConfirmationEmail(
+    token: string,
+    email: string,
+    organizationName: string,
+    organizationAndTeamData: OrganizationAndTeamData,
+    logger?,
+) {
+    const emailService = getEmailServiceInstance();
+    return emailService.sendConfirmationEmail(
+        token,
+        email,
+        organizationName,
+        organizationAndTeamData,
+        logger,
+    );
+}

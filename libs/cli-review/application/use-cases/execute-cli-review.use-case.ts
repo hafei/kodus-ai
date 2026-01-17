@@ -318,9 +318,7 @@ export class ExecuteCliReviewUseCase implements IUseCase {
             bug: !!reviewOptions.bug,
             performance: !!reviewOptions.performance,
             security: !!reviewOptions.security,
-            breaking_changes: !!reviewOptions.breaking_changes,
             cross_file: !!reviewOptions.cross_file,
-            kody_rules: !!reviewOptions.kody_rules,
         } as any;
 
         return merged;
