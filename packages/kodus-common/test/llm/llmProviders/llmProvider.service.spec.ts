@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LoggerService } from '@nestjs/common';
 import { LLMProviderService, LLMModelProvider, MODEL_STRATEGIES } from '@/llm';
+import { BYOKProviderService } from '@/llm/byokProvider.service';
 
 describe('LLMProviderService', () => {
     let service: LLMProviderService;
@@ -13,12 +14,20 @@ describe('LLMProviderService', () => {
             warn: jest.fn(),
         };
 
+        const mockBYOKProviderService = {
+            createBYOKProvider: jest.fn(),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 LLMProviderService,
                 {
                     provide: 'LLM_LOGGER',
                     useValue: mockLogger,
+                },
+                {
+                    provide: BYOKProviderService,
+                    useValue: mockBYOKProviderService,
                 },
             ],
         }).compile();

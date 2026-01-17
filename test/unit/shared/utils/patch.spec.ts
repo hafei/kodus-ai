@@ -1,4 +1,4 @@
-import { extractLinesFromDiffHunk } from '../../../../src/shared/utils/patch';
+import { extractLinesFromDiffHunk } from '@/shared/utils/patch';
 
 describe('patch.ts', () => {
     describe('extractLinesFromDiffHunk', () => {

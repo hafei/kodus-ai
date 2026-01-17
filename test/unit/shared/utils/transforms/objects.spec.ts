@@ -1,4 +1,4 @@
-import { transformObjectKeys } from '../../../../../src/shared/utils/transforms/objects';
+import { transformObjectKeys } from '@/shared/utils/transforms/objects';
 
 describe('Tests for the transformObjectKeys function', () => {
     it('should correctly transform simple keys', () => {

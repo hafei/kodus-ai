@@ -1,4 +1,4 @@
-import { isFileMatchingGlob } from '../../../../src/shared/utils/glob-utils';
+import { isFileMatchingGlob } from '@/shared/utils/glob-utils';
 
 describe('globMatch', () => {
     it('matches .cursor/rules/**/*.mdc against rule files in tree', () => {

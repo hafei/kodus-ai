@@ -1,15 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { REQUEST } from '@nestjs/core';
 
 import {
     ActionType,
     ConfigLevel,
 } from '@/config/types/general/codeReviewSettingsLog.type';
-import { FindCodeReviewSettingsLogsUseCase } from '@/core/application/use-cases/codeReviewSettingsLog/find-code-review-settings-logs.use-case';
+import { FindCodeReviewSettingsLogsUseCase } from '@/ee/codeReviewSettingsLog/application/use-cases/find-code-review-settings-logs.use-case';
 import {
     ICodeReviewSettingsLogService,
     CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-} from '@/core/domain/codeReviewSettingsLog/contracts/codeReviewSettingsLog.service.contract';
+} from '@/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
 import { CodeReviewSettingsLogFiltersDto } from '@/core/infrastructure/http/dtos/code-review-settings-log-filters.dto';
+import { AuthorizationService } from '@/core/infrastructure/adapters/services/permissions/authorization.service';
 
 describe('FindCodeReviewSettingsLogsUseCase', () => {
     let useCase: FindCodeReviewSettingsLogsUseCase;
@@ -57,8 +59,32 @@ describe('FindCodeReviewSettingsLogsUseCase', () => {
             },
         };
 
+        const mockAuthorizationService = {
+            provide: AuthorizationService,
+            useValue: {
+                ensure: jest.fn(),
+                getRepositoryScope: jest.fn().mockResolvedValue(['repo-123']),
+            },
+        };
+
+        const mockRequest = {
+            provide: REQUEST,
+            useValue: {
+                user: {
+                    organization: {
+                        uuid: 'org-123',
+                    },
+                },
+            },
+        };
+
         const module: TestingModule = await Test.createTestingModule({
-            providers: [FindCodeReviewSettingsLogsUseCase, mockServiceProvider],
+            providers: [
+                FindCodeReviewSettingsLogsUseCase,
+                mockServiceProvider,
+                mockAuthorizationService,
+                mockRequest,
+            ],
         }).compile();
 
         useCase = module.get<FindCodeReviewSettingsLogsUseCase>(
@@ -133,6 +159,7 @@ describe('FindCodeReviewSettingsLogsUseCase', () => {
         await useCase.execute(filters);
 
         expect(mockService.find).toHaveBeenCalledWith({
+            organizationId: 'org-123',
             createdAt: {
                 $gte: startDate,
                 $lte: endDate,

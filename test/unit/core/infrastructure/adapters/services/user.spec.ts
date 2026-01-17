@@ -6,19 +6,21 @@ import { AUTH_SERVICE_TOKEN } from '@/core/domain/auth/contracts/auth.service.co
 import {
     IProfileRepository,
     PROFILE_REPOSITORY_TOKEN,
-} from '@/core/domain/profile/contracts/profile.repository.contract';
+} from '@/identity/domain/profile/contracts/profile.repository.contract';
 import {
     ITeamRepository,
     TEAM_REPOSITORY_TOKEN,
-} from '@/core/domain/team/contracts/team.repository.contract';
+} from '@/core/domain/organization/team/contracts/team.repository.contract';
 import {
     IUserRepository,
     USER_REPOSITORY_TOKEN,
-} from '@/core/domain/user/contracts/user.repository.contract';
-import { Role } from '@/core/domain/user/enums/Role.enum';
-import { ProfilesService } from '@/core/infrastructure/adapters/services/profile.service';
-import { TeamService } from '@/core/infrastructure/adapters/services/team.service';
-import { UsersService } from '@/core/infrastructure/adapters/services/users.service';
+} from '@/identity/domain/user/contracts/user.repository.contract';
+import { Role } from '@/identity/domain/permissions/enums/permissions.enum';
+import { ProfilesService } from '@/identity/infrastructure/adapters/services/profile.service';
+import { TeamService } from '@/organization/infrastructure/adapters/services/team.service';
+import { UsersService } from '@/identity/infrastructure/adapters/services/users.service';
+
+import { CryptoService } from '@/core/crypto/crypto.service';
 
 describe('User SignUp', () => {
     let usersService: UsersService;
@@ -50,6 +52,12 @@ describe('User SignUp', () => {
         create: jest.fn(),
     };
 
+    const mockCryptoService = {
+        encrypt: jest.fn(),
+        decrypt: jest.fn(),
+        hashPassword: jest.fn().mockResolvedValue('hashedPassword'),
+    };
+
     beforeEach(async () => {
         const userModule: TestingModule = await Test.createTestingModule({
             providers: [
@@ -61,6 +69,10 @@ describe('User SignUp', () => {
                 {
                     provide: USER_REPOSITORY_TOKEN,
                     useValue: mockUsersRepository,
+                },
+                {
+                    provide: CryptoService,
+                    useValue: mockCryptoService,
                 },
             ],
         }).compile();

@@ -130,10 +130,9 @@ describe('PostHogClient', () => {
     describe('isFeatureEnabled', () => {
         it('should call isFeatureEnabled when PostHog is initialized', async () => {
             const posthogClient = await getClient('test-key');
-            posthogClient.isFeatureEnabled('test-feature', {
-                uuid: '123',
-                organization: { uuid: '456' },
-            } as IUser);
+            await posthogClient.isFeatureEnabled('test-feature', '123', {
+                organizationId: '456',
+            } as any);
             expect(
                 posthogClient['posthog'].isFeatureEnabled,
             ).toHaveBeenCalledWith('test-feature', '123', {
@@ -145,10 +144,10 @@ describe('PostHogClient', () => {
             const posthogClient = await getClient('');
             const isFeatureEnabled = await posthogClient.isFeatureEnabled(
                 'test-feature',
+                '123',
                 {
-                    uuid: '123',
-                    organization: { uuid: '456' },
-                } as IUser,
+                    organizationId: '456',
+                } as any,
             );
             expect(posthogClient['posthog']).toBeNull();
             expect(isFeatureEnabled).toBe(true);
