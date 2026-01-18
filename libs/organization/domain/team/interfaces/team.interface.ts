@@ -6,6 +6,7 @@ export interface ITeam<TOrganization = any> {
     name: string;
     organization?: Partial<TOrganization> | null;
     status: STATUS;
+    cliConfig?: any;
 }
 
 export interface ITeamWithIntegrations extends ITeam {

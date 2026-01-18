@@ -1,12 +1,12 @@
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 
+import type { SSOConfigModel } from '@libs/ee/sso/repositories/ssoConfig.model';
+import type { UserModel } from '@libs/identity/infrastructure/adapters/repositories/schemas/user.model';
 import type { AuthIntegrationModel } from '@libs/integrations/infrastructure/adapters/repositories/schemas/authIntegration.model';
 import type { IntegrationModel } from '@libs/integrations/infrastructure/adapters/repositories/schemas/integration.model';
 import type { OrganizationParametersModel } from './organizationParameters.model';
-import type { SSOConfigModel } from '@libs/identity/infrastructure/adapters/repositories/schemas/ssoConfig.model';
 import type { TeamModel } from './team.model';
 import type { TeamMemberModel } from './teamMember.model';
-import type { UserModel } from '@libs/identity/infrastructure/adapters/repositories/schemas/user.model';
 
 import { CoreModel } from '@libs/core/infrastructure/repositories/model/typeOrm';
 

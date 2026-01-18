@@ -2,7 +2,7 @@ import {
     joinArrayValues,
     transformAndCreateDocuments,
     iterateAndTransformKeys,
-} from '../../../../../src/shared/utils/transforms/arrays';
+} from '@/shared/utils/transforms/arrays';
 
 describe('Tests for the joinArrayValues function', () => {
     it('should return the array joined as a string', () => {

@@ -8,16 +8,14 @@
             "port": 9229,
             "address": "localhost",
             "timeout": 60000,
-            "restart": false,
+            "restart": true,
             "localRoot": "${workspaceFolder}",
             "remoteRoot": "/usr/src/app",
             "sourceMaps": true,
             "sourceMapPathOverrides": {
                 "webpack:///*": "${workspaceFolder}/*"
             },
-            "skipFiles": [
-                "<node_internals>/**"
-            ]
+            "skipFiles": ["<node_internals>/**"]
         },
         {
             "type": "node",
@@ -26,16 +24,14 @@
             "port": 9232,
             "address": "localhost",
             "timeout": 60000,
-            "restart": false,
+            "restart": true,
             "localRoot": "${workspaceFolder}",
             "remoteRoot": "/usr/src/app",
             "sourceMaps": true,
             "sourceMapPathOverrides": {
                 "webpack:///*": "${workspaceFolder}/*"
             },
-            "skipFiles": [
-                "<node_internals>/**"
-            ]
+            "skipFiles": ["<node_internals>/**"]
         },
         {
             "type": "node",
@@ -44,26 +40,20 @@
             "port": 9231,
             "address": "localhost",
             "timeout": 60000,
-            "restart": false,
+            "restart": true,
             "localRoot": "${workspaceFolder}",
             "remoteRoot": "/usr/src/app",
             "sourceMaps": true,
             "sourceMapPathOverrides": {
                 "webpack:///*": "${workspaceFolder}/*"
             },
-            "skipFiles": [
-                "<node_internals>/**"
-            ]
+            "skipFiles": ["<node_internals>/**"]
         }
     ],
     "compounds": [
         {
             "name": "Debug: All Services",
-            "configurations": [
-                "Debug: API",
-                "Debug: Webhooks",
-                "Debug: Worker"
-            ]
+            "configurations": ["Debug: API", "Debug: Webhooks", "Debug: Worker"]
         }
     ]
 }

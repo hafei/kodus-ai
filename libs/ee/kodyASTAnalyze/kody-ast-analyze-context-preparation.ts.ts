@@ -42,29 +42,6 @@ export class KodyASTAnalyzeContextPreparationServiceEE extends BaseKodyASTAnalyz
     async prepareKodyASTAnalyzeContextInternal(
         context: AnalysisContext,
     ): Promise<AIAnalysisResult | null> {
-        const { organizationAndTeamData, pullRequest } = context;
-
-        try {
-            const kodyASTSuggestions =
-                await this.codeAnalysisOrchestrator.executeASTAnalysis(
-                    context.fileChangeContext,
-                    context.reviewModeResponse,
-                    context,
-                );
-
-            return kodyASTSuggestions ? kodyASTSuggestions : null;
-        } catch (error) {
-            this.logger.error({
-                message: 'Error performing AST analysis',
-                error,
-                context: KodyASTAnalyzeContextPreparationServiceEE.name,
-                metadata: {
-                    organizationAndTeamData,
-                    prNumber: pullRequest?.prNumber,
-                },
-            });
-
-            return null;
-        }
+        return null;
     }
 }

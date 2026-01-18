@@ -169,8 +169,7 @@
         "js-yaml": "^4.1.1",
         "json5": "^2.2.3",
         "keyv": "^5.5.5",
-        "langsmith": "0.4.7",
-        "mailersend": "^2.6.0",
+        "langsmith": "0.4.4",
         "ml-kmeans": "^6.0.0",
         "moment": "^2.30.1",
         "moment-timezone": "^0.6.0",
@@ -236,6 +235,7 @@
         "husky": "^9.1.7",
         "jest": "^30.2.0",
         "localtunnel": "^2.0.2",
+        "nock": "^14.0.10",
         "nodemon": "^3.1.11",
         "prettier": "^3.8.0",
         "run-script-webpack-plugin": "^0.2.3",
@@ -254,33 +254,5 @@
         "moment": "^2.29.4",
         "xml2js": ">=0.5.0",
         "axios": ">=1.7.2"
-    },
-    "jest": {
-        "moduleNameMapper": {
-            "^@/(.*)$": "<rootDir>/src/$1",
-            "^test/mocks/(.*)$": "<rootDir>/test/mocks/$1",
-            "^@kodus/kodus-common/(.*)$": "<rootDir>/packages/kodus-common/src/$1",
-            "^@kodus/kodus-common$": "<rootDir>/packages/kodus-common/src",
-            "^@kodus/flow/(.*)$": "<rootDir>/packages/kodus-flow/src/$1",
-            "^@kodus/flow$": "<rootDir>/packages/kodus-flow/src"
-        },
-        "moduleFileExtensions": [
-            "js",
-            "json",
-            "ts"
-        ],
-        "roots": [
-            "src",
-            "test"
-        ],
-        "testRegex": ".*\\.spec\\.ts$",
-        "transform": {
-            "^.+\\.(t|j)s$": "ts-jest"
-        },
-        "collectCoverageFrom": [
-            "**/*.(t|j)s"
-        ],
-        "coverageDirectory": "../coverage",
-        "testEnvironment": "node"
     }
 }

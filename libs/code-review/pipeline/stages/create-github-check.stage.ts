@@ -67,7 +67,7 @@ export class CreateGithubCheckStage extends BasePipelineStage<CodeReviewPipeline
                     name: repo,
                 },
                 headSha: context.pullRequest.head.sha,
-                status: CheckStatus.IN_PROGRESS, // ✅ Start as In Progress immediately
+                status: CheckStatus.IN_PROGRESS,
             });
 
             if (checkRunId) {

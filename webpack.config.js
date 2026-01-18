@@ -84,6 +84,7 @@ module.exports = function (options, webpack) {
         },
         cache: {
             type: 'filesystem',
+            version: '1',
             buildDependencies: {
                 config: [__filename],
             },

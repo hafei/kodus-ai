@@ -1,30 +1,32 @@
+import { ExecuteCliReviewUseCase } from '@libs/cli-review/application/use-cases/execute-cli-review.use-case';
+import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
+import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
+import { AutoAssignLicenseUseCase } from '@libs/ee/license/use-cases/auto-assign-license.use-case';
 import {
-    Controller,
-    Post,
-    Get,
+    PermissionValidationService,
+    ValidationErrorType,
+} from '@libs/ee/shared/services/permissionValidation.service';
+import {
+    ITeamCliKeyService,
+    TEAM_CLI_KEY_SERVICE_TOKEN,
+} from '@libs/organization/domain/team-cli-key/contracts/team-cli-key.service.contract';
+import {
     Body,
+    Controller,
+    ForbiddenException,
+    Get,
     Headers,
-    Inject,
-    Res,
     HttpException,
     HttpStatus,
+    Inject,
+    Post,
+    Res,
     UnauthorizedException,
-    ForbiddenException,
 } from '@nestjs/common';
 import {
     CliReviewRequestDto,
     TrialCliReviewRequestDto,
 } from '../dtos/cli-review.dto';
-import { ExecuteCliReviewUseCase } from '@libs/cli-review/application/use-cases/execute-cli-review.use-case';
-import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
-import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
-import {
-    ITeamCliKeyService,
-    TEAM_CLI_KEY_SERVICE_TOKEN,
-} from '@libs/organization/domain/team-cli-key/contracts/team-cli-key.service.contract';
-import { PermissionValidationService } from '@libs/ee/shared/services/permissionValidation.service';
-import { ValidationErrorType } from '@libs/ee/shared/services/permissionValidation.service';
-import { AutoAssignLicenseUseCase } from '@libs/ee/license/use-cases/auto-assign-license.use-case';
 
 /**
  * Controller for CLI code review endpoints
@@ -78,25 +80,28 @@ export class CliReviewController {
             },
         });
 
-        const buildInvalidPayload = (error: string) => buildPayload({
-            valid: false,
-            error,
-            team: {
-                id: null,
-                name: '',
-            },
-            organization: {
-                id: null,
-                name: '',
-            },
-            user: {
-                email: '',
-                name: '',
-            },
-        });
+        const buildInvalidPayload = (error: string) =>
+            buildPayload({
+                valid: false,
+                error,
+                team: {
+                    id: null,
+                    name: '',
+                },
+                organization: {
+                    id: null,
+                    name: '',
+                },
+                user: {
+                    email: '',
+                    name: '',
+                },
+            });
 
         if (!key) {
-            return buildInvalidPayload('Team API key required. Provide via X-Team-Key or Authorization: Bearer header.');
+            return buildInvalidPayload(
+                'Team API key required. Provide via X-Team-Key or Authorization: Bearer header.',
+            );
         }
 
         const teamData = await this.teamCliKeyService.validateKey(key);
@@ -177,14 +182,14 @@ export class CliReviewController {
         };
 
         // 3. Check rate limit for authenticated team
-        const rateLimitResult = await this.authenticatedRateLimiter.checkRateLimit(
-            team.uuid,
-        );
+        const rateLimitResult =
+            await this.authenticatedRateLimiter.checkRateLimit(team.uuid);
 
         if (!rateLimitResult.allowed) {
             throw new HttpException(
                 {
-                    message: 'Rate limit exceeded for this team. Please try again later.',
+                    message:
+                        'Rate limit exceeded for this team. Please try again later.',
                     remaining: rateLimitResult.remaining,
                     resetAt: rateLimitResult.resetAt?.toISOString(),
                     limit: 1000,
@@ -195,8 +200,7 @@ export class CliReviewController {
 
         // 4. Validate domain of email (if configured)
         if (body.userEmail) {
-            const allowedDomains =
-                (team as any).cliConfig?.allowedDomains || [];
+            const allowedDomains = team.cliConfig?.allowedDomains || [];
 
             if (allowedDomains.length > 0) {
                 const isValidDomain = allowedDomains.some((domain: string) =>

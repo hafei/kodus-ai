@@ -27,8 +27,8 @@ export class FinalizeGithubCheckStage extends BasePipelineStage<CodeReviewPipeli
                 context: this.stageName,
                 metadata: {
                     prNumber: context.pullRequest?.number,
-                    organizationAndTeamData: context.organizationAndTeamData
-
+                    organizationAndTeamData: context.organizationAndTeamData,
+                    platformType: context.platformType,
                 },
             });
             return context;
@@ -60,13 +60,23 @@ export class FinalizeGithubCheckStage extends BasePipelineStage<CodeReviewPipeli
                     checkRunId: context.githubCheckRunId,
                     output: {
                         title: 'Code Review Failed',
-                        summary: 'An error occurred during the code review process. Please check the logs for details.',
+                        summary:
+                            'An error occurred during the code review process. Please check the logs for details.',
                     },
                 });
             } else {
-                let summary = `✅ Kody found ${totalSuggestions} suggestion${totalSuggestions === 1 ? '' : 's'}. Check the comments for details.`;
+                let summary = `✅ Kody found ${totalSuggestions} suggestion${
+                    totalSuggestions === 1 ? '' : 's'
+                }. Check the comments for details.`;
+
                 if (totalSuggestions === 0) {
-                    summary = '✅ No issues found. Great work!';
+                    if (context.statusInfo.skippedReason?.message) {
+                        summary = `ℹ️ ${context.statusInfo.skippedReason.message}`;
+                    } else if (context.statusInfo?.message) {
+                        summary = `ℹ️ ${context.statusInfo.message}`;
+                    } else {
+                        summary = '✅ No issues found. Great work!';
+                    }
                 }
                 // Mark as success with suggestion count
                 await this.githubChecksService.markSuccess({
@@ -90,8 +100,7 @@ export class FinalizeGithubCheckStage extends BasePipelineStage<CodeReviewPipeli
                     checkRunId: context.githubCheckRunId,
                     totalSuggestions,
                     hasErrors,
-                    organizationAndTeamData: context.organizationAndTeamData
-
+                    organizationAndTeamData: context.organizationAndTeamData,
                 },
             });
         } catch (error) {
@@ -101,7 +110,7 @@ export class FinalizeGithubCheckStage extends BasePipelineStage<CodeReviewPipeli
                 error,
                 metadata: {
                     checkRunId: context.githubCheckRunId,
-                    organizationAndTeamData: context.organizationAndTeamData
+                    organizationAndTeamData: context.organizationAndTeamData,
                 },
             });
         }

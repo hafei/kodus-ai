@@ -9,12 +9,14 @@ export class TeamEntity implements Entity<ITeam> {
     private _name: string;
     private _organization?: Partial<IOrganization>;
     private _status: STATUS;
+    private _cliConfig?: any;
 
     private constructor(team: ITeam | Partial<ITeam>) {
         this._uuid = team.uuid;
         this._name = team.name;
         this._organization = team.organization;
         this._status = team.status;
+        this._cliConfig = team.cliConfig;
     }
 
     public static create(team: ITeam | Partial<ITeam>): TeamEntity {
@@ -43,6 +45,7 @@ export class TeamEntity implements Entity<ITeam> {
             name: this._name,
             organization: this._organization,
             status: this._status,
+            cliConfig: this._cliConfig,
         };
     }
 
@@ -51,6 +54,11 @@ export class TeamEntity implements Entity<ITeam> {
             uuid: this._uuid,
             name: this._name,
             status: this._status,
+            cliConfig: this._cliConfig,
         };
+    }
+
+    public get cliConfig() {
+        return this._cliConfig;
     }
 }

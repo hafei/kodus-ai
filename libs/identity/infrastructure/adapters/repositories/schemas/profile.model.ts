@@ -26,6 +26,6 @@ export class ProfileModel extends CoreModel {
     @JoinColumn({ name: 'user_id', referencedColumnName: 'uuid' })
     user: UserModel;
 
-    @OneToMany(() => ProfileConfigModel, (config) => config.profile)
+    @OneToMany('ProfileConfigModel', 'profile')
     profileConfigs: ProfileConfigModel[];
 }

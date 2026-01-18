@@ -1,18 +1,19 @@
 // services/message-template-processor.service.ts
 import { Injectable } from '@nestjs/common';
 
-import { LanguageValue } from '@libs/core/domain/enums/language-parameter.enum';
-import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
-import {
-    FileChange,
-    ReviewCadenceType,
-} from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { CodeReviewConfig } from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import {
     getTranslationsForLanguageByCategory,
     TranslationsCategory,
 } from '@libs/common/utils/translations/translations';
+import { getDefaultKodusConfigFile } from '@libs/common/utils/validateCodeReviewConfigFile';
+import { LanguageValue } from '@libs/core/domain/enums/language-parameter.enum';
+import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
+import {
+    CodeReviewConfig,
+    FileChange,
+    ReviewCadenceType,
+} from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 
 export interface PlaceholderContext {
     changedFiles?: FileChange[];
@@ -179,9 +180,15 @@ ${filesTable}
 
         if (!translation) return '';
 
+        const defaultConfig = getDefaultKodusConfigFile();
+        const defaultReviewOptions = Object.keys(
+            defaultConfig?.reviewOptions || {},
+        );
+
         const reviewOptionsMarkdown = Object.entries(
             context.codeReviewConfig.reviewOptions,
         )
+            .filter(([key]) => defaultReviewOptions.includes(key))
             .map(
                 ([key, value]) =>
                     `| **${key.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())}** | ${

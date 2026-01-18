@@ -1,18 +1,18 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { createLogger } from '@kodus/flow';
+import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
+import { Inject, Injectable } from '@nestjs/common';
 
-import { KodyRulesScope } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
-import { ReviewModeResponse } from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
-import {
-    KODY_RULES_PR_LEVEL_ANALYSIS_SERVICE_TOKEN,
-    KodyRulesPrLevelAnalysisService,
-} from '@libs/ee/codeBase/kodyRulesPrLevelAnalysis.service';
 import {
     CROSS_FILE_ANALYSIS_SERVICE_TOKEN,
     CrossFileAnalysisService,
 } from '@libs/code-review/infrastructure/adapters/services/crossFileAnalysis.service';
+import { ReviewModeResponse } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import {
+    KODY_RULES_PR_LEVEL_ANALYSIS_SERVICE_TOKEN,
+    KodyRulesPrLevelAnalysisService,
+} from '@libs/ee/codeBase/kodyRulesPrLevelAnalysis.service';
+import { KodyRulesScope } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 
 @Injectable()
 export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReviewPipelineContext> {
@@ -78,79 +78,59 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
 
         //#region Kody Rules analysis
         try {
-            const kodyRulesTurnedOn =
-                context?.codeReviewConfig?.reviewOptions?.kody_rules;
+            const prLevelRules = context?.codeReviewConfig?.kodyRules?.filter(
+                (rule) => rule.scope === KodyRulesScope.PULL_REQUEST,
+            );
 
-            if (kodyRulesTurnedOn) {
-                const prLevelRules =
-                    context?.codeReviewConfig?.kodyRules?.filter(
-                        (rule) => rule.scope === KodyRulesScope.PULL_REQUEST,
+            if (prLevelRules?.length > 0) {
+                this.logger.log({
+                    message: `Starting PR-level Kody Rules analysis for PR#${context.pullRequest.number}`,
+                    context: this.stageName,
+                    metadata: {
+                        organizationAndTeamData:
+                            context.organizationAndTeamData,
+                        prNumber: context.pullRequest.number,
+                    },
+                });
+
+                const kodyRulesPrLevelAnalysis =
+                    await this.kodyRulesPrLevelAnalysisService.analyzeCodeWithAI(
+                        context.organizationAndTeamData,
+                        context.pullRequest.number,
+                        context.changedFiles,
+                        ReviewModeResponse.HEAVY_MODE,
+                        context,
                     );
 
-                if (prLevelRules?.length > 0) {
+                if (kodyRulesPrLevelAnalysis?.codeSuggestions?.length > 0) {
                     this.logger.log({
-                        message: `Starting PR-level Kody Rules analysis for PR#${context.pullRequest.number}`,
+                        message: `PR-level analysis completed for PR#${context.pullRequest.number}`,
                         context: this.stageName,
                         metadata: {
+                            suggestionsCount:
+                                kodyRulesPrLevelAnalysis?.codeSuggestions
+                                    ?.length,
                             organizationAndTeamData:
                                 context.organizationAndTeamData,
                             prNumber: context.pullRequest.number,
                         },
                     });
 
-                    const kodyRulesPrLevelAnalysis =
-                        await this.kodyRulesPrLevelAnalysisService.analyzeCodeWithAI(
-                            context.organizationAndTeamData,
-                            context.pullRequest.number,
-                            context.changedFiles,
-                            ReviewModeResponse.HEAVY_MODE,
-                            context,
-                        );
+                    const codeSuggestions =
+                        kodyRulesPrLevelAnalysis?.codeSuggestions || [];
 
-                    if (kodyRulesPrLevelAnalysis?.codeSuggestions?.length > 0) {
-                        this.logger.log({
-                            message: `PR-level analysis completed for PR#${context.pullRequest.number}`,
-                            context: this.stageName,
-                            metadata: {
-                                suggestionsCount:
-                                    kodyRulesPrLevelAnalysis?.codeSuggestions
-                                        ?.length,
-                                organizationAndTeamData:
-                                    context.organizationAndTeamData,
-                                prNumber: context.pullRequest.number,
-                            },
-                        });
+                    context = this.updateContext(context, (draft) => {
+                        if (!draft.validSuggestionsByPR) {
+                            draft.validSuggestionsByPR = [];
+                        }
 
-                        const codeSuggestions =
-                            kodyRulesPrLevelAnalysis?.codeSuggestions || [];
-
-                        context = this.updateContext(context, (draft) => {
-                            if (!draft.validSuggestionsByPR) {
-                                draft.validSuggestionsByPR = [];
-                            }
-
-                            if (
-                                codeSuggestions &&
-                                Array.isArray(codeSuggestions)
-                            ) {
-                                draft.validSuggestionsByPR.push(
-                                    ...codeSuggestions,
-                                );
-                            }
-                        });
-                    } else {
-                        this.logger.warn({
-                            message: `Analysis returned null for PR#${context.pullRequest.number}`,
-                            context: this.stageName,
-                            metadata: {
-                                organizationAndTeamData:
-                                    context.organizationAndTeamData,
-                            },
-                        });
-                    }
+                        if (codeSuggestions && Array.isArray(codeSuggestions)) {
+                            draft.validSuggestionsByPR.push(...codeSuggestions);
+                        }
+                    });
                 } else {
-                    this.logger.log({
-                        message: `No PR-level Kody Rules configured for PR#${context.pullRequest.number}`,
+                    this.logger.warn({
+                        message: `Analysis returned null for PR#${context.pullRequest.number}`,
                         context: this.stageName,
                         metadata: {
                             organizationAndTeamData:

@@ -48,6 +48,7 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
                 draft.statusInfo = {
                     status: AutomationStatus.SKIPPED,
                     message: AutomationMessage.NO_CONFIG_IN_CONTEXT,
+                    jumpToStage: 'FinalizeGithubCheckStage',
                 };
             });
         }
@@ -78,6 +79,7 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
                 draft.statusInfo = {
                     status: AutomationStatus.SKIPPED,
                     message: msg,
+                    jumpToStage: 'FinalizeGithubCheckStage',
                 };
             });
         }

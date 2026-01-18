@@ -8,14 +8,11 @@ import { BYOKConfig, LLMModelProvider } from '@kodus/kodus-common/llm';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
-import {
-    AST_ANALYSIS_SERVICE_TOKEN,
-    IASTAnalysisService,
-} from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
-import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
+
+
 import { BaseFileReviewContextPreparation } from '@libs/code-review/infrastructure/adapters/services/code-analysis/file/base-file-review.abstract';
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/infrastructure/adapters/services/llmAnalysis.service';
-import { WorkflowPausedError } from '@libs/core/infrastructure/pipeline/errors/workflow-paused.error';
+import { BackoffPresets } from '@libs/common/utils/polling';
 import { ReviewModeOptions } from '@libs/core/domain/interfaces/file-review-context-preparation.interface';
 import {
     AnalysisContext,
@@ -23,7 +20,7 @@ import {
     ReviewModeConfig,
     ReviewModeResponse,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { BackoffPresets } from '@libs/common/utils/polling';
+import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 
 /**
  * Enterprise (cloud) implementation of the file review context preparation service
@@ -34,8 +31,6 @@ import { BackoffPresets } from '@libs/common/utils/polling';
 export class FileReviewContextPreparation extends BaseFileReviewContextPreparation {
     protected readonly logger = createLogger(FileReviewContextPreparation.name);
     constructor(
-        @Inject(AST_ANALYSIS_SERVICE_TOKEN)
-        private readonly astService: IASTAnalysisService,
         @Inject(LLM_ANALYSIS_SERVICE_TOKEN)
         private readonly aiAnalysisService: IAIAnalysisService,
     ) {
@@ -120,152 +115,10 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
             return null;
         }
 
-        let fileContext: AnalysisContext = {
+        const fileContext: AnalysisContext = {
             ...baseContext.fileContext,
-            workflowJobId: context.workflowJobId, // Pass workflowJobId from pipeline context
+            workflowJobId: context.workflowJobId,
         };
-
-        const isHeavyMode =
-            fileContext.reviewModeResponse !== ReviewModeResponse.HEAVY_MODE;
-
-        const hasASTAnalysisTask =
-            fileContext.tasks.astAnalysis.taskId &&
-            fileContext.tasks.astAnalysis.status !==
-                TaskStatus.TASK_STATUS_FAILED &&
-            fileContext.tasks.astAnalysis.status !==
-                TaskStatus.TASK_STATUS_CANCELLED;
-
-        const hasEnabledBreakingChanges =
-            fileContext.codeReviewConfig.reviewOptions?.breaking_changes;
-
-        // Check if we should execute the AST analysis
-        const shouldRunAST =
-            isHeavyMode && hasASTAnalysisTask && hasEnabledBreakingChanges;
-
-        if (shouldRunAST) {
-            try {
-                // ✅ NEW: Pause workflow instead of active polling
-                // Check if we have workflowJobId (executing via workflow queue)
-                if (fileContext.workflowJobId) {
-                    // Pause workflow and wait for AST event
-                    throw new WorkflowPausedError(
-                        'ast.task.completed',
-                        fileContext.tasks.astAnalysis.taskId,
-                        720000, // 12 minutes timeout
-                        {
-                            filename: file.filename,
-                            taskId: fileContext.tasks.astAnalysis.taskId,
-                        },
-                    );
-                }
-
-                // Fallback: If no workflowJobId, use polling (compatibility with existing code)
-                // Heavy task: linear backoff 5s, 10s, 15s... up to 60s
-                const astTaskRes = await this.astService.awaitTask(
-                    fileContext.tasks.astAnalysis.taskId,
-                    fileContext.organizationAndTeamData,
-                    {
-                        timeout: 720000, // 12 minutes
-                        ...this.getHeavyTaskBackoffConfig(),
-                    },
-                );
-
-                if (
-                    !astTaskRes ||
-                    astTaskRes?.task?.status !==
-                        TaskStatus.TASK_STATUS_COMPLETED
-                ) {
-                    this.logger.warn({
-                        message:
-                            'AST analysis task did not complete successfully',
-                        context: FileReviewContextPreparation.name,
-                        metadata: {
-                            ...fileContext?.organizationAndTeamData,
-                            filename: file.filename,
-                            task: fileContext.tasks.astAnalysis,
-                        },
-                    });
-
-                    return {
-                        fileContext: this.updateContextWithTaskStatus(
-                            fileContext,
-                            astTaskRes?.task?.status ||
-                                TaskStatus.TASK_STATUS_FAILED,
-                            'astAnalysis',
-                        ),
-                    };
-                }
-
-                fileContext = this.updateContextWithTaskStatus(
-                    fileContext,
-                    astTaskRes?.task?.status,
-                    'astAnalysis',
-                );
-
-                const { taskId } =
-                    await this.astService.initializeImpactAnalysis(
-                        fileContext.repository,
-                        fileContext.pullRequest,
-                        fileContext.platformType,
-                        fileContext.organizationAndTeamData,
-                        patchWithLinesStr,
-                        file.filename,
-                        fileContext.tasks.astAnalysis.taskId,
-                    );
-
-                // Heavy task: linear backoff 5s, 10s, 15s... up to 60s
-                const impactTaskRes = await this.astService.awaitTask(
-                    taskId,
-                    fileContext.organizationAndTeamData,
-                    {
-                        timeout: 720000, // 12 minutes
-                        ...this.getHeavyTaskBackoffConfig(),
-                    },
-                );
-
-                if (
-                    !impactTaskRes ||
-                    impactTaskRes?.task?.status !==
-                        TaskStatus.TASK_STATUS_COMPLETED
-                ) {
-                    this.logger.warn({
-                        message:
-                            'Impact analysis task did not complete successfully',
-                        context: FileReviewContextPreparation.name,
-                        metadata: {
-                            ...fileContext?.organizationAndTeamData,
-                            filename: file.filename,
-                            task: { taskId, impactTaskRes },
-                        },
-                    });
-                    return { fileContext };
-                }
-
-                const impactAnalysis = await this.astService.getImpactAnalysis(
-                    fileContext.repository,
-                    fileContext.pullRequest,
-                    fileContext.platformType,
-                    fileContext.organizationAndTeamData,
-                    taskId,
-                );
-
-                // Creates a new context by combining the fileContext with the AST analysis
-                fileContext = {
-                    ...fileContext,
-                    impactASTAnalysis: impactAnalysis,
-                };
-            } catch (error) {
-                this.logger.error({
-                    message: 'Error executing advanced AST analysis',
-                    error,
-                    context: FileReviewContextPreparation.name,
-                    metadata: {
-                        ...context?.organizationAndTeamData,
-                        filename: file.filename,
-                    },
-                });
-            }
-        }
 
         return { fileContext };
     }
@@ -313,56 +166,6 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
                     hasRelevantContent: false,
                     taskStatus: TaskStatus.TASK_STATUS_FAILED,
                 };
-            }
-
-            // Heavy task: linear backoff 5s, 10s, 15s... up to 60s
-            const taskRes = await this.astService.awaitTask(
-                taskId,
-                context.organizationAndTeamData,
-                {
-                    timeout: 720000, // 12 minutes
-                    ...this.getHeavyTaskBackoffConfig(),
-                },
-            );
-
-            if (
-                !taskRes ||
-                taskRes?.task?.status !== TaskStatus.TASK_STATUS_COMPLETED
-            ) {
-                this.logger.warn({
-                    message: 'AST analysis task did not complete successfully',
-                    context: FileReviewContextPreparation.name,
-                    metadata: {
-                        ...context?.organizationAndTeamData,
-                        filename: file.filename,
-                        task: { taskId },
-                    },
-                });
-
-                return {
-                    relevantContent: file.fileContent || file.content || null,
-                    hasRelevantContent: false,
-                    taskStatus:
-                        taskRes?.task?.status || TaskStatus.TASK_STATUS_FAILED,
-                };
-            }
-
-            const { content } = await this.astService.getRelatedContentFromDiff(
-                context.repository,
-                context.pullRequest,
-                context.platformType,
-                context.organizationAndTeamData,
-                file.patch,
-                file.filename,
-                taskId,
-            );
-
-            if (content && content?.length > 0) {
-                return {
-                    relevantContent: content,
-                    hasRelevantContent: true,
-                    taskStatus: taskRes?.task?.status,
-                };
             } else {
                 this.logger.warn({
                     message: 'No relevant content found for the file',
@@ -376,7 +179,6 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
                 return {
                     relevantContent: file.fileContent || file.content || null,
                     hasRelevantContent: false,
-                    taskStatus: taskRes?.task?.status,
                 };
             }
         } catch (error) {

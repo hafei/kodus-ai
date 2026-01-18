@@ -15,14 +15,8 @@
         "description": "Fixing vulnerabilities or improving code security."
     },
     {
-        "type": "breaking_changes",
-        "name": "Breaking Changes",
-        "description": "Changes that break the existing code."
-    },
-    {
         "type": "cross_file",
         "name": "Cross File",
         "description": "Identifies fails between changed files in the PR."
     }
-
 ]

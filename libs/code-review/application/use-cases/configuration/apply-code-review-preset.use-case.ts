@@ -126,11 +126,8 @@ export class ApplyCodeReviewPresetUseCase implements IUseCase {
             case ReviewPreset.SPEED: {
                 reviewOptions.bug = true;
                 reviewOptions.security = true;
-                reviewOptions.breaking_changes = true;
                 reviewOptions.performance = false;
                 reviewOptions.cross_file = false;
-                reviewOptions.performance_and_optimization = false;
-                reviewOptions.kody_rules = true;
 
                 suggestionControl.limitationType = LimitationType.PR;
                 suggestionControl.maxSuggestions = 6;
@@ -150,17 +147,8 @@ export class ApplyCodeReviewPresetUseCase implements IUseCase {
                 });
                 reviewOptions.bug = true;
                 reviewOptions.security = true;
-                reviewOptions.breaking_changes = true;
                 reviewOptions.performance = true;
                 reviewOptions.cross_file = true;
-                reviewOptions.performance_and_optimization = true;
-                reviewOptions.kody_rules = true;
-                reviewOptions.error_handling = true;
-                reviewOptions.maintainability = true;
-                reviewOptions.potential_issues = true;
-                reviewOptions.documentation_and_comments = true;
-                reviewOptions.refactoring = true;
-                reviewOptions.code_style = true;
 
                 suggestionControl.limitationType = LimitationType.PR;
                 suggestionControl.maxSuggestions = 20;
@@ -177,11 +165,8 @@ export class ApplyCodeReviewPresetUseCase implements IUseCase {
             case ReviewPreset.COACH: {
                 reviewOptions.bug = true;
                 reviewOptions.security = true;
-                reviewOptions.breaking_changes = true;
                 reviewOptions.performance = true;
                 reviewOptions.cross_file = true;
-                reviewOptions.performance_and_optimization = true;
-                reviewOptions.kody_rules = true;
 
                 suggestionControl.limitationType = LimitationType.PR;
                 suggestionControl.maxSuggestions = 12;

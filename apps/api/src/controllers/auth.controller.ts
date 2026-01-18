@@ -21,11 +21,11 @@ import { ResendEmailUseCase } from '@libs/identity/application/use-cases/auth/re
 import { ResetPasswordUseCase } from '@libs/identity/application/use-cases/auth/resetPasswordUseCase';
 import { SignUpUseCase } from '@libs/identity/application/use-cases/auth/signup.use-case';
 
-import { CreateUserOrganizationOAuthDto } from '../dtos/create-user-organization-oauth.dto';
+import { SSOCheckUseCase } from '@libs/ee/sso/use-cases/sso-check.use-case';
+import { SSOLoginUseCase } from '@libs/ee/sso/use-cases/sso-login.use-case';
 import { SignUpDTO } from '@libs/identity/dtos/create-user-organization.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { SSOLoginUseCase } from '@libs/identity/application/use-cases/auth/sso-login.use-case';
-import { SSOCheckUseCase } from '@libs/identity/application/use-cases/auth/sso-check.use-case';
+import { CreateUserOrganizationOAuthDto } from '../dtos/create-user-organization-oauth.dto';
 
 @Controller('auth')
 export class AuthController {

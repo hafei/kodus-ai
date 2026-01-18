@@ -1,5 +1,5 @@
 import { createLogger } from '@kodus/flow';
-import { Injectable, Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
 import {
@@ -26,8 +26,6 @@ export class CodeAnalysisOrchestrator {
         private readonly standardLLMAnalysisService: IAIAnalysisService,
         @Inject(KODY_RULES_ANALYSIS_SERVICE_TOKEN)
         private readonly kodyRulesAnalysisService: IAIAnalysisService,
-        @Inject(AST_ANALYSIS_SERVICE_TOKEN)
-        private readonly codeASTAnalysisService: IASTAnalysisService,
     ) {}
 
     async executeStandardAnalysis(
@@ -174,73 +172,14 @@ export class CodeAnalysisOrchestrator {
         }
     }
 
-    async executeASTAnalysis(
-        fileContext: FileChangeContext,
-        reviewModeResponse: ReviewModeResponse,
-        context: AnalysisContext,
-    ): Promise<AIAnalysisResult | null> {
-        try {
-            if (!context?.impactASTAnalysis?.functionsAffect?.length) {
-                return null;
-            }
-
-            const result = await this.codeASTAnalysisService.analyzeASTWithAI(
-                context,
-                reviewModeResponse,
-            );
-
-            if (!result) {
-                this.logger.log({
-                    message: `AST Breaking Changes suggestions null for file: ${fileContext?.file?.filename} from PR#${context.pullRequest.number}`,
-                    context: CodeAnalysisOrchestrator.name,
-                    metadata: {
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                        prNumber: context.pullRequest.number,
-                        fileContext,
-                    },
-                });
-            }
-
-            if (result?.codeSuggestions?.length === 0) {
-                this.logger.log({
-                    message: `AST Breaking Changes suggestions empty for file: ${fileContext?.file?.filename} from PR#${context.pullRequest.number}`,
-                    context: CodeAnalysisOrchestrator.name,
-                    metadata: {
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                        prNumber: context.pullRequest.number,
-                        fileContext,
-                    },
-                });
-            }
-
-            return result;
-        } catch (error) {
-            this.logger.error({
-                message: `Error executing AST Breaking Changes for file: ${fileContext?.file?.filename} from PR#${context.pullRequest.number}`,
-                context: CodeAnalysisOrchestrator.name,
-                error,
-                metadata: {
-                    organizationAndTeamData: context.organizationAndTeamData,
-                    prNumber: context.pullRequest.number,
-                    fileContext,
-                    error,
-                },
-            });
-            return null;
-        }
-    }
-
     private shouldExecuteKodyRules(
         context: AnalysisContext,
         organizationAndTeamData: OrganizationAndTeamData,
         prNumber: number,
     ): boolean {
         const hasRules = context.codeReviewConfig?.kodyRules?.length > 0;
-        const isEnabled = context.codeReviewConfig?.reviewOptions?.kody_rules;
 
-        if (!hasRules || !isEnabled) {
+        if (!hasRules) {
             this.logger.log({
                 message: `Kody rules will not execute: ${!hasRules ? 'No rules found' : 'Feature disabled'} for PR#${prNumber}`,
                 context: CodeAnalysisOrchestrator.name,
@@ -248,7 +187,6 @@ export class CodeAnalysisOrchestrator {
                     organizationAndTeamData,
                     prNumber,
                     hasRules,
-                    isEnabled,
                     rulesCount:
                         context.codeReviewConfig?.kodyRules?.length || 0,
                     reviewOptions: context.codeReviewConfig?.reviewOptions,
@@ -256,6 +194,6 @@ export class CodeAnalysisOrchestrator {
             });
         }
 
-        return hasRules && isEnabled;
+        return hasRules;
     }
 }

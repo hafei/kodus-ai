@@ -22,13 +22,11 @@ export const FILE_REVIEW_CONTEXT_PREPARATION_PROVIDER: Provider = {
     useFactory: (
         corePreparation: CoreFileReviewContextPreparation,
         aiAnalysisService: IAIAnalysisService,
-        astAnalysisService: IASTAnalysisService,
     ): IFileReviewContextPreparation => {
         const isCloud = environment.API_CLOUD_MODE;
 
         if (isCloud) {
             return new FileReviewContextPreparation(
-                astAnalysisService,
                 aiAnalysisService,
             );
         }

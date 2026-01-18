@@ -39,6 +39,7 @@ export class GithubChecksService {
     private readonly logger = createLogger(GithubChecksService.name);
 
     constructor(private readonly gitHubService: GithubService) {}
+
     async createCheckRun(params: CreateCheckRunParams): Promise<number | null> {
         const {
             organizationAndTeamData,

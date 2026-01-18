@@ -27,18 +27,7 @@ reviewOptions:
     bug: true
     performance: true
     security: true
-    breaking_changes: true
     cross_file: true
-    kody_rules: true
-
-    # legacy only
-    code_style: false
-    refactoring: false
-    error_handling: false
-    maintainability: false
-    potential_issues: false
-    documentation_and_comments: false
-    performance_and_optimization: false
 
 # suggestion control
 suggestionControl:
@@ -62,7 +51,7 @@ summary:
 
 # kody rules
 ideRulesSyncEnabled: false
-kodyRulesGeneratorEnabled: false
+kodyRulesGeneratorEnabled: true
 
 # custom messages
 customMessages:

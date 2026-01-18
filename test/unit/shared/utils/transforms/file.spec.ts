@@ -1,4 +1,4 @@
-import { loadJsonFile } from '../../../../../src/shared/utils/transforms/file';
+import { loadJsonFile } from '@/shared/utils/transforms/file';
 
 const dirname = require('path').resolve('./');
 

@@ -4,6 +4,13 @@ export interface PipelineContext {
     statusInfo: {
         status: AutomationStatus;
         message?: string;
+        jumpToStage?: string;
+        skippedReason?: {
+            status: AutomationStatus;
+            message?: string;
+            stageName?: string;
+            jumpToStage?: string;
+        };
     };
     pipelineVersion: string;
     errors: PipelineError[];

@@ -261,34 +261,16 @@ export type ReviewComment = {
 };
 
 export const reviewOptionsSchema = z.object({
-    security: z.boolean(),
-    code_style: z.boolean(),
-    refactoring: z.boolean(),
-    error_handling: z.boolean(),
-    maintainability: z.boolean(),
-    potential_issues: z.boolean(),
-    documentation_and_comments: z.boolean(),
-    performance_and_optimization: z.boolean(),
-    kody_rules: z.boolean(),
-    breaking_changes: z.boolean(),
     bug: z.boolean(),
     performance: z.boolean(),
+    security: z.boolean(),
     cross_file: z.boolean(),
 });
 
 export interface ReviewOptions {
-    security?: boolean;
-    code_style?: boolean;
-    refactoring?: boolean;
-    error_handling?: boolean;
-    maintainability?: boolean;
-    potential_issues?: boolean;
-    documentation_and_comments?: boolean;
-    performance_and_optimization?: boolean;
-    kody_rules?: boolean;
-    breaking_changes?: boolean;
     bug?: boolean;
     performance?: boolean;
+    security?: boolean;
     cross_file?: boolean;
 }
 

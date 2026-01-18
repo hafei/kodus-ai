@@ -2,8 +2,8 @@ import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 
 import { ProfileModel } from './profile.model';
 
-import { ProfileConfigKey } from '@libs/identity/domain/profile-configs/enum/profileConfigKey.enum';
 import { CoreModel } from '@libs/core/infrastructure/repositories/model/typeOrm';
+import { ProfileConfigKey } from '@libs/identity/domain/profile-configs/enum/profileConfigKey.enum';
 
 @Entity('profile_configs')
 export class ProfileConfigModel extends CoreModel {
@@ -19,7 +19,7 @@ export class ProfileConfigModel extends CoreModel {
     @Column({ default: true })
     public status: boolean;
 
-    @ManyToOne(() => ProfileModel, (profile) => profile.profileConfigs)
+    @ManyToOne('ProfileModel', 'profileConfigs')
     @JoinColumn({ name: 'profile_id', referencedColumnName: 'uuid' })
     profile: ProfileModel;
 }
