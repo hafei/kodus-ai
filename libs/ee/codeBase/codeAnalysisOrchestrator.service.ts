@@ -26,8 +26,6 @@ export class CodeAnalysisOrchestrator {
         private readonly standardLLMAnalysisService: IAIAnalysisService,
         @Inject(KODY_RULES_ANALYSIS_SERVICE_TOKEN)
         private readonly kodyRulesAnalysisService: IAIAnalysisService,
-        @Inject(AST_ANALYSIS_SERVICE_TOKEN)
-        private readonly codeASTAnalysisService: IASTAnalysisService,
     ) {}
 
     async executeStandardAnalysis(
@@ -166,64 +164,6 @@ export class CodeAnalysisOrchestrator {
                 metadata: {
                     organizationAndTeamData,
                     prNumber,
-                    fileContext,
-                    error,
-                },
-            });
-            return null;
-        }
-    }
-
-    async executeASTAnalysis(
-        fileContext: FileChangeContext,
-        reviewModeResponse: ReviewModeResponse,
-        context: AnalysisContext,
-    ): Promise<AIAnalysisResult | null> {
-        try {
-            if (!context?.impactASTAnalysis?.functionsAffect?.length) {
-                return null;
-            }
-
-            const result = await this.codeASTAnalysisService.analyzeASTWithAI(
-                context,
-                reviewModeResponse,
-            );
-
-            if (!result) {
-                this.logger.log({
-                    message: `AST Breaking Changes suggestions null for file: ${fileContext?.file?.filename} from PR#${context.pullRequest.number}`,
-                    context: CodeAnalysisOrchestrator.name,
-                    metadata: {
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                        prNumber: context.pullRequest.number,
-                        fileContext,
-                    },
-                });
-            }
-
-            if (result?.codeSuggestions?.length === 0) {
-                this.logger.log({
-                    message: `AST Breaking Changes suggestions empty for file: ${fileContext?.file?.filename} from PR#${context.pullRequest.number}`,
-                    context: CodeAnalysisOrchestrator.name,
-                    metadata: {
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                        prNumber: context.pullRequest.number,
-                        fileContext,
-                    },
-                });
-            }
-
-            return result;
-        } catch (error) {
-            this.logger.error({
-                message: `Error executing AST Breaking Changes for file: ${fileContext?.file?.filename} from PR#${context.pullRequest.number}`,
-                context: CodeAnalysisOrchestrator.name,
-                error,
-                metadata: {
-                    organizationAndTeamData: context.organizationAndTeamData,
-                    prNumber: context.pullRequest.number,
                     fileContext,
                     error,
                 },

@@ -1,6 +1,6 @@
-import * as moment from 'moment';
+import moment from 'moment';
 
-import { getDayForFilter } from '../../../../../src/shared/utils/transforms/date';
+import { getDayForFilter } from '@/shared/utils/transforms/date';
 
 describe('getDayForFilter Function', () => {
     test('should correctly subtract days from the current date', () => {

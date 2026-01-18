@@ -17,7 +17,11 @@ import {
     PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
 import { ParametersKey } from '@libs/core/domain/enums';
-import { CodeReviewConfig } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import {
+    CodeReviewConfig,
+    CodeReviewVersion,
+} from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import { DeepPartial } from 'typeorm';
 import { getDefaultKodusConfigFile } from '@libs/common/utils/validateCodeReviewConfigFile';
 import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
 import { PipelineError } from '@libs/core/infrastructure/pipeline/interfaces/pipeline-context.interface';
@@ -271,11 +275,16 @@ export class ExecuteCliReviewUseCase implements IUseCase {
 
             const paramObj = params.toObject();
             const config = paramObj.configValue?.configs || this.getDefaultConfig();
+            const normalizedConfig = this.normalizeCliConfig(
+                config,
+                this.getDefaultConfig(),
+            );
 
             // Ensure required fields are present
             return {
-                ...config,
-                languageResultPrompt: (config as any).languageResultPrompt || {},
+                ...normalizedConfig,
+                languageResultPrompt:
+                    (normalizedConfig as any).languageResultPrompt || {},
             } as any as CodeReviewConfig;
         } catch (error) {
             this.logger.warn({
@@ -286,6 +295,33 @@ export class ExecuteCliReviewUseCase implements IUseCase {
             });
             return this.getDefaultConfig();
         }
+    }
+
+    private normalizeCliConfig(
+        config: DeepPartial<CodeReviewConfig>,
+        defaults: CodeReviewConfig,
+    ): DeepPartial<CodeReviewConfig> {
+        const base = defaults as DeepPartial<CodeReviewConfig>;
+        const merged = {
+            ...base,
+            ...config,
+            reviewOptions: {
+                ...(base.reviewOptions || {}),
+                ...(config.reviewOptions || {}),
+            },
+        } as DeepPartial<CodeReviewConfig>;
+
+        merged.codeReviewVersion = CodeReviewVersion.v2;
+
+        const reviewOptions = merged.reviewOptions || {};
+        merged.reviewOptions = {
+            bug: !!reviewOptions.bug,
+            performance: !!reviewOptions.performance,
+            security: !!reviewOptions.security,
+            cross_file: !!reviewOptions.cross_file,
+        } as any;
+
+        return merged;
     }
 
     /**

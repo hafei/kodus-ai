@@ -1,4 +1,4 @@
-import * as moment from 'moment-timezone';
+const moment = require('moment-timezone');
 
 import { Timezone } from '@libs/core/domain/enums/timezones.enum';
 

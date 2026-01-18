@@ -4,7 +4,7 @@ import {
     removeAccents,
     removeSpecialChars,
     transformValue,
-} from '../../../../../src/shared/utils/transforms/strings';
+} from '@/shared/utils/transforms/strings';
 
 describe('Test for the removeAccents function', () => {
     it('should remove accents', () => {

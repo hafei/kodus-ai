@@ -133,7 +133,7 @@ describe('PromptRunnerService', () => {
 
             // Using a wrapper function to test for thrown errors
             expect(() => service.createChain(params)).toThrow(
-                'Provider must be defined in the parameters.',
+                'Provider or BYOK config must be defined in the parameters.',
             );
         });
 

@@ -1,4 +1,4 @@
-import * as picomatch from 'picomatch';
+import picomatch from 'picomatch';
 
 /**
  * Checks if a file matches any of the provided Glob patterns.

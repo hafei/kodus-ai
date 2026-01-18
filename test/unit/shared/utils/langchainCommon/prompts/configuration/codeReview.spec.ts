@@ -70,6 +70,6 @@ describe('prompt_codereview_system_gemini_v2', () => {
 
         expect(result).toContain('docs/rules.md');
         expect(result).toContain(knowledgeContent);
-        expect(result).toContain('## External Reference Context');
+        expect(result).toContain('## External Context & Injected Knowledge');
     });
 });
