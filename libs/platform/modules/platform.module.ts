@@ -66,19 +66,19 @@ import { WorkflowModule } from '@libs/core/workflow/modules/workflow.module';
         BitbucketPullRequestHandler,
         {
             provide: 'AZURE_REPOS_WEBHOOK_HANDLER',
-            useClass: AzureReposPullRequestHandler,
+            useExisting: AzureReposPullRequestHandler,
         },
         {
             provide: 'GITHUB_WEBHOOK_HANDLER',
-            useClass: GitHubPullRequestHandler,
+            useExisting: GitHubPullRequestHandler,
         },
         {
             provide: 'GITLAB_WEBHOOK_HANDLER',
-            useClass: GitLabMergeRequestHandler,
+            useExisting: GitLabMergeRequestHandler,
         },
         {
             provide: 'BITBUCKET_WEBHOOK_HANDLER',
-            useClass: BitbucketPullRequestHandler,
+            useExisting: BitbucketPullRequestHandler,
         },
     ],
     exports: [

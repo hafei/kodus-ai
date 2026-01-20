@@ -40,14 +40,21 @@ if ! node -e "const { Module } = require('@nestjs/common'); process.exit(typeof 
 fi
 
 # 2. Run Migrations and Seeds (if configured)
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-echo "▶ Running Migrations..."
-npm run migration:run:internal
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
+RUN_SEEDS="${RUN_SEEDS:-false}"
 
-echo "▶ Running Seeds..."
-npm run seed:internal
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+  echo "▶ Running Migrations..."
+  npm run migration:run:internal
 else
-  echo "▶ Skipping Migrations and Seeds."
+  echo "▶ Skipping Migrations (RUN_MIGRATIONS=$RUN_MIGRATIONS)"
+fi
+
+if [ "$RUN_SEEDS" = "true" ]; then
+  echo "▶ Running Seeds..."
+  npm run seed:internal
+else
+  echo "▶ Skipping Seeds (RUN_SEEDS=$RUN_SEEDS)"
 fi
 
 # 3. Yalc Check

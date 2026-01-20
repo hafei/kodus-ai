@@ -20,6 +20,7 @@ import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeRevie
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 
 /**
  * Handler for GitLab webhook events.
@@ -36,6 +37,7 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
         private readonly eventEmitter: EventEmitter2,
         private readonly codeManagement: CodeManagementService,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     /**
@@ -77,7 +79,7 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
     private async handleMergeRequest(
         params: IWebhookEventParams,
     ): Promise<void> {
-        const { payload } = params;
+        const { payload, event } = params;
         const mrNumber = payload?.object_attributes?.iid;
         const mrUrl = payload?.object_attributes?.url;
 
@@ -90,7 +92,7 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
 
         const repository = {
             id: String(payload?.project?.id),
-            name: payload?.project?.path,
+            name: payload?.project?.name || payload?.project?.path,
             fullName: payload?.project?.path_with_namespace,
         } as any;
 
@@ -131,26 +133,38 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                     this.enqueueCodeReviewJobUseCase &&
                     orgData?.organizationAndTeamData
                 ) {
-                    const jobId =
-                        await this.enqueueCodeReviewJobUseCase.execute({
+                    this.enqueueCodeReviewJobUseCase
+                        .execute({
                             payload,
                             event: params.event,
                             platformType: PlatformType.GITLAB,
                             organizationAndTeam:
                                 orgData.organizationAndTeamData,
                             correlationId: params.correlationId,
+                        })
+                        .then((jobId) => {
+                            this.logger.log({
+                                message:
+                                    'Code review job enqueued for asynchronous processing',
+                                context: GitLabMergeRequestHandler.name,
+                                metadata: {
+                                    jobId,
+                                    mrNumber,
+                                    repositoryId: repository.id,
+                                },
+                            });
+                        })
+                        .catch((error) => {
+                            this.logger.error({
+                                message: 'Failed to enqueue code review job',
+                                context: GitLabMergeRequestHandler.name,
+                                error,
+                                metadata: {
+                                    mrNumber,
+                                    repositoryId: repository.id,
+                                },
+                            });
                         });
-
-                    this.logger.log({
-                        message:
-                            'Code review job enqueued for asynchronous processing',
-                        context: GitLabMergeRequestHandler.name,
-                        metadata: {
-                            jobId,
-                            mrNumber,
-                            repositoryId: repository.id,
-                        },
-                    });
                 } else {
                     this.logger.log({
                         message:
@@ -164,12 +178,44 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                     });
                 }
 
-                if (payload?.object_attributes?.action === 'merge') {
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+                if (this.isNewCommitUpdate(payload)) {
+                    if (orgData?.organizationAndTeamData) {
+                        this.enqueueImplementationCheckUseCase
+                            .execute({
+                                repository: {
+                                    id: repository.id,
+                                    name: repository.name,
+                                },
+                                pullRequestNumber:
+                                    payload?.object_attributes?.iid,
+                                commitSha:
+                                    payload?.object_attributes?.last_commit?.id,
+                                trigger: payload?.object_attributes?.action,
+                                payload: payload,
+                                event: event,
+                                organizationAndTeamData:
+                                    orgData.organizationAndTeamData,
+                                platformType: PlatformType.GITLAB,
+                            })
+                            .catch((e) => {
+                                this.logger.error({
+                                    message:
+                                        'Failed to enqueue implementation check',
+                                    context: GitLabMergeRequestHandler.name,
+                                    error: e,
+                                    metadata: {
+                                        repository,
+                                        pullRequestNumber:
+                                            payload?.object_attributes?.iid,
+                                    },
+                                });
+                            });
+                    }
+                }
 
-                    // Sync Kody Rules after merge into target branch
+                if (payload?.object_attributes?.action === 'merge') {
+                    this.generateIssuesFromPrClosedUseCase.execute(params);
+
                     try {
                         if (orgData?.organizationAndTeamData) {
                             const baseRef =
@@ -228,9 +274,20 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                 await this.savePullRequestUseCase.execute(params);
 
                 if (payload?.object_attributes?.action === 'merge') {
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+                    this.generateIssuesFromPrClosedUseCase
+                        .execute(params)
+                        .catch((error) => {
+                            this.logger.error({
+                                message:
+                                    'Failed to generate issues from merged MR',
+                                context: GitLabMergeRequestHandler.name,
+                                error,
+                                metadata: {
+                                    mrNumber,
+                                    repositoryId: repository.id,
+                                },
+                            });
+                        });
                 }
 
                 return;
@@ -408,5 +465,18 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
 
         // For all other cases, return false
         return false;
+    }
+
+    private isNewCommitUpdate(payload: any): boolean {
+        const objectAttributes = payload?.object_attributes || {};
+
+        if (objectAttributes.action !== 'update') {
+            return false;
+        }
+
+        const lastCommitId = objectAttributes.last_commit?.id;
+        const oldRev = objectAttributes.oldrev;
+
+        return !!(lastCommitId && oldRev && lastCommitId !== oldRev);
     }
 }

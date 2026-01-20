@@ -605,7 +605,8 @@ export class PullRequestsService implements IPullRequestsService {
             pullRequest.state === 'merge' ||
             pullRequest.state === 'merged' ||
             pullRequest.state === 'MERGED' ||
-            pullRequest.status === 'completed'
+            pullRequest.status === 'completed' ||
+            pullRequest.status === 'abandoned'
         ) {
             return PullRequestState.CLOSED;
         } else {

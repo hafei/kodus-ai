@@ -140,6 +140,50 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
         );
     }
 
+    /**
+     * Implementation Check jobs
+     */
+    @RabbitSubscribe({
+        exchange: 'workflow.exchange',
+        routingKey: 'workflow.jobs.*.CHECK_SUGGESTION_IMPLEMENTATION',
+        queue: 'workflow.jobs.check_implementation.queue',
+        errorBehavior: MessageHandlerErrorBehavior.ACK,
+        errorHandler: (channel, msg, err) =>
+            RabbitMQErrorHandler.instance?.handle(channel, msg, err, {
+                dlqRoutingKey: 'workflow.job.failed',
+            }),
+        queueOptions: {
+            arguments: {
+                'x-queue-type': 'quorum',
+                'x-dead-letter-exchange': 'workflow.exchange.dlx',
+                'x-dead-letter-routing-key': 'workflow.job.failed',
+            },
+        },
+    })
+    @RabbitSubscribe({
+        exchange: 'workflow.exchange.delayed',
+        routingKey: 'workflow.jobs.*.CHECK_SUGGESTION_IMPLEMENTATION',
+        queue: 'workflow.jobs.check_implementation.queue',
+        queueOptions: {
+            arguments: {
+                'x-queue-type': 'quorum',
+                'x-dead-letter-exchange': 'workflow.exchange.dlx',
+                'x-dead-letter-routing-key': 'workflow.job.failed',
+            },
+        },
+    })
+    async handleImplementationCheckJob(
+        message: WorkflowJobMessage | MessagePayload<WorkflowJobMessage>,
+        amqpMsg: ConsumeMessage,
+    ): Promise<void> {
+        return this.handleWorkflowJob(
+            'workflow-job-consumer.check_implementation',
+            'workflow.jobs.check_implementation.queue',
+            message,
+            amqpMsg,
+        );
+    }
+
     private async handleWorkflowJob(
         consumerId: string,
         queueName: string,

@@ -64,7 +64,7 @@ export async function getExecutionTraceability(
         executions?: string;
     },
 ): Promise<TraceabilityResponse> {
-    const logsCollection = collections?.logs || 'observability_logs';
+    const logsCollection = collections?.logs || 'observability_logs_ts';
     const telemetryCollection =
         collections?.telemetry || 'observability_telemetry';
     const executionsCollection = collections?.executions || 'executions';
@@ -268,7 +268,7 @@ export async function getExecutionSummary(
         telemetry?: string;
     },
 ): Promise<TraceabilityResponse['summary'] & { correlationId: string }> {
-    const logsCollection = collections?.logs || 'observability_logs';
+    const logsCollection = collections?.logs || 'observability_logs_ts';
     const telemetryCollection =
         collections?.telemetry || 'observability_telemetry';
     const logger = createLogger('traceability-summary');

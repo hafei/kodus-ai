@@ -156,6 +156,8 @@ export interface MongoDBConfig {
     flushIntervalMs?: number;
     ttlDays?: number;
     enableObservability?: boolean;
+    secondaryIndexes?: string[];
+    bucketKeys?: string[];
 }
 
 // Main observability configuration

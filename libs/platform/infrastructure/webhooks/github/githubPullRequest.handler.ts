@@ -20,6 +20,7 @@ import {
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeReview.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 
 /**
  * Handler for GitHub webhook events.
@@ -36,6 +37,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
         private readonly generateIssuesFromPrClosedUseCase: GenerateIssuesFromPrClosedUseCase,
         private readonly eventEmitter: EventEmitter2,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     public canHandle(params: IWebhookEventParams): boolean {
@@ -140,25 +142,38 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 this.enqueueCodeReviewJobUseCase &&
                 validationResult?.organizationAndTeamData
             ) {
-                const jobId = await this.enqueueCodeReviewJobUseCase.execute({
-                    payload: payload,
-                    event: event,
-                    platformType: PlatformType.GITHUB,
-                    organizationAndTeam:
-                        validationResult.organizationAndTeamData,
-                    correlationId: params.correlationId,
-                });
-
-                this.logger.log({
-                    message:
-                        'Code review job enqueued for asynchronous processing',
-                    context: GitHubPullRequestHandler.name,
-                    metadata: {
-                        jobId,
-                        prNumber,
-                        repositoryId: repository.id,
-                    },
-                });
+                this.enqueueCodeReviewJobUseCase
+                    .execute({
+                        payload: payload,
+                        event: event,
+                        platformType: PlatformType.GITHUB,
+                        organizationAndTeam:
+                            validationResult.organizationAndTeamData,
+                        correlationId: params.correlationId,
+                    })
+                    .then((jobId) => {
+                        this.logger.log({
+                            message:
+                                'Code review job enqueued for asynchronous processing',
+                            context: GitHubPullRequestHandler.name,
+                            metadata: {
+                                jobId,
+                                prNumber,
+                                repositoryId: repository.id,
+                            },
+                        });
+                    })
+                    .catch((error) => {
+                        this.logger.error({
+                            message: 'Failed to enqueue code review job',
+                            context: GitHubPullRequestHandler.name,
+                            error,
+                            metadata: {
+                                prNumber,
+                                repositoryId: repository.id,
+                            },
+                        });
+                    });
             } else {
                 this.logger.log({
                     message:
@@ -174,12 +189,48 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 });
             }
 
+            if (payload?.action === 'synchronize') {
+                if (validationResult?.organizationAndTeamData) {
+                    this.enqueueImplementationCheckUseCase
+                        .execute({
+                            payload: payload,
+                            event: event,
+                            organizationAndTeamData:
+                                validationResult.organizationAndTeamData,
+                            repository: {
+                                id: repository.id,
+                                name: repository.name,
+                            },
+                            platformType: PlatformType.GITHUB,
+                            pullRequestNumber: payload?.pull_request?.number,
+                            commitSha: payload?.after || payload?.head?.sha,
+                            trigger: payload?.action,
+                        })
+                        .catch((e) => {
+                            this.logger.error({
+                                message:
+                                    'Failed to enqueue implementation check',
+                                context: GitHubPullRequestHandler.name,
+                                error: e,
+                                metadata: {
+                                    organizationAndTeamData:
+                                        validationResult?.organizationAndTeamData,
+                                    repository,
+                                    pullRequestNumber:
+                                        payload?.pull_request?.number,
+                                },
+                            });
+                        });
+                }
+            }
+
             if (payload?.action === 'closed') {
-                await this.generateIssuesFromPrClosedUseCase.execute(params);
+                this.generateIssuesFromPrClosedUseCase.execute(params);
 
                 // If merged into default branch, trigger Kody Rules sync for main
                 const merged = payload?.pull_request?.merged === true;
                 const baseRef = payload?.pull_request?.base?.ref;
+
                 if (merged && baseRef) {
                     try {
                         if (validationResult?.organizationAndTeamData) {
@@ -234,6 +285,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                     }
                 }
             }
+
             return;
         } catch (error) {
             this.logger.error({

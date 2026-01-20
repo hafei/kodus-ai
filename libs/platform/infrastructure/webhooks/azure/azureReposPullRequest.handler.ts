@@ -17,6 +17,7 @@ import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeRevie
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
 import {
     hasReviewMarker,
@@ -37,6 +38,7 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
         private readonly eventEmitter: EventEmitter2,
         private readonly codeManagement: CodeManagementService,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     /**
@@ -97,6 +99,7 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
     private async handlePullRequest(
         params: IWebhookEventParams,
     ): Promise<void> {
+        const { payload, event } = params;
         const prId = params.payload?.resource?.pullRequestId || 'UNKNOWN_PR_ID';
         const eventType = params.event;
         const repoName =
@@ -151,7 +154,8 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                     await this.savePullRequestUseCase.execute(params);
                     if (
                         this.enqueueCodeReviewJobUseCase &&
-                        orgData?.organizationAndTeamData
+                        orgData?.organizationAndTeamData &&
+                        params?.payload?.resource?.status !== 'abandoned'
                     ) {
                         const jobId =
                             await this.enqueueCodeReviewJobUseCase.execute({
@@ -188,9 +192,48 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                             },
                         });
                     }
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+
+                    if (
+                        eventType === 'git.pullrequest.updated' &&
+                        params?.payload?.resource?.status !== 'abandoned'
+                    ) {
+                        try {
+                            if (orgData?.organizationAndTeamData) {
+                                await this.enqueueImplementationCheckUseCase.execute(
+                                    {
+                                        organizationAndTeamData:
+                                            orgData.organizationAndTeamData,
+                                        repository: {
+                                            id: repository.id,
+                                            name: repository.name,
+                                        },
+                                        pullRequestNumber: Number(prId),
+                                        commitSha:
+                                            params.payload?.resource
+                                                ?.lastMergeSourceCommit
+                                                ?.commitId,
+                                        payload: payload,
+                                        event: event,
+                                        platformType: PlatformType.AZURE_REPOS,
+                                        trigger: payload?.action,
+                                    },
+                                );
+                            }
+                        } catch (e) {
+                            this.logger.error({
+                                message:
+                                    'Failed to enqueue implementation check',
+                                context: AzureReposPullRequestHandler.name,
+                                error: e,
+                                metadata: {
+                                    repository,
+                                    prId,
+                                },
+                            });
+                        }
+                    }
+
+                    this.generateIssuesFromPrClosedUseCase.execute(params);
 
                     try {
                         if (params?.payload?.resource?.status === 'completed') {

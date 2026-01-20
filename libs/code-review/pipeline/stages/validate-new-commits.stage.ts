@@ -33,7 +33,6 @@ export class ValidateNewCommitsStage extends BasePipelineStage<CodeReviewPipelin
     protected override async executeStage(
         context: CodeReviewPipelineContext,
     ): Promise<CodeReviewPipelineContext> {
-        // Buscar execução anterior para verificar se há commits novos
         const lastExecution =
             await this.automationExecutionService.findLatestExecutionByFilters({
                 status: AutomationStatus.SUCCESS,

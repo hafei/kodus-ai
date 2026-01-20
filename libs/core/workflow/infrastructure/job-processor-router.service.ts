@@ -11,8 +11,11 @@ import { WorkflowType } from '@libs/core/workflow/domain/enums/workflow-type.enu
 import { WebhookProcessingJobProcessorService } from '@libs/automation/webhook-processing/webhook-processing-job.processor';
 import { CodeReviewJobProcessorService } from '@libs/code-review/workflow/code-review-job-processor.service';
 
+import { ImplementationVerificationProcessor } from '@libs/code-review/workflow/implementation-verification.processor';
+
 const WEBHOOK_PROCESS_TIMEOUT_MS = 10 * 60 * 1000;
 const CODE_REVIEW_PROCESS_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const CHECK_IMPLEMENTATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 @Injectable()
 export class JobProcessorRouterService
@@ -23,6 +26,7 @@ export class JobProcessorRouterService
         private readonly jobRepository: IWorkflowJobRepository,
         private readonly codeReviewProcessor: CodeReviewJobProcessorService,
         private readonly webhookProcessor: WebhookProcessingJobProcessorService,
+        private readonly implementationVerificationProcessor: ImplementationVerificationProcessor,
     ) {}
 
     async process(jobId: string): Promise<void> {
@@ -70,6 +74,8 @@ export class JobProcessorRouterService
                 return this.webhookProcessor;
             case WorkflowType.CODE_REVIEW:
                 return this.codeReviewProcessor;
+            case WorkflowType.CHECK_SUGGESTION_IMPLEMENTATION:
+                return this.implementationVerificationProcessor;
             default:
                 throw new Error(
                     `No processor found for workflow type: ${workflowType}`,
@@ -83,6 +89,8 @@ export class JobProcessorRouterService
                 return WEBHOOK_PROCESS_TIMEOUT_MS;
             case WorkflowType.CODE_REVIEW:
                 return CODE_REVIEW_PROCESS_TIMEOUT_MS;
+            case WorkflowType.CHECK_SUGGESTION_IMPLEMENTATION:
+                return CHECK_IMPLEMENTATION_TIMEOUT_MS;
             default:
                 return CODE_REVIEW_PROCESS_TIMEOUT_MS;
         }

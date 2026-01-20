@@ -32,6 +32,7 @@ import {
 } from '@libs/common/utils/codeManagement/codeCommentMarkers';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 
 /**
  * Handler for Bitbucket webhook events.
@@ -52,6 +53,7 @@ export class BitbucketPullRequestHandler implements IWebhookEventHandler {
         private readonly generateIssuesFromPrClosedUseCase: GenerateIssuesFromPrClosedUseCase,
         private readonly eventEmitter: EventEmitter2,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     /**
@@ -150,30 +152,83 @@ export class BitbucketPullRequestHandler implements IWebhookEventHandler {
                     event === 'pullrequest:created' ||
                     event === 'pullrequest:updated'
                 ) {
+                    if (event === 'pullrequest:updated') {
+                        if (orgData?.organizationAndTeamData) {
+                            this.enqueueImplementationCheckUseCase
+                                .execute({
+                                    payload: payload,
+                                    event: event,
+                                    platformType: PlatformType.BITBUCKET,
+                                    organizationAndTeamData:
+                                        orgData.organizationAndTeamData,
+                                    repository: {
+                                        id: repository.id,
+                                        name: repository.name,
+                                    },
+                                    pullRequestNumber: payload?.pullrequest?.id,
+                                    commitSha:
+                                        payload?.pullrequest?.source?.commit
+                                            ?.hash,
+                                    trigger: 'synchronize',
+                                })
+                                .catch((e) => {
+                                    this.logger.error({
+                                        message:
+                                            'Failed to enqueue implementation check',
+                                        context:
+                                            BitbucketPullRequestHandler.name,
+                                        error: e,
+                                        metadata: {
+                                            repository,
+                                            pullRequestNumber:
+                                                payload?.pullrequest?.id,
+                                            organizationAndTeamData:
+                                                orgData.organizationAndTeamData,
+                                        },
+                                    });
+                                });
+                        }
+                    }
+
                     if (
                         this.enqueueCodeReviewJobUseCase &&
                         orgData?.organizationAndTeamData
                     ) {
-                        const jobId =
-                            await this.enqueueCodeReviewJobUseCase.execute({
+                        this.enqueueCodeReviewJobUseCase
+                            .execute({
                                 payload: params.payload,
                                 event: params.event,
                                 platformType: PlatformType.BITBUCKET,
                                 organizationAndTeam:
                                     orgData.organizationAndTeamData,
                                 correlationId: params.correlationId,
+                            })
+                            .then((jobId) => {
+                                this.logger.log({
+                                    message:
+                                        'Code review job enqueued for asynchronous processing',
+                                    context: BitbucketPullRequestHandler.name,
+                                    metadata: {
+                                        jobId,
+                                        prId,
+                                        repositoryId: repository.id,
+                                    },
+                                });
+                            })
+                            .catch((error) => {
+                                this.logger.error({
+                                    message:
+                                        'Failed to enqueue code review job',
+                                    context: BitbucketPullRequestHandler.name,
+                                    error,
+                                    metadata: {
+                                        prId,
+                                        repositoryId: repository.id,
+                                        organizationAndTeamData:
+                                            orgData.organizationAndTeamData,
+                                    },
+                                });
                             });
-
-                        this.logger.log({
-                            message:
-                                'Code review job enqueued for asynchronous processing',
-                            context: BitbucketPullRequestHandler.name,
-                            metadata: {
-                                jobId,
-                                prId,
-                                repositoryId: repository.id,
-                            },
-                        });
                     } else {
                         this.logger.log({
                             message:
@@ -194,11 +249,10 @@ export class BitbucketPullRequestHandler implements IWebhookEventHandler {
                     await this.savePullRequestUseCase.execute(params);
 
                 if (pullRequest && pullRequest.status === 'closed') {
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+                    this.generateIssuesFromPrClosedUseCase.execute(params);
 
                     const merged = payload?.pullrequest?.state === 'MERGED';
+
                     if (merged) {
                         try {
                             if (orgData?.organizationAndTeamData) {

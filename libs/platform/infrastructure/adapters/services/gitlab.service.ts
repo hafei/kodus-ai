@@ -3668,8 +3668,8 @@ export class GitlabService implements Omit<
                             );
 
                         const files = trees
-                            .filter((file) => file.type === 'blob')
-                            .map((file) => this.transformRepositoryFile(file));
+                            ?.filter((file) => file.type === 'blob')
+                            ?.map((file) => this.transformRepositoryFile(file));
 
                         allFiles.push(...files);
                     } catch (dirError) {
