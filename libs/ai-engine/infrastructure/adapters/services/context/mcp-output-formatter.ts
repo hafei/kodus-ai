@@ -132,5 +132,6 @@ function looksLikeJSON(value: string): boolean {
 }
 
 function wrapAsJSON(value: unknown): string {
+    // Keep pretty-print for MCP output as it's meant for user/LLM readability
     return `\`\`\`mcp-result\n${JSON.stringify(value, null, 2)}\n\`\`\``;
 }

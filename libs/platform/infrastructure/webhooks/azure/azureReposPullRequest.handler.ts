@@ -19,6 +19,11 @@ import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-cl
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
 import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
+import {
+    hasReviewMarker,
+    isKodyMentionNonReview,
+    isReviewCommand,
+} from '@libs/common/utils/codeManagement/codeCommentMarkers';
 
 @Injectable()
 export class AzureReposPullRequestHandler implements IWebhookEventHandler {
@@ -411,18 +416,10 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                 return;
             }
 
-            // Verify if it is a start-review command
-            const commandPattern = /^\s*@kody\s+start-review/i;
-            const isStartCommand = commandPattern.test(comment.body);
+            const isStartCommand = isReviewCommand(comment.body);
+            const hasMarker = hasReviewMarker(comment.body);
 
-            // Verify if it has the review marker
-            const reviewMarkerPattern = /<!--\s*kody-codereview\s*-->/i;
-            const hasReviewMarker = reviewMarkerPattern.test(comment.body);
-
-            // Verify if the comment mentions Kody and is not a start-review command
-            const kodyMentionPattern = /^\s*@kody\b(?!\s+start-review)/i;
-
-            if (isStartCommand && !hasReviewMarker) {
+            if (isStartCommand && !hasMarker) {
                 this.logger.log({
                     message: `@kody start command detected in Azure Repos comment for PR#${prId}`,
                     serviceName: AzureReposPullRequestHandler.name,
@@ -459,9 +456,9 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
 
             // For pull_request_review_comment that is not a start-review command
             if (
-                !hasReviewMarker &&
+                !hasMarker &&
                 !isStartCommand &&
-                kodyMentionPattern.test(comment.body)
+                isKodyMentionNonReview(comment.body)
             ) {
                 this.chatWithKodyFromGitUseCase.execute(params);
                 return;

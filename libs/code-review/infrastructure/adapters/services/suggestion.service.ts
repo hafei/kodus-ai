@@ -127,9 +127,14 @@ export class SuggestionService implements ISuggestionService {
                 );
 
             if (implementedSuggestions && implementedSuggestions?.length > 0) {
+                // Create lookup map for O(1) access instead of O(n) find per iteration
+                const savedSuggestionsMap = new Map(
+                    savedSuggestions?.map((s) => [s.id, s]) ?? [],
+                );
+
                 for (const suggestion of implementedSuggestions) {
-                    const savedSuggestion = savedSuggestions?.find(
-                        (s) => s.id === suggestion.id,
+                    const savedSuggestion = savedSuggestionsMap.get(
+                        suggestion.id,
                     );
 
                     if (savedSuggestion) {
@@ -377,38 +382,35 @@ export class SuggestionService implements ISuggestionService {
                 },
             });
 
-            // Categorizar sugestões por severidade
-            const categorizedSuggestions = {
-                critical: suggestions.filter(
-                    (s) => s.severity?.toLowerCase() === 'critical',
-                ),
-                high: suggestions.filter(
-                    (s) => s.severity?.toLowerCase() === 'high',
-                ),
-                medium: suggestions.filter(
-                    (s) => s.severity?.toLowerCase() === 'medium',
-                ),
-                low: suggestions.filter(
-                    (s) => s.severity?.toLowerCase() === 'low',
-                ),
+            // PERF: Categorizar sugestões em uma única passagem (antes eram 4 filters)
+            const categorizedSuggestions: Record<string, Partial<CodeSuggestion>[]> = {
+                critical: [],
+                high: [],
+                medium: [],
+                low: [],
             };
 
+            for (const s of suggestions) {
+                const severity = s.severity?.toLowerCase() || 'low';
+                if (categorizedSuggestions[severity]) {
+                    categorizedSuggestions[severity].push(s);
+                }
+            }
+
             // Ordenar cada categoria por rankScore (decrescente)
-            Object.keys(categorizedSuggestions).forEach((severity) => {
-                categorizedSuggestions[severity] = categorizedSuggestions[
-                    severity
-                ].sort((a, b) => {
+            for (const severity of Object.keys(categorizedSuggestions)) {
+                categorizedSuggestions[severity].sort((a, b) => {
                     const scoreA = a.rankScore || 0;
                     const scoreB = b.rankScore || 0;
                     return scoreB - scoreA;
                 });
-            });
+            }
 
             // Aplicar limites por severidade
             const prioritizedSuggestions: Partial<CodeSuggestion>[] = [];
 
             // Prioridade: critical > high > medium > low
-            ['critical', 'high', 'medium', 'low'].forEach((severity) => {
+            for (const severity of ['critical', 'high', 'medium', 'low']) {
                 const limit = severityLimits[severity];
                 const suggestionsOfSeverity = categorizedSuggestions[severity];
 
@@ -420,15 +422,14 @@ export class SuggestionService implements ISuggestionService {
                             ? suggestionsOfSeverity
                             : suggestionsOfSeverity.slice(0, limit);
 
-                    prioritizedSuggestions.push(
-                        ...selected.map((s) => ({
-                            ...s,
-                            priorityStatus: PriorityStatus.PRIORITIZED,
-                            deliveryStatus: DeliveryStatus.NOT_SENT,
-                        })),
-                    );
+                    // PERF: Mutar in-place ao invés de criar novos objetos com spread
+                    for (const s of selected) {
+                        s.priorityStatus = PriorityStatus.PRIORITIZED;
+                        s.deliveryStatus = DeliveryStatus.NOT_SENT;
+                        prioritizedSuggestions.push(s);
+                    }
                 }
-            });
+            }
 
             this.logger.log({
                 message: `Suggestions prioritized by severity limits for PR#${prNumber}`,
@@ -481,12 +482,12 @@ export class SuggestionService implements ISuggestionService {
                 metadata: { severityLimits, organizationAndTeamData, prNumber },
             });
 
-            // Fallback: retorna todas as sugestões
-            return suggestions.map((s) => ({
-                ...s,
-                priorityStatus: PriorityStatus.PRIORITIZED,
-                deliveryStatus: DeliveryStatus.NOT_SENT,
-            }));
+            // Fallback: retorna todas as sugestões (mutação in-place)
+            for (const s of suggestions) {
+                s.priorityStatus = PriorityStatus.PRIORITIZED;
+                s.deliveryStatus = DeliveryStatus.NOT_SENT;
+            }
+            return suggestions;
         }
     }
 
@@ -508,11 +509,12 @@ export class SuggestionService implements ISuggestionService {
                     prioritizedIds.has(
                         suggestion.clusteringInformation.parentSuggestionId,
                     ),
-            )
-            .map((suggestion) => ({
-                ...suggestion,
-                priorityStatus: PriorityStatus.PRIORITIZED_BY_CLUSTERING,
-            }));
+            );
+
+        // PERF: Mutar in-place ao invés de criar novos objetos
+        for (const suggestion of relatedToPrioritized) {
+            suggestion.priorityStatus = PriorityStatus.PRIORITIZED_BY_CLUSTERING;
+        }
 
         return [...prioritizedByQuantity, ...relatedToPrioritized];
     }
@@ -537,11 +539,12 @@ export class SuggestionService implements ISuggestionService {
         discardedSuggestionsBySeverityOrQuantity: any[];
     }> {
         if (!shouldApplyFilters) {
+            // PERF: Mutar in-place ao invés de criar novos objetos
+            for (const s of suggestions) {
+                s.priorityStatus = PriorityStatus.PRIORITIZED;
+            }
             return {
-                prioritizedSuggestions: suggestions.map((s) => ({
-                    ...s,
-                    priorityStatus: PriorityStatus.PRIORITIZED,
-                })),
+                prioritizedSuggestions: suggestions,
                 discardedSuggestionsBySeverityOrQuantity: [],
             };
         }
@@ -783,12 +786,12 @@ export class SuggestionService implements ISuggestionService {
 
         // Processa Kody Rules SEM filtros - todas passam
         if (kodyRulesSuggestions.length > 0) {
-            const kodyRulesPrioritized = kodyRulesSuggestions.map((s) => ({
-                ...s,
-                priorityStatus: PriorityStatus.PRIORITIZED,
-                deliveryStatus: DeliveryStatus.NOT_SENT,
-            }));
-            allPrioritized.push(...kodyRulesPrioritized);
+            // PERF: Mutar in-place ao invés de criar novos objetos
+            for (const s of kodyRulesSuggestions) {
+                s.priorityStatus = PriorityStatus.PRIORITIZED;
+                s.deliveryStatus = DeliveryStatus.NOT_SENT;
+            }
+            allPrioritized.push(...kodyRulesSuggestions);
         }
 
         this.logger.log({
@@ -845,15 +848,16 @@ export class SuggestionService implements ISuggestionService {
             const acceptedSeverities =
                 severityLevels[severityLevelFilter] || [];
 
-            return suggestions.map((suggestion) => ({
-                ...suggestion,
-                priorityStatus: acceptedSeverities.includes(
+            // PERF: Mutar in-place ao invés de criar novos objetos com spread
+            for (const suggestion of suggestions) {
+                suggestion.priorityStatus = acceptedSeverities.includes(
                     suggestion?.severity?.toLowerCase(),
                 )
                     ? PriorityStatus.PRIORITIZED
-                    : PriorityStatus.DISCARDED_BY_SEVERITY,
-                deliveryStatus: DeliveryStatus.NOT_SENT,
-            }));
+                    : PriorityStatus.DISCARDED_BY_SEVERITY;
+                suggestion.deliveryStatus = DeliveryStatus.NOT_SENT;
+            }
+            return suggestions;
         } catch (error) {
             this.logger.log({
                 message: `Failed to prioritize suggestions by severity level for PR#${prNumber}`,
@@ -1318,15 +1322,16 @@ export class SuggestionService implements ISuggestionService {
                 return [];
             }
 
+            // Create lookup map for O(1) access instead of O(n) find per iteration
+            const severityMap = new Map(
+                severityLevels?.map((level) => [level.id, level.severity]) ??
+                    [],
+            );
+
             return suggestions.map((suggestion) => {
-                const severityLevel = severityLevels?.find(
-                    (level) => level.id === suggestion.id,
-                );
+                const severity = severityMap.get(suggestion.id) || 'medium';
 
-                // Se não encontrar uma severidade específica, usa a existente ou define como 'medium'
-                const severity = severityLevel?.severity || 'medium';
-
-                if (!severityLevel?.severity) {
+                if (!severityMap.has(suggestion.id)) {
                     this.logger.warn({
                         message: `Suggestion severity not found in severity levels`,
                         context: SuggestionService.name,
@@ -1478,9 +1483,12 @@ export class SuggestionService implements ISuggestionService {
 
         // For each group, finds the highest severity and normalizes
         groupsMap.forEach((groupIds, parentId) => {
+            // Convert to Set for O(1) lookup instead of O(n) includes
+            const groupIdSet = new Set(groupIds);
+
             // Gets all suggestions in the group (parent + related)
             const groupSuggestions = updatedSuggestions.filter((s) =>
-                groupIds.includes(s.id),
+                groupIdSet.has(s.id),
             );
 
             // Finds the highest severity in the group
@@ -1497,14 +1505,10 @@ export class SuggestionService implements ISuggestionService {
             );
 
             // Updates the severity of all suggestions in the group
-            groupSuggestions.forEach((suggestion) => {
-                const suggestionToUpdate = updatedSuggestions.find(
-                    (s) => s.id === suggestion.id,
-                );
-                if (suggestionToUpdate) {
-                    suggestionToUpdate.severity = highestSeverity;
-                }
-            });
+            // groupSuggestions already contains references to objects in updatedSuggestions
+            for (const suggestion of groupSuggestions) {
+                suggestion.severity = highestSeverity;
+            }
         });
 
         return updatedSuggestions;

@@ -12,6 +12,11 @@ import {
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
 import { CodeManagementService } from '../../adapters/services/codeManagement.service';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
+import {
+    hasReviewMarker,
+    isKodyMentionNonReview,
+    isReviewCommand,
+} from '@libs/common/utils/codeManagement/codeCommentMarkers';
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeReview.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
@@ -337,21 +342,13 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 return;
             }
 
-            // Verify if it is a start-review command
-            const commandPattern = /^\s*@kody\s+start-review/i;
-            const isStartCommand = commandPattern.test(comment.body);
-
-            // Verify if it has the review marker
-            const reviewMarkerPattern = /<!--\s*kody-codereview\s*-->/i;
-            const hasReviewMarker = reviewMarkerPattern.test(comment.body);
+            const isStartCommand = isReviewCommand(comment.body);
+            const hasMarker = hasReviewMarker(comment.body);
 
             const pullRequest = mappedPlatform.mapPullRequest({ payload });
 
-            // Verify if the comment mentions Kody and is not a start-review command
-            const kodyMentionPattern = /^\s*@kody\b(?!\s+start-review)/i;
-
             // If it is a start-review command and does not have the review marker
-            if (isStartCommand && !hasReviewMarker) {
+            if (isStartCommand && !hasMarker) {
                 this.logger.log({
                     message: `@kody start command detected in GitHub comment for PR#${pullRequest?.number}`,
                     serviceName: GitHubPullRequestHandler.name,
@@ -505,9 +502,9 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
             if (
                 (event === 'pull_request_review_comment' ||
                     event === 'issue_comment') &&
-                !hasReviewMarker &&
+                !hasMarker &&
                 !isStartCommand &&
-                kodyMentionPattern.test(comment.body)
+                isKodyMentionNonReview(comment.body)
             ) {
                 this.chatWithKodyFromGitUseCase.execute(params);
                 return;

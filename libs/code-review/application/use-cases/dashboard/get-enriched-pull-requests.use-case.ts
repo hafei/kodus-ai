@@ -218,8 +218,11 @@ export class GetEnrichedPullRequestsUseCase implements IUseCase {
 
                 const executionUuids = executionsBatch.map((e) => e.uuid);
 
-                // Bulk fetch in parallel
-                const [pullRequestsList, codeReviewsList] = await Promise.all([
+                // PERF: Bulk fetch in parallel
+                // - PRs: basic data only (no files array)
+                // - Suggestion counts: computed via MongoDB aggregation (not in-memory)
+                // - Code reviews: timeline data
+                const [pullRequestsList, suggestionCountsMap, codeReviewsList] = await Promise.all([
                     this.pullRequestsService
                         .findManyByNumbersAndRepositoryIds(
                             prCriteria,
@@ -235,6 +238,23 @@ export class GetEnrichedPullRequestsUseCase implements IUseCase {
                                 },
                             });
                             return [];
+                        }),
+                    // PERF: Fetch counts via aggregation instead of loading 180k objects
+                    this.pullRequestsService
+                        .findSuggestionCountsByNumbersAndRepositoryIds(
+                            prCriteria,
+                            organizationId,
+                        )
+                        .catch((error) => {
+                            this.logger.error({
+                                message: 'Error fetching suggestion counts',
+                                context: GetEnrichedPullRequestsUseCase.name,
+                                error,
+                                metadata: {
+                                    organizationId,
+                                },
+                            });
+                            return new Map<string, { sent: number; filtered: number }>();
                         }),
                     this.codeReviewExecutionService
                         .findManyByAutomationExecutionIds(executionUuids)
@@ -309,7 +329,10 @@ export class GetEnrichedPullRequestsUseCase implements IUseCase {
                             execution.dataExecution,
                         );
 
+                        // PERF: Use pre-computed counts from aggregation query
+                        // Falls back to in-memory computation if aggregation failed
                         const suggestionsCount =
+                            suggestionCountsMap.get(prKey) ||
                             this.extractSuggestionsCount(pullRequest);
 
                         if (

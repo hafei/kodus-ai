@@ -26,6 +26,10 @@ import { CodeManagementService } from '../../adapters/services/codeManagement.se
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeReview.use-case';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
+import {
+    isKodyMentionNonReview,
+    isReviewCommand,
+} from '@libs/common/utils/codeManagement/codeCommentMarkers';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
 import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
@@ -379,20 +383,16 @@ export class BitbucketPullRequestHandler implements IWebhookEventHandler {
                 return;
             }
 
-            // Verify if the comment is a start-review command
-            const commandPattern = /^\s*@kody\s+start-review/i;
-            const isStartCommand = commandPattern.test(comment.body);
+            const isStartCommand = isReviewCommand(comment.body);
 
-            // Verify if the comment is a review marker (emoji or API generated)
+            // Bitbucket-specific: Verify if the comment is a review marker (emoji or API generated)
             const emojiPattern = /(?:👍|👎)/u;
             const apiGeneratedPattern = /(?:kody code-review)/i;
-            const hasReviewMarker =
+            const hasMarker =
                 emojiPattern.test(comment.body) ||
                 apiGeneratedPattern.test(comment.body);
-            // Verify if the comment mentions Kody and is not a start-review command
-            const kodyMentionPattern = /^\s*@kody\b(?!\s+start-review)/i;
 
-            if (isStartCommand && !hasReviewMarker) {
+            if (isStartCommand && !hasMarker) {
                 this.logger.log({
                     message: `@kody start command detected in Bitbucket comment for PR#${prId}`,
                     serviceName: BitbucketPullRequestHandler.name,
@@ -427,8 +427,8 @@ export class BitbucketPullRequestHandler implements IWebhookEventHandler {
 
             if (
                 !isStartCommand &&
-                !hasReviewMarker &&
-                kodyMentionPattern.test(comment.body)
+                !hasMarker &&
+                isKodyMentionNonReview(comment.body)
             ) {
                 this.chatWithKodyFromGitUseCase.execute(params);
                 return;
