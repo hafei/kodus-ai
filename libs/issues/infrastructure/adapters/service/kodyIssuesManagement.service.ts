@@ -354,15 +354,19 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
 
             const prChangedFiles = await this.getChangedFiles(context);
 
+            // PERF: Create lookup map for O(1) access instead of O(n) find per iteration
+            const prChangedFilesMap = new Map(
+                prChangedFiles?.map((f) => [f.filename, f]) ?? [],
+            );
+
             // Array para coletar todas as promises de atualização
             const updatePromises: Promise<any>[] = [];
 
             for (const file of files) {
-                const currentCode = prChangedFiles.find(
-                    (f) => f.filename === file.path,
-                )?.fileContent;
+                const currentCode = prChangedFilesMap.get(file.path)?.fileContent;
 
-                const fileData = files.find((f) => f.path === file.path);
+                // file is already the current item from the loop, no need to find it again
+                const fileData = file;
                 if (!fileData) continue;
 
                 // Buscar issues abertas para o arquivo
@@ -493,12 +497,15 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
             return;
         }
 
+        // PERF: Create lookup map for O(1) access instead of O(n) find per iteration
+        const suggestionsMap = new Map(
+            newSuggestions.map((s) => [s.id, s]),
+        );
+
         const unmatchedSuggestions: Partial<CodeSuggestion>[] = [];
 
         for (const match of mergeResult.matches) {
-            const suggestion = newSuggestions.find(
-                (s) => s.id === match.suggestionId,
-            );
+            const suggestion = suggestionsMap.get(match.suggestionId);
 
             if (!suggestion) continue;
 
@@ -611,7 +618,9 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
         contributingSuggestions: IContributingSuggestion[],
         organizationId: string,
     ): Promise<IContributingSuggestion[]> {
-        const suggestionsCache = new Map<number, ISuggestion[]>();
+        // PERF: Use Map of Maps for O(1) lookup instead of O(n) find per iteration
+        // Outer Map: prNumber -> Inner Map: suggestionId -> suggestion
+        const suggestionsCache = new Map<number, Map<string, ISuggestion>>();
 
         const enrichedContributingSuggestions = await Promise.all(
             contributingSuggestions.map(async (contributingSuggestion) => {
@@ -630,19 +639,21 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
                             organizationId,
                             contributingSuggestion.prNumber,
                         );
+                        // Convert array to Map for O(1) lookups
+                        const suggestionsMap = new Map(
+                            suggestionsFromPR.map((s) => [s.id, s]),
+                        );
                         suggestionsCache.set(
                             contributingSuggestion.prNumber,
-                            suggestionsFromPR,
+                            suggestionsMap,
                         );
                     }
 
-                    const suggestionsFromPR =
-                        suggestionsCache.get(contributingSuggestion.prNumber) ||
-                        [];
+                    const suggestionsMap =
+                        suggestionsCache.get(contributingSuggestion.prNumber);
 
-                    const fullSuggestion = suggestionsFromPR.find(
-                        (suggestion) =>
-                            suggestion.id === contributingSuggestion.id,
+                    const fullSuggestion = suggestionsMap?.get(
+                        contributingSuggestion.id,
                     );
 
                     if (fullSuggestion) {

@@ -1205,9 +1205,10 @@ ${reviewOptions}
         originalSuggestions: any[],
         clusteredIds: Set<string>,
     ): Promise<Partial<CodeSuggestion>[]> {
-        return originalSuggestions
-            .filter((suggestion) => !clusteredIds.has(suggestion.id))
-            .map((suggestion) => ({ ...suggestion }));
+        // PERF: filter já cria novo array, não precisa copiar objetos
+        return originalSuggestions.filter(
+            (suggestion) => !clusteredIds.has(suggestion.id),
+        );
     }
 
     private async enrichClusteredSuggestions(
@@ -1216,34 +1217,33 @@ ${reviewOptions}
     ): Promise<Partial<CodeSuggestion>[]> {
         const enrichedSuggestions: Partial<CodeSuggestion>[] = [];
 
-        await Promise.all(
-            clusteredSuggestions.map(async (cluster) => {
-                const parentSuggestion =
-                    await this.findAndEnrichParentSuggestion(
-                        originalSuggestions,
-                        cluster,
-                    );
-                enrichedSuggestions.push(parentSuggestion);
-
-                const relatedSuggestions =
-                    await this.findAndEnrichRelatedSuggestions(
-                        originalSuggestions,
-                        cluster,
-                    );
-                enrichedSuggestions.push(...relatedSuggestions);
-            }),
+        // PERF: Create lookup map for O(1) access instead of O(n) find per iteration
+        const suggestionsMap = new Map(
+            originalSuggestions.map((s) => [s.id, s]),
         );
+
+        for (const cluster of clusteredSuggestions) {
+            const parentSuggestion = this.enrichParentSuggestion(
+                suggestionsMap,
+                cluster,
+            );
+            enrichedSuggestions.push(parentSuggestion);
+
+            const relatedSuggestions = this.enrichRelatedSuggestions(
+                suggestionsMap,
+                cluster,
+            );
+            enrichedSuggestions.push(...relatedSuggestions);
+        }
 
         return enrichedSuggestions;
     }
 
-    private findAndEnrichParentSuggestion(
-        originalSuggestions: any[],
+    private enrichParentSuggestion(
+        suggestionsMap: Map<string, any>,
         cluster: ClusteredSuggestion,
     ): Partial<CodeSuggestion> {
-        const originalSuggestion = originalSuggestions.find(
-            (s) => s.id === cluster.id,
-        );
+        const originalSuggestion = suggestionsMap.get(cluster.id);
 
         return {
             ...originalSuggestion,
@@ -1256,14 +1256,12 @@ ${reviewOptions}
         };
     }
 
-    private findAndEnrichRelatedSuggestions(
-        originalSuggestions: any[],
+    private enrichRelatedSuggestions(
+        suggestionsMap: Map<string, any>,
         cluster: ClusteredSuggestion,
     ): Partial<CodeSuggestion>[] {
         return cluster.sameSuggestionsId.map((id) => {
-            const originalSuggestion = originalSuggestions.find(
-                (s) => s.id === id,
-            );
+            const originalSuggestion = suggestionsMap.get(id);
 
             return {
                 ...originalSuggestion,
@@ -1292,6 +1290,22 @@ ${reviewOptions}
     async enrichParentSuggestionsWithRelated(
         suggestions: CodeSuggestion[],
     ): Promise<CodeSuggestion[]> {
+        // PERF: Build lookup map of RELATED suggestions grouped by parentSuggestionId
+        // This avoids O(n²) from filtering inside map
+        const relatedByParentId = new Map<string, CodeSuggestion[]>();
+        for (const s of suggestions) {
+            if (
+                s.clusteringInformation?.type === ClusteringType.RELATED &&
+                s.clusteringInformation?.parentSuggestionId
+            ) {
+                const parentId = s.clusteringInformation.parentSuggestionId;
+                if (!relatedByParentId.has(parentId)) {
+                    relatedByParentId.set(parentId, []);
+                }
+                relatedByParentId.get(parentId)!.push(s);
+            }
+        }
+
         return suggestions.map((suggestion) => {
             if (
                 suggestion.clusteringInformation?.type !== ClusteringType.PARENT
@@ -1299,12 +1313,8 @@ ${reviewOptions}
                 return suggestion;
             }
 
-            const relatedSuggestions = suggestions.filter(
-                (s) =>
-                    s.clusteringInformation?.type === ClusteringType.RELATED &&
-                    s.clusteringInformation?.parentSuggestionId ===
-                        suggestion.id,
-            );
+            const relatedSuggestions =
+                relatedByParentId.get(suggestion.id) || [];
 
             const occurrences = [
                 {
