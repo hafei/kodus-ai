@@ -1,4 +1,3 @@
-import { PlatformType } from '@libs/core/domain/enums';
 import { Injectable, Inject } from '@nestjs/common';
 import { IJobProcessorService } from '@libs/core/workflow/domain/contracts/job-processor.service.contract';
 import { WorkflowType } from '@libs/core/workflow/domain/enums/workflow-type.enum';
@@ -180,12 +179,6 @@ export class ImplementationVerificationProcessor implements IJobProcessorService
                 payload.pullRequestNumber,
             );
 
-            // 6. Resolve comments on platform for implemented suggestions
-            const platformType =
-                payload.platformType ||
-                (savedPr.provider as PlatformType) ||
-                PlatformType.GITHUB;
-
             await this.suggestionService.resolveImplementedSuggestionsOnPlatform(
                 {
                     organizationAndTeamData: payload.organizationAndTeamData,
@@ -194,7 +187,7 @@ export class ImplementationVerificationProcessor implements IJobProcessorService
                         name: payload.repository.name,
                     },
                     prNumber: payload.pullRequestNumber,
-                    platformType,
+                    platformType: payload.platformType,
                 },
             );
 
