@@ -22,6 +22,13 @@ import type { IntegrationConfigModel } from './integrationConfig.model';
     ['team', 'integrationCategory', 'status'],
     { concurrent: true },
 )
+@Index(
+    'IDX_integrations_platform_org_team',
+    ['platform', 'organization', 'team'],
+    {
+        concurrent: true,
+    },
+)
 export class IntegrationModel extends CoreModel {
     @Column({ type: 'boolean' })
     status: boolean;

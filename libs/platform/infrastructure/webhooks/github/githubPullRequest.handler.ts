@@ -137,25 +137,38 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 this.enqueueCodeReviewJobUseCase &&
                 validationResult?.organizationAndTeamData
             ) {
-                const jobId = await this.enqueueCodeReviewJobUseCase.execute({
-                    payload: payload,
-                    event: event,
-                    platformType: PlatformType.GITHUB,
-                    organizationAndTeam:
-                        validationResult.organizationAndTeamData,
-                    correlationId: params.correlationId,
-                });
-
-                this.logger.log({
-                    message:
-                        'Code review job enqueued for asynchronous processing',
-                    context: GitHubPullRequestHandler.name,
-                    metadata: {
-                        jobId,
-                        prNumber,
-                        repositoryId: repository.id,
-                    },
-                });
+                this.enqueueCodeReviewJobUseCase
+                    .execute({
+                        payload: payload,
+                        event: event,
+                        platformType: PlatformType.GITHUB,
+                        organizationAndTeam:
+                            validationResult.organizationAndTeamData,
+                        correlationId: params.correlationId,
+                    })
+                    .then((jobId) => {
+                        this.logger.log({
+                            message:
+                                'Code review job enqueued for asynchronous processing',
+                            context: GitHubPullRequestHandler.name,
+                            metadata: {
+                                jobId,
+                                prNumber,
+                                repositoryId: repository.id,
+                            },
+                        });
+                    })
+                    .catch((error) => {
+                        this.logger.error({
+                            message: 'Failed to enqueue code review job',
+                            context: GitHubPullRequestHandler.name,
+                            error,
+                            metadata: {
+                                prNumber,
+                                repositoryId: repository.id,
+                            },
+                        });
+                    });
             } else {
                 this.logger.log({
                     message:
@@ -172,63 +185,50 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
             }
 
             if (payload?.action === 'synchronize') {
-                try {
-                    if (validationResult?.organizationAndTeamData) {
-                        await this.enqueueImplementationCheckUseCase.execute({
+                if (validationResult?.organizationAndTeamData) {
+                    this.enqueueImplementationCheckUseCase
+                        .execute({
+                            payload: payload,
+                            event: event,
                             organizationAndTeamData:
                                 validationResult.organizationAndTeamData,
                             repository: {
                                 id: repository.id,
                                 name: repository.name,
                             },
+                            platformType: PlatformType.GITHUB,
                             pullRequestNumber: payload?.pull_request?.number,
                             commitSha: payload?.after || payload?.head?.sha,
-                            trigger: 'synchronize',
+                            trigger: payload?.action,
+                        })
+                        .catch((e) => {
+                            this.logger.error({
+                                message:
+                                    'Failed to enqueue implementation check',
+                                context: GitHubPullRequestHandler.name,
+                                error: e,
+                                metadata: {
+                                    organizationAndTeamData:
+                                        validationResult?.organizationAndTeamData,
+                                    repository,
+                                    pullRequestNumber:
+                                        payload?.pull_request?.number,
+                                },
+                            });
                         });
-                    }
-                } catch (e) {
-                    this.logger.error({
-                        message: 'Failed to enqueue implementation check',
-                        context: GitHubPullRequestHandler.name,
-                        error: e,
-                        metadata: {
-                            organizationAndTeamData:
-                                validationResult?.organizationAndTeamData,
-                            repository,
-                            pullRequestNumber: payload?.pull_request?.number,
-                        },
-                    });
                 }
             }
 
             if (payload?.action === 'closed') {
-                await this.generateIssuesFromPrClosedUseCase.execute(params);
+                this.generateIssuesFromPrClosedUseCase.execute(params);
 
                 // If merged into default branch, trigger Kody Rules sync for main
                 const merged = payload?.pull_request?.merged === true;
                 const baseRef = payload?.pull_request?.base?.ref;
+
                 if (merged && baseRef) {
                     try {
                         if (validationResult?.organizationAndTeamData) {
-                            // Enqueue Implementation Check on Merge
-                            await this.enqueueImplementationCheckUseCase.execute(
-                                {
-                                    organizationAndTeamData:
-                                        validationResult.organizationAndTeamData,
-                                    repository: {
-                                        id: repository.id,
-                                        name: repository.name,
-                                    },
-                                    pullRequestNumber:
-                                        payload?.pull_request?.number,
-                                    commitSha:
-                                        payload?.pull_request
-                                            ?.merge_commit_sha ||
-                                        payload?.pull_request?.head?.sha,
-                                    trigger: 'closed',
-                                },
-                            );
-
                             const defaultBranch =
                                 await this.codeManagement.getDefaultBranch({
                                     organizationAndTeamData:
@@ -280,6 +280,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                     }
                 }
             }
+
             return;
         } catch (error) {
             this.logger.error({

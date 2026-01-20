@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DevtoolsModule } from '@nestjs/devtools-integration';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { SharedCoreModule } from '@libs/shared/infrastructure/shared-core.module';
@@ -17,6 +18,10 @@ import { WebhookHealthController } from '../controllers/webhook-health.controlle
 
 @Module({
     imports: [
+        DevtoolsModule.register({
+            http: process.env.NODE_ENV !== 'production',
+            port: 8002,
+        }),
         SharedCoreModule,
         SharedConfigModule,
         SharedLogModule,

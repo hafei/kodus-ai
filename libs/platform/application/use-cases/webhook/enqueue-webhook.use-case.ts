@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { v4 as uuid } from 'uuid';
+import { IdGenerator } from '@kodus/flow';
 
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
@@ -61,7 +61,8 @@ export class EnqueueWebhookUseCase implements IUseCase {
     async execute(input: EnqueueWebhookInput): Promise<void> {
         try {
             const platformType = normalizePlatformType(input.platformType);
-            const correlationId = input.correlationId || uuid();
+            const correlationId =
+                input.correlationId || IdGenerator.correlationId();
 
             this.logger.log({
                 message: 'Enqueuing raw webhook payload',

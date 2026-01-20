@@ -23,7 +23,25 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
         repository: { name: string; id: any },
         prNumber: number,
     ): Promise<any> {
-        // Existing implementation or add necessary implementation
+        try {
+            return await this.codeManagementService.getPullRequest({
+                organizationAndTeamData,
+                repository,
+                prNumber,
+            });
+        } catch (error) {
+            this.logger.error({
+                message: 'Error fetching pull request details',
+                context: PullRequestHandlerService.name,
+                error,
+                metadata: {
+                    organizationAndTeamData,
+                    repository,
+                    prNumber,
+                },
+            });
+            throw error;
+        }
     }
 
     async getChangedFiles(

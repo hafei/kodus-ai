@@ -1,19 +1,39 @@
-import { Injectable } from '@nestjs/common';
-import { WorkflowJobQueueService } from '@libs/core/workflow/application/services/workflow-job-queue.service';
+import { Injectable, Inject } from '@nestjs/common';
 import { WorkflowType } from '@libs/core/workflow/domain/enums/workflow-type.enum';
 import { CheckImplementationJobPayload } from '../../domain/interfaces/check-implementation-job.interface';
+import { HandlerType } from '@libs/core/workflow/domain/enums/handler-type.enum';
+import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
+import {
+    IJobQueueService,
+    JOB_QUEUE_SERVICE_TOKEN,
+} from '@libs/core/workflow/domain/contracts/job-queue.service.contract';
+import { IdGenerator } from '@kodus/flow';
+import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
 
 @Injectable()
-export class EnqueueImplementationCheckUseCase {
+export class EnqueueImplementationCheckUseCase implements IUseCase {
     constructor(
-        private readonly workflowJobQueueService: WorkflowJobQueueService,
+        @Inject(JOB_QUEUE_SERVICE_TOKEN)
+        private readonly jobQueueService: IJobQueueService,
     ) {}
 
-    async execute(payload: CheckImplementationJobPayload): Promise<string> {
-        return this.workflowJobQueueService.enqueue({
+    async execute(input: CheckImplementationJobPayload): Promise<string> {
+        const correlationId =
+            input.correlationId || IdGenerator.correlationId();
+
+        // Pass the input as payload directly
+        const jobPayload = { ...input };
+
+        return this.jobQueueService.enqueue({
+            correlationId: correlationId,
             workflowType: WorkflowType.CHECK_SUGGESTION_IMPLEMENTATION,
-            payload,
-            correlationId: `check-impl-${payload.repository.id}-${payload.pullRequestNumber}-${payload.commitSha}`,
+            handlerType: HandlerType.SIMPLE_FUNCTION,
+            payload: jobPayload,
+            organizationAndTeam: input.organizationAndTeamData,
+            status: JobStatus.PENDING,
+            priority: 0,
+            retryCount: 0,
+            maxRetries: 1,
         });
     }
 }

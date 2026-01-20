@@ -17,6 +17,7 @@ import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeRevie
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
         private readonly eventEmitter: EventEmitter2,
         private readonly codeManagement: CodeManagementService,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     /**
@@ -183,9 +185,42 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                             },
                         });
                     }
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+
+                    if (eventType === 'git.pullrequest.updated') {
+                        try {
+                            if (orgData?.organizationAndTeamData) {
+                                await this.enqueueImplementationCheckUseCase.execute(
+                                    {
+                                        organizationAndTeamData:
+                                            orgData.organizationAndTeamData,
+                                        repository: {
+                                            id: repository.id,
+                                            name: repository.name,
+                                        },
+                                        pullRequestNumber: Number(prId),
+                                        commitSha:
+                                            params.payload?.resource
+                                                ?.lastMergeSourceCommit
+                                                ?.commitId,
+                                        trigger: 'synchronize',
+                                    },
+                                );
+                            }
+                        } catch (e) {
+                            this.logger.error({
+                                message:
+                                    'Failed to enqueue implementation check',
+                                context: AzureReposPullRequestHandler.name,
+                                error: e,
+                                metadata: {
+                                    repository,
+                                    prId,
+                                },
+                            });
+                        }
+                    }
+
+                    this.generateIssuesFromPrClosedUseCase.execute(params);
 
                     try {
                         if (params?.payload?.resource?.status === 'completed') {

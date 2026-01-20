@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DevtoolsModule } from '@nestjs/devtools-integration';
 import { SharedMongoModule } from '@libs/shared/database/shared-mongo.module';
 import { SharedPostgresModule } from '@libs/shared/database/shared-postgres.module';
 import { SharedConfigModule } from '@libs/shared/infrastructure/shared-config.module';
@@ -19,6 +20,10 @@ import { WorkerDrainService } from './worker-drain.service';
 
 @Module({
     imports: [
+        DevtoolsModule.register({
+            http: process.env.NODE_ENV !== 'production',
+            port: 8001,
+        }),
         ScheduleModule.forRoot(),
         SharedConfigModule,
         SharedLogModule,

@@ -128,26 +128,38 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                     this.enqueueCodeReviewJobUseCase &&
                     orgData?.organizationAndTeamData
                 ) {
-                    const jobId =
-                        await this.enqueueCodeReviewJobUseCase.execute({
+                    this.enqueueCodeReviewJobUseCase
+                        .execute({
                             payload,
                             event: params.event,
                             platformType: PlatformType.GITLAB,
                             organizationAndTeam:
                                 orgData.organizationAndTeamData,
                             correlationId: params.correlationId,
+                        })
+                        .then((jobId) => {
+                            this.logger.log({
+                                message:
+                                    'Code review job enqueued for asynchronous processing',
+                                context: GitLabMergeRequestHandler.name,
+                                metadata: {
+                                    jobId,
+                                    mrNumber,
+                                    repositoryId: repository.id,
+                                },
+                            });
+                        })
+                        .catch((error) => {
+                            this.logger.error({
+                                message: 'Failed to enqueue code review job',
+                                context: GitLabMergeRequestHandler.name,
+                                error,
+                                metadata: {
+                                    mrNumber,
+                                    repositoryId: repository.id,
+                                },
+                            });
                         });
-
-                    this.logger.log({
-                        message:
-                            'Code review job enqueued for asynchronous processing',
-                        context: GitLabMergeRequestHandler.name,
-                        metadata: {
-                            jobId,
-                            mrNumber,
-                            repositoryId: repository.id,
-                        },
-                    });
                 } else {
                     this.logger.log({
                         message:
@@ -162,11 +174,10 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                 }
 
                 if (payload?.object_attributes?.action === 'merge') {
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+                    this.generateIssuesFromPrClosedUseCase.execute(params);
 
                     // Sync Kody Rules after merge into target branch
+
                     try {
                         if (orgData?.organizationAndTeamData) {
                             const baseRef =
@@ -225,79 +236,52 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                 await this.savePullRequestUseCase.execute(params);
 
                 if (payload?.object_attributes?.action === 'update') {
-                    try {
-                        const orgData =
-                            await this.savePullRequestUseCase.execute(params);
-                        if (orgData?.organizationAndTeamData) {
-                            await this.enqueueImplementationCheckUseCase.execute(
-                                {
-                                    organizationAndTeamData:
-                                        orgData.organizationAndTeamData,
-                                    repository: {
-                                        id: repository.id,
-                                        name: repository.name,
-                                    },
-                                    pullRequestNumber:
-                                        payload?.object_attributes?.iid,
-                                    commitSha:
-                                        payload?.object_attributes?.last_commit
-                                            ?.id,
-                                    trigger: 'synchronize',
+                    if (orgData?.organizationAndTeamData) {
+                        this.enqueueImplementationCheckUseCase
+                            .execute({
+                                organizationAndTeamData:
+                                    orgData.organizationAndTeamData,
+                                repository: {
+                                    id: repository.id,
+                                    name: repository.name,
                                 },
-                            );
-                        }
-                    } catch (e) {
-                        this.logger.error({
-                            message: 'Failed to enqueue implementation check',
-                            context: GitLabMergeRequestHandler.name,
-                            error: e,
-                            metadata: {
-                                repository,
                                 pullRequestNumber:
                                     payload?.object_attributes?.iid,
-                            },
-                        });
+                                commitSha:
+                                    payload?.object_attributes?.last_commit?.id,
+                                trigger: 'synchronize',
+                            })
+                            .catch((e) => {
+                                this.logger.error({
+                                    message:
+                                        'Failed to enqueue implementation check',
+                                    context: GitLabMergeRequestHandler.name,
+                                    error: e,
+                                    metadata: {
+                                        repository,
+                                        pullRequestNumber:
+                                            payload?.object_attributes?.iid,
+                                    },
+                                });
+                            });
                     }
                 }
 
                 if (payload?.object_attributes?.action === 'merge') {
-                    try {
-                        const orgData =
-                            await this.savePullRequestUseCase.execute(params);
-                        if (orgData?.organizationAndTeamData) {
-                            await this.enqueueImplementationCheckUseCase.execute(
-                                {
-                                    organizationAndTeamData:
-                                        orgData.organizationAndTeamData,
-                                    repository: {
-                                        id: repository.id,
-                                        name: repository.name,
-                                    },
-                                    pullRequestNumber:
-                                        payload?.object_attributes?.iid,
-                                    commitSha:
-                                        payload?.object_attributes?.last_commit
-                                            ?.id,
-                                    trigger: 'closed',
+                    this.generateIssuesFromPrClosedUseCase
+                        .execute(params)
+                        .catch((error) => {
+                            this.logger.error({
+                                message:
+                                    'Failed to generate issues from merged MR',
+                                context: GitLabMergeRequestHandler.name,
+                                error,
+                                metadata: {
+                                    mrNumber,
+                                    repositoryId: repository.id,
                                 },
-                            );
-                        }
-                    } catch (e) {
-                        this.logger.error({
-                            message: 'Failed to enqueue implementation check',
-                            context: GitLabMergeRequestHandler.name,
-                            error: e,
-                            metadata: {
-                                repository,
-                                pullRequestNumber:
-                                    payload?.object_attributes?.iid,
-                            },
+                            });
                         });
-                    }
-
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
                 }
 
                 return;

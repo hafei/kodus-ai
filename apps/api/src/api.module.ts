@@ -38,6 +38,7 @@ import { SharedCoreModule } from '@libs/shared/infrastructure/shared-core.module
 import { SharedLogModule } from '@libs/shared/infrastructure/shared-log.module';
 import { SharedObservabilityModule } from '@libs/shared/infrastructure/shared-observability.module';
 import { Module } from '@nestjs/common';
+import { DevtoolsModule } from '@nestjs/devtools-integration';
 
 import { LoggerWrapperService } from '@libs/core/log/loggerWrapper.service';
 import { SSOModule } from '@libs/ee/sso/sso.module';
@@ -70,6 +71,10 @@ import { CronModule } from './cron/cron.module';
 
 @Module({
     imports: [
+        DevtoolsModule.register({
+            http: process.env.NODE_ENV !== 'production',
+            port: 8000,
+        }),
         SharedCoreModule,
         SharedConfigModule,
         SharedLogModule,

@@ -1332,7 +1332,7 @@ export function createMongoDBExporterFromStorage(
         connectionString: storageConfig.connectionString,
         database: storageConfig.database,
         collections: {
-            logs: storageConfig.collections?.logs || 'observability_logs',
+            logs: storageConfig.collections?.logs || 'observability_logs_ts',
             telemetry:
                 storageConfig.collections?.telemetry ||
                 'observability_telemetry',

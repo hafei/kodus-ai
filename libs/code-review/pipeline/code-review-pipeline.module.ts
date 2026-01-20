@@ -45,9 +45,7 @@ import { CodeReviewJobProcessorService } from '../workflow/code-review-job-proce
 import { LOAD_EXTERNAL_CONTEXT_STAGE_TOKEN } from './stages/contracts/loadExternalContextStage.contract';
 import { ValidateSuggestionsStage } from './stages/validate-suggestions.stage';
 import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.strategy';
-import { ImplementationVerificationProcessor } from '../application/processors/implementation-verification.processor';
-import { EnqueueImplementationCheckUseCase } from '../application/use-cases/enqueue-implementation-check.use-case';
-import { VerifyImplementationUseCase } from '../application/use-cases/verify-implementation.use-case';
+import { ImplementationVerificationProcessor } from '../workflow/implementation-verification.processor';
 
 @Module({
     imports: [
@@ -82,7 +80,7 @@ import { VerifyImplementationUseCase } from '../application/use-cases/verify-imp
         FetchChangedFilesStage,
         {
             provide: LOAD_EXTERNAL_CONTEXT_STAGE_TOKEN,
-            useClass: LoadExternalContextStage,
+            useExisting: LoadExternalContextStage,
         },
         LoadExternalContextStage,
         FileContextGateStage,
@@ -108,8 +106,6 @@ import { VerifyImplementationUseCase } from '../application/use-cases/verify-imp
 
         // Implementation Verification
         ImplementationVerificationProcessor,
-        EnqueueImplementationCheckUseCase,
-        VerifyImplementationUseCase,
     ],
     exports: [
         CodeReviewPipelineStrategyEE,
@@ -133,8 +129,6 @@ import { VerifyImplementationUseCase } from '../application/use-cases/verify-imp
         CreateGithubCheckStage,
         FinalizeGithubCheckStage,
         ImplementationVerificationProcessor,
-        EnqueueImplementationCheckUseCase,
-        VerifyImplementationUseCase,
     ],
 })
 export class CodeReviewPipelineModule {}

@@ -1,4 +1,5 @@
-import { OrganizationAndTeamData } from '@libs/core/domain/types/organization-and-team-data.type';
+import { PlatformType } from '@libs/core/domain/enums';
+import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 
 export interface CheckImplementationJobPayload {
     organizationAndTeamData: OrganizationAndTeamData;
@@ -6,4 +7,9 @@ export interface CheckImplementationJobPayload {
     pullRequestNumber: number;
     commitSha: string;
     trigger: 'synchronize' | 'closed';
+    correlationId?: string;
+    // Optional metadata
+    payload?: any;
+    event?: string;
+    platformType?: PlatformType;
 }

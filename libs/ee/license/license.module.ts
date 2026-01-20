@@ -18,12 +18,13 @@ import { OrganizationParametersModule } from '@libs/organization/modules/organiz
         forwardRef(() => OrganizationParametersModule),
     ],
     providers: [
+        LicenseService,
         {
             provide: LICENSE_SERVICE_TOKEN,
-            useClass: LicenseService,
+            useExisting: LicenseService,
         },
         AutoAssignLicenseUseCase,
     ],
-    exports: [LICENSE_SERVICE_TOKEN, AutoAssignLicenseUseCase],
+    exports: [LicenseService, LICENSE_SERVICE_TOKEN, AutoAssignLicenseUseCase],
 })
 export class LicenseModule {}
