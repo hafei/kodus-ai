@@ -1,7 +1,7 @@
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 import { Type } from 'class-transformer';
-import {
 import { ApiProperty } from '@nestjs/swagger';
+import {
     IsBoolean,
     IsEnum,
     IsString,
@@ -21,11 +21,14 @@ class SourceFiltersDto {
 }
 
 class SeverityFiltersDto {
-    @ApiProperty({ description: 'minimumSeverity', example: 'minimumSeverity_example' })
+    @ApiProperty({
+        description: 'minimumSeverity',
+        example: 'minimumSeverity_example',
+    })
     @IsEnum(SeverityLevel)
     minimumSeverity: SeverityLevel;
 
-    @ApiProperty({ description: 'allowedSeverities', example: ["example"] })
+    @ApiProperty({ description: 'allowedSeverities', example: ['example'] })
     @IsArray()
     @IsEnum(SeverityLevel, { each: true })
     allowedSeverities: SeverityLevel[];
@@ -36,12 +39,18 @@ export class IssuesParameterDto {
     @IsBoolean()
     automaticCreationEnabled: boolean;
 
-    @ApiProperty({ description: 'sourceFilters', example: 'sourceFilters_example' })
+    @ApiProperty({
+        description: 'sourceFilters',
+        example: 'sourceFilters_example',
+    })
     @ValidateNested()
     @Type(() => SourceFiltersDto)
     sourceFilters: SourceFiltersDto;
 
-    @ApiProperty({ description: 'severityFilters', example: 'severityFilters_example' })
+    @ApiProperty({
+        description: 'severityFilters',
+        example: 'severityFilters_example',
+    })
     @ValidateNested()
     @Type(() => SeverityFiltersDto)
     severityFilters: SeverityFiltersDto;
@@ -53,7 +62,10 @@ export class OrganizationAndTeamDataDto {
     @IsString()
     teamId: string;
 
-    @ApiProperty({ description: 'organizationId', example: 'organizationId_example' })
+    @ApiProperty({
+        description: 'organizationId',
+        example: 'organizationId_example',
+    })
     @IsString()
     organizationId: string;
 }
@@ -64,7 +76,10 @@ export class UpdateOrCreateIssuesParameterBodyDto {
     @Type(() => IssuesParameterDto)
     configValue: IssuesParameterDto;
 
-    @ApiProperty({ description: 'organizationAndTeamData', example: 'organizationAndTeamData_example' })
+    @ApiProperty({
+        description: 'organizationAndTeamData',
+        example: 'organizationAndTeamData_example',
+    })
     @IsDefined()
     @ValidateNested()
     @Type(() => OrganizationAndTeamDataDto)
