@@ -4,7 +4,6 @@ import { ApiProperty } from '@nestjs/swagger';
 export class TokenUsageQueryDto {
     @ApiProperty({
         description: 'Start date (ISO8601)',
-        @ApiProperty({ description: 'example', example: 'example_example' })
         example: '2025-01-01T00:00:00Z',
     })
     @IsISO8601()
@@ -13,7 +12,11 @@ export class TokenUsageQueryDto {
     @IsISO8601()
     endDate: string; // ISO date string
 
-    @ApiProperty({ description: 'models', example: 'models_example', required: false })
+    @ApiProperty({
+        description: 'models',
+        example: 'models_example',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     models?: string;
@@ -27,7 +30,11 @@ export class TokenUsageQueryDto {
     @IsString()
     timezone?: string; // e.g., 'UTC' or 'America/Sao_Paulo'
 
-    @ApiProperty({ description: 'developer', example: 'developer_example', required: false })
+    @ApiProperty({
+        description: 'developer',
+        example: 'developer_example',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     developer?: string;
@@ -42,7 +49,11 @@ export class TokenPricingQueryDto {
     @IsString()
     model: string;
 
-    @ApiProperty({ description: 'provider', example: 'provider_example', required: false })
+    @ApiProperty({
+        description: 'provider',
+        example: 'provider_example',
+        required: false,
+    })
     @IsString()
     @IsOptional()
     provider?: string;

@@ -4,10 +4,8 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CreateUserDto {
     @ApiProperty({
         description: 'User email address',
-        @ApiProperty({ description: 'example', example: 'example_example' })
         example: 'alice@example.com',
     })
-    @ApiProperty({ description: 'email', example: 'email_example' })
     @IsString()
     @IsEmail()
     public email: string;
