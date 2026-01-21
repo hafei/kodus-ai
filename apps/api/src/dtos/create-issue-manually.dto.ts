@@ -14,20 +14,19 @@ import { LabelType } from '@libs/common/utils/codeManagement/labels';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
 class GitUserDto {
-    @ApiProperty({ description: 'gitId', example: 123 })
     @ApiProperty({ description: 'Git user id', example: 12345 })
     @IsNumber()
     gitId: number;
-    @IsString() username: string;
+    @ApiProperty({ description: 'Git username', example: 'alice' })
+    @IsString()
+    username: string;
 }
 
 export class CreateIssueManuallyDto {
     @ApiProperty({
         description: 'Issue title',
-        @ApiProperty({ description: 'example', example: 123 })
         example: 'Null pointer in UserService',
     })
-    @ApiProperty({ description: 'title', example: 'title_example' })
     @IsString()
     title: string;
 
@@ -51,7 +50,10 @@ export class CreateIssueManuallyDto {
     @IsEnum(SeverityLevel)
     severity: SeverityLevel;
 
-    @ApiProperty({ description: 'organizationId', example: 'organizationId_example' })
+    @ApiProperty({
+        description: 'organizationId',
+        example: 'organizationId_example',
+    })
     @IsString()
     organizationId: string;
 
