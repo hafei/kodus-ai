@@ -21,6 +21,8 @@ jobs:
               if: github.event.pull_request.head.repo.fork == false
               run: |
                   cat <<'EOF' > .env
+                  API_NODE_ENV=test
+                  API_DATABASE_ENV=test
                   API_PG_DB_USERNAME=${{ secrets.API_PG_DB_USERNAME }}
                   API_PG_DB_PASSWORD=${{ secrets.API_PG_DB_PASSWORD }}
                   API_PG_DB_DATABASE=${{ secrets.API_PG_DB_DATABASE }}
@@ -37,6 +39,8 @@ jobs:
               if: github.event.pull_request.head.repo.fork == true
               run: |
                   cat <<'EOF' > .env
+                  API_NODE_ENV=test
+                  API_DATABASE_ENV=test
                   API_PG_DB_USERNAME=kodusdev
                   API_PG_DB_PASSWORD=123456
                   API_PG_DB_DATABASE=kodus_db
