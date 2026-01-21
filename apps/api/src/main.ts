@@ -2,6 +2,7 @@ import 'source-map-support/register';
 import { environment } from '@libs/ee/configs/environment';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -98,6 +99,18 @@ async function bootstrap() {
         useContainer(app.select(ApiModule), { fallbackOnErrors: true });
 
         app.enableShutdownHooks();
+
+        // Swagger / OpenAPI setup (public, for testing)
+        const swaggerConfig = new DocumentBuilder()
+            .setTitle('Kodus API')
+            .setDescription('Kodus REST API documentation')
+            .setVersion('1.0')
+            .build();
+        const swaggerDocument = SwaggerModule.createDocument(
+            app,
+            swaggerConfig,
+        );
+        SwaggerModule.setup('docs', app, swaggerDocument);
 
         const apiPort = process.env.API_PORT
             ? parseInt(process.env.API_PORT, 10)

@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 import {
     IsString,
     IsEnum,
@@ -13,11 +14,17 @@ import { LabelType } from '@libs/common/utils/codeManagement/labels';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
 class GitUserDto {
-    @IsNumber() gitId: number;
+    @ApiProperty({ description: 'Git user id', example: 12345 })
+    @IsNumber()
+    gitId: number;
     @IsString() username: string;
 }
 
 export class CreateIssueManuallyDto {
+    @ApiProperty({
+        description: 'Issue title',
+        example: 'Null pointer in UserService',
+    })
     @IsString()
     title: string;
 
