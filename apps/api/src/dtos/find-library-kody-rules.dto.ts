@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { ProgrammingLanguage } from '@libs/core/domain/enums/programming-language.enum';
 import { PaginationDto } from '@libs/core/domain/dtos/pagination.dto';
@@ -24,6 +25,11 @@ export class FindLibraryKodyRulesDto
         return value;
     };
 
+    @ApiProperty({
+        description: 'Filter by rule title',
+        example: 'no-console',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     title?: string;

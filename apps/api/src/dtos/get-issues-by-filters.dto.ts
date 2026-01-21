@@ -1,10 +1,16 @@
 import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 import { IssueStatus } from '@libs/core/infrastructure/config/types/general/issues.type';
 import { LabelType } from '@libs/common/utils/codeManagement/labels';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
 export class GetIssuesByFiltersDto {
+    @ApiProperty({
+        description: 'Issue title filter',
+        example: 'Null pointer in UserService',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     title?: string;
