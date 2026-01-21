@@ -16,7 +16,7 @@ export interface IPullRequestManagerService {
 
     getChangedFiles(
         organizationAndTeamData: OrganizationAndTeamData,
-        repository: { name: string; id: any },
+        repository: { name: string; id: any; project?: { id: any } },
         pullRequest: any,
         ignorePaths: string[],
         lastCommit?: string,

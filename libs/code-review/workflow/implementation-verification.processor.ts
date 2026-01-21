@@ -119,6 +119,7 @@ export class ImplementationVerificationProcessor implements IJobProcessorService
             // 2. Fetch Pull Request Details from Platform (to get latest state)
             const platformPr =
                 payload.payload?.pull_request ||
+                payload.payload?.resource ||
                 (await this.pullRequestManagerService.getPullRequestDetails(
                     payload.organizationAndTeamData,
                     {
@@ -153,6 +154,8 @@ export class ImplementationVerificationProcessor implements IJobProcessorService
             const lastAnalyzedCommit =
                 lastExecution?.dataExecution?.lastAnalyzedCommit;
 
+            platformPr.number = payload.pullRequestNumber;
+
             // 3. Fetch Changed Files (Diff)
             const changedFiles =
                 await this.pullRequestManagerService.getChangedFiles(
@@ -160,6 +163,7 @@ export class ImplementationVerificationProcessor implements IJobProcessorService
                     {
                         name: payload.repository.name,
                         id: payload.repository.id,
+                        project: { id: platformPr.repository?.project?.id },
                     },
                     platformPr,
                     [],
