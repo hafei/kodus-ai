@@ -1,6 +1,6 @@
 import { AutomationType } from '@libs/automation/domain/automation/enum/automation-type';
-import {
 import { ApiProperty } from '@nestjs/swagger';
+import {
     IsEnum,
     IsNotEmpty,
     IsOptional,
@@ -9,7 +9,10 @@ import { ApiProperty } from '@nestjs/swagger';
 } from 'class-validator';
 
 export class AutomationRunDto {
-    @ApiProperty({ description: 'automationName', example: 'automationName_example' })
+    @ApiProperty({
+        description: 'automationName',
+        example: 'automationName_example',
+    })
     @IsEnum(AutomationType)
     automationName: AutomationType;
 
@@ -18,12 +21,20 @@ export class AutomationRunDto {
     @IsUUID()
     teamId: string;
 
-    @ApiProperty({ description: 'channelId', example: 'channelId_example', required: false })
+    @ApiProperty({
+        description: 'channelId',
+        example: 'channelId_example',
+        required: false,
+    })
     @IsString()
     @IsOptional()
     channelId?: string;
 
-    @ApiProperty({ description: 'organizationId', example: 'organizationId_example', required: false })
+    @ApiProperty({
+        description: 'organizationId',
+        example: 'organizationId_example',
+        required: false,
+    })
     @IsString()
     @IsOptional()
     organizationId?: string;

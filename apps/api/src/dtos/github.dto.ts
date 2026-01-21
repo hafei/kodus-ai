@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-export interface GithubAccessTokenDTO {
+
+export class GithubAccessTokenDTO {
     @ApiProperty({ description: 'code', example: 'code_example' })
     code: string;
 }
