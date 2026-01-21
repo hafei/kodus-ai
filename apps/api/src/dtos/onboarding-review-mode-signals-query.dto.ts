@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+import { ApiProperty } from '@nestjs/swagger';
     IsArray,
     IsNotEmpty,
     IsOptional,
@@ -9,6 +10,7 @@ import {
 } from 'class-validator';
 
 export class OnboardingReviewModeSignalsQueryDto {
+    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
     @IsNotEmpty()
     @IsString()
     teamId: string;
@@ -25,6 +27,7 @@ export class OnboardingReviewModeSignalsQueryDto {
         }
         return [];
     })
+    @ApiProperty({ description: 'repositoryIds', example: 'repositoryIds_example' })
     repositoryIds: string[];
 
     @IsOptional()

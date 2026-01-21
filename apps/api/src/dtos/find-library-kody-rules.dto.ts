@@ -27,36 +27,45 @@ export class FindLibraryKodyRulesDto
 
     @ApiProperty({
         description: 'Filter by rule title',
+        @ApiProperty({ description: 'example', example: 'example_example' })
         example: 'no-console',
+        @ApiProperty({ description: 'required', example: 'required_example' })
         required: false,
     })
+    @ApiProperty({ description: 'title', example: 'title_example', required: false })
     @IsOptional()
     @IsString()
     title?: string;
 
+    @ApiProperty({ description: 'severity', example: 'severity_example', required: false })
     @IsOptional()
     @IsString()
     severity?: string;
 
+    @ApiProperty({ description: 'tags', example: 'tags_example', required: false })
     @IsOptional()
     @Transform(transformToArray)
     @IsArray()
     @IsString({ each: true })
     tags?: string[];
 
+    @ApiProperty({ description: 'plug_and_play', example: true, required: false })
     @IsOptional()
     @IsBoolean()
     @Transform(FindLibraryKodyRulesDto.transformToBoolean)
     plug_and_play?: boolean;
 
+    @ApiProperty({ description: 'needMCPS', example: true, required: false })
     @IsOptional()
     @IsBoolean()
     @Transform(FindLibraryKodyRulesDto.transformToBoolean)
     needMCPS?: boolean;
 
+    @ApiProperty({ description: 'language', example: 'language_example', required: false })
     @IsOptional()
     language?: ProgrammingLanguage;
 
+    @ApiProperty({ description: 'buckets', example: 'buckets_example', required: false })
     @IsOptional()
     @Transform(transformToArray)
     @IsArray()
