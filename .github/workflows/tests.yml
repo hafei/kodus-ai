@@ -46,6 +46,13 @@ jobs:
             - name: Install dependencies
               run: yarn install --frozen-lockfile
 
+            - name: Enable pgvector extension
+              run: |
+                  source .env
+                  docker exec -e PGPASSWORD="$API_PG_DB_PASSWORD" postgres \
+                    psql -U "$API_PG_DB_USERNAME" -d "$API_PG_DB_DATABASE" \
+                    -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
             - name: Run migrations
               run: yarn migration:run
 
