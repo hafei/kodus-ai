@@ -55,7 +55,6 @@ lerna-debug.log*
 *.launch
 .settings/
 *.sublime-workspace
-.cursor/
 .specify/
 
 # IDE - VSCode
@@ -108,7 +107,6 @@ scripts/duplicate-prs
 test.json
 specs
 .cursor/rules/bmad/
-.cursor
 .specify
 .build_cache
 
