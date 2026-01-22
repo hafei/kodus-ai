@@ -4,14 +4,14 @@
  * PR Performance Analysis CLI
  *
  * Usage:
- *   npx ts-node scripts/analyze-pr-performance.cli.ts <prNumber> [repoFullName] [--days=7]
+ *   npx ts-node scripts/analyze-pr-performance.cli.ts <prNumber> <orgId> [options]
  *
  * Examples:
- *   npx ts-node scripts/analyze-pr-performance.cli.ts 701 LumeWeb/web
- *   npx ts-node scripts/analyze-pr-performance.cli.ts 723 LumeWeb/web --days=1
+ *   npx ts-node scripts/analyze-pr-performance.cli.ts 558 04bd288b-595a-4ee1-87cd-8bbbdc312b3c --env=.env.prod
+ *   npx ts-node scripts/analyze-pr-performance.cli.ts 723 97442318-9d2a-496b-a0d2-b45fb --days=1 --env=.env.prod
  *
- * Or with pnpm script (after adding to package.json):
- *   pnpm analyze-pr 701 LumeWeb/web
+ * Or with yarn script:
+ *   yarn analyze-pr 558 04bd288b-595a-4ee1-87cd-8bbbdc312b3c --env=.env.prod
  *
  * Environment variables (uses .env):
  *   API_MG_DB_HOST, API_MG_DB_PORT, API_MG_DB_USERNAME, API_MG_DB_PASSWORD, API_MG_DB_DATABASE
@@ -46,15 +46,35 @@ interface LLMCallData {
     model?: string;
     inputTokens?: number;
     outputTokens?: number;
+    reasoningTokens?: number;
+    filePath?: string;
+}
+
+interface PipelineInfo {
+    pipelineId: string;
+    correlationId: string;
+    organizationId?: string;
+    teamId?: string;
+    repository?: string;
+    status?: string;
+    startTime?: Date;
+    endTime?: Date;
 }
 
 interface AnalysisResult {
     prNumber: number;
-    pipelineId: string;
-    correlationId: string;
+    pipelineInfo: PipelineInfo;
     totalDuration: number;
     stages: StageData[];
     llmCalls: LLMCallData[];
+    summary: {
+        totalLLMCalls: number;
+        totalInputTokens: number;
+        totalOutputTokens: number;
+        totalReasoningTokens: number;
+        slowCallsCount: number;
+        modelsUsed: string[];
+    };
 }
 
 function buildMongoUri(): string {
@@ -122,18 +142,18 @@ async function findOneInLogs(db: Db, query: any, options?: any, includeLegacy: b
 async function analyzePR(
     db: Db,
     prNumber: number,
-    repoFullName?: string,
+    orgId: string,
     daysBack: number = 7,
     includeLegacy: boolean = false
 ): Promise<AnalysisResult | null> {
     const start = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
     const end = new Date();
 
-    console.log(`\n${'='.repeat(70)}`);
+    console.log(`\n${'='.repeat(80)}`);
     console.log(`PR PERFORMANCE ANALYSIS - PR #${prNumber}`);
-    console.log(`Repository: ${repoFullName || 'any'}`);
+    console.log(`Organization: ${orgId}`);
     console.log(`Date range: ${start.toISOString()} - ${end.toISOString()}`);
-    console.log(`${'='.repeat(70)}\n`);
+    console.log(`${'='.repeat(80)}\n`);
 
     const telemetryCollection = db.collection('observability_telemetry');
 
@@ -141,8 +161,22 @@ async function analyzePR(
     console.log('Step 1: Finding pipeline...\n');
 
     const logQuery: any = {
-        message: { $regex: `PR#${prNumber}` },
-        timestamp: { $gte: start, $lte: end }
+        timestamp: { $gte: start, $lte: end },
+        $and: [
+            {
+                $or: [
+                    { 'attributes.organizationId': orgId },
+                    { 'attributes.organizationAndTeamData.organizationId': orgId }
+                ]
+            },
+            {
+                $or: [
+                    { 'attributes.prNumber': prNumber },
+                    { 'attributes.pullRequest.number': prNumber },
+                    { message: { $regex: `PR#${prNumber}` } }
+                ]
+            }
+        ]
     };
 
     const prLog = await findOneInLogs(db, logQuery, {
@@ -150,20 +184,24 @@ async function analyzePR(
             timestamp: 1,
             correlationId: 1,
             'attributes.organizationAndTeamData': 1,
-            'attributes.pipelineId': 1
+            'attributes.pipelineId': 1,
+            'attributes.repository': 1
         }
     }, includeLegacy);
 
     if (!prLog) {
-        console.log(`ERROR: No logs found for PR #${prNumber}`);
+        console.log(`ERROR: No logs found for PR #${prNumber} with orgId ${orgId}`);
         return null;
     }
 
     const correlationId = prLog.correlationId;
     const teamId = (prLog as any).attributes?.organizationAndTeamData?.teamId;
+    const repository = (prLog as any).attributes?.organizationAndTeamData?.repository?.fullName ||
+                       (prLog as any).attributes?.repository?.fullName;
 
     console.log(`Found correlationId: ${correlationId}`);
     console.log(`Found teamId: ${teamId}`);
+    if (repository) console.log(`Found repository: ${repository}`);
 
     // Step 2: Find pipelineId
     console.log('\nStep 2: Finding pipelineId...\n');
@@ -285,22 +323,10 @@ async function analyzePR(
     // Step 4: Get LLM call details
     console.log('\n\nStep 4: Getting LLM call details...\n');
 
-    const telemetryCorrelation = await telemetryCollection.findOne({
-        timestamp: {
-            $gte: new Date(prLog.timestamp.getTime() - 60000),
-            $lte: new Date(prLog.timestamp.getTime() + 30 * 60000)
-        },
-        $or: [
-            { 'attributes.prNumber': prNumber },
-            { 'attributes.organizationAndTeamData.teamId': teamId }
-        ],
-        name: { $regex: 'LLMAnalysisService|CrossFileAnalysis|KodyRules' }
-    });
-
-    const telemetryCorrelationId = telemetryCorrelation?.correlationId || correlationId;
-
+    // Search by prNumber and orgId directly for more reliable results
     const llmCallsRaw = await telemetryCollection.find({
-        correlationId: telemetryCorrelationId,
+        'attributes.prNumber': prNumber,
+        'attributes.organizationId': orgId,
         name: { $not: { $regex: 'workflow\\.job' } }
     }, {
         projection: {
@@ -308,11 +334,9 @@ async function analyzePR(
             name: 1,
             duration: 1,
             timestamp: 1,
-            'attributes.gen_ai.response.model': 1,
-            'attributes.gen_ai.usage.input_tokens': 1,
-            'attributes.gen_ai.usage.output_tokens': 1
+            attributes: 1
         }
-    }).sort({ timestamp: 1 }).toArray();
+    }).sort({ duration: -1 }).toArray();
 
     const llmCalls: LLMCallData[] = llmCallsRaw.map((call: any) => ({
         timestamp: call.timestamp,
@@ -320,73 +344,89 @@ async function analyzePR(
         duration: call.duration,
         model: call.attributes?.['gen_ai.response.model'],
         inputTokens: call.attributes?.['gen_ai.usage.input_tokens'],
-        outputTokens: call.attributes?.['gen_ai.usage.output_tokens']
+        outputTokens: call.attributes?.['gen_ai.usage.output_tokens'],
+        reasoningTokens: call.attributes?.['gen_ai.usage.reasoning_tokens'],
+        filePath: call.attributes?.file?.filePath
     }));
 
     if (llmCalls.length > 0) {
-        console.log('LLM CALLS:');
-        console.log('-'.repeat(110));
-        console.log(padRight('Operation', 50) + padLeft('Model', 30) + padLeft('Tokens', 15) + padLeft('Duration', 12));
-        console.log('-'.repeat(110));
+        // Group calls by type for better readability
+        const fileAnalysisCalls = llmCalls.filter(c => c.name.includes('analyzeCodeWithAI'));
+        const kodyRulesCalls = llmCalls.filter(c => c.name.includes('kodyRulesAnalyzeCodeWithAI'));
+        const otherCalls = llmCalls.filter(c =>
+            !c.name.includes('analyzeCodeWithAI') && !c.name.includes('kodyRulesAnalyzeCodeWithAI')
+        );
 
-        llmCalls.forEach(call => {
-            const model = call.model || 'unknown';
-            const tokens = `${call.inputTokens || 0}/${call.outputTokens || 0}`;
-            const duration = formatDuration(call.duration);
-            const highlight = call.duration > 60000 ? ' <<<' : '';
-
-            console.log(
-                padRight(call.name, 50) +
-                padLeft(truncate(model, 29), 30) +
-                padLeft(tokens, 15) +
-                padLeft(duration, 12) +
-                highlight
-            );
-        });
-
-        console.log('-'.repeat(110));
-    } else {
-        console.log('No LLM call telemetry found for this correlationId.');
-
-        // Try alternative search
-        const altLlmCalls = await telemetryCollection.find({
-            timestamp: {
-                $gte: new Date(prLog.timestamp.getTime() - 60000),
-                $lte: new Date(prLog.timestamp.getTime() + 30 * 60000)
-            },
-            'attributes.prNumber': prNumber
-        }, {
-            projection: {
-                _id: 0,
-                name: 1,
-                duration: 1,
-                correlationId: 1,
-                'attributes.gen_ai.response.model': 1
-            }
-        }).sort({ timestamp: 1 }).limit(20).toArray();
-
-        if (altLlmCalls.length > 0) {
-            console.log(`\nFound ${altLlmCalls.length} LLM calls with prNumber=${prNumber}:`);
-            console.log('-'.repeat(80));
-            altLlmCalls.forEach((call: any) => {
-                const model = call.attributes?.['gen_ai.response.model'] || 'unknown';
+        if (fileAnalysisCalls.length > 0) {
+            console.log('FILE ANALYSIS CALLS (sorted by duration):');
+            console.log('-'.repeat(110));
+            fileAnalysisCalls.forEach((call, i) => {
                 const duration = formatDuration(call.duration);
-                console.log(`${call.name}: ${duration} (${model})`);
-            });
+                const highlight = call.duration > 60000 ? ' <<<' : '';
+                const filePath = call.filePath || 'unknown';
+                const model = call.model || 'unknown';
+                const tokens = `${call.inputTokens || 0} in / ${call.outputTokens || 0} out`;
+                const reasoning = call.reasoningTokens ? ` / ${call.reasoningTokens} reasoning` : '';
 
-            // Update correlationId for return
-            if (altLlmCalls[0]?.correlationId) {
-                llmCalls.push(...altLlmCalls.map((c: any) => ({
-                    timestamp: c.timestamp,
-                    name: c.name,
-                    duration: c.duration,
-                    model: c.attributes?.['gen_ai.response.model']
-                })));
-            }
+                console.log(`${String(i + 1).padStart(2)}. ${duration.padStart(8)}${highlight} | ${filePath}`);
+                console.log(`              Model: ${truncate(model, 25)} | Tokens: ${tokens}${reasoning}`);
+            });
+            console.log('-'.repeat(110));
         }
+
+        if (kodyRulesCalls.length > 0) {
+            console.log('\nKODY RULES CALLS (sorted by duration):');
+            console.log('-'.repeat(110));
+            kodyRulesCalls.forEach((call, i) => {
+                const duration = formatDuration(call.duration);
+                const highlight = call.duration > 60000 ? ' <<<' : '';
+                const filePath = call.filePath || 'unknown';
+                const model = call.model || 'unknown';
+                const tokens = `${call.inputTokens || 0} in / ${call.outputTokens || 0} out`;
+
+                console.log(`${String(i + 1).padStart(2)}. ${duration.padStart(8)}${highlight} | ${filePath}`);
+                console.log(`              Model: ${truncate(model, 25)} | Tokens: ${tokens}`);
+            });
+            console.log('-'.repeat(110));
+        }
+
+        if (otherCalls.length > 0) {
+            console.log('\nOTHER LLM CALLS (sorted by duration):');
+            console.log('-'.repeat(110));
+            otherCalls.forEach((call, i) => {
+                const duration = formatDuration(call.duration);
+                const highlight = call.duration > 60000 ? ' <<<' : '';
+                const model = call.model || 'unknown';
+                const tokens = `${call.inputTokens || 0} in / ${call.outputTokens || 0} out`;
+
+                console.log(`${String(i + 1).padStart(2)}. ${duration.padStart(8)}${highlight} | ${call.name}`);
+                console.log(`              Model: ${truncate(model, 25)} | Tokens: ${tokens}`);
+            });
+            console.log('-'.repeat(110));
+        }
+    } else {
+        console.log('No LLM call telemetry found for this PR.');
     }
 
-    // Step 5: Identify bottlenecks
+    // Step 5: Calculate summary metrics
+    const totalInputTokens = llmCalls.reduce((sum, c) => sum + (c.inputTokens || 0), 0);
+    const totalOutputTokens = llmCalls.reduce((sum, c) => sum + (c.outputTokens || 0), 0);
+    const totalReasoningTokens = llmCalls.reduce((sum, c) => sum + (c.reasoningTokens || 0), 0);
+    const slowCallsCount = llmCalls.filter(c => c.duration > 60000).length;
+    const modelsUsed = [...new Set(llmCalls.map(c => c.model).filter(Boolean))] as string[];
+
+    // Step 6: Print summary
+    console.log('\n\nSUMMARY:');
+    console.log('-'.repeat(60));
+    console.log(`Total Pipeline Duration: ${formatDuration(totalDuration)}`);
+    console.log(`Total LLM Calls: ${llmCalls.length}`);
+    console.log(`Total Tokens: ${totalInputTokens.toLocaleString()} input / ${totalOutputTokens.toLocaleString()} output / ${totalReasoningTokens.toLocaleString()} reasoning`);
+    console.log(`Slow Calls (>60s): ${slowCallsCount}`);
+    if (modelsUsed.length > 0) {
+        console.log(`Models Used: ${modelsUsed.join(', ')}`);
+    }
+
+    // Step 7: Identify bottlenecks
     console.log('\n\nBOTTLENECKS (> 60s):');
     console.log('-'.repeat(60));
 
@@ -400,47 +440,80 @@ async function analyzePR(
             console.log(`STAGE: ${s.stage} - ${formatDuration(s.durationMs)}`);
         });
         slowLlmCalls.forEach(c => {
-            console.log(`LLM: ${c.name} - ${formatDuration(c.duration)} (${c.model || 'unknown'})`);
+            const fileInfo = c.filePath ? ` [${c.filePath}]` : '';
+            console.log(`LLM: ${c.name} - ${formatDuration(c.duration)} (${c.model || 'unknown'})${fileInfo}`);
         });
     }
 
-    console.log(`\n${'='.repeat(70)}`);
+    // Step 8: Get pipeline status
+    const pipelineEndLog = await findOneInLogs(db, {
+        'attributes.pipelineId': pipelineId,
+        message: { $regex: 'Finished pipeline|Pipeline failed|Pipeline error' }
+    }, {
+        projection: { message: 1, timestamp: 1 }
+    }, includeLegacy);
+
+    let pipelineStatus = 'unknown';
+    if (pipelineEndLog) {
+        if (pipelineEndLog.message.includes('Finished')) pipelineStatus = 'completed';
+        else if (pipelineEndLog.message.includes('failed') || pipelineEndLog.message.includes('error')) pipelineStatus = 'failed';
+    }
+
+    console.log(`\nPipeline Status: ${pipelineStatus.toUpperCase()}`);
+
+    console.log(`\n${'='.repeat(80)}`);
     console.log('Analysis complete');
-    console.log(`${'='.repeat(70)}\n`);
+    console.log(`${'='.repeat(80)}\n`);
 
     return {
         prNumber,
-        pipelineId,
-        correlationId: telemetryCorrelationId,
+        pipelineInfo: {
+            pipelineId,
+            correlationId,
+            organizationId: orgId,
+            teamId,
+            repository,
+            status: pipelineStatus,
+            startTime: prLog.timestamp,
+            endTime: pipelineEndLog?.timestamp
+        },
         totalDuration,
         stages,
-        llmCalls
+        llmCalls,
+        summary: {
+            totalLLMCalls: llmCalls.length,
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+            slowCallsCount,
+            modelsUsed
+        }
     };
 }
 
 async function main() {
-    const args = process.argv.slice(2);
+    const args = process.argv.slice(2).filter(a => !a.startsWith('--env='));
 
-    if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+    if (args.length < 2 || args.includes('--help') || args.includes('-h')) {
         console.log(`
 PR Performance Analysis CLI
 
 Usage:
-  npx ts-node scripts/analyze-pr-performance.cli.ts <prNumber> [repoFullName] [options]
+  npx ts-node scripts/analyze-pr-performance.cli.ts <prNumber> <orgId> [options]
 
 Arguments:
-  prNumber      PR number to analyze (required)
-  repoFullName  Repository full name, e.g., "LumeWeb/web" (optional)
+  prNumber    PR number to analyze (required)
+  orgId       Organization ID (required)
 
 Options:
   --days=N      Number of days to search back (default: 7)
   --legacy      Also search in legacy collection (observability_logs)
-  --env=PATH    Path to .env file
+  --env=PATH    Path to .env file (e.g., --env=.env.prod)
 
 Examples:
-  npx ts-node scripts/analyze-pr-performance.cli.ts 701 LumeWeb/web --env=.env.prod
-  npx ts-node scripts/analyze-pr-performance.cli.ts 723 LumeWeb/web --days=1 --env=.env.prod
-  npx ts-node scripts/analyze-pr-performance.cli.ts 723 --legacy --env=.env.prod
+  npx ts-node scripts/analyze-pr-performance.cli.ts 558 04bd288b-595a-4ee1-87cd-8bbbdc312b3c --env=.env.prod
+  npx ts-node scripts/analyze-pr-performance.cli.ts 723 97442318-9d2a-496b-a0d2-b45fb --days=1 --env=.env.prod
+  npx ts-node scripts/analyze-pr-performance.cli.ts 701 97442318-9d2a-496b-a0d2-b45fb --legacy --env=.env.prod
 `);
         process.exit(0);
     }
@@ -451,7 +524,12 @@ Examples:
         process.exit(1);
     }
 
-    const repoFullName = args.find(a => !a.startsWith('--') && a !== args[0]);
+    const orgId = args[1];
+    if (!orgId || orgId.startsWith('--')) {
+        console.error('ERROR: Organization ID is required');
+        process.exit(1);
+    }
+
     const daysArg = args.find(a => a.startsWith('--days='));
     const daysBack = daysArg ? parseInt(daysArg.split('=')[1], 10) : 7;
     const includeLegacy = args.includes('--legacy');
@@ -469,7 +547,7 @@ Examples:
 
         const db = client.db(dbName);
 
-        await analyzePR(db, prNumber, repoFullName, daysBack, includeLegacy);
+        await analyzePR(db, prNumber, orgId, daysBack, includeLegacy);
     } catch (error) {
         console.error('ERROR:', error);
         process.exit(1);
