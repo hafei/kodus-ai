@@ -10,6 +10,13 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiParam,
+    ApiSecurity,
+} from '@nestjs/swagger';
 import { TeamQueryDto } from '@libs/organization/dtos/teamId-query.dto';
 import {
     CheckPolicies,
@@ -25,6 +32,8 @@ import { CreateOrUpdateTeamMembersUseCase } from '@libs/organization/application
 import { GetTeamMembersUseCase } from '@libs/organization/application/use-cases/teamMembers/get-team-members.use-case';
 import { DeleteTeamMembersUseCase } from '@libs/organization/application/use-cases/teamMembers/delete.use-case';
 
+@ApiTags('Team Members')
+@ApiSecurity('Bearer', [])
 @Controller('team-members')
 export class TeamMembersController {
     constructor(
@@ -35,6 +44,8 @@ export class TeamMembersController {
 
     @Get('/')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get team members', description: 'Get all members of a team' })
+    @ApiResponse({ status: 200, description: 'Team members retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -47,6 +58,8 @@ export class TeamMembersController {
 
     @Post('/')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create or update team members', description: 'Add or update team members' })
+    @ApiResponse({ status: 200, description: 'Team members updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -64,6 +77,9 @@ export class TeamMembersController {
 
     @Delete('/:uuid')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Delete team member', description: 'Remove member from team' })
+    @ApiResponse({ status: 200, description: 'Team member deleted' })
+    @ApiParam({ name: 'uuid', type: 'string', example: 'member_123abc' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Delete,

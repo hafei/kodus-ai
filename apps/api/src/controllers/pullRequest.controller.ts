@@ -15,6 +15,12 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 import { BackfillPRsDto } from '../dtos/backfill-prs.dto';
 import { EnrichedPullRequestsQueryDto } from '@libs/code-review/dtos/dashboard/enriched-pull-requests-query.dto';
 import { PaginatedEnrichedPullRequestsResponse } from '@libs/code-review/dtos/dashboard/paginated-enriched-pull-requests.dto';
@@ -30,6 +36,8 @@ import {
 } from '@libs/identity/infrastructure/adapters/services/permissions/policy.guard';
 import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 
+@ApiTags('Pull Requests')
+@ApiSecurity('Bearer', [])
 @Controller('pull-requests')
 export class PullRequestController {
     constructor(
@@ -44,6 +52,8 @@ export class PullRequestController {
 
     @Get('/executions')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get PR executions', description: 'Get enriched pull request executions with pagination' })
+    @ApiResponse({ status: 200, description: 'PR executions retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -58,6 +68,8 @@ export class PullRequestController {
 
     @Get('/onboarding-signals')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get onboarding signals', description: 'Get signals for PR onboarding review mode' })
+    @ApiResponse({ status: 200, description: 'Onboarding signals retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -89,6 +101,8 @@ export class PullRequestController {
     // NOT USED IN WEB - INTERNAL USE ONLY
     @Post('/backfill')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Backfill historical PRs', description: 'Internal: Backfill historical pull requests' })
+    @ApiResponse({ status: 200, description: 'Backfill initiated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,

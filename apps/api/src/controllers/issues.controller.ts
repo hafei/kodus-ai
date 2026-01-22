@@ -7,6 +7,13 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiParam,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     Action,
@@ -25,6 +32,8 @@ import { IssuesEntity } from '@libs/issues/domain/entities/issues.entity';
 
 import { GetIssuesByFiltersDto } from '../dtos/get-issues-by-filters.dto';
 
+@ApiTags('Issues')
+@ApiSecurity('Bearer', [])
 @Controller('issues')
 export class IssuesController {
     constructor(
@@ -36,6 +45,8 @@ export class IssuesController {
 
     @Get()
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get issues', description: 'Get issues with filters' })
+    @ApiResponse({ status: 200, description: 'Issues retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -48,6 +59,8 @@ export class IssuesController {
 
     @Get('count')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Count issues', description: 'Get total count of issues' })
+    @ApiResponse({ status: 200, description: 'Issues count retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -60,6 +73,10 @@ export class IssuesController {
 
     @Get(':id')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get issue by ID', description: 'Get specific issue details' })
+    @ApiResponse({ status: 200, description: 'Issue retrieved' })
+    @ApiResponse({ status: 404, description: 'Issue not found' })
+    @ApiParam({ name: 'id', type: 'string', example: 'issue_123abc' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -72,6 +89,9 @@ export class IssuesController {
 
     @Patch(':id')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Update issue property', description: 'Update severity, label, or status of an issue' })
+    @ApiResponse({ status: 200, description: 'Issue updated' })
+    @ApiParam({ name: 'id', type: 'string', example: 'issue_123abc' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,

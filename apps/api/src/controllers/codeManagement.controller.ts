@@ -10,6 +10,13 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiParam,
+    ApiSecurity,
+} from '@nestjs/swagger';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
 import {
     CheckPolicies,
@@ -42,6 +49,8 @@ import { FinishOnboardingDTO } from '@libs/platform/dtos/finish-onboarding.dto';
 import { GetRepositoryTreeByDirectoryDto } from '@libs/platform/dtos/get-repository-tree-by-directory.dto';
 import { WebhookStatusQueryDto } from '../dtos/webhook-status-query.dto';
 
+@ApiTags('Code Management')
+@ApiSecurity('Bearer', [])
 @Controller('code-management')
 export class CodeManagementController {
     constructor(
@@ -65,6 +74,8 @@ export class CodeManagementController {
 
     @Get('/repositories/org')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get repositories', description: 'Get repositories for organization' })
+    @ApiResponse({ status: 200, description: 'Repositories retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -86,6 +97,8 @@ export class CodeManagementController {
 
     @Post('/auth-integration')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Authorize integration', description: 'Authorize platform integration with token' })
+    @ApiResponse({ status: 200, description: 'Integration authorized' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -98,6 +111,8 @@ export class CodeManagementController {
 
     @Post('/repositories')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create repositories', description: 'Add repositories to team' })
+    @ApiResponse({ status: 200, description: 'Repositories created' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -117,6 +132,8 @@ export class CodeManagementController {
 
     @Get('/organization-members')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get organization members', description: 'Get all members from platform' })
+    @ApiResponse({ status: 200, description: 'Members retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -129,6 +146,8 @@ export class CodeManagementController {
 
     @Get('/get-prs')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get PRs', description: 'Get pull requests by filters' })
+    @ApiResponse({ status: 200, description: 'PRs retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -154,6 +173,8 @@ export class CodeManagementController {
 
     @Get('/get-prs-repo')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get PRs by repository', description: 'Get pull requests for a repository' })
+    @ApiResponse({ status: 200, description: 'PRs retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -184,6 +205,8 @@ export class CodeManagementController {
 
     @Post('/finish-onboarding')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Finish onboarding', description: 'Complete onboarding process' })
+    @ApiResponse({ status: 200, description: 'Onboarding completed' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -199,6 +222,8 @@ export class CodeManagementController {
 
     @Delete('/delete-integration')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Delete integration', description: 'Remove platform integration' })
+    @ApiResponse({ status: 200, description: 'Integration deleted' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Delete,
@@ -222,6 +247,8 @@ export class CodeManagementController {
 
     @Delete('/delete-integration-and-repositories')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Delete integration and repos', description: 'Remove integration and all repositories' })
+    @ApiResponse({ status: 200, description: 'Integration and repos deleted' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Delete,
@@ -247,6 +274,8 @@ export class CodeManagementController {
 
     @Get('/get-repository-tree-by-directory')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get repository tree', description: 'Get directory structure of repository' })
+    @ApiResponse({ status: 200, description: 'Tree retrieved' })
     @CheckPolicies(
         checkRepoPermissions({
             action: Action.Read,
@@ -275,6 +304,8 @@ export class CodeManagementController {
 
     @Get('/search-users')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Search users', description: 'Search for platform users' })
+    @ApiResponse({ status: 200, description: 'Users retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -302,6 +333,8 @@ export class CodeManagementController {
 
     @Get('/current-user')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get current user', description: 'Get current platform user info' })
+    @ApiResponse({ status: 200, description: 'User info retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -323,6 +356,8 @@ export class CodeManagementController {
 
     // NOT USED IN WEB - INTERNAL USE ONLY
     @Get('/webhook-status')
+    @ApiOperation({ summary: 'Get webhook status', description: 'Internal: Check webhook status' })
+    @ApiResponse({ status: 200, description: 'Webhook status' })
     public async getWebhookStatus(
         @Query() query: WebhookStatusQueryDto,
     ): Promise<{ active: boolean }> {

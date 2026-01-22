@@ -10,7 +10,7 @@ import {
 } from 'class-validator';
 
 export class OnboardingReviewModeSignalsQueryDto {
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsNotEmpty()
     @IsString()
     teamId: string;
@@ -28,8 +28,8 @@ export class OnboardingReviewModeSignalsQueryDto {
         return [];
     })
     @ApiProperty({
-        description: 'repositoryIds',
-        example: 'repositoryIds_example',
+        description: 'List of repository identifiers',
+        example: ['repo_1', 'repo_2'],
     })
     repositoryIds: string[];
 

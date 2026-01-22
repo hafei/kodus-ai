@@ -8,6 +8,12 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import { CreateOrUpdatePullRequestMessagesUseCase } from '@libs/code-review/application/use-cases/pullRequestMessages/create-or-update-pull-request-messages.use-case';
 import { FindByRepositoryOrDirectoryIdPullRequestMessagesUseCase } from '@libs/code-review/application/use-cases/pullRequestMessages/find-by-repo-or-directory.use-case';
@@ -26,6 +32,8 @@ import {
 } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 
+@ApiTags('Pull Request Messages')
+@ApiSecurity('Bearer', [])
 @Controller('pull-request-messages')
 export class PullRequestMessagesController {
     constructor(
@@ -38,6 +46,9 @@ export class PullRequestMessagesController {
 
     @Post('/')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create or update PR messages', description: 'Manage PR message settings' })
+    @ApiResponse({ status: 200, description: 'Messages updated' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -55,6 +66,11 @@ export class PullRequestMessagesController {
 
     @Get('/find-by-repository-or-directory')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get PR messages', description: 'Get PR messages for repository or directory' })
+    @ApiResponse({ status: 200, description: 'Messages retrieved' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: true })
+    @ApiQuery({ name: 'directoryId', type: 'string', required: false })
     @CheckPolicies(
         checkRepoPermissions({
             action: Action.Read,

@@ -7,8 +7,8 @@ export class CreateTeamDto {
     teamName: string;
 
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier',
+        example: 'org_123abc',
     })
     @IsString()
     organizationId: string;

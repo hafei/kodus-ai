@@ -35,8 +35,8 @@ export class FindLibraryKodyRulesDto
     title?: string;
 
     @ApiProperty({
-        description: 'severity',
-        example: 'severity_example',
+        description: 'Severity level filter (e.g., high, medium, low)',
+        example: 'high',
         required: false,
     })
     @IsOptional()
@@ -44,8 +44,8 @@ export class FindLibraryKodyRulesDto
     severity?: string;
 
     @ApiProperty({
-        description: 'tags',
-        example: 'tags_example',
+        description: 'Comma-separated tags to filter',
+        example: 'security,performance',
         required: false,
     })
     @IsOptional()
@@ -55,7 +55,7 @@ export class FindLibraryKodyRulesDto
     tags?: string[];
 
     @ApiProperty({
-        description: 'plug_and_play',
+        description: 'Filter for plug-and-play rules (no configuration needed)',
         example: true,
         required: false,
     })
@@ -64,23 +64,23 @@ export class FindLibraryKodyRulesDto
     @Transform(FindLibraryKodyRulesDto.transformToBoolean)
     plug_and_play?: boolean;
 
-    @ApiProperty({ description: 'needMCPS', example: true, required: false })
+    @ApiProperty({ description: 'Filter for rules requiring MCP servers', example: true, required: false })
     @IsOptional()
     @IsBoolean()
     @Transform(FindLibraryKodyRulesDto.transformToBoolean)
     needMCPS?: boolean;
 
     @ApiProperty({
-        description: 'language',
-        example: 'language_example',
+        description: 'Programming language filter (e.g., TYPESCRIPT, PYTHON)',
+        example: 'TYPESCRIPT',
         required: false,
     })
     @IsOptional()
     language?: ProgrammingLanguage;
 
     @ApiProperty({
-        description: 'buckets',
-        example: 'buckets_example',
+        description: 'Comma-separated bucket categories',
+        example: 'backend,frontend',
         required: false,
     })
     @IsOptional()

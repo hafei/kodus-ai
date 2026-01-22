@@ -10,6 +10,14 @@ import {
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Response } from 'express';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiBody,
+    ApiQuery,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import { CodeReviewVersion } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
@@ -43,6 +51,8 @@ import { DeleteRepositoryCodeReviewParameterDto } from '@libs/organization/dtos/
 import { ApplyCodeReviewPresetDto } from '../dtos/apply-code-review-preset.dto';
 import { CreateOrUpdateCodeReviewParameterDto } from '@libs/organization/dtos/create-or-update-code-review-parameter.dto';
 
+@ApiTags('Parameters')
+@ApiSecurity('Bearer', [])
 @Controller('parameters')
 export class ParametersController {
     constructor(
@@ -65,6 +75,9 @@ export class ParametersController {
     //#region Parameters
     @Post('/create-or-update')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create or update parameter', description: 'Create new or update existing configuration parameter' })
+    @ApiResponse({ status: 200, description: 'Parameter created/updated' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -97,6 +110,10 @@ export class ParametersController {
 
     @Get('/find-by-key')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Find parameter by key', description: 'Get configuration parameter by key' })
+    @ApiResponse({ status: 200, description: 'Parameter retrieved' })
+    @ApiQuery({ name: 'key', type: 'string', example: 'ALIGNMENT_LEVEL', required: true })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -115,6 +132,11 @@ export class ParametersController {
 
     @Get('/list-code-review-automation-labels')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'List automation labels', description: 'Get all code review automation labels' })
+    @ApiResponse({ status: 200, description: 'Labels retrieved' })
+    @ApiQuery({ name: 'codeReviewVersion', type: 'string', required: false })
+    @ApiQuery({ name: 'teamId', type: 'string', required: false })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: false })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -135,6 +157,8 @@ export class ParametersController {
 
     @Post('/create-or-update-code-review')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create or update code review parameter', description: 'Configure code review settings' })
+    @ApiResponse({ status: 200, description: 'Code review parameter updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -162,6 +186,8 @@ export class ParametersController {
 
     @Post('/apply-code-review-preset')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Apply code review preset', description: 'Apply predefined code review configuration' })
+    @ApiResponse({ status: 200, description: 'Preset applied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -177,6 +203,8 @@ export class ParametersController {
 
     @Post('/update-code-review-parameter-repositories')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Update code review repositories', description: 'Update repositories for code review parameter' })
+    @ApiResponse({ status: 200, description: 'Repositories updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -206,6 +234,9 @@ export class ParametersController {
 
     @Get('/code-review-parameter')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get code review parameter', description: 'Retrieve code review configuration' })
+    @ApiResponse({ status: 200, description: 'Parameter retrieved' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -221,6 +252,8 @@ export class ParametersController {
 
     @Get('/default-code-review-parameter')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get default code review parameter', description: 'Get default code review configuration' })
+    @ApiResponse({ status: 200, description: 'Default config retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -233,6 +266,11 @@ export class ParametersController {
 
     @Get('/generate-kodus-config-file')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Generate Kodus config file', description: 'Download kodus-config.yml file' })
+    @ApiResponse({ status: 200, description: 'Config file generated' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: false })
+    @ApiQuery({ name: 'directoryId', type: 'string', required: false })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -262,6 +300,8 @@ export class ParametersController {
 
     @Post('/delete-repository-code-review-parameter')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Delete repository code review parameter', description: 'Remove code review config for repository' })
+    @ApiResponse({ status: 200, description: 'Parameter deleted' })
     @CheckPolicies(
         checkRepoPermissions({
             action: Action.Delete,
@@ -283,6 +323,8 @@ export class ParametersController {
 
     @Post('/preview-pr-summary')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Preview PR summary', description: 'Generate preview of pull request summary' })
+    @ApiResponse({ status: 200, description: 'Summary preview generated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,

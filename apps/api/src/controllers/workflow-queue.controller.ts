@@ -7,6 +7,13 @@ import {
     HttpCode,
 } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiParam,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     Action,
@@ -18,6 +25,8 @@ import { checkPermissions } from '@libs/identity/infrastructure/adapters/service
 import { JOB_STATUS_SERVICE_TOKEN } from '@libs/core/workflow/domain/contracts/job-status.service.contract';
 import { IJobStatusService } from '@libs/core/workflow/domain/contracts/job-status.service.contract';
 
+@ApiTags('Workflow Queue')
+@ApiSecurity('Bearer', [])
 @Controller('workflow-queue')
 @UseGuards(PolicyGuard)
 export class WorkflowQueueController {
@@ -33,6 +42,10 @@ export class WorkflowQueueController {
             resource: ResourceType.CodeReviewSettings,
         }),
     )
+    @ApiOperation({ summary: 'Get job status', description: 'Get status of a workflow job' })
+    @ApiResponse({ status: 200, description: 'Job status retrieved' })
+    @ApiResponse({ status: 404, description: 'Job not found' })
+    @ApiParam({ name: 'jobId', type: 'string', example: 'job_abc123' })
     @HttpCode(HttpStatus.OK)
     async getJobStatus(@Param('jobId') jobId: string) {
         const job = await this.jobStatusService.getJobStatus(jobId);
@@ -57,6 +70,10 @@ export class WorkflowQueueController {
             resource: ResourceType.CodeReviewSettings,
         }),
     )
+    @ApiOperation({ summary: 'Get job detail', description: 'Get detailed information about a workflow job' })
+    @ApiResponse({ status: 200, description: 'Job detail retrieved' })
+    @ApiResponse({ status: 404, description: 'Job not found' })
+    @ApiParam({ name: 'jobId', type: 'string', example: 'job_abc123' })
     @HttpCode(HttpStatus.OK)
     async getJobDetail(@Param('jobId') jobId: string) {
         const detail = await this.jobStatusService.getJobDetail(jobId);
@@ -81,6 +98,8 @@ export class WorkflowQueueController {
             resource: ResourceType.CodeReviewSettings,
         }),
     )
+    @ApiOperation({ summary: 'Get queue metrics', description: 'Get workflow queue metrics' })
+    @ApiResponse({ status: 200, description: 'Metrics retrieved' })
     @HttpCode(HttpStatus.OK)
     async getMetrics() {
         const metrics = await this.jobStatusService.getMetrics();

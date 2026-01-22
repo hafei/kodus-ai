@@ -8,6 +8,12 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import { AssignReposUseCase } from '@libs/identity/application/use-cases/permissions/assign-repos.use-case';
 import { CanAccessUseCase } from '@libs/identity/application/use-cases/permissions/can-access.use-case';
@@ -25,6 +31,8 @@ import {
 import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 import { createLogger } from '@kodus/flow';
 
+@ApiTags('Permissions')
+@ApiSecurity('Bearer', [])
 @Controller('permissions')
 export class PermissionsController {
     private readonly logger = createLogger(PermissionsController.name);
@@ -42,6 +50,8 @@ export class PermissionsController {
     ) {}
 
     @Get()
+    @ApiOperation({ summary: 'Get user permissions', description: 'Get all permissions for current user' })
+    @ApiResponse({ status: 200, description: 'Permissions retrieved' })
     async getPermissions(): ReturnType<GetPermissionsUseCase['execute']> {
         const { user } = this.request;
 
@@ -58,6 +68,10 @@ export class PermissionsController {
     }
 
     @Get('can-access')
+    @ApiOperation({ summary: 'Check access permission', description: 'Check if user has permission to access resource' })
+    @ApiResponse({ status: 200, description: 'Access status' })
+    @ApiQuery({ name: 'action', type: 'string', example: 'Read' })
+    @ApiQuery({ name: 'resource', type: 'string', example: 'PullRequests' })
     async can(
         @Query('action') action: Action,
         @Query('resource') resource: ResourceType,
@@ -77,6 +91,9 @@ export class PermissionsController {
     }
 
     @Get('assigned-repos')
+    @ApiOperation({ summary: 'Get assigned repositories', description: 'Get repositories assigned to user' })
+    @ApiResponse({ status: 200, description: 'Assigned repositories retrieved' })
+    @ApiQuery({ name: 'userId', type: 'string', required: false })
     async getAssignedRepos(
         @Query('userId') userId?: string,
     ): Promise<string[]> {
@@ -85,6 +102,9 @@ export class PermissionsController {
 
     @Post('assign-repos')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Assign repositories', description: 'Assign repositories to a user' })
+    @ApiResponse({ status: 200, description: 'Repositories assigned' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,

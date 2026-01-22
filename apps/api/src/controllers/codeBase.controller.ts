@@ -13,6 +13,12 @@ import {
 import { REQUEST } from '@nestjs/core';
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     AST_ANALYSIS_SERVICE_TOKEN,
@@ -36,6 +42,8 @@ function replacer(key: any, value: any) {
     return value;
 }
 
+@ApiTags('Code Base')
+@ApiSecurity('Bearer', [])
 @Controller('code-base')
 export class CodeBaseController {
     constructor(
@@ -56,6 +64,9 @@ export class CodeBaseController {
             resource: ResourceType.CodeReviewSettings,
         }),
     )
+    @ApiOperation({ summary: 'Analyze dependencies', description: 'Analyze code dependencies for a pull request' })
+    @ApiResponse({ status: 200, description: 'Dependencies analyzed' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     async analyzeDependencies(
         @Body()
         body: {

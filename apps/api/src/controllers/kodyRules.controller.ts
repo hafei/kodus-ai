@@ -32,6 +32,14 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiQuery,
+    ApiBody,
+    ApiSecurity,
+} from '@nestjs/swagger';
 import { AddLibraryKodyRulesDto } from '@libs/kodyRules/dtos/add-library-kody-rules.dto';
 import { ChangeStatusKodyRulesDTO } from '@libs/kodyRules/dtos/change-status-kody-rules.dto';
 import { FindLibraryKodyRulesDto } from '../dtos/find-library-kody-rules.dto';
@@ -54,6 +62,8 @@ import { CreateKodyRuleDto } from '@libs/ee/kodyRules/dtos/create-kody-rule.dto'
 import { KodyRulesStatus } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { FindRecommendedKodyRulesDto } from '../dtos/find-recommended-kody-rules.dto';
 
+@ApiTags('Kody Rules')
+@ApiSecurity('Bearer', [])
 @Controller('kody-rules')
 export class KodyRulesController {
     constructor(
@@ -83,6 +93,9 @@ export class KodyRulesController {
 
     @Post('/create-or-update')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create or update Kody rule', description: 'Create a new Kody rule or update existing one' })
+    @ApiResponse({ status: 200, description: 'Rule created/updated successfully' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -104,6 +117,8 @@ export class KodyRulesController {
 
     @Get('/find-by-organization-id')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Find rules by organization', description: 'Get all Kody rules for the organization' })
+    @ApiResponse({ status: 200, description: 'Rules retrieved successfully' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -116,6 +131,8 @@ export class KodyRulesController {
 
     @Get('/limits')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get rules limits status', description: 'Check organization rules usage and limits' })
+    @ApiResponse({ status: 200, description: 'Limits status retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -128,6 +145,9 @@ export class KodyRulesController {
 
     @Get('/suggestions')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Find suggestions by rule', description: 'Get code suggestions for a specific rule' })
+    @ApiResponse({ status: 200, description: 'Suggestions retrieved' })
+    @ApiQuery({ name: 'ruleId', type: 'string', example: 'rule_abc123', required: true })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -142,6 +162,12 @@ export class KodyRulesController {
 
     @Get('/find-rules-in-organization-by-filter')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Find rules by filter', description: 'Search rules using key-value filter' })
+    @ApiResponse({ status: 200, description: 'Rules filtered successfully' })
+    @ApiQuery({ name: 'key', type: 'string', example: 'status', required: true })
+    @ApiQuery({ name: 'value', type: 'string', example: 'ACTIVE', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: false })
+    @ApiQuery({ name: 'directoryId', type: 'string', required: false })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -172,6 +198,9 @@ export class KodyRulesController {
 
     @Delete('/delete-rule-in-organization-by-id')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Delete rule by ID', description: 'Delete a Kody rule from organization' })
+    @ApiResponse({ status: 200, description: 'Rule deleted successfully' })
+    @ApiQuery({ name: 'ruleId', type: 'string', example: 'rule_abc123', required: true })
     @CheckPolicies(
         checkPermissions({
             action: Action.Delete,
@@ -188,11 +217,15 @@ export class KodyRulesController {
     }
 
     @Get('/find-library-kody-rules')
+    @ApiOperation({ summary: 'Find library Kody rules', description: 'Search rules in the Kody rule library' })
+    @ApiResponse({ status: 200, description: 'Library rules retrieved' })
     public async findLibraryKodyRules(@Query() query: FindLibraryKodyRulesDto) {
         return this.findLibraryKodyRulesUseCase.execute(query);
     }
 
     @Get('/find-library-kody-rules-with-feedback')
+    @ApiOperation({ summary: 'Find library rules with feedback', description: 'Search library rules including user feedback' })
+    @ApiResponse({ status: 200, description: 'Rules with feedback retrieved' })
     public async findLibraryKodyRulesWithFeedback(
         @Query() query: FindLibraryKodyRulesDto,
     ) {
@@ -200,12 +233,16 @@ export class KodyRulesController {
     }
 
     @Get('/find-library-kody-rules-buckets')
+    @ApiOperation({ summary: 'Get library rules buckets', description: 'Get all available rule categories/buckets' })
+    @ApiResponse({ status: 200, description: 'Buckets retrieved' })
     public async findLibraryKodyRulesBuckets() {
         return this.findLibraryKodyRulesBucketsUseCase.execute();
     }
 
     @Get('/find-recommended-kody-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get recommended rules', description: 'Get AI-recommended rules for organization' })
+    @ApiResponse({ status: 200, description: 'Recommended rules retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -242,6 +279,8 @@ export class KodyRulesController {
 
     @Post('/add-library-kody-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Add library rules', description: 'Add rules from library to organization' })
+    @ApiResponse({ status: 200, description: 'Rules added successfully' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -254,6 +293,8 @@ export class KodyRulesController {
 
     @Post('/generate-kody-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Generate Kody rules', description: 'AI-generate rules based on codebase' })
+    @ApiResponse({ status: 200, description: 'Rules generated successfully' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -273,6 +314,8 @@ export class KodyRulesController {
 
     @Post('/change-status-kody-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Change rules status', description: 'Bulk update status of multiple rules' })
+    @ApiResponse({ status: 200, description: 'Rules status updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,
@@ -285,6 +328,10 @@ export class KodyRulesController {
 
     @Get('/check-sync-status')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Check IDE sync status', description: 'Check synchronization status from IDE' })
+    @ApiResponse({ status: 200, description: 'Sync status retrieved' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: false })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -319,6 +366,8 @@ export class KodyRulesController {
 
     @Post('/sync-ide-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Sync IDE rules', description: 'Synchronize rules from IDE to server' })
+    @ApiResponse({ status: 200, description: 'Sync completed' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -338,6 +387,8 @@ export class KodyRulesController {
 
     @Post('/fast-sync-ide-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Fast sync IDE rules', description: 'Fast synchronize rules from IDE with configurable limits' })
+    @ApiResponse({ status: 200, description: 'Fast sync completed' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -359,6 +410,10 @@ export class KodyRulesController {
 
     @Get('/pending-ide-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'List pending IDE rules', description: 'Get all pending rules from IDE' })
+    @ApiResponse({ status: 200, description: 'Pending rules retrieved' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: false })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -379,6 +434,8 @@ export class KodyRulesController {
 
     @Post('/import-fast-ide-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Import fast IDE rules', description: 'Import rules from IDE in bulk' })
+    @ApiResponse({ status: 200, description: 'Rules imported successfully' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -391,6 +448,8 @@ export class KodyRulesController {
 
     @Post('/review-fast-ide-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Review fast IDE rules', description: 'Activate or delete pending IDE rules' })
+    @ApiResponse({ status: 200, description: 'Rules reviewed' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,
@@ -421,6 +480,11 @@ export class KodyRulesController {
 
     @Get('/inherited-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get inherited rules', description: 'Get rules inherited from parent directories' })
+    @ApiResponse({ status: 200, description: 'Inherited rules retrieved' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', example: 'repo_456def', required: true })
+    @ApiQuery({ name: 'directoryId', type: 'string', required: false })
     @CheckPolicies(
         checkRepoPermissions({
             action: Action.Read,
@@ -459,9 +523,19 @@ export class KodyRulesController {
         );
     }
 
-    // NOT USED IN WEB - INTERNAL USE ONLY
     @Post('/resync-ide-rules')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Resync IDE rules', description: 'Force resynchronization of IDE rules' })
+    @ApiResponse({ status: 200, description: 'Resync completed' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                teamId: { type: 'string', example: 'team_123abc' },
+                repositoryId: { type: 'string', example: 'repo_456def' },
+            },
+        },
+    })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,

@@ -10,20 +10,20 @@ import {
 
 export class AutomationRunDto {
     @ApiProperty({
-        description: 'automationName',
-        example: 'automationName_example',
+        description: 'Automation type to execute',
+        example: 'CODE_REVIEW',
     })
     @IsEnum(AutomationType)
     automationName: AutomationType;
 
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsNotEmpty()
     @IsUUID()
     teamId: string;
 
     @ApiProperty({
-        description: 'channelId',
-        example: 'channelId_example',
+        description: 'Channel ID for notifications (e.g., Slack channel)',
+        example: 'C1234567890',
         required: false,
     })
     @IsString()
@@ -31,8 +31,8 @@ export class AutomationRunDto {
     channelId?: string;
 
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier',
+        example: 'org_456def',
         required: false,
     })
     @IsString()

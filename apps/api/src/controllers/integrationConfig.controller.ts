@@ -1,4 +1,10 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     Action,
@@ -11,6 +17,8 @@ import {
 import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 import { GetIntegrationConfigsByIntegrationCategoryUseCase } from '@libs/integrations/application/use-cases/integrationConfig/getIntegrationConfigsByIntegrationCategory.use-case';
 
+@ApiTags('Integration Config')
+@ApiSecurity('Bearer', [])
 @Controller('integration-config')
 export class IntegrationConfigController {
     constructor(
@@ -25,6 +33,8 @@ export class IntegrationConfigController {
             resource: ResourceType.GitSettings,
         }),
     )
+    @ApiOperation({ summary: 'Get integration configs', description: 'Get integration configurations by category' })
+    @ApiResponse({ status: 200, description: 'Configs retrieved' })
     public async getIntegrationConfigsByIntegrationCategory(
         @Query('integrationCategory') integrationCategory: string,
         @Query('teamId') teamId: string,

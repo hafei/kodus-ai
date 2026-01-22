@@ -16,32 +16,32 @@ export class GetIssuesByFiltersDto {
     title?: string;
 
     @ApiProperty({
-        description: 'severity',
-        example: 'severity_example',
+        description: 'Issue severity level filter',
+        example: 'HIGH',
         required: false,
     })
     @IsOptional()
     severity?: SeverityLevel;
 
     @ApiProperty({
-        description: 'category',
-        example: 'category_example',
+        description: 'Issue category/label filter',
+        example: 'BUG',
         required: false,
     })
     @IsOptional()
     category?: LabelType;
 
     @ApiProperty({
-        description: 'status',
-        example: 'status_example',
+        description: 'Issue status filter',
+        example: 'OPEN',
         required: false,
     })
     @IsOptional()
     status?: IssueStatus;
 
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier filter',
+        example: 'org_123abc',
         required: false,
     })
     @IsOptional()
@@ -49,8 +49,8 @@ export class GetIssuesByFiltersDto {
     organizationId?: string;
 
     @ApiProperty({
-        description: 'repositoryName',
-        example: 'repositoryName_example',
+        description: 'Repository name filter',
+        example: 'my-repo',
         required: false,
     })
     @IsOptional()
@@ -63,8 +63,8 @@ export class GetIssuesByFiltersDto {
     prNumber?: number;
 
     @ApiProperty({
-        description: 'filePath',
-        example: 'filePath_example',
+        description: 'File path filter',
+        example: 'src/services',
         required: false,
     })
     @IsOptional()
@@ -72,8 +72,8 @@ export class GetIssuesByFiltersDto {
     filePath?: string;
 
     @ApiProperty({
-        description: 'prAuthor',
-        example: 'prAuthor_example',
+        description: 'PR author username filter',
+        example: 'alice',
         required: false,
     })
     @IsOptional()
@@ -81,8 +81,8 @@ export class GetIssuesByFiltersDto {
     prAuthor?: string;
 
     @ApiProperty({
-        description: 'beforeAt',
-        example: 'beforeAt_example',
+        description: 'Filter issues created before this date (ISO 8601)',
+        example: '2024-01-01T00:00:00Z',
         required: false,
     })
     @IsOptional()
@@ -90,8 +90,8 @@ export class GetIssuesByFiltersDto {
     beforeAt?: string;
 
     @ApiProperty({
-        description: 'afterAt',
-        example: 'afterAt_example',
+        description: 'Filter issues created after this date (ISO 8601)',
+        example: '2024-01-01T00:00:00Z',
         required: false,
     })
     @IsOptional()

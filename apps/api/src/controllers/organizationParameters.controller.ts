@@ -37,7 +37,15 @@ import {
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ProviderService } from '@libs/core/infrastructure/services/providers/provider.service';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
+@ApiTags('Organization Parameters')
+@ApiSecurity('Bearer', [])
 @Controller('organization-parameters')
 export class OrganizationParametersController {
     constructor(
@@ -57,6 +65,9 @@ export class OrganizationParametersController {
 
     @Post('/create-or-update')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Create or update org parameter', description: 'Manage organization parameters' })
+    @ApiResponse({ status: 200, description: 'Parameter updated' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -87,6 +98,8 @@ export class OrganizationParametersController {
 
     @Get('/find-by-key')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Find org parameter by key', description: 'Get organization parameter' })
+    @ApiResponse({ status: 200, description: 'Parameter retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -106,6 +119,8 @@ export class OrganizationParametersController {
     }
 
     @Get('/list-providers')
+    @ApiOperation({ summary: 'List AI providers', description: 'Get all available AI providers' })
+    @ApiResponse({ status: 200, description: 'Providers list' })
     public async listProviders() {
         const providers = this.providerService.getAllProviders();
         return {
@@ -120,6 +135,8 @@ export class OrganizationParametersController {
     }
 
     @Get('/list-models')
+    @ApiOperation({ summary: 'List AI models', description: 'Get models for a specific provider' })
+    @ApiResponse({ status: 200, description: 'Models list' })
     public async listModels(
         @Query('provider') provider: string,
     ): Promise<ModelResponse> {
@@ -127,6 +144,8 @@ export class OrganizationParametersController {
     }
 
     @Delete('/delete-byok-config')
+    @ApiOperation({ summary: 'Delete BYOK config', description: 'Remove Bring Your Own Key configuration' })
+    @ApiResponse({ status: 200, description: 'Config deleted' })
     public async deleteByokConfig(
         @Query('configType') configType: 'main' | 'fallback',
     ) {
@@ -144,6 +163,8 @@ export class OrganizationParametersController {
 
     @Get('/cockpit-metrics-visibility')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get cockpit visibility', description: 'Get metrics visibility settings' })
+    @ApiResponse({ status: 200, description: 'Visibility settings' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -164,6 +185,8 @@ export class OrganizationParametersController {
 
     @Post('/cockpit-metrics-visibility')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Update cockpit visibility', description: 'Update metrics visibility settings' })
+    @ApiResponse({ status: 200, description: 'Visibility updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,
@@ -195,6 +218,8 @@ export class OrganizationParametersController {
 
     @Post('/ignore-bots')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Ignore bots', description: 'Configure bot ignore settings' })
+    @ApiResponse({ status: 200, description: 'Settings updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,
@@ -221,6 +246,8 @@ export class OrganizationParametersController {
 
     @Post('/auto-license/allowed-users')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Update auto-license users', description: 'Manage auto-license allowed users' })
+    @ApiResponse({ status: 200, description: 'Users updated' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,

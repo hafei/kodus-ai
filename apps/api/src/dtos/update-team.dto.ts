@@ -6,7 +6,7 @@ export class UpdateTeamDto {
     @IsString()
     teamName: string;
 
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsString()
     teamId: string;
 }

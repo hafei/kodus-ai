@@ -1,5 +1,11 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
+import {
     Action,
     ResourceType,
 } from '@libs/identity/domain/permissions/enums/permissions.enum';
@@ -13,6 +19,8 @@ import { RegisterUserStatusLogUseCase } from '@libs/ee/codeReviewSettingsLog/app
 import { CodeReviewSettingsLogFiltersDto } from '@libs/ee/codeReviewSettingsLog/dtos/code-review-settings-log-filters.dto';
 import { UserStatusDto } from '@libs/ee/codeReviewSettingsLog/dtos/user-status-change.dto';
 
+@ApiTags('User Log')
+@ApiSecurity('Bearer', [])
 @Controller('user-log')
 export class CodeReviewSettingLogController {
     constructor(
@@ -21,6 +29,8 @@ export class CodeReviewSettingLogController {
     ) {}
 
     @Post('/status-change')
+    @ApiOperation({ summary: 'Register status change', description: 'Log user status changes' })
+    @ApiResponse({ status: 200, description: 'Status change logged' })
     public async registerStatusChange(
         @Body() body: UserStatusDto,
     ): Promise<void> {
@@ -29,6 +39,9 @@ export class CodeReviewSettingLogController {
 
     @Get('/code-review-settings')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get code review settings logs', description: 'Get audit logs of code review settings changes' })
+    @ApiResponse({ status: 200, description: 'Logs retrieved' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,

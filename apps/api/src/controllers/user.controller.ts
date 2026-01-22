@@ -10,6 +10,15 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiBody,
+    ApiQuery,
+    ApiParam,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     Action,
@@ -32,6 +41,8 @@ import { CheckUserWithEmailUserUseCase } from '@libs/identity/application/use-ca
 import { JoinOrganizationUseCase } from '@libs/organization/application/use-cases/onboarding/join-organization.use-case';
 import { UpdateAnotherUserUseCase } from '@libs/identity/application/use-cases/user/update-another.use-case';
 
+@ApiTags('Users')
+@ApiSecurity('Bearer', [])
 @Controller('user')
 export class UsersController {
     constructor(
@@ -46,6 +57,10 @@ export class UsersController {
     ) {}
 
     @Get('/email')
+    @ApiOperation({ summary: 'Check if user exists by email', description: 'Query user by email address' })
+    @ApiResponse({ status: 200, description: 'User found' })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    @ApiQuery({ name: 'email', type: 'string', example: 'user@example.com' })
     public async getEmail(
         @Query('email')
         email: string,
@@ -54,6 +69,10 @@ export class UsersController {
     }
 
     @Get('/invite')
+    @ApiOperation({ summary: 'Get user invitation data', description: 'Retrieve invitation details for a user' })
+    @ApiResponse({ status: 200, description: 'Invitation data retrieved' })
+    @ApiResponse({ status: 404, description: 'Invitation not found' })
+    @ApiQuery({ name: 'userId', type: 'string', example: 'user_123abc' })
     public async getInviteDate(
         @Query('userId')
         userId: string,
@@ -62,12 +81,19 @@ export class UsersController {
     }
 
     @Post('/invite/complete-invitation')
+    @ApiOperation({ summary: 'Complete user invitation', description: 'Accept invitation and complete user registration' })
+    @ApiResponse({ status: 200, description: 'Invitation completed successfully' })
+    @ApiResponse({ status: 400, description: 'Invalid invitation data' })
     public async completeInvitation(@Body() body: AcceptUserInvitationDto) {
         return await this.acceptUserInvitationUseCase.execute(body);
     }
 
     @Post('/join-organization')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Join organization', description: 'User joins an existing organization' })
+    @ApiSecurity('Bearer', [])
+    @ApiResponse({ status: 200, description: 'Joined organization successfully' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -80,6 +106,12 @@ export class UsersController {
 
     @Patch('/:targetUserId')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Update another user', description: 'Update user information by admin' })
+    @ApiSecurity('Bearer', [])
+    @ApiResponse({ status: 200, description: 'User updated successfully' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    @ApiParam({ name: 'targetUserId', type: 'string', example: 'user_456def' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,

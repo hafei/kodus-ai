@@ -2,18 +2,18 @@ import { IsNumber, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ExecuteDryRunDto {
-    @ApiProperty({ description: 'Team identifier', example: 'team_123' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsString()
     teamId: string;
 
     @ApiProperty({
-        description: 'repositoryId',
-        example: 'repositoryId_example',
+        description: 'Repository unique identifier',
+        example: 'repo_789ghi',
     })
     @IsString()
     repositoryId: string;
 
-    @ApiProperty({ description: 'prNumber', example: 123 })
+    @ApiProperty({ description: 'Pull request number', example: 123 })
     @IsNumber()
     prNumber: number;
 }

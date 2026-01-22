@@ -3,24 +3,24 @@ import { RepositoryTreeType } from '@libs/common/utils/enums/repositoryTree.enum
 import { ApiProperty } from '@nestjs/swagger';
 
 export class GetRepositoryTreeDto {
-    @ApiProperty({ description: 'organizationId', example: 'organizationId_example' })
+    @ApiProperty({ description: 'Organization unique identifier', example: 'org_456def' })
     @IsString()
     organizationId: string;
 
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsString()
     teamId: string;
 
-    @ApiProperty({ description: 'repositoryId', example: 'repositoryId_example' })
+    @ApiProperty({ description: 'Repository unique identifier', example: 'repo_789ghi' })
     @IsString()
     repositoryId: string;
 
-    @ApiProperty({ description: 'treeType', example: 'treeType_example', required: false })
+    @ApiProperty({ description: 'Type of tree to fetch (e.g., FILES, COMMITS)', example: 'FILES', required: false })
     @IsEnum(RepositoryTreeType)
     @IsOptional()
     treeType?: RepositoryTreeType;
 
-    @ApiProperty({ description: 'useCache', example: true, required: false })
+    @ApiProperty({ description: 'Whether to use cached tree data', example: true, required: false })
     @IsBoolean()
     @IsOptional()
     useCache?: boolean;

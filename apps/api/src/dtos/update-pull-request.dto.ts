@@ -12,8 +12,8 @@ export class updatePullRequestDto {
     public teamId?: string;
 
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier',
+        example: 'org_456def',
     })
     @IsString()
     public organizationId: string;

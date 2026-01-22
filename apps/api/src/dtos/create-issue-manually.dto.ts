@@ -14,7 +14,7 @@ import { LabelType } from '@libs/common/utils/codeManagement/labels';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
 class GitUserDto {
-    @ApiProperty({ description: 'Git user id', example: 12345 })
+    @ApiProperty({ description: 'Git platform user ID', example: 12345 })
     @IsNumber()
     gitId: number;
     @ApiProperty({ description: 'Git username', example: 'alice' })
@@ -30,44 +30,44 @@ export class CreateIssueManuallyDto {
     @IsString()
     title: string;
 
-    @ApiProperty({ description: 'description', example: 'description_example' })
+    @ApiProperty({ description: 'Detailed issue description', example: 'Null pointer exception when accessing user service' })
     @IsString()
     description: string;
 
-    @ApiProperty({ description: 'filePath', example: 'filePath_example' })
+    @ApiProperty({ description: 'File path where issue occurs', example: 'src/services/user.service.ts' })
     @IsString()
     filePath: string;
 
-    @ApiProperty({ description: 'language', example: 'language_example' })
+    @ApiProperty({ description: 'Programming language', example: 'TYPESCRIPT' })
     @IsString()
     language: string;
 
-    @ApiProperty({ description: 'label', example: 'label_example' })
+    @ApiProperty({ description: 'Issue label category', example: 'BUG' })
     @IsEnum(LabelType)
     label: LabelType;
 
-    @ApiProperty({ description: 'severity', example: 'severity_example' })
+    @ApiProperty({ description: 'Issue severity level', example: 'HIGH' })
     @IsEnum(SeverityLevel)
     severity: SeverityLevel;
 
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier',
+        example: 'org_456def',
     })
     @IsString()
     organizationId: string;
 
-    @ApiProperty({ description: 'repository', example: 'repository_example' })
+    @ApiProperty({ description: 'Repository information', example: { id: 'repo_123', name: 'my-repo' } })
     @IsObject()
     repository: IRepositoryToIssues;
 
-    @ApiProperty({ description: 'owner', example: 'owner_example' })
+    @ApiProperty({ description: 'Issue owner (author) information', example: { gitId: 12345, username: 'alice' } })
     @IsOptional()
     @ValidateNested()
     @Type(() => GitUserDto)
     owner: GitUserDto;
 
-    @ApiProperty({ description: 'reporter', example: 'reporter_example' })
+    @ApiProperty({ description: 'Issue reporter information', example: { gitId: 67890, username: 'bob' } })
     @ValidateNested()
     @Type(() => GitUserDto)
     reporter: GitUserDto;

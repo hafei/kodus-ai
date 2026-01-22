@@ -11,6 +11,14 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { ExecuteDryRunDto } from '../dtos/execute-dry-run.dto';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiParam,
+    ApiQuery,
+    ApiSecurity,
+} from '@nestjs/swagger';
 import { ExecuteDryRunUseCase } from '@libs/dryRun/application/use-cases/execute-dry-run.use-case';
 import { SseDryRunUseCase } from '@libs/dryRun/application/use-cases/sse-dry-run.use-case';
 import { GetStatusDryRunUseCase } from '@libs/dryRun/application/use-cases/get-status-dry-run.use-case';
@@ -31,6 +39,8 @@ import {
     ResourceType,
 } from '@libs/identity/domain/permissions/enums/permissions.enum';
 
+@ApiTags('Dry Run')
+@ApiSecurity('Bearer', [])
 @Controller('dry-run')
 export class DryRunController {
     constructor(
@@ -46,6 +56,9 @@ export class DryRunController {
 
     @Post('execute')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Execute dry run', description: 'Execute code review dry run without creating comments' })
+    @ApiResponse({ status: 200, description: 'Dry run execution started' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkRepoPermissions({
             action: Action.Manage,
@@ -81,6 +94,10 @@ export class DryRunController {
 
     @Get('status/:correlationId')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get dry run status', description: 'Check status of a dry run execution' })
+    @ApiResponse({ status: 200, description: 'Status retrieved' })
+    @ApiParam({ name: 'correlationId', type: 'string', example: 'correlation_abc123' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_456def' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Manage,
@@ -108,6 +125,10 @@ export class DryRunController {
 
     @Sse('events/:correlationId')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Dry run SSE events', description: 'Server-sent events for dry run progress' })
+    @ApiResponse({ status: 200, description: 'SSE connection established' })
+    @ApiParam({ name: 'correlationId', type: 'string', example: 'correlation_abc123' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_456def' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Manage,
@@ -135,7 +156,15 @@ export class DryRunController {
 
     @Get('')
     @UseGuards(PolicyGuard)
-    @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'List dry runs', description: 'Get list of dry runs with filters' })
+    @ApiResponse({ status: 200, description: 'Dry runs retrieved' })
+    @ApiQuery({ name: 'teamId', type: 'string', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', required: false })
+    @ApiQuery({ name: 'directoryId', type: 'string', required: false })
+    @ApiQuery({ name: 'startDate', type: 'string', required: false })
+    @ApiQuery({ name: 'endDate', type: 'string', required: false })
+    @ApiQuery({ name: 'prNumber', type: 'number', required: false })
+    @ApiQuery({ name: 'status', type: 'string', required: false })
     @CheckPolicies(
         checkPermissions({
             action: Action.Manage,
@@ -175,6 +204,10 @@ export class DryRunController {
 
     @Get(':correlationId')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get dry run details', description: 'Get detailed information about a dry run' })
+    @ApiResponse({ status: 200, description: 'Dry run details retrieved' })
+    @ApiParam({ name: 'correlationId', type: 'string', example: 'correlation_abc123' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_456def' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Manage,

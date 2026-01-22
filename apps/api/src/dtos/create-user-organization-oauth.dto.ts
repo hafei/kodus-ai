@@ -4,20 +4,20 @@ import { AuthProvider } from '@libs/core/domain/enums/auth-provider.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserOrganizationOAuthDto {
-    @ApiProperty({ description: 'name', example: 'name_example' })
+    @ApiProperty({ description: 'User full name', example: 'Alice Johnson' })
     @IsString()
     public name: string;
 
-    @ApiProperty({ description: 'email', example: 'email_example' })
+    @ApiProperty({ description: 'User email address', example: 'alice@example.com' })
     @IsString()
     @IsEmail()
     public email: string;
 
-    @ApiProperty({ description: 'refreshToken', example: 'refreshToken_example' })
+    @ApiProperty({ description: 'OAuth refresh token from provider', example: 'refresh_token_xyz' })
     @IsString()
     public refreshToken: string;
 
-    @ApiProperty({ description: 'authProvider', example: 'authProvider_example' })
+    @ApiProperty({ description: 'Authentication provider (e.g., GITHUB, GITLAB)', example: 'GITHUB' })
     @IsEnum(AuthProvider)
     public authProvider: AuthProvider;
 }

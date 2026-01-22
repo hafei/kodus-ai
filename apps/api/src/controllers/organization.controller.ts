@@ -8,6 +8,13 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiQuery,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     Action,
@@ -27,6 +34,8 @@ import { CacheService } from '@libs/core/cache/cache.service';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
 import { REQUEST } from '@nestjs/core';
 
+@ApiTags('Organization')
+@ApiSecurity('Bearer', [])
 @Controller('organization')
 export class OrganizationController {
     constructor(
@@ -40,12 +49,19 @@ export class OrganizationController {
     ) {}
 
     @Get('/name')
+    @ApiOperation({ summary: 'Get organization name', description: 'Retrieve current organization name' })
+    @ApiSecurity('Bearer', [])
+    @ApiResponse({ status: 200, description: 'Organization name retrieved' })
     public getOrganizationName() {
         return this.getOrganizationNameUseCase.execute();
     }
 
     @Patch('/update-infos')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Update organization info', description: 'Update organization name and phone' })
+    @ApiSecurity('Bearer', [])
+    @ApiResponse({ status: 200, description: 'Organization info updated' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Update,
@@ -59,6 +75,9 @@ export class OrganizationController {
     }
 
     @Get('/domain')
+    @ApiOperation({ summary: 'Get organizations by domain', description: 'Search organizations by domain' })
+    @ApiResponse({ status: 200, description: 'Organizations retrieved' })
+    @ApiQuery({ name: 'domain', type: 'string', example: 'company.com' })
     public async getOrganizationsByDomain(
         @Query('domain')
         domain: string,
@@ -67,6 +86,13 @@ export class OrganizationController {
     }
 
     @Get('/language')
+    @ApiOperation({ summary: 'Get organization language', description: 'Analyze and detect primary programming language' })
+    @ApiSecurity('Bearer', [])
+    @ApiResponse({ status: 200, description: 'Language detected successfully' })
+    @ApiResponse({ status: 400, description: 'Invalid request parameters' })
+    @ApiQuery({ name: 'teamId', type: 'string', example: 'team_123abc', required: true })
+    @ApiQuery({ name: 'repositoryId', type: 'string', example: 'repo_456def', required: false })
+    @ApiQuery({ name: 'sampleSize', type: 'string', example: '100', required: false })
     public async getOrganizationLanguage(
         @Query('teamId') teamId: string,
         @Query('repositoryId') repositoryId?: string,

@@ -105,12 +105,30 @@ async function bootstrap() {
             .setTitle('Kodus API')
             .setDescription('Kodus REST API documentation')
             .setVersion('1.0')
+            .addApiKey(
+                {
+                    type: 'apiKey',
+                    name: 'Authorization',
+                    description: 'Please enter JWT token with "Bearer " prefix (e.g., "Bearer eyJhbGci...")',
+                    in: 'header',
+                },
+                'Bearer',
+            )
             .build();
         const swaggerDocument = SwaggerModule.createDocument(
             app,
             swaggerConfig,
         );
-        SwaggerModule.setup('docs', app, swaggerDocument);
+        SwaggerModule.setup('docs', app, swaggerDocument, {
+            swaggerOptions: {
+                persistAuthorization: true,
+                docExpansion: 'list',
+                filter: true,
+                showRequestDuration: true,
+                tryItOutEnabled: true,
+            },
+            customSiteTitle: 'Kodus API Docs',
+        });
 
         const apiPort = process.env.API_PORT
             ? parseInt(process.env.API_PORT, 10)

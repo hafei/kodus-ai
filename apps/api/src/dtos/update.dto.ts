@@ -16,8 +16,8 @@ export class UpdateUserDto {
     email?: string;
 
     @ApiProperty({
-        description: 'password',
-        example: 'password_example',
+        description: 'New password (min 8 characters with uppercase, lowercase, number, and symbol)',
+        example: 'NewSecurePass456!',
         required: false,
     })
     @IsString()
@@ -25,8 +25,8 @@ export class UpdateUserDto {
     password?: string;
 
     @ApiProperty({
-        description: 'status',
-        example: 'status_example',
+        description: 'User account status',
+        example: 'ACTIVE',
         required: false,
     })
     @IsOptional()
@@ -34,8 +34,8 @@ export class UpdateUserDto {
     status?: STATUS;
 
     @ApiProperty({
-        description: 'role',
-        example: 'role_example',
+        description: 'User role in organization',
+        example: 'ADMIN',
         required: false,
     })
     @IsOptional()

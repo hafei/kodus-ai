@@ -5,16 +5,16 @@ import { OrganizationAndTeamDataDto } from '@libs/core/domain/dtos/organizationA
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ApplyCodeReviewPresetDto {
-    @ApiProperty({ description: 'preset', example: 'preset_example' })
+    @ApiProperty({ description: 'Code review preset (e.g., STRICT, BALANCED, LOOSE)', example: 'STRICT' })
     @IsEnum(ReviewPreset)
     preset: ReviewPreset;
 
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsNotEmpty()
     @IsString()
     teamId: string;
 
-    @ApiProperty({ description: 'organizationAndTeamData', example: 'organizationAndTeamData_example', required: false })
+    @ApiProperty({ description: 'Organization and team context data', example: { teamId: 'team_123', organizationId: 'org_456' }, required: false })
     @IsOptional()
     organizationAndTeamData?: OrganizationAndTeamDataDto;
 }

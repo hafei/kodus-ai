@@ -11,45 +11,45 @@ import {
 } from 'class-validator';
 
 class SourceFiltersDto {
-    @ApiProperty({ description: 'includeKodyRules', example: true })
+    @ApiProperty({ description: 'Include Kody rules in issue generation', example: true })
     @IsBoolean()
     includeKodyRules: boolean;
 
-    @ApiProperty({ description: 'includeCodeReviewEngine', example: true })
+    @ApiProperty({ description: 'Include code review engine in issue generation', example: true })
     @IsBoolean()
     includeCodeReviewEngine: boolean;
 }
 
 class SeverityFiltersDto {
     @ApiProperty({
-        description: 'minimumSeverity',
-        example: 'minimumSeverity_example',
+        description: 'Minimum severity level for issues',
+        example: 'MEDIUM',
     })
     @IsEnum(SeverityLevel)
     minimumSeverity: SeverityLevel;
 
-    @ApiProperty({ description: 'allowedSeverities', example: ['example'] })
+    @ApiProperty({ description: 'List of allowed severity levels', example: ['MEDIUM', 'HIGH', 'CRITICAL'] })
     @IsArray()
     @IsEnum(SeverityLevel, { each: true })
     allowedSeverities: SeverityLevel[];
 }
 
 export class IssuesParameterDto {
-    @ApiProperty({ description: 'automaticCreationEnabled', example: true })
+    @ApiProperty({ description: 'Enable automatic issue creation', example: true })
     @IsBoolean()
     automaticCreationEnabled: boolean;
 
     @ApiProperty({
-        description: 'sourceFilters',
-        example: 'sourceFilters_example',
+        description: 'Filters for issue sources',
+        example: { includeKodyRules: true, includeCodeReviewEngine: true },
     })
     @ValidateNested()
     @Type(() => SourceFiltersDto)
     sourceFilters: SourceFiltersDto;
 
     @ApiProperty({
-        description: 'severityFilters',
-        example: 'severityFilters_example',
+        description: 'Filters for issue severity',
+        example: { minimumSeverity: 'MEDIUM', allowedSeverities: ['MEDIUM', 'HIGH'] },
     })
     @ValidateNested()
     @Type(() => SeverityFiltersDto)
@@ -58,27 +58,27 @@ export class IssuesParameterDto {
 
 // required
 export class OrganizationAndTeamDataDto {
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsString()
     teamId: string;
 
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier',
+        example: 'org_456def',
     })
     @IsString()
     organizationId: string;
 }
 
 export class UpdateOrCreateIssuesParameterBodyDto {
-    @ApiProperty({ description: 'configValue', example: 'configValue_example' })
+    @ApiProperty({ description: 'Issue configuration parameters', example: { automaticCreationEnabled: true } })
     @ValidateNested()
     @Type(() => IssuesParameterDto)
     configValue: IssuesParameterDto;
 
     @ApiProperty({
-        description: 'organizationAndTeamData',
-        example: 'organizationAndTeamData_example',
+        description: 'Organization and team context',
+        example: { teamId: 'team_123', organizationId: 'org_456' },
     })
     @IsDefined()
     @ValidateNested()

@@ -27,10 +27,18 @@ import {
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
+import {
     TokenPricingQueryDto,
     TokenUsageQueryDto,
 } from '../dtos/token-usage.dto';
 
+@ApiTags('Token Usage')
+@ApiSecurity('Bearer', [])
 @Controller({ path: 'usage', scope: Scope.REQUEST })
 export class TokenUsageController {
     private readonly logger = createLogger(TokenUsageController.name);
@@ -48,6 +56,8 @@ export class TokenUsageController {
     ) {}
 
     @Get('tokens/summary')
+    @ApiOperation({ summary: 'Get token usage summary', description: 'Get overall token usage summary' })
+    @ApiResponse({ status: 200, description: 'Summary retrieved' })
     async getSummary(
         @Query() query: TokenUsageQueryDto,
     ): Promise<UsageSummaryContract> {
@@ -74,6 +84,8 @@ export class TokenUsageController {
     }
 
     @Get('tokens/daily')
+    @ApiOperation({ summary: 'Get daily token usage', description: 'Get token usage aggregated by day' })
+    @ApiResponse({ status: 200, description: 'Daily usage retrieved' })
     async getDaily(
         @Query() query: TokenUsageQueryDto,
     ): Promise<DailyUsageResultContract[]> {
@@ -100,6 +112,8 @@ export class TokenUsageController {
     }
 
     @Get('tokens/by-pr')
+    @ApiOperation({ summary: 'Get usage by PR', description: 'Get token usage breakdown by pull request' })
+    @ApiResponse({ status: 200, description: 'Usage by PR retrieved' })
     async getUsageByPr(
         @Query() query: TokenUsageQueryDto,
     ): Promise<UsageByPrResultContract[]> {
@@ -126,6 +140,8 @@ export class TokenUsageController {
     }
 
     @Get('tokens/daily-by-pr')
+    @ApiOperation({ summary: 'Get daily usage by PR', description: 'Get daily token usage by pull request' })
+    @ApiResponse({ status: 200, description: 'Daily usage by PR retrieved' })
     async getDailyUsageByPr(
         @Query() query: TokenUsageQueryDto,
     ): Promise<DailyUsageByPrResultContract[]> {
@@ -152,6 +168,8 @@ export class TokenUsageController {
     }
 
     @Get('tokens/by-developer')
+    @ApiOperation({ summary: 'Get usage by developer', description: 'Get token usage breakdown by developer' })
+    @ApiResponse({ status: 200, description: 'Usage by developer retrieved' })
     async getUsageByDeveloper(
         @Query() query: TokenUsageQueryDto,
     ): Promise<UsageByDeveloperResultContract[]> {
@@ -178,6 +196,8 @@ export class TokenUsageController {
     }
 
     @Get('tokens/daily-by-developer')
+    @ApiOperation({ summary: 'Get daily usage by developer', description: 'Get daily token usage by developer' })
+    @ApiResponse({ status: 200, description: 'Daily usage by developer retrieved' })
     async getDailyByDeveloper(
         @Query() query: TokenUsageQueryDto,
     ): Promise<DailyUsageByDeveloperResultContract[]> {
@@ -204,6 +224,8 @@ export class TokenUsageController {
     }
 
     @Get('tokens/pricing')
+    @ApiOperation({ summary: 'Get token pricing', description: 'Get pricing information for AI models' })
+    @ApiResponse({ status: 200, description: 'Pricing information retrieved' })
     async getPricing(@Query() query: TokenPricingQueryDto) {
         const organizationId = this.request?.user?.organization?.uuid;
 
@@ -217,6 +239,8 @@ export class TokenUsageController {
     }
 
     @Get('cost-estimate')
+    @ApiOperation({ summary: 'Get cost estimate', description: 'Get monthly cost estimate based on usage' })
+    @ApiResponse({ status: 200, description: 'Cost estimate retrieved' })
     async getCostEstimate(): Promise<CostEstimateContract> {
         const organizationId = this.request?.user?.organization?.uuid;
 

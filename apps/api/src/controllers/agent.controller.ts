@@ -4,7 +4,15 @@ import { OrganizationAndTeamDataDto } from '@libs/core/domain/dtos/organizationA
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
 import { Body, Controller, Inject, Post } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
+@ApiTags('Agent')
+@ApiSecurity('Bearer', [])
 @Controller('agent')
 export class AgentController {
     constructor(
@@ -15,6 +23,9 @@ export class AgentController {
     ) {}
 
     @Post('/conversation')
+    @ApiOperation({ summary: 'Agent conversation', description: 'Chat with AI agent' })
+    @ApiResponse({ status: 200, description: 'Conversation response' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
     public async conversation(
         @Body()
         body: {

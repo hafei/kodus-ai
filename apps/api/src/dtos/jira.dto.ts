@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class JiraAccessTokenDTO {
-    @ApiProperty({ description: 'code', example: 'code_example' })
+    @ApiProperty({ description: 'Jira OAuth authorization code', example: 'AUTHORIZATION_CODE_123' })
     code: string;
 }

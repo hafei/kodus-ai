@@ -3,7 +3,7 @@ import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class FindRecommendedKodyRulesDto {
-    @ApiProperty({ description: 'limit', example: 123, required: false })
+    @ApiProperty({ description: 'Maximum number of rules to return', example: 10, required: false })
     @IsOptional()
     @IsNumber()
     @Min(1)

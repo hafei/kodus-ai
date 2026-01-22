@@ -10,7 +10,7 @@ export class CreateConversationDto {
     @MinLength(3)
     public prompt: string;
 
-    @ApiProperty({ description: 'teamId', example: 'teamId_example' })
+    @ApiProperty({ description: 'Team unique identifier', example: 'team_123abc' })
     @IsString()
     public teamId: string;
 }

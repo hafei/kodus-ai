@@ -4,7 +4,7 @@ import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PlatformTypeDto {
-    @ApiProperty({ description: 'platformType', example: 'platformType_example' })
+    @ApiProperty({ description: 'Platform type (e.g., GITHUB, GITLAB)', example: 'GITHUB' })
     @IsEnum(PlatformType)
     platformType: PlatformType;
 }

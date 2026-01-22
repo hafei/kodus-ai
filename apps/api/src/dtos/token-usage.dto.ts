@@ -13,15 +13,15 @@ export class TokenUsageQueryDto {
     endDate: string; // ISO date string
 
     @ApiProperty({
-        description: 'models',
-        example: 'models_example',
+        description: 'Comma-separated list of model names to filter',
+        example: 'gpt-4,claude-3',
         required: false,
     })
     @IsOptional()
     @IsString()
     models?: string;
 
-    @ApiProperty({ description: 'prNumber', example: 123, required: false })
+    @ApiProperty({ description: 'Pull request number filter', example: 123, required: false })
     @IsOptional()
     @IsNumber()
     prNumber?: number;
@@ -31,27 +31,27 @@ export class TokenUsageQueryDto {
     timezone?: string; // e.g., 'UTC' or 'America/Sao_Paulo'
 
     @ApiProperty({
-        description: 'developer',
-        example: 'developer_example',
+        description: 'Developer email or username filter',
+        example: 'alice@example.com',
         required: false,
     })
     @IsOptional()
     @IsString()
     developer?: string;
 
-    @ApiProperty({ description: 'byok', example: 'byok_example' })
+    @ApiProperty({ description: 'Bring Your Own Key identifier', example: 'byok_config_123' })
     @IsString()
     byok: string;
 }
 
 export class TokenPricingQueryDto {
-    @ApiProperty({ description: 'model', example: 'model_example' })
+    @ApiProperty({ description: 'Model name (e.g., gpt-4, claude-3)', example: 'gpt-4' })
     @IsString()
     model: string;
 
     @ApiProperty({
-        description: 'provider',
-        example: 'provider_example',
+        description: 'Provider name (e.g., openai, anthropic)',
+        example: 'openai',
         required: false,
     })
     @IsString()

@@ -1,4 +1,10 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+} from '@nestjs/swagger';
 
 import {
     Action,
@@ -15,6 +21,8 @@ import { GetConnectionsUseCase } from '@libs/platform/application/use-cases/inte
 import { GetOrganizationIdUseCase } from '@libs/integrations/application/use-cases/get-organization-id.use-case';
 import { TeamQueryDto } from '@libs/organization/dtos/teamId-query.dto';
 
+@ApiTags('Integration')
+@ApiSecurity('Bearer', [])
 @Controller('integration')
 export class IntegrationController {
     constructor(
@@ -26,6 +34,9 @@ export class IntegrationController {
 
     @Post('/clone-integration')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Clone integration', description: 'Clone integration configuration from one team to another' })
+    @ApiResponse({ status: 200, description: 'Integration cloned' })
+    @ApiResponse({ status: 403, description: 'Permission denied' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -45,6 +56,8 @@ export class IntegrationController {
 
     @Get('/check-connection-platform')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Check connection platform', description: 'Check if platform integration exists' })
+    @ApiResponse({ status: 200, description: 'Connection status retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -57,6 +70,8 @@ export class IntegrationController {
 
     @Get('/organization-id')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get organization ID', description: 'Get platform organization ID' })
+    @ApiResponse({ status: 200, description: 'Organization ID retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,
@@ -69,6 +84,8 @@ export class IntegrationController {
 
     @Get('/connections')
     @UseGuards(PolicyGuard)
+    @ApiOperation({ summary: 'Get connections', description: 'Get all platform connections for team' })
+    @ApiResponse({ status: 200, description: 'Connections retrieved' })
     @CheckPolicies(
         checkPermissions({
             action: Action.Read,

@@ -8,29 +8,30 @@ import {
 
 export class PullRequestMessagesDto {
     @ApiProperty({
-        description: 'organizationId',
-        example: 'organizationId_example',
+        description: 'Organization unique identifier',
+        example: 'org_123abc',
         required: false,
     })
     @IsString()
     public organizationId?: string;
 
     @ApiProperty({
-        description: 'pullRequestMessageType',
-        example: 'pullRequestMessageType_example',
+        description: 'Type of pull request message (e.g., START, END)',
+        example: 'START',
     })
     @IsString()
     public pullRequestMessageType: PullRequestMessageType;
 
-    @ApiProperty({ description: 'status', example: 'status_example' })
+    @ApiProperty({ description: 'Message status (e.g., ACTIVE, INACTIVE)', example: 'ACTIVE' })
     @IsString()
     public status: PullRequestMessageStatus;
 
-    @ApiProperty({ description: 'content', example: 'content_example' })
+    @ApiProperty({ description: 'Message content', example: 'Code review started...' })
     @IsOptional()
     @IsString()
     public content: string;
 
+    @ApiProperty({ description: 'Repository information', example: { id: 'repo_123', name: 'my-repo' } })
     @IsObject()
     public repository?: { id: string; name: string };
 }

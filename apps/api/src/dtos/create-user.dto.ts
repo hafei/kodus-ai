@@ -10,12 +10,12 @@ export class CreateUserDto {
     @IsEmail()
     public email: string;
 
-    @ApiProperty({ description: 'password', example: 'password_example' })
+    @ApiProperty({ description: 'User password (min 8 characters)', example: 'SecurePass123!', required: false })
     @IsString()
     @IsOptional()
     public password: string;
 
-    @ApiProperty({ description: 'status', example: true, required: false })
+    @ApiProperty({ description: 'User account status (active/inactive)', example: true, required: false })
     @IsBoolean()
     @IsOptional()
     public status?: boolean;
