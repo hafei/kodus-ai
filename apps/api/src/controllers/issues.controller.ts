@@ -31,6 +31,7 @@ import { UpdateIssuePropertyUseCase } from '@libs/issues/application/use-cases/u
 import { IssuesEntity } from '@libs/issues/domain/entities/issues.entity';
 
 import { GetIssuesByFiltersDto } from '../dtos/get-issues-by-filters.dto';
+import { UpdateIssuePropertyDto } from '../dtos/issues.dto';
 
 @ApiTags('Issues')
 @ApiSecurity('Bearer', [])
@@ -41,7 +42,7 @@ export class IssuesController {
         private readonly getTotalIssuesUseCase: GetTotalIssuesUseCase,
         private readonly getIssueByIdUseCase: GetIssueByIdUseCase,
         private readonly updateIssuePropertyUseCase: UpdateIssuePropertyUseCase,
-    ) {}
+    ) { }
 
     @Get()
     @UseGuards(PolicyGuard)
@@ -100,7 +101,7 @@ export class IssuesController {
     )
     async updateIssueProperty(
         @Param('id') id: string,
-        @Body() body: { field: 'severity' | 'label' | 'status'; value: string },
+        @Body() body: UpdateIssuePropertyDto,
     ): Promise<IssuesEntity | null> {
         return await this.updateIssuePropertyUseCase.execute(
             id,

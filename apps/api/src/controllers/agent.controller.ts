@@ -10,6 +10,7 @@ import {
     ApiResponse,
     ApiSecurity,
 } from '@nestjs/swagger';
+import { ConversationDto } from '../dtos/agent.dto';
 
 @ApiTags('Agent')
 @ApiSecurity('Bearer', [])
@@ -20,7 +21,7 @@ export class AgentController {
 
         @Inject(REQUEST)
         private readonly request: UserRequest,
-    ) {}
+    ) { }
 
     @Post('/conversation')
     @ApiOperation({ summary: 'Agent conversation', description: 'Chat with AI agent' })
@@ -28,10 +29,7 @@ export class AgentController {
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     public async conversation(
         @Body()
-        body: {
-            prompt: string;
-            organizationAndTeamData: OrganizationAndTeamDataDto;
-        },
+        body: ConversationDto,
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
 

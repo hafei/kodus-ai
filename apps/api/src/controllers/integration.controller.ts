@@ -20,6 +20,7 @@ import { CloneIntegrationUseCase } from '@libs/integrations/application/use-case
 import { GetConnectionsUseCase } from '@libs/platform/application/use-cases/integrations/get-connections.use-case';
 import { GetOrganizationIdUseCase } from '@libs/integrations/application/use-cases/get-organization-id.use-case';
 import { TeamQueryDto } from '@libs/organization/dtos/teamId-query.dto';
+import { CloneIntegrationDto, CheckConnectionPlatformDto } from '../dtos/integration.dto';
 
 @ApiTags('Integration')
 @ApiSecurity('Bearer', [])
@@ -30,7 +31,7 @@ export class IntegrationController {
         private readonly cloneIntegrationUseCase: CloneIntegrationUseCase,
         private readonly checkHasIntegrationByPlatformUseCase: CheckHasIntegrationByPlatformUseCase,
         private readonly getConnectionsUseCase: GetConnectionsUseCase,
-    ) {}
+    ) { }
 
     @Post('/clone-integration')
     @UseGuards(PolicyGuard)
@@ -45,11 +46,7 @@ export class IntegrationController {
     )
     public async cloneIntegration(
         @Body()
-        body: {
-            teamId: string;
-            teamIdClone: string;
-            integrationData: { platform: string; category: string };
-        },
+        body: CloneIntegrationDto,
     ) {
         return this.cloneIntegrationUseCase.execute(body);
     }
@@ -64,7 +61,7 @@ export class IntegrationController {
             resource: ResourceType.GitSettings,
         }),
     )
-    public async checkHasConnectionByPlatform(@Query() query: any) {
+    public async checkHasConnectionByPlatform(@Query() query: CheckConnectionPlatformDto) {
         return this.checkHasIntegrationByPlatformUseCase.execute(query);
     }
 

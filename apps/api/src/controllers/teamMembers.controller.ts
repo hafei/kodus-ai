@@ -31,6 +31,7 @@ import { IMembers } from '@libs/organization/domain/teamMembers/interfaces/teamM
 import { CreateOrUpdateTeamMembersUseCase } from '@libs/organization/application/use-cases/teamMembers/create.use-case';
 import { GetTeamMembersUseCase } from '@libs/organization/application/use-cases/teamMembers/get-team-members.use-case';
 import { DeleteTeamMembersUseCase } from '@libs/organization/application/use-cases/teamMembers/delete.use-case';
+import { CreateOrUpdateTeamMembersDto } from '../dtos/team-members.dto';
 
 @ApiTags('Team Members')
 @ApiSecurity('Bearer', [])
@@ -40,7 +41,7 @@ export class TeamMembersController {
         private readonly createOrUpdateTeamMembersUseCase: CreateOrUpdateTeamMembersUseCase,
         private readonly getTeamMembersUseCase: GetTeamMembersUseCase,
         private readonly deleteTeamMembersUseCase: DeleteTeamMembersUseCase,
-    ) {}
+    ) { }
 
     @Get('/')
     @UseGuards(PolicyGuard)
@@ -67,11 +68,11 @@ export class TeamMembersController {
         }),
     )
     public async createOrUpdateTeamMembers(
-        @Body() body: { members: IMembers[]; teamId: string },
+        @Body() body: CreateOrUpdateTeamMembersDto,
     ) {
         return this.createOrUpdateTeamMembersUseCase.execute(
             body.teamId,
-            body.members,
+            body.members as IMembers[],
         );
     }
 

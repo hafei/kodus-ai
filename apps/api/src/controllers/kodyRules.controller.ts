@@ -61,6 +61,7 @@ import {
 import { CreateKodyRuleDto } from '@libs/ee/kodyRules/dtos/create-kody-rule.dto';
 import { KodyRulesStatus } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { FindRecommendedKodyRulesDto } from '../dtos/find-recommended-kody-rules.dto';
+import { SyncIdeRulesDto, FastSyncIdeRulesDto } from '../dtos/kody-rules.dto';
 
 @ApiTags('Kody Rules')
 @ApiSecurity('Bearer', [])
@@ -89,7 +90,7 @@ export class KodyRulesController {
         private readonly importFastKodyRulesUseCase: ImportFastKodyRulesUseCase,
         @Inject(REQUEST)
         private readonly request: UserRequest,
-    ) {}
+    ) { }
 
     @Post('/create-or-update')
     @UseGuards(PolicyGuard)
@@ -375,7 +376,7 @@ export class KodyRulesController {
         }),
     )
     public async syncIdeRules(
-        @Body() body: { teamId: string; repositoryId: string },
+        @Body() body: SyncIdeRulesDto,
     ) {
         const respositories = [body.repositoryId];
 
@@ -397,13 +398,7 @@ export class KodyRulesController {
     )
     public async fastSyncIdeRules(
         @Body()
-        body: {
-            teamId: string;
-            repositoryId: string;
-            maxFiles?: number;
-            maxFileSizeBytes?: number;
-            maxTotalBytes?: number;
-        },
+        body: FastSyncIdeRulesDto,
     ) {
         return this.fastSyncIdeRulesUseCase.execute(body);
     }
@@ -527,15 +522,6 @@ export class KodyRulesController {
     @UseGuards(PolicyGuard)
     @ApiOperation({ summary: 'Resync IDE rules', description: 'Force resynchronization of IDE rules' })
     @ApiResponse({ status: 200, description: 'Resync completed' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                teamId: { type: 'string', example: 'team_123abc' },
-                repositoryId: { type: 'string', example: 'repo_456def' },
-            },
-        },
-    })
     @CheckPolicies(
         checkPermissions({
             action: Action.Create,
@@ -543,7 +529,7 @@ export class KodyRulesController {
         }),
     )
     public async resyncIdeRules(
-        @Body() body: { teamId: string; repositoryId: string },
+        @Body() body: SyncIdeRulesDto,
     ) {
         const respositories = [body.repositoryId];
 

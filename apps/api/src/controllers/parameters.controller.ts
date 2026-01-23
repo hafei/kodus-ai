@@ -50,6 +50,7 @@ import { PreviewPrSummaryDto } from '@libs/organization/dtos/preview-pr-summary.
 import { DeleteRepositoryCodeReviewParameterDto } from '@libs/organization/dtos/delete-repository-code-review-parameter.dto';
 import { ApplyCodeReviewPresetDto } from '../dtos/apply-code-review-preset.dto';
 import { CreateOrUpdateCodeReviewParameterDto } from '@libs/organization/dtos/create-or-update-code-review-parameter.dto';
+import { CreateOrUpdateParameterDto, UpdateCodeReviewParameterRepositoriesDto } from '../dtos/parameters.dto';
 
 @ApiTags('Parameters')
 @ApiSecurity('Bearer', [])
@@ -70,7 +71,7 @@ export class ParametersController {
         private readonly getDefaultConfigUseCase: GetDefaultConfigUseCase,
         private readonly getCodeReviewParameterUseCase: GetCodeReviewParameterUseCase,
         private readonly applyCodeReviewPresetUseCase: ApplyCodeReviewPresetUseCase,
-    ) {}
+    ) { }
 
     //#region Parameters
     @Post('/create-or-update')
@@ -86,11 +87,7 @@ export class ParametersController {
     )
     public async createOrUpdate(
         @Body()
-        body: {
-            key: ParametersKey;
-            configValue: any;
-            organizationAndTeamData: { teamId: string };
-        },
+        body: CreateOrUpdateParameterDto,
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
 
@@ -213,9 +210,7 @@ export class ParametersController {
     )
     public async UpdateCodeReviewParameterRepositories(
         @Body()
-        body: {
-            organizationAndTeamData: { teamId: string };
-        },
+        body: UpdateCodeReviewParameterRepositoriesDto,
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
 

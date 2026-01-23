@@ -43,6 +43,7 @@ import {
     ApiResponse,
     ApiSecurity,
 } from '@nestjs/swagger';
+import { CreateOrUpdateOrgParameterDto, UpdateCockpitMetricsVisibilityDto, IgnoreBotsDto, UpdateAutoLicenseAllowedUsersDto } from '../dtos/organization-parameters.dto';
 
 @ApiTags('Organization Parameters')
 @ApiSecurity('Bearer', [])
@@ -61,7 +62,7 @@ export class OrganizationParametersController {
 
         @Inject(REQUEST)
         private readonly request: UserRequest,
-    ) {}
+    ) { }
 
     @Post('/create-or-update')
     @UseGuards(PolicyGuard)
@@ -76,10 +77,7 @@ export class OrganizationParametersController {
     )
     public async createOrUpdate(
         @Body()
-        body: {
-            key: OrganizationParametersKey;
-            configValue: any;
-        },
+        body: CreateOrUpdateOrgParameterDto,
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
 
@@ -195,10 +193,7 @@ export class OrganizationParametersController {
     )
     public async updateCockpitMetricsVisibility(
         @Body()
-        body: {
-            teamId?: string;
-            config: ICockpitMetricsVisibility;
-        },
+        body: UpdateCockpitMetricsVisibilityDto,
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
 
@@ -228,9 +223,7 @@ export class OrganizationParametersController {
     )
     public async ignoreBots(
         @Body()
-        body: {
-            teamId: string;
-        },
+        body: IgnoreBotsDto,
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
 
@@ -256,11 +249,7 @@ export class OrganizationParametersController {
     )
     public async updateAutoLicenseAllowedUsers(
         @Body()
-        body: {
-            teamId?: string;
-            includeCurrentUser?: boolean;
-            organizationId?: string;
-        },
+        body: UpdateAutoLicenseAllowedUsersDto,
     ) {
         const organizationId =
             body.organizationId || this.request?.user?.organization?.uuid;

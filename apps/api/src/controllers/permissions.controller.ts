@@ -31,6 +31,7 @@ import {
 } from '@libs/identity/infrastructure/adapters/services/permissions/policy.guard';
 import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 import { createLogger } from '@kodus/flow';
+import { AssignReposDto } from '../dtos/permissions.dto';
 
 @ApiTags('Permissions')
 @ApiSecurity('Bearer', [])
@@ -114,11 +115,7 @@ export class PermissionsController {
     )
     async assignRepos(
         @Body()
-        body: {
-            repositoryIds: string[];
-            userId: string;
-            teamId: string;
-        },
+        body: AssignReposDto,
     ) {
         return this.assignReposUseCase.execute({
             repoIds: body.repositoryIds,

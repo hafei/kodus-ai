@@ -34,6 +34,7 @@ import {
     CheckPolicies,
 } from '@libs/identity/infrastructure/adapters/services/permissions/policy.guard';
 import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
+import { AnalyzeDependenciesDto, GetRelatedContentFromDiffDto } from '../dtos/code-base.dto';
 
 function replacer(key: any, value: any) {
     if (value instanceof Map) {
@@ -54,7 +55,7 @@ export class CodeBaseController {
         private readonly request: Request & {
             user: { organization: { uuid: string } };
         },
-    ) {}
+    ) { }
 
     @Post('analyze-dependencies')
     @UseGuards(PolicyGuard)
@@ -69,21 +70,7 @@ export class CodeBaseController {
     @ApiResponse({ status: 403, description: 'Permission denied' })
     async analyzeDependencies(
         @Body()
-        body: {
-            id: string;
-            name: string;
-            full_name: string;
-            number: string;
-            head: {
-                ref: string;
-            };
-            base: {
-                ref: string;
-            };
-            platform: string;
-            teamId: string;
-            filePaths?: string[];
-        },
+        body: AnalyzeDependenciesDto,
         @Res({ passthrough: true }) res: Response,
     ): Promise<StreamableFile> {
         const { id, name, full_name, number, head, base, platform, teamId } =
@@ -163,23 +150,7 @@ export class CodeBaseController {
     )
     async getRelatedContentFromDiff(
         @Body()
-        body: {
-            id: string;
-            name: string;
-            full_name: string;
-            number: string;
-            head: {
-                ref: string;
-            };
-            base: {
-                ref: string;
-            };
-            platform: string;
-            teamId: string;
-            diff: string;
-            filePath: string;
-            taskId: string;
-        },
+        body: GetRelatedContentFromDiffDto,
         @Res({ passthrough: true }) res: Response,
     ): Promise<StreamableFile> {
         const {

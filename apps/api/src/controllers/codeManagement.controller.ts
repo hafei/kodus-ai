@@ -48,6 +48,7 @@ import { GetCurrentCodeManagementUserUseCase } from '@libs/platform/application/
 import { FinishOnboardingDTO } from '@libs/platform/dtos/finish-onboarding.dto';
 import { GetRepositoryTreeByDirectoryDto } from '@libs/platform/dtos/get-repository-tree-by-directory.dto';
 import { WebhookStatusQueryDto } from '../dtos/webhook-status-query.dto';
+import { AuthIntegrationDto, CreateRepositoriesDto } from '../dtos/code-management.dto';
 
 @ApiTags('Code Management')
 @ApiSecurity('Bearer', [])
@@ -70,7 +71,7 @@ export class CodeManagementController {
 
         @Inject(REQUEST)
         private readonly request: UserRequest,
-    ) {}
+    ) { }
 
     @Get('/repositories/org')
     @UseGuards(PolicyGuard)
@@ -105,7 +106,7 @@ export class CodeManagementController {
             resource: ResourceType.GitSettings,
         }),
     )
-    public async authIntegrationToken(@Body() body: any) {
+    public async authIntegrationToken(@Body() body: AuthIntegrationDto) {
         return this.createIntegrationUseCase.execute(body);
     }
 
@@ -121,11 +122,7 @@ export class CodeManagementController {
     )
     public async createRepositories(
         @Body()
-        body: {
-            repositories: Repository[];
-            teamId: string;
-            type?: 'replace' | 'append';
-        },
+        body: CreateRepositoriesDto,
     ) {
         return this.createRepositoriesUseCase.execute(body);
     }

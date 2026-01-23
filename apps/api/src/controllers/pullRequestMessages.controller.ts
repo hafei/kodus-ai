@@ -32,6 +32,7 @@ import {
     checkRepoPermissions,
 } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
+import { CreateOrUpdatePullRequestMessagesDto } from '../dtos/pull-request-messages-body.dto';
 
 @ApiTags('Pull Request Messages')
 @ApiSecurity('Bearer', [])
@@ -57,11 +58,11 @@ export class PullRequestMessagesController {
         }),
     )
     public async createOrUpdatePullRequestMessages(
-        @Body() body: IPullRequestMessages,
+        @Body() body: CreateOrUpdatePullRequestMessagesDto,
     ) {
         return await this.createOrUpdatePullRequestMessagesUseCase.execute(
             this.request.user,
-            body,
+            body as unknown as IPullRequestMessages,
         );
     }
 
