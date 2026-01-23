@@ -41,6 +41,12 @@ export class KodyRulesInheritanceDto {
     @IsBoolean()
     inheritable: boolean;
 
+    @ApiProperty({ description: 'List of directories to exclude from inheritance', example: ['node_modules', 'dist'], required: false })
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    exclude: string[];
+
     @ApiProperty({ description: 'List of directories to include in inheritance', example: ['src', 'lib'], required: false })
     @IsArray()
     @IsString({ each: true })

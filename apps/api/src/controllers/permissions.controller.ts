@@ -13,6 +13,7 @@ import {
     ApiOperation,
     ApiResponse,
     ApiSecurity,
+    ApiQuery,
 } from '@nestjs/swagger';
 
 import { AssignReposUseCase } from '@libs/identity/application/use-cases/permissions/assign-repos.use-case';
@@ -47,7 +48,7 @@ export class PermissionsController {
         private readonly canAccessUseCase: CanAccessUseCase,
         private readonly getAssignedReposUseCase: GetAssignedReposUseCase,
         private readonly assignReposUseCase: AssignReposUseCase,
-    ) {}
+    ) { }
 
     @Get()
     @ApiOperation({ summary: 'Get user permissions', description: 'Get all permissions for current user' })

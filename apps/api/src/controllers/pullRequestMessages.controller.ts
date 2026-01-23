@@ -13,6 +13,7 @@ import {
     ApiOperation,
     ApiResponse,
     ApiSecurity,
+    ApiQuery,
 } from '@nestjs/swagger';
 
 import { CreateOrUpdatePullRequestMessagesUseCase } from '@libs/code-review/application/use-cases/pullRequestMessages/create-or-update-pull-request-messages.use-case';
@@ -42,7 +43,7 @@ export class PullRequestMessagesController {
 
         @Inject(REQUEST)
         private readonly request: UserRequest,
-    ) {}
+    ) { }
 
     @Post('/')
     @UseGuards(PolicyGuard)
