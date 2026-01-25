@@ -67,8 +67,11 @@ export interface CodeReviewPipelineContext extends PipelineContext {
     githubCheckRunId?: number;
     pipelineError?: boolean;
 
-    /** Commits do PR - buscados uma vez no ValidateNewCommitsStage e reutilizados em stages subsequentes */
+    /** Commits NOVOS do PR (após lastAnalyzedCommit) - usados para validação de merge-only */
     prCommits?: Commit[];
+
+    /** TODOS os commits do PR - usados para salvar no banco (aggregateAndSaveDataStructure) */
+    prAllCommits?: Commit[];
 
     /** Arquivos preliminares SEM conteúdo - buscados no ResolveConfigStage para determinar config */
     preliminaryFiles?: FileChange[];

@@ -112,14 +112,14 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
                 },
             });
 
-            // Reutilizar commits do context (buscados no ValidateNewCommitsStage)
-            const commits = context.prCommits;
+            // Usar todos os commits para determinar o lastAnalyzedCommit
+            const allCommits = context.prAllCommits;
 
-            if (!commits?.length) {
+            if (!allCommits?.length) {
                 return context;
             }
 
-            const lastAnalyzedCommit = commits[commits.length - 1];
+            const lastAnalyzedCommit = allCommits[allCommits.length - 1];
 
             return this.updateContext(context, (draft) => {
                 draft.lineComments = [];
@@ -243,7 +243,7 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
             platformType,
             context.fileMetadata,
             dryRun,
-            context.prCommits,
+            context.prAllCommits,
         );
 
         return {
