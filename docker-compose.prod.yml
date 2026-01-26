@@ -73,6 +73,33 @@ services:
       - kodus-backend-services
 
   #----------------------------------------------------------------
+  # Frontend
+  #----------------------------------------------------------------
+  web:
+    image: kodus-web:${KODUS_VERSION:-latest}
+    container_name: kodus_web_prod
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env.prod}
+    environment:
+      - WEB_NODE_ENV=self-hosted
+      - WEB_HOSTNAME_API=api
+      - WEB_PORT_API=3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - kodus-backend-services
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  #----------------------------------------------------------------
   # Databases & Infrastructure
   #----------------------------------------------------------------
   db_postgres:
