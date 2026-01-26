@@ -141,8 +141,9 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                                     context: PullRequestHandlerService.name,
                                     error,
                                     metadata: {
-                                        ...pullRequest,
+                                        organizationAndTeamData,
                                         repository,
+                                        prNumber: pullRequest?.number,
                                         filename: file.filename,
                                     },
                                 });
@@ -300,6 +301,7 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                 context: PullRequestHandlerService.name,
                 error,
                 metadata: {
+                    organizationAndTeamData,
                     prNumber: pullRequest?.number,
                     repository,
                 },
@@ -363,6 +365,7 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                                 context: PullRequestHandlerService.name,
                                 error,
                                 metadata: {
+                                    organizationAndTeamData,
                                     prNumber: pullRequest?.number,
                                     repository,
                                     filename: file.filename,
@@ -381,6 +384,7 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                 context: PullRequestHandlerService.name,
                 error,
                 metadata: {
+                    organizationAndTeamData,
                     prNumber: pullRequest?.number,
                     repository,
                     fileCount: files.length,
