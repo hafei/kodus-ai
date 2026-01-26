@@ -135,13 +135,24 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 },
             );
 
+        // If no active automation found, complete the webhook processing immediately
+        if (!validationResult?.organizationAndTeamData) {
+            this.logger.log({
+                message: `No active automation found for repository, completing webhook processing`,
+                context: GitHubPullRequestHandler.name,
+                metadata: {
+                    prNumber,
+                    repositoryId: repository.id,
+                    repositoryName: repository.name,
+                },
+            });
+            return;
+        }
+
         try {
             await this.savePullRequestUseCase.execute(params);
 
-            if (
-                this.enqueueCodeReviewJobUseCase &&
-                validationResult?.organizationAndTeamData
-            ) {
+            if (this.enqueueCodeReviewJobUseCase) {
                 this.enqueueCodeReviewJobUseCase
                     .execute({
                         payload: payload,
@@ -174,54 +185,39 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                             },
                         });
                     });
-            } else {
-                this.logger.log({
-                    message:
-                        'Skipping code review job enqueue (missing org/team or enqueue use case)',
-                    context: GitHubPullRequestHandler.name,
-                    metadata: {
-                        hasOrgAndTeam:
-                            !!validationResult?.organizationAndTeamData,
-                        prNumber,
-                        repositoryId: repository.id,
-                        userGitId,
-                    },
-                });
             }
 
             if (payload?.action === 'synchronize') {
-                if (validationResult?.organizationAndTeamData) {
-                    this.enqueueImplementationCheckUseCase
-                        .execute({
-                            payload: payload,
-                            event: event,
-                            organizationAndTeamData:
-                                validationResult.organizationAndTeamData,
-                            repository: {
-                                id: repository.id,
-                                name: repository.name,
+                this.enqueueImplementationCheckUseCase
+                    .execute({
+                        payload: payload,
+                        event: event,
+                        organizationAndTeamData:
+                            validationResult.organizationAndTeamData,
+                        repository: {
+                            id: repository.id,
+                            name: repository.name,
+                        },
+                        platformType: PlatformType.GITHUB,
+                        pullRequestNumber: payload?.pull_request?.number,
+                        commitSha: payload?.after || payload?.head?.sha,
+                        trigger: payload?.action,
+                    })
+                    .catch((e) => {
+                        this.logger.error({
+                            message:
+                                'Failed to enqueue implementation check',
+                            context: GitHubPullRequestHandler.name,
+                            error: e,
+                            metadata: {
+                                organizationAndTeamData:
+                                    validationResult.organizationAndTeamData,
+                                repository,
+                                pullRequestNumber:
+                                    payload?.pull_request?.number,
                             },
-                            platformType: PlatformType.GITHUB,
-                            pullRequestNumber: payload?.pull_request?.number,
-                            commitSha: payload?.after || payload?.head?.sha,
-                            trigger: payload?.action,
-                        })
-                        .catch((e) => {
-                            this.logger.error({
-                                message:
-                                    'Failed to enqueue implementation check',
-                                context: GitHubPullRequestHandler.name,
-                                error: e,
-                                metadata: {
-                                    organizationAndTeamData:
-                                        validationResult?.organizationAndTeamData,
-                                    repository,
-                                    pullRequestNumber:
-                                        payload?.pull_request?.number,
-                                },
-                            });
                         });
-                }
+                    });
             }
 
             if (payload?.action === 'closed') {
@@ -233,42 +229,40 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
 
                 if (merged && baseRef) {
                     try {
-                        if (validationResult?.organizationAndTeamData) {
-                            const defaultBranch =
-                                await this.codeManagement.getDefaultBranch({
+                        const defaultBranch =
+                            await this.codeManagement.getDefaultBranch({
+                                organizationAndTeamData:
+                                    validationResult.organizationAndTeamData,
+                                repository: {
+                                    id: repository.id,
+                                    name: repository.name,
+                                },
+                            });
+                        if (baseRef !== defaultBranch) {
+                            return;
+                        }
+                        // fetch changed files
+                        const changedFiles =
+                            await this.codeManagement.getFilesByPullRequestId(
+                                {
                                     organizationAndTeamData:
                                         validationResult.organizationAndTeamData,
                                     repository: {
                                         id: repository.id,
                                         name: repository.name,
                                     },
-                                });
-                            if (baseRef !== defaultBranch) {
-                                return;
-                            }
-                            // fetch changed files
-                            const changedFiles =
-                                await this.codeManagement.getFilesByPullRequestId(
-                                    {
-                                        organizationAndTeamData:
-                                            validationResult.organizationAndTeamData,
-                                        repository: {
-                                            id: repository.id,
-                                            name: repository.name,
-                                        },
-                                        prNumber: payload?.pull_request?.number,
-                                    },
-                                );
-                            this.eventEmitter.emit(
-                                'pull-request.closed',
-                                new PullRequestClosedEvent(
-                                    validationResult.organizationAndTeamData,
-                                    repository,
-                                    payload?.pull_request?.number,
-                                    changedFiles || [],
-                                ),
+                                    prNumber: payload?.pull_request?.number,
+                                },
                             );
-                        }
+                        this.eventEmitter.emit(
+                            'pull-request.closed',
+                            new PullRequestClosedEvent(
+                                validationResult.organizationAndTeamData,
+                                repository,
+                                payload?.pull_request?.number,
+                                changedFiles || [],
+                            ),
+                        );
                     } catch (e) {
                         this.logger.error({
                             message: 'Failed to sync Kody Rules after PR merge',
@@ -276,7 +270,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                             error: e,
                             metadata: {
                                 organizationAndTeamData:
-                                    validationResult?.organizationAndTeamData,
+                                    validationResult.organizationAndTeamData,
                                 repository,
                                 pullRequestNumber:
                                     payload?.pull_request?.number,
