@@ -16,7 +16,7 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
     private readonly logger = createLogger(PullRequestHandlerService.name);
 
     /** Limite de concorrência para requisições de conteúdo de arquivos à API do GitHub */
-    private readonly FILE_CONTENT_CONCURRENCY = 50;
+    private readonly FILE_CONTENT_CONCURRENCY = 100;
 
     constructor(
         private readonly codeManagementService: CodeManagementService,
