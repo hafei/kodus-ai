@@ -32,21 +32,28 @@ describe('SavePullRequestUseCase', () => {
         base: { ref: 'main' },
     };
 
-    const mockFiles = [
+    // API format (what getFilesByPullRequestId returns)
+    const mockApiFiles = [
         { filename: 'file1.ts', additions: 10, deletions: 5 },
         { filename: 'file2.ts', additions: 20, deletions: 10 },
     ];
 
-    const mockCommits = [
+    const mockApiCommits = [
         { sha: 'commit1', message: 'First commit' },
         { sha: 'commit2', message: 'Second commit' },
+    ];
+
+    // DB format (what findByNumberAndRepositoryId returns - IFile structure)
+    const mockDbFiles = [
+        { path: 'file1.ts', filename: 'file1.ts', added: 10, deleted: 5, changes: 15, patch: '', sha: '', status: 'modified', previousName: '', suggestions: [] },
+        { path: 'file2.ts', filename: 'file2.ts', added: 20, deleted: 10, changes: 30, patch: '', sha: '', status: 'modified', previousName: '', suggestions: [] },
     ];
 
     const mockExistingPR = {
         uuid: 'pr-uuid-123',
         number: 42,
-        files: mockFiles,
-        commits: mockCommits,
+        files: mockDbFiles,
+        commits: mockApiCommits,
         repository: mockRepository,
     };
 
@@ -71,8 +78,8 @@ describe('SavePullRequestUseCase', () => {
         };
 
         mockCodeManagementService = {
-            getFilesByPullRequestId: jest.fn().mockResolvedValue(mockFiles),
-            getCommitsForPullRequestForCodeReview: jest.fn().mockResolvedValue(mockCommits),
+            getFilesByPullRequestId: jest.fn().mockResolvedValue(mockApiFiles),
+            getCommitsForPullRequestForCodeReview: jest.fn().mockResolvedValue(mockApiCommits),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -185,16 +192,20 @@ describe('SavePullRequestUseCase', () => {
                     mockRepository.id.toString(),
                     mockOrganizationAndTeamData,
                 );
-                expect(mockPullRequestsService.aggregateAndSaveDataStructure).toHaveBeenCalledWith(
-                    expect.anything(),
-                    expect.anything(),
-                    mockFiles,
-                    expect.anything(),
-                    expect.anything(),
-                    expect.anything(),
-                    expect.anything(),
-                    mockCommits,
-                );
+                // Verify files are mapped from DB format to API format
+                const callArgs = mockPullRequestsService.aggregateAndSaveDataStructure.mock.calls[0];
+                const filesArg = callArgs[2];
+                const commitsArg = callArgs[7];
+
+                expect(filesArg).toHaveLength(2);
+                expect(filesArg[0].filename).toBe('file1.ts');
+                expect(filesArg[0].additions).toBe(10);
+                expect(filesArg[0].deletions).toBe(5);
+                expect(filesArg[1].filename).toBe('file2.ts');
+                expect(filesArg[1].additions).toBe(20);
+                expect(filesArg[1].deletions).toBe(10);
+
+                expect(commitsArg).toEqual(mockApiCommits);
             });
 
             it('should use empty arrays when action is "closed" and PR does not exist in DB', async () => {
@@ -469,10 +480,10 @@ describe('SavePullRequestUseCase', () => {
 
             // Make the API calls take some time
             mockCodeManagementService.getFilesByPullRequestId.mockImplementation(
-                () => new Promise(resolve => setTimeout(() => resolve(mockFiles), 50))
+                () => new Promise(resolve => setTimeout(() => resolve(mockApiFiles), 50))
             );
             mockCodeManagementService.getCommitsForPullRequestForCodeReview.mockImplementation(
-                () => new Promise(resolve => setTimeout(() => resolve(mockCommits), 50))
+                () => new Promise(resolve => setTimeout(() => resolve(mockApiCommits), 50))
             );
 
             await useCase.execute(params);

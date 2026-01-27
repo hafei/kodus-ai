@@ -154,7 +154,22 @@ export class SavePullRequestUseCase {
                         );
 
                     if (existingPR) {
-                        changedFiles = existingPR.files || [];
+                        // Map DB file format back to API format for compatibility
+                        // DB stores: { path, filename (short), added, deleted, previousName }
+                        // API returns: { filename (full path), additions, deletions, previous_filename }
+                        changedFiles = (existingPR.files || []).map(
+                            (f: any) => ({
+                                filename: f.path || f.filename,
+                                additions: f.added ?? 0,
+                                deletions: f.deleted ?? 0,
+                                changes: f.changes ?? 0,
+                                patch: f.patch ?? '',
+                                sha: f.sha ?? '',
+                                status: f.status ?? '',
+                                previous_filename:
+                                    f.previousName ?? '',
+                            }),
+                        );
                         pullRequestCommits = existingPR.commits || [];
 
                         this.logger.debug({
