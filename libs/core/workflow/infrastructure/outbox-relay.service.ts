@@ -384,23 +384,25 @@ export class OutboxRelayService
                     'workflow.outbox.max_attempts': this.maxAttemptsOutbox,
                 });
 
+                // Extract jobId before try-catch so it's accessible in catch block
+                const rawPayload = message?.payload as unknown as
+                    | MessagePayload<MessagePayloadContent>
+                    | MessagePayloadContent
+                    | undefined;
+
+                const payloadContent =
+                    (rawPayload as MessagePayload<MessagePayloadContent>)
+                        ?.payload ??
+                    (rawPayload as MessagePayloadContent) ??
+                    {};
+
+                const correlationId = payloadContent?.correlationId;
+                const workflowType = payloadContent?.workflowType;
+                const jobId = payloadContent?.jobId;
+
                 try {
                     // Note: message.job is not populated by RETURNING * (only job_id column)
                     // Always use payload.jobId which is set during enqueue
-                    const rawPayload = message?.payload as unknown as
-                        | MessagePayload<MessagePayloadContent>
-                        | MessagePayloadContent
-                        | undefined;
-
-                    const payloadContent =
-                        (rawPayload as MessagePayload<MessagePayloadContent>)
-                            ?.payload ??
-                        (rawPayload as MessagePayloadContent) ??
-                        {};
-
-                    const correlationId = payloadContent?.correlationId;
-                    const workflowType = payloadContent?.workflowType;
-                    const jobId = payloadContent?.jobId;
 
                     span.setAttributes({
                         'workflow.outbox.job.id': jobId,
