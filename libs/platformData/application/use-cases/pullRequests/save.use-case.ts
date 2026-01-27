@@ -180,6 +180,7 @@ export class SavePullRequestUseCase {
                                 filesCount: changedFiles.length,
                                 commitsCount: pullRequestCommits.length,
                             },
+                            organizationAndTeamData,
                         });
                     }
                 }
