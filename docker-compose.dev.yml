@@ -16,7 +16,6 @@ x-app-service-template: &app-service-defaults
         - yalc_store:/root/.yalc
     networks:
         - kodus-backend-services
-        - shared-network
 
 services:
     #----------------------------------------------------------------
@@ -37,7 +36,7 @@ services:
                 reservations:
                     memory: 512M
         healthcheck:
-            test: ['CMD', 'node', '-e', 'process.exit(0)']
+            test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
             interval: 30s
             timeout: 10s
             retries: 3
@@ -67,7 +66,7 @@ services:
                 reservations:
                     memory: 512M
         healthcheck:
-            test: ['CMD', 'node', '-e', 'process.exit(0)']
+            test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
             interval: 30s
             timeout: 10s
             retries: 3
@@ -96,7 +95,7 @@ services:
                 reservations:
                     memory: 256M
         healthcheck:
-            test: ['CMD', 'node', '-e', 'process.exit(0)']
+            test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
             interval: 30s
             timeout: 10s
             retries: 3
@@ -127,6 +126,38 @@ services:
         restart: unless-stopped
 
     #----------------------------------------------------------------
+    # Web Frontend
+    #----------------------------------------------------------------
+    web:
+        build:
+            context: ./kodustech/web
+            dockerfile: Dockerfiles/Dockerfile.dev
+        container_name: kodus_web
+        ports:
+            - '${WEB_PORT:-3000}:3000'
+        env_file:
+            - .env
+        volumes:
+            - ./kodustech/web:/usr/src/app:delegated
+            - web_node_modules:/usr/src/app/node_modules
+            - web_next_cache:/usr/src/app/.next
+        restart: unless-stopped
+        healthcheck:
+            test: [ 'CMD', 'curl', '-f', 'http://localhost:3000' ]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
+        networks:
+            - kodus-backend-services
+        environment:
+            - CHOKIDAR_USEPOLLING=true
+            - NODE_ENV=development
+            - NEXT_TELEMETRY_DISABLED=1
+        depends_on:
+            - api
+
+    #----------------------------------------------------------------
     # Databases & Infrastructure
     #----------------------------------------------------------------
     db_postgres:
@@ -148,11 +179,7 @@ services:
             - kodus-backend-services
         restart: unless-stopped
         healthcheck:
-            test:
-                [
-                    'CMD-SHELL',
-                    'pg_isready -U ${API_PG_DB_USERNAME} -d ${API_PG_DB_DATABASE}',
-                ]
+            test: [ 'CMD-SHELL', 'pg_isready -U ${API_PG_DB_USERNAME} -d ${API_PG_DB_DATABASE}' ]
             interval: 5s
             timeout: 3s
             retries: 20
@@ -176,27 +203,46 @@ services:
             - kodus-backend-services
         restart: unless-stopped
         healthcheck:
-            test:
-                [
-                    'CMD-SHELL',
-                    "echo 'db.runCommand({ ping: 1 }).ok' | mongosh --quiet mongodb://$${MONGO_INITDB_ROOT_USERNAME}:$${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/admin | grep -q 1",
-                ]
+            test: [ 'CMD-SHELL', "echo 'db.runCommand({ ping: 1 }).ok' | mongosh --quiet mongodb://$${MONGO_INITDB_ROOT_USERNAME}:$${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/admin | grep -q 1" ]
             interval: 10s
             timeout: 5s
             retries: 20
             start_period: 20s
+    rabbitmq:
+        profiles:
+            - local-db
+        image: rabbitmq-delayed
+        container_name: rabbitmq
+        ports:
+            - '5672:5672'
+            - '15672:15672'
+        environment:
+            RABBITMQ_DEFAULT_USER: ${API_RABBITMQ_USER:-    }
+            RABBITMQ_DEFAULT_PASS: ${API_RABBITMQ_PASSWORD:-password}
+        volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+        networks:
+            - kodus-backend-services
+        restart: unless-stopped
+        healthcheck:
+            test: [ 'CMD-SHELL', 'rabbitmq-diagnostics -q ping' ]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
 
 volumes:
     yalc_store:
     node_modules_cache:
+    web_node_modules:
+    web_next_cache:
     pgdata:
     mongodbdata:
     pyroscope-data:
+    rabbitmq_data:
+
 
 networks:
     kodus-backend-services:
         driver: bridge
         name: kodus-backend-services
-        external: true
-    shared-network:
-        external: true

@@ -1,0 +1,213 @@
+# ====================================================================
+# Kodus AI - 服务器部署配置 (使用预构建镜像)
+# 使用方式: docker-compose -f docker-compose.server.yml --env-file .env.server up -d
+# ====================================================================
+
+services:
+  #----------------------------------------------------------------
+  # Application Services (预构建镜像)
+  #----------------------------------------------------------------
+  api:
+    image: ghcr.io/kodustech/kodus-ai-api:2.0.7
+    container_name: kodus_api
+    ports:
+      - '${API_PORT:-3001}:${API_PORT:-3001}'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - NODE_OPTIONS=--max-old-space-size=1200 --max-semi-space-size=64
+      - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
+      - RUN_MIGRATIONS=true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      db_mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/kodustech/kodus-ai-worker:2.0.7
+    container_name: kodus_worker
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - NODE_OPTIONS=--max-old-space-size=800 --max-semi-space-size=64
+      - COMPONENT_TYPE=worker
+      - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      db_mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  webhooks:
+    image: ghcr.io/kodustech/kodus-ai-webhook:2.0.7
+    container_name: kodus_webhooks
+    ports:
+      - '${WEBHOOKS_PORT:-3332}:${WEBHOOKS_PORT:-3332}'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - NODE_OPTIONS=--max-old-space-size=800 --max-semi-space-size=64
+      - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      db_mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  #----------------------------------------------------------------
+  # Web Frontend (预构建镜像)
+  #----------------------------------------------------------------
+  web:
+    image: kodus-web:latest
+    container_name: kodus_web
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD', 'curl', '-f', 'http://localhost:3000' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      - api
+
+  #----------------------------------------------------------------
+  # Databases & Infrastructure
+  #----------------------------------------------------------------
+  db_postgres:
+    image: pgvector/pgvector:pg16
+    container_name: db_postgres
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${API_PG_DB_USERNAME}
+      POSTGRES_PASSWORD: ${API_PG_DB_PASSWORD}
+      POSTGRES_DB: ${API_PG_DB_DATABASE}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - kodus-backend-services
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -U ${API_PG_DB_USERNAME} -d ${API_PG_DB_DATABASE}' ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  db_mongodb:
+    image: mongo:8
+    container_name: db_mongodb
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${API_MG_DB_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${API_MG_DB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${API_MG_DB_DATABASE}
+    volumes:
+      - mongodbdata:/data/db
+    networks:
+      - kodus-backend-services
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD-SHELL', "echo 'db.runCommand({ ping: 1 }).ok' | mongosh --quiet mongodb://$${MONGO_INITDB_ROOT_USERNAME}:$${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/admin | grep -q 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq-delayed:latest
+    container_name: rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: ${API_RABBITMQ_USER:-user}
+      RABBITMQ_DEFAULT_PASS: ${API_RABBITMQ_PASSWORD:-password}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - kodus-backend-services
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD-SHELL', 'rabbitmq-diagnostics -q ping' ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  pgdata:
+  mongodbdata:
+  rabbitmq_data:
+
+
+networks:
+  kodus-backend-services:
+    driver: bridge
+    name: kodus-backend-services
