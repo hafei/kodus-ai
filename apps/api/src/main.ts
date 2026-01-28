@@ -1,6 +1,9 @@
 import 'source-map-support/register';
 import { environment } from '@libs/ee/configs/environment';
 
+// Initialize profiling early (before NestJS bootstrap)
+// initPyroscope({ appName: 'kodus-api' });
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';

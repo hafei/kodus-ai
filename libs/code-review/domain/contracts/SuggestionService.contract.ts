@@ -1,3 +1,6 @@
+import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
+import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
+import { Repository } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { BYOKConfig } from '@kodus/kodus-common/llm';
 
 import { PriorityStatus } from '@libs/platformData/domain/pullRequests/enums/priorityStatus.enum';
@@ -251,6 +254,17 @@ export interface ISuggestionService {
     transformCommentResultsToPrLevelSuggestions(
         commentResults: CommentResult[],
     ): ISuggestionByPR[];
+
+    /**
+     * Resolves comments on the platform (GitHub, etc.) for implemented suggestions
+     */
+    resolveImplementedSuggestionsOnPlatform(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: Partial<Repository>;
+        prNumber: number;
+        platformType: PlatformType;
+        dryRun?: CodeReviewPipelineContext['dryRun'];
+    }): Promise<void>;
 }
 
 export const SUGGESTION_SERVICE_TOKEN = 'SUGGESTION_SERVICE_TOKEN';

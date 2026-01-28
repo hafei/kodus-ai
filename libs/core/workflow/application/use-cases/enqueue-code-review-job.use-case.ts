@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { v4 as uuid } from 'uuid';
+import { IdGenerator, createLogger } from '@kodus/flow';
 
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
@@ -10,7 +10,6 @@ import {
 import { HandlerType } from '@libs/core/workflow/domain/enums/handler-type.enum';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
 import { WorkflowType } from '@libs/core/workflow/domain/enums/workflow-type.enum';
-import { createLogger } from '@kodus/flow';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 
 export interface EnqueueCodeReviewJobInput {
@@ -32,7 +31,8 @@ export class EnqueueCodeReviewJobUseCase implements IUseCase {
 
     async execute(input: EnqueueCodeReviewJobInput): Promise<string> {
         try {
-            const correlationId = input.correlationId || uuid();
+            const correlationId =
+                input.correlationId || IdGenerator.correlationId();
 
             this.logger.log({
                 message: 'Enqueuing code review job',

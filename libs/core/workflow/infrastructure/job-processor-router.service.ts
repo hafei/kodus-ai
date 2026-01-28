@@ -1,4 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { createLogger } from '@kodus/flow';
 
 import { IJobProcessorRouter } from '@libs/core/workflow/domain/contracts/job-processor-router.contract';
 import { IJobProcessorService } from '@libs/core/workflow/domain/contracts/job-processor.service.contract';
@@ -7,22 +8,30 @@ import {
     WORKFLOW_JOB_REPOSITORY_TOKEN,
 } from '@libs/core/workflow/domain/contracts/workflow-job.repository.contract';
 import { WorkflowType } from '@libs/core/workflow/domain/enums/workflow-type.enum';
+import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
+import { ErrorClassification } from '@libs/core/workflow/domain/enums/error-classification.enum';
 
 import { WebhookProcessingJobProcessorService } from '@libs/automation/webhook-processing/webhook-processing-job.processor';
 import { CodeReviewJobProcessorService } from '@libs/code-review/workflow/code-review-job-processor.service';
 
+import { ImplementationVerificationProcessor } from '@libs/code-review/workflow/implementation-verification.processor';
+
 const WEBHOOK_PROCESS_TIMEOUT_MS = 10 * 60 * 1000;
 const CODE_REVIEW_PROCESS_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const CHECK_IMPLEMENTATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 @Injectable()
 export class JobProcessorRouterService
     implements IJobProcessorService, IJobProcessorRouter
 {
+    private readonly logger = createLogger(JobProcessorRouterService.name);
+
     constructor(
         @Inject(WORKFLOW_JOB_REPOSITORY_TOKEN)
         private readonly jobRepository: IWorkflowJobRepository,
         private readonly codeReviewProcessor: CodeReviewJobProcessorService,
         private readonly webhookProcessor: WebhookProcessingJobProcessorService,
+        private readonly implementationVerificationProcessor: ImplementationVerificationProcessor,
     ) {}
 
     async process(jobId: string): Promise<void> {
@@ -35,11 +44,47 @@ export class JobProcessorRouterService
         const processor = this.getProcessor(job.workflowType);
         const timeoutMs = this.getProcessTimeoutMs(job.workflowType);
 
-        return await this.runWithTimeout(
-            processor.process(jobId),
-            timeoutMs,
-            `Workflow job ${jobId} timeout after ${timeoutMs}ms`,
-        );
+        try {
+            return await this.runWithTimeout(
+                processor.process(jobId),
+                timeoutMs,
+                `Workflow job ${jobId} timeout after ${timeoutMs}ms`,
+            );
+        } catch (error) {
+            const isTimeout = error.message?.includes('timeout after');
+
+            // Always mark job as FAILED when an error occurs (including timeout)
+            try {
+                await this.jobRepository.update(jobId, {
+                    status: JobStatus.FAILED,
+                    errorClassification: isTimeout
+                        ? ErrorClassification.RETRYABLE
+                        : ErrorClassification.PERMANENT,
+                    lastError: error.message,
+                });
+
+                this.logger.error({
+                    message: `Job ${jobId} marked as FAILED${isTimeout ? ' due to timeout' : ''}`,
+                    context: JobProcessorRouterService.name,
+                    error,
+                    metadata: {
+                        jobId,
+                        workflowType: job.workflowType,
+                        isTimeout,
+                        timeoutMs,
+                    },
+                });
+            } catch (updateError) {
+                this.logger.error({
+                    message: `Failed to update job ${jobId} status to FAILED`,
+                    context: JobProcessorRouterService.name,
+                    error: updateError,
+                    metadata: { jobId, originalError: error.message },
+                });
+            }
+
+            throw error;
+        }
     }
 
     async handleFailure(jobId: string, error: Error): Promise<void> {
@@ -70,6 +115,8 @@ export class JobProcessorRouterService
                 return this.webhookProcessor;
             case WorkflowType.CODE_REVIEW:
                 return this.codeReviewProcessor;
+            case WorkflowType.CHECK_SUGGESTION_IMPLEMENTATION:
+                return this.implementationVerificationProcessor;
             default:
                 throw new Error(
                     `No processor found for workflow type: ${workflowType}`,
@@ -83,6 +130,8 @@ export class JobProcessorRouterService
                 return WEBHOOK_PROCESS_TIMEOUT_MS;
             case WorkflowType.CODE_REVIEW:
                 return CODE_REVIEW_PROCESS_TIMEOUT_MS;
+            case WorkflowType.CHECK_SUGGESTION_IMPLEMENTATION:
+                return CHECK_IMPLEMENTATION_TIMEOUT_MS;
             default:
                 return CODE_REVIEW_PROCESS_TIMEOUT_MS;
         }

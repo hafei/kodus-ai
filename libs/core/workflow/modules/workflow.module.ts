@@ -33,6 +33,7 @@ import { ERROR_CLASSIFIER_SERVICE_TOKEN } from '@libs/core/workflow/domain/contr
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
 import { ProcessWorkflowJobUseCase } from '@libs/core/workflow/application/use-cases/process-workflow-job.use-case';
 import { GetJobStatusUseCase } from '@libs/core/workflow/application/use-cases/get-job-status.use-case';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 import { AutomationModule } from '@libs/automation/modules/automation.module';
 import { ASTEventHandler } from '@libs/core/workflow/infrastructure/ast-event-handler.service';
 import { EcsModule } from '@libs/ee/infrastructure/ecs/ecs.module';
@@ -55,12 +56,14 @@ const sharedProviders = [
 
     EnqueueCodeReviewJobUseCase,
     GetJobStatusUseCase,
+    EnqueueImplementationCheckUseCase,
 ];
 
 const sharedExports = [
     JOB_QUEUE_SERVICE_TOKEN,
     EnqueueCodeReviewJobUseCase,
     GetJobStatusUseCase,
+    EnqueueImplementationCheckUseCase,
 ];
 
 const workerProviders = [

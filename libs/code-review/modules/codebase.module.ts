@@ -1,7 +1,6 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { AIEngineModule } from '@libs/ai-engine/modules/ai-engine.module';
 import { CodeAnalysisOrchestrator } from '@libs/ee/codeBase/codeAnalysisOrchestrator.service';
-import { LicenseService } from '@libs/ee/license/license.service';
 
 import { IntegrationCoreModule } from '@libs/integrations/modules/integrations-core.module';
 import { IntegrationConfigCoreModule } from '@libs/integrations/modules/config-core.module';
@@ -124,7 +123,6 @@ import { DryRunModule } from '@libs/dryRun/dry-run.module';
         KodyFineTuningService,
         CommentAnalysisService,
         MessageTemplateProcessor,
-        LicenseService,
         pipelineProvider,
         codeReviewPipelineProvider,
         {

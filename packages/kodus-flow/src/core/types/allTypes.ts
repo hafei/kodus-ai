@@ -5042,6 +5042,8 @@ export interface ObservabilityStorageConfig {
     flushIntervalMs?: number;
     ttlDays?: number;
     enableObservability?: boolean;
+    secondaryIndexes?: string[];
+    bucketKeys?: string[];
 }
 
 export interface MongoDBExporterConfig {
@@ -5056,6 +5058,8 @@ export interface MongoDBExporterConfig {
     maxRetries: number;
     ttlDays: number;
     enableObservability: boolean;
+    secondaryIndexes?: string[];
+    bucketKeys?: string[];
 }
 
 export interface MongoDBLogItem {

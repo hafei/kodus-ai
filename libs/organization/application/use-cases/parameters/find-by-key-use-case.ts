@@ -1,4 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 import { createLogger } from '@kodus/flow';
 import {
@@ -10,19 +11,100 @@ import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/
 import { IParameters } from '@libs/organization/domain/parameters/interfaces/parameters.interface';
 import { ParametersEntity } from '@libs/organization/domain/parameters/entities/parameters.entity';
 
+/**
+ * PERF: In-memory cache entry with TTL support
+ */
+interface CacheEntry<T> {
+    data: T;
+    expiresAt: number;
+}
+
+/**
+ * PERF: Default cache TTL in milliseconds (60 seconds)
+ * Parameters rarely change, so 60s is safe and reduces DB calls significantly
+ * Can be overridden via PARAMETERS_CACHE_TTL_MS env var
+ */
+const DEFAULT_CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class FindByKeyParametersUseCase {
     private readonly logger = createLogger(FindByKeyParametersUseCase.name);
 
+    /**
+     * PERF: In-memory cache for parameters
+     *
+     * Problem: findByKey is called 30+ times across the codebase per request
+     * Solution: Cache results with short TTL (60s default)
+     *
+     * Key format: `${parametersKey}:${organizationId}:${teamId || 'no-team'}`
+     */
+    private readonly cache = new Map<string, CacheEntry<IParameters<any>>>();
+    private readonly cacheTTL: number;
+
     constructor(
         @Inject(PARAMETERS_SERVICE_TOKEN)
         private readonly parametersService: IParametersService,
-    ) {}
+        private readonly configService: ConfigService,
+    ) {
+        this.cacheTTL = this.configService.get<number>('PARAMETERS_CACHE_TTL_MS', DEFAULT_CACHE_TTL_MS);
+    }
+
+    /**
+     * Generates a cache key from the parameters key and organization/team data
+     */
+    private getCacheKey(
+        parametersKey: ParametersKey,
+        organizationAndTeamData: OrganizationAndTeamData,
+    ): string {
+        const orgId = organizationAndTeamData.organizationId || 'no-org';
+        const teamId = organizationAndTeamData.teamId || 'no-team';
+        return `${parametersKey}:${orgId}:${teamId}`;
+    }
+
+    /**
+     * Gets a cached value if it exists and hasn't expired
+     */
+    private getFromCache<K extends ParametersKey>(
+        cacheKey: string,
+    ): IParameters<K> | null {
+        const entry = this.cache.get(cacheKey);
+        if (!entry) {
+            return null;
+        }
+
+        if (Date.now() > entry.expiresAt) {
+            this.cache.delete(cacheKey);
+            return null;
+        }
+
+        return entry.data as IParameters<K>;
+    }
+
+    /**
+     * Sets a value in the cache with TTL
+     */
+    private setInCache<K extends ParametersKey>(
+        cacheKey: string,
+        data: IParameters<K>,
+    ): void {
+        this.cache.set(cacheKey, {
+            data,
+            expiresAt: Date.now() + this.cacheTTL,
+        });
+    }
 
     async execute<K extends ParametersKey>(
         parametersKey: K,
         organizationAndTeamData: OrganizationAndTeamData,
-    ): Promise<IParameters<K>> {
+    ): Promise<IParameters<K> | null> {
+        const cacheKey = this.getCacheKey(parametersKey, organizationAndTeamData);
+
+        // PERF: Check cache first
+        const cached = this.getFromCache<K>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
         try {
             const parameter = await this.parametersService.findByKey(
                 parametersKey,
@@ -30,10 +112,13 @@ export class FindByKeyParametersUseCase {
             );
 
             if (!parameter) {
-                throw new NotFoundException('Parameter config does not exist');
+                return null;
             }
 
             const updatedParameters = this.getUpdatedParamaters(parameter);
+
+            // PERF: Cache the result
+            this.setInCache(cacheKey, updatedParameters);
 
             return updatedParameters;
         } catch (error) {
@@ -45,6 +130,39 @@ export class FindByKeyParametersUseCase {
             });
 
             throw error;
+        }
+    }
+
+    /**
+     * Invalidates cache for a specific key or all keys for an organization
+     * Call this when parameters are updated
+     */
+    invalidateCache(
+        parametersKey?: ParametersKey,
+        organizationAndTeamData?: OrganizationAndTeamData,
+    ): void {
+        if (!parametersKey && !organizationAndTeamData) {
+            // Clear entire cache
+            this.cache.clear();
+            return;
+        }
+
+        if (parametersKey && organizationAndTeamData) {
+            // Clear specific key
+            const cacheKey = this.getCacheKey(parametersKey, organizationAndTeamData);
+            this.cache.delete(cacheKey);
+            return;
+        }
+
+        // Clear by prefix (all keys for an org or all instances of a param)
+        const prefix = parametersKey
+            ? `${parametersKey}:`
+            : `${organizationAndTeamData?.organizationId || ''}`;
+
+        for (const key of this.cache.keys()) {
+            if (key.startsWith(prefix) || key.includes(`:${prefix}`)) {
+                this.cache.delete(key);
+            }
         }
     }
 

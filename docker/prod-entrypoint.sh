@@ -82,8 +82,8 @@ done
 # Standard Startup
 # ----------------------------------------------------------------
 
-RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
-RUN_SEEDS="${RUN_SEEDS:-true}"
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
+RUN_SEEDS="${RUN_SEEDS:-false}"
 
 if [ "$RUN_MIGRATIONS" = "true" ]; then
   echo "▶ Running Migrations (PROD)..."

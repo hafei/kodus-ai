@@ -34,8 +34,6 @@ import {
     IFinalAnalysisResult,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { createOptimizedBatches } from '@libs/common/utils/batch.helper';
-import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
-import { ImplementationStatus } from '@libs/platformData/domain/pullRequests/enums/implementationStatus.enum';
 import { PriorityStatus } from '@libs/platformData/domain/pullRequests/enums/priorityStatus.enum';
 import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
@@ -49,7 +47,7 @@ import {
 export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineContext> {
     readonly stageName = 'FileAnalysisStage';
 
-    private readonly concurrencyLimit = 20;
+    private readonly concurrencyLimit = 30;
     private readonly logger = createLogger(ProcessFilesReview.name);
 
     constructor(
@@ -673,6 +671,8 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         ];
 
         // If it's a commit, validate repeated suggestions
+        // We keep it here to ensure immediate feedback within the review session context, but avoid race conditions
+        // by checking if the async job will likely cover it (though redundancy is generally safe as operations are idempotent).
         if (context?.action && VALID_ACTIONS.includes(context.action)) {
             const savedSuggestions =
                 await this.pullRequestService.findSuggestionsByPRAndFilename(
@@ -682,33 +682,14 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                     context.organizationAndTeamData,
                 );
 
-            if (savedSuggestions?.length > 0) {
-                const sentSuggestions = savedSuggestions.filter(
-                    (suggestion) =>
-                        suggestion.deliveryStatus === DeliveryStatus.SENT &&
-                        suggestion.implementationStatus ===
-                            ImplementationStatus.NOT_IMPLEMENTED,
-                );
-
-                if (mergedSuggestions?.length > 0) {
-                    mergedSuggestions =
-                        await this.suggestionService.removeSuggestionsRelatedToSavedFiles(
-                            context?.organizationAndTeamData,
-                            context?.pullRequest?.number.toString(),
-                            savedSuggestions,
-                            mergedSuggestions,
-                        );
-                }
-
-                // We can only validate the implementation of suggestions that were sent
-                if (sentSuggestions.length > 0) {
-                    await this.suggestionService.validateImplementedSuggestions(
+            if (savedSuggestions?.length > 0 && mergedSuggestions?.length > 0) {
+                mergedSuggestions =
+                    await this.suggestionService.removeSuggestionsRelatedToSavedFiles(
                         context?.organizationAndTeamData,
-                        file?.patch,
-                        sentSuggestions,
-                        context?.pullRequest?.number,
+                        context?.pullRequest?.number.toString(),
+                        savedSuggestions,
+                        mergedSuggestions,
                     );
-                }
             }
         }
 

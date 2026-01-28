@@ -34,6 +34,8 @@ export interface ObservabilityConfig {
         ttlDays?: number;
         samplingRate?: number;
         spanTimeoutMs?: number;
+        secondaryIndexes?: string[];
+        bucketKeys?: string[];
     };
 }
 
@@ -48,7 +50,7 @@ export class ObservabilityService implements OnModuleInit {
     private isInitialized = false;
 
     private static readonly DEFAULT_COLLECTIONS = {
-        logs: 'observability_logs',
+        logs: 'observability_logs_ts',
         telemetry: 'observability_telemetry',
     };
 
@@ -58,6 +60,13 @@ export class ObservabilityService implements OnModuleInit {
         ttlDays: 0,
         samplingRate: 1,
         spanTimeoutMs: 10 * 60 * 1000,
+        secondaryIndexes: [
+            'metadata.component',
+            'metadata.tenantId',
+            'metadata.organizationId',
+            'metadata.teamId',
+        ],
+        bucketKeys: ['organizationId', 'teamId', 'tenantId'],
     };
 
     private readonly logger = createLogger(ObservabilityService.name);
@@ -417,6 +426,12 @@ export class ObservabilityService implements OnModuleInit {
                     options.customSettings?.ttlDays ??
                     ObservabilityService.DEFAULT_SETTINGS.ttlDays,
                 enableObservability: true,
+                secondaryIndexes:
+                    options.customSettings?.secondaryIndexes ??
+                    ObservabilityService.DEFAULT_SETTINGS.secondaryIndexes,
+                bucketKeys:
+                    options.customSettings?.bucketKeys ??
+                    ObservabilityService.DEFAULT_SETTINGS.bucketKeys,
             },
             telemetry: {
                 enabled: true,

@@ -122,6 +122,23 @@ export class PullRequestsService implements IPullRequestsService {
         );
     }
 
+    /**
+     * PERF: Returns only suggestion counts using MongoDB aggregation.
+     * Much faster than findManyByNumbersAndRepositoryIds when you only need counts.
+     */
+    findSuggestionCountsByNumbersAndRepositoryIds(
+        criteria: Array<{
+            number: number;
+            repositoryId: string;
+        }>,
+        organizationId: string,
+    ): Promise<Map<string, { sent: number; filtered: number }>> {
+        return this.pullRequestsRepository.findSuggestionCountsByNumbersAndRepositoryIds(
+            criteria,
+            organizationId,
+        );
+    }
+
     async findSuggestionsByPRAndFilename(
         prNumber: number,
         repoFullName: string,
@@ -588,7 +605,8 @@ export class PullRequestsService implements IPullRequestsService {
             pullRequest.state === 'merge' ||
             pullRequest.state === 'merged' ||
             pullRequest.state === 'MERGED' ||
-            pullRequest.status === 'completed'
+            pullRequest.status === 'completed' ||
+            pullRequest.status === 'abandoned'
         ) {
             return PullRequestState.CLOSED;
         } else {

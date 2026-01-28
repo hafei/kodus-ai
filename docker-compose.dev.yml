@@ -27,6 +27,7 @@ services:
         ports:
             - '${API_PORT:-3001}:${API_PORT:-3001}'
             - '9229:9229'
+            - '8000:8000'
         command: yarn start:dev:api
         deploy:
             resources:
@@ -48,12 +49,15 @@ services:
             - CHOKIDAR_USEPOLLING=false
             - API_DEVELOPMENT_MODE=${API_DEVELOPMENT_MODE:-true}
             - RUN_MIGRATIONS=true
+            - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
+            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-true}
 
     worker:
         <<: *app-service-defaults
         container_name: kodus_worker
         ports:
             - '9231:9231'
+            - '8001:8001'
         command: yarn start:dev:worker
         deploy:
             resources:
@@ -73,6 +77,8 @@ services:
             - DEBUG_PORT=9231
             - COMPONENT_TYPE=worker
             - API_LOG_PRETTY=true
+            - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
+            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-true}
 
     webhooks:
         <<: *app-service-defaults
@@ -80,6 +86,7 @@ services:
         ports:
             - '${API_WEBHOOKS_PORT:-3332}:${API_WEBHOOKS_PORT:-3332}'
             - '9232:9232'
+            - '8002:8002'
         command: yarn start:dev:webhooks
         deploy:
             resources:
@@ -98,6 +105,25 @@ services:
             - NODE_OPTIONS=--max-old-space-size=800 --max-semi-space-size=64
             - DEBUG_PORT=9232
             - API_LOG_PRETTY=true
+            - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
+            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-true}
+
+    #----------------------------------------------------------------
+    # Observability & Profiling
+    #----------------------------------------------------------------
+    pyroscope:
+        profiles:
+            - profiling
+            - infra
+        image: grafana/pyroscope:latest
+        container_name: pyroscope
+        ports:
+            - '4040:4040'
+        volumes:
+            - pyroscope-data:/var/lib/pyroscope
+        networks:
+            - kodus-backend-services
+        restart: unless-stopped
 
     #----------------------------------------------------------------
     # Web Frontend
@@ -212,6 +238,7 @@ volumes:
     web_next_cache:
     pgdata:
     mongodbdata:
+    pyroscope-data:
     rabbitmq_data:
 
 

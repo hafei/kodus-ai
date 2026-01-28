@@ -45,6 +45,7 @@ import { CodeReviewJobProcessorService } from '../workflow/code-review-job-proce
 import { LOAD_EXTERNAL_CONTEXT_STAGE_TOKEN } from './stages/contracts/loadExternalContextStage.contract';
 import { ValidateSuggestionsStage } from './stages/validate-suggestions.stage';
 import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.strategy';
+import { ImplementationVerificationProcessor } from '../workflow/implementation-verification.processor';
 
 @Module({
     imports: [
@@ -79,7 +80,7 @@ import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.stra
         FetchChangedFilesStage,
         {
             provide: LOAD_EXTERNAL_CONTEXT_STAGE_TOKEN,
-            useClass: LoadExternalContextStage,
+            useExisting: LoadExternalContextStage,
         },
         LoadExternalContextStage,
         FileContextGateStage,
@@ -102,6 +103,9 @@ import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.stra
         GithubChecksService,
         CreateGithubCheckStage,
         FinalizeGithubCheckStage,
+
+        // Implementation Verification
+        ImplementationVerificationProcessor,
     ],
     exports: [
         CodeReviewPipelineStrategyEE,
@@ -124,6 +128,7 @@ import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.stra
         ValidateSuggestionsStage,
         CreateGithubCheckStage,
         FinalizeGithubCheckStage,
+        ImplementationVerificationProcessor,
     ],
 })
 export class CodeReviewPipelineModule {}

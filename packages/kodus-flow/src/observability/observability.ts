@@ -707,7 +707,7 @@ export class ObservabilitySystem {
                     collections: {
                         logs:
                             this.config.mongodb.collections?.logs ||
-                            'observability_logs',
+                            'observability_logs_ts', // Updated for Time-Series (MongoDB 8)
                         telemetry:
                             this.config.mongodb.collections?.telemetry ||
                             'observability_telemetry',
@@ -715,7 +715,19 @@ export class ObservabilitySystem {
                     batchSize: this.config.mongodb.batchSize || 100,
                     flushIntervalMs:
                         this.config.mongodb.flushIntervalMs || 30000,
-                    ttlDays: this.config.mongodb.ttlDays ?? 30,
+                    ttlDays: this.config.mongodb.ttlDays ?? 0, // Default 0 (Infinite Retention) for Time-Series
+                    secondaryIndexes: this.config.mongodb.secondaryIndexes || [
+                        'metadata.component',
+                        'metadata.tenantId',
+                        'metadata.organizationId',
+                        'metadata.teamId',
+                        'attributes.prNumber',
+                    ],
+                    bucketKeys: this.config.mongodb.bucketKeys || [
+                        'organizationId',
+                        'teamId',
+                        'tenantId',
+                    ],
                 };
 
                 const mongoExporter = createMongoDBExporter(mongoConfig);
