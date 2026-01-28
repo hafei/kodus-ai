@@ -22,15 +22,10 @@ export const FILE_REVIEW_CONTEXT_PREPARATION_PROVIDER: Provider = {
         corePreparation: CoreFileReviewContextPreparation,
         aiAnalysisService: IAIAnalysisService,
     ): IFileReviewContextPreparation => {
-        const isCloud = environment.API_CLOUD_MODE;
-
-        if (isCloud) {
-            return new FileReviewContextPreparation(
-                aiAnalysisService,
-            );
-        }
-
-        return corePreparation;
+        // Force HEAVY_MODE (EE implementation) regardless of the environment
+        return new FileReviewContextPreparation(
+            aiAnalysisService,
+        );
     },
     inject: [
         CoreFileReviewContextPreparation,

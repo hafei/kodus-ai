@@ -6,7 +6,7 @@ import { CodeReviewPipelineStrategy } from '@libs/code-review/pipeline/strategy/
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { IPipeline } from '@libs/core/infrastructure/pipeline/interfaces/pipeline.interface';
 import { PipelineExecutor } from '@libs/core/infrastructure/pipeline/services/pipeline-executor.service';
-import { environment } from '@libs/ee/configs/environment';
+
 import { Provider } from '@nestjs/common';
 import { CodeReviewPipelineStrategyEE } from '@libs/ee/codeReview/strategies/code-review-pipeline.strategy.ee';
 import { createLogger } from '@kodus/flow';
@@ -18,17 +18,16 @@ const logger = createLogger('codeReviewPipelineProvider');
 export const codeReviewPipelineProvider: Provider = {
     provide: CODE_REVIEW_PIPELINE_TOKEN,
     useFactory: (
-        ceStrategy: CodeReviewPipelineStrategy,
+        _ceStrategy: CodeReviewPipelineStrategy,
         eeStrategy: CodeReviewPipelineStrategyEE,
     ): IPipeline<CodeReviewPipelineContext> => {
-        const isCloud = environment.API_CLOUD_MODE;
-        const strategy = isCloud ? eeStrategy : ceStrategy;
+        const strategy = eeStrategy;
 
         logger.log({
-            message: `🔁 Modo de execução: ${isCloud ? 'Cloud (EE)' : 'Self-Hosted (CE)'}`,
+            message: `🔁 Modo de execução: Cloud (EE) (Forced)`,
             context: 'CodeReviewPipelineProvider',
             metadata: {
-                mode: isCloud ? 'cloud' : 'selfhosted',
+                mode: 'cloud',
             },
         });
 

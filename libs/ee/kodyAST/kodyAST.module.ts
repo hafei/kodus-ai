@@ -16,7 +16,7 @@ const staticImports = [
 const providers = [];
 const moduleExports = [AST_ANALYSIS_SERVICE_TOKEN];
 
-if (environment.API_CLOUD_MODE && process.env.API_ENABLE_CODE_REVIEW_AST) {
+if (process.env.API_ENABLE_CODE_REVIEW_AST) {
     providers.push({
         provide: AST_ANALYSIS_SERVICE_TOKEN,
         useClass: CodeAstAnalysisService,
@@ -31,4 +31,4 @@ if (environment.API_CLOUD_MODE && process.env.API_ENABLE_CODE_REVIEW_AST) {
     providers,
     exports: moduleExports,
 })
-export class KodyASTModule {}
+export class KodyASTModule { }

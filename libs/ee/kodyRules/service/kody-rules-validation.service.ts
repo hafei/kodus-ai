@@ -6,7 +6,7 @@
 import { isFileMatchingGlob } from '@libs/common/utils/glob-utils';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { PermissionValidationService } from '@libs/ee/shared/services/permissionValidation.service';
-import { environment } from '@libs/ee/configs/environment';
+
 import {
     IKodyRule,
     KodyRulesStatus,
@@ -19,13 +19,9 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class KodyRulesValidationService {
     public readonly MAX_KODY_RULES = 10;
-    private readonly isCloud: boolean;
 
-    constructor(
-        private readonly permissionValidationService: PermissionValidationService,
-    ) {
-        this.isCloud = environment.API_CLOUD_MODE;
-    }
+
+    constructor() { }
 
     /**
      * Validates if the total number of rules is within the allowed limit.
@@ -36,17 +32,7 @@ export class KodyRulesValidationService {
         organizationAndTeamData: OrganizationAndTeamData,
         totalRules: number,
     ): Promise<boolean> {
-        const limited =
-            await this.permissionValidationService.shouldLimitResources(
-                organizationAndTeamData,
-                KodyRulesValidationService.name,
-            );
-
-        if (!limited) {
-            return true;
-        }
-
-        return totalRules <= this.MAX_KODY_RULES;
+        return true;
     }
 
     /**
@@ -136,7 +122,7 @@ export class KodyRulesValidationService {
         const mergedRulesWithoutDuplicates =
             this.extractUniqueKodyRules(mergedRules);
 
-        const limit = this.isCloud ? 0 : this.MAX_KODY_RULES;
+        const limit = 0;
         const orderedRules = this.orderByCreatedAtAndLimit(
             mergedRulesWithoutDuplicates,
             limit,
