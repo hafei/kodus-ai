@@ -12,7 +12,6 @@ import { FileReviewContextPreparation } from '@libs/ee/codeReview/fileReviewCont
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/infrastructure/adapters/services/llmAnalysis.service';
 import {
     AST_ANALYSIS_SERVICE_TOKEN,
-    IASTAnalysisService,
 } from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
 import { environment } from '@libs/ee/configs/environment';

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { createLogger } from '@kodus/flow';
+import { createLogger, IdGenerator } from '@kodus/flow';
 import { LLMModelProvider } from '@kodus/kodus-common/llm';
 import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
 import {
@@ -11,7 +11,6 @@ import { CliInputConverter } from '@libs/cli-review/infrastructure/converters/cl
 import { CliReviewPipelineContext } from '@libs/cli-review/pipeline/context/cli-review-pipeline.context';
 import { CliReviewPipelineStrategy } from '@libs/cli-review/pipeline/strategy/cli-review-pipeline.strategy';
 import { PipelineExecutor } from '@libs/core/infrastructure/pipeline/services/pipeline-executor.service';
-import { v4 as uuidv4 } from 'uuid';
 import {
     IParametersService,
     PARAMETERS_SERVICE_TOKEN,
@@ -66,8 +65,14 @@ export class ExecuteCliReviewUseCase implements IUseCase {
     ) {}
 
     async execute(params: ExecuteCliReviewInput): Promise<CliReviewResponse> {
-        const { organizationAndTeamData, input, isTrialMode = false, userEmail, gitContext } = params;
-        const correlationId = uuidv4();
+        const {
+            organizationAndTeamData,
+            input,
+            isTrialMode = false,
+            userEmail,
+            gitContext,
+        } = params;
+        const correlationId = IdGenerator.correlationId();
         const startTime = Date.now();
         let execution: IAutomationExecution | null = null;
 
@@ -188,7 +193,8 @@ export class ExecuteCliReviewUseCase implements IUseCase {
             };
 
             // 5. Execute pipeline
-            const pipelineExecutor = new PipelineExecutor<CliReviewPipelineContext>();
+            const pipelineExecutor =
+                new PipelineExecutor<CliReviewPipelineContext>();
             const stages = this.pipelineStrategy.configureStages();
             const pipelineName = this.pipelineStrategy.getPipelineName();
 
@@ -274,7 +280,8 @@ export class ExecuteCliReviewUseCase implements IUseCase {
             }
 
             const paramObj = params.toObject();
-            const config = paramObj.configValue?.configs || this.getDefaultConfig();
+            const config =
+                paramObj.configValue?.configs || this.getDefaultConfig();
             const normalizedConfig = this.normalizeCliConfig(
                 config,
                 this.getDefaultConfig(),
@@ -364,12 +371,14 @@ export class ExecuteCliReviewUseCase implements IUseCase {
                     correlationId,
                     userEmail,
                     organizationAndTeamData,
-                    git: gitContext ? {
-                        remote: gitContext.remote,
-                        branch: gitContext.branch,
-                        commitSha: gitContext.commitSha,
-                        inferredPlatform: gitContext.inferredPlatform,
-                    } : undefined,
+                    git: gitContext
+                        ? {
+                              remote: gitContext.remote,
+                              branch: gitContext.branch,
+                              commitSha: gitContext.commitSha,
+                              inferredPlatform: gitContext.inferredPlatform,
+                          }
+                        : undefined,
                     cliVersion: gitContext?.cliVersion,
                 },
             });

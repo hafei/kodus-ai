@@ -165,16 +165,118 @@ export class PullRequestsRepository implements IPullRequestsRepository {
                 $or: orConditions,
             },
             {
-                // Exclude suggestion content but keep count
-                'files.suggestions.existingCode': 0,
-                'files.suggestions.improvedCode': 0,
-                'files.suggestions.suggestionContent': 0,
+                // PERF: Exclude heavy fields - suggestion counts come from aggregation
+                // This reduces data transfer from ~3MB to ~50KB per batch
+                'files': 0,
                 'commits': 0,
                 'prLevelSuggestions': 0,
             },
         ).lean().exec();
 
         return mapSimpleModelsToEntities(pullRequests, PullRequestsEntity);
+    }
+
+    /**
+     * PERF: Aggregation query that counts suggestions directly in MongoDB.
+     *
+     * Instead of transferring ~180k suggestion objects to count SENT vs NOT_SENT,
+     * this performs the counting in MongoDB and returns only the totals.
+     *
+     * Performance improvement:
+     * - Before: ~3MB of BSON data per batch of 30 PRs
+     * - After: ~1KB of data (just counts)
+     *
+     * @returns Map keyed by `${repositoryId}_${prNumber}` with counts
+     */
+    async findSuggestionCountsByNumbersAndRepositoryIds(
+        criteria: Array<{
+            number: number;
+            repositoryId: string;
+        }>,
+        organizationId: string,
+    ): Promise<Map<string, { sent: number; filtered: number }>> {
+        const result = new Map<string, { sent: number; filtered: number }>();
+
+        if (!criteria.length) {
+            return result;
+        }
+
+        const orConditions = criteria.map((c) => ({
+            'number': c.number,
+            'repository.id': c.repositoryId,
+        }));
+
+        const aggregationResult = await this.pullRequestsModel.aggregate([
+            // Match the PRs we need
+            {
+                $match: {
+                    organizationId,
+                    $or: orConditions,
+                },
+            },
+            // Unwind files array
+            {
+                $unwind: {
+                    path: '$files',
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
+            // Unwind suggestions array
+            {
+                $unwind: {
+                    path: '$files.suggestions',
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
+            // Group by PR and count by deliveryStatus
+            {
+                $group: {
+                    _id: {
+                        repositoryId: '$repository.id',
+                        prNumber: '$number',
+                    },
+                    sent: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$files.suggestions.deliveryStatus', DeliveryStatus.SENT] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                    filtered: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$files.suggestions.deliveryStatus', DeliveryStatus.NOT_SENT] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
+            // Project to clean output
+            {
+                $project: {
+                    _id: 0,
+                    repositoryId: '$_id.repositoryId',
+                    prNumber: '$_id.prNumber',
+                    sent: 1,
+                    filtered: 1,
+                },
+            },
+        ]).exec();
+
+        // Build the result map
+        for (const row of aggregationResult) {
+            const key = `${row.repositoryId}_${row.prNumber}`;
+            result.set(key, {
+                sent: row.sent || 0,
+                filtered: row.filtered || 0,
+            });
+        }
+
+        return result;
     }
 
     async findFileWithSuggestions(

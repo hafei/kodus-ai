@@ -2,10 +2,8 @@ import { createLogger } from '@kodus/flow';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
-import {
-    AST_ANALYSIS_SERVICE_TOKEN,
-    IASTAnalysisService,
-} from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
+
+
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/infrastructure/adapters/services/llmAnalysis.service';
 import {
     AIAnalysisResult,

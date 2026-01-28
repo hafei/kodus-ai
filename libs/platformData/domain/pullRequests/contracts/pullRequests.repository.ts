@@ -60,6 +60,20 @@ export interface IPullRequestsRepository {
         }>,
         organizationId: string,
     ): Promise<PullRequestsEntity[]>;
+
+    /**
+     * PERF: Aggregation query that returns only suggestion counts.
+     * Reduces data transfer from ~180k objects to just counts per PR.
+     *
+     * @returns Map keyed by `${repositoryId}_${prNumber}` with counts
+     */
+    findSuggestionCountsByNumbersAndRepositoryIds(
+        criteria: Array<{
+            number: number;
+            repositoryId: string;
+        }>,
+        organizationId: string,
+    ): Promise<Map<string, { sent: number; filtered: number }>>;
     findFileWithSuggestions(
         prnumber: number,
         repositoryName: string,

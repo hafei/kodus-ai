@@ -16,23 +16,20 @@ import {
     FileChange,
     Repository,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import { Commit } from '@libs/core/infrastructure/config/types/general/commit.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import {
     DRY_RUN_SERVICE_TOKEN,
     IDryRunService,
 } from '@libs/dryRun/domain/contracts/dryRun.service.contract';
-import { PullRequestReviewComment } from '@libs/platform/domain/platformIntegrations/types/codeManagement/pullRequests.type';
-import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import {
     IPullRequestsService,
     PULL_REQUESTS_SERVICE_TOKEN,
 } from '@libs/platformData/domain/pullRequests/contracts/pullRequests.service.contracts';
-import { PullRequestsEntity } from '@libs/platformData/domain/pullRequests/entities/pullRequests.entity';
-import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
-import { ImplementationStatus } from '@libs/platformData/domain/pullRequests/enums/implementationStatus.enum';
 import { Inject, Injectable } from '@nestjs/common';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
+import { ICommit } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
 
 @Injectable()
 export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelineContext> {
@@ -51,8 +48,6 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
 
         @Inject(DRY_RUN_SERVICE_TOKEN)
         private readonly dryRunService: IDryRunService,
-
-        private readonly codeManagementService: CodeManagementService,
     ) {
         super();
     }
@@ -98,7 +93,7 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
         const changedFiles = context?.changedFiles || [];
 
         // Resolve comments that refer to suggestions partially or fully implemented
-        await this.resolveCommentsWithImplementedSuggestions({
+        await this.suggestionService.resolveImplementedSuggestionsOnPlatform({
             organizationAndTeamData: context.organizationAndTeamData,
             repository: context.repository,
             prNumber: context.pullRequest.number,
@@ -117,21 +112,14 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
                 },
             });
 
-            const commits =
-                await this.codeManagementService.getCommitsForPullRequestForCodeReview(
-                    {
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                        repository: context.repository,
-                        prNumber: context.pullRequest.number,
-                    },
-                );
+            // Usar todos os commits para determinar o lastAnalyzedCommit
+            const allCommits = context.prAllCommits;
 
-            if (!commits?.length) {
+            if (!allCommits?.length) {
                 return context;
             }
 
-            const lastAnalyzedCommit = commits[commits.length - 1];
+            const lastAnalyzedCommit = allCommits[allCommits.length - 1];
 
             return this.updateContext(context, (draft) => {
                 draft.lineComments = [];
@@ -255,6 +243,7 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
             platformType,
             context.fileMetadata,
             dryRun,
+            context.prAllCommits,
         );
 
         return {
@@ -367,6 +356,7 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
         platformType: string,
         fileMetadata?: Map<string, any>,
         dryRun?: CodeReviewPipelineContext['dryRun'],
+        prCommits?: Commit[],
     ) {
         const enrichedFiles = changedFiles.map((file) => {
             const metadata = fileMetadata?.get(file.filename);
@@ -400,14 +390,8 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
                 commentResults,
             );
 
-        const pullRequestCommits =
-            await this.codeManagementService.getCommitsForPullRequestForCodeReview(
-                {
-                    organizationAndTeamData,
-                    repository: { id: repository.id, name: repository.name },
-                    prNumber: pullRequest.number,
-                },
-            );
+        // Reutilizar commits do context (buscados no ValidateNewCommitsStage)
+        const pullRequestCommits = prCommits || [];
 
         await this.pullRequestService.aggregateAndSaveDataStructure(
             pullRequest,
@@ -417,173 +401,7 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
             discardedSuggestions,
             platformType,
             organizationAndTeamData,
-            pullRequestCommits,
+            pullRequestCommits as unknown as ICommit[],
         );
-    }
-
-    private async resolveCommentsWithImplementedSuggestions({
-        organizationAndTeamData,
-        repository,
-        prNumber,
-        platformType,
-        dryRun,
-    }: {
-        organizationAndTeamData: OrganizationAndTeamData;
-        repository: Partial<Repository>;
-        prNumber: number;
-        platformType: PlatformType;
-        dryRun: CodeReviewPipelineContext['dryRun'];
-    }) {
-        if (dryRun?.enabled) {
-            return;
-        }
-
-        try {
-            const codeManagementRequestData = {
-                organizationAndTeamData,
-                repository: {
-                    id: repository.id,
-                    name: repository.name,
-                },
-                prNumber: prNumber,
-            };
-
-            const isPlatformTypeGithub: boolean =
-                platformType === PlatformType.GITHUB;
-
-            const pr =
-                await this.pullRequestService.findByNumberAndRepositoryName(
-                    prNumber,
-                    repository.name,
-                    organizationAndTeamData,
-                );
-
-            if (!pr) {
-                this.logger.warn({
-                    message: `PR #${prNumber} not found, skipping comment resolution.`,
-                    context: this.stageName,
-                    metadata: {
-                        organizationAndTeamData,
-                        prNumber,
-                        repositoryName: repository.name,
-                    },
-                });
-                return;
-            }
-
-            const implementedSuggestionsCommentIds =
-                this.getImplementedSuggestionsCommentIds(pr);
-
-            let reviewComments = [];
-
-            /**
-             * Marking comments as resolved in github needs to be done using another API.
-             * Marking comments as resolved in github also is done using threadId rather than the comment Id.
-             */
-            if (isPlatformTypeGithub) {
-                reviewComments =
-                    await this.codeManagementService.getPullRequestReviewThreads(
-                        codeManagementRequestData,
-                        PlatformType.GITHUB,
-                    );
-            } else {
-                reviewComments =
-                    await this.codeManagementService.getPullRequestReviewComments(
-                        codeManagementRequestData,
-                    );
-            }
-
-            if (reviewComments?.length === 0) {
-                this.logger.warn({
-                    message: `No review comments found for PR#${prNumber}`,
-                    context: this.stageName,
-                    metadata: {
-                        organizationAndTeamData,
-                        prNumber,
-                        repositoryName: repository.name,
-                    },
-                });
-                return;
-            }
-
-            const foundComments = isPlatformTypeGithub
-                ? reviewComments.filter((comment) =>
-                      implementedSuggestionsCommentIds.includes(
-                          Number(comment.fullDatabaseId),
-                      ),
-                  )
-                : reviewComments.filter((comment) =>
-                      implementedSuggestionsCommentIds.includes(comment.id),
-                  );
-
-            if (foundComments?.length > 0) {
-                const promises = foundComments.map(
-                    async (foundComment: PullRequestReviewComment) => {
-                        const commentId =
-                            platformType === PlatformType.BITBUCKET
-                                ? foundComment.id
-                                : foundComment.threadId;
-
-                        return this.codeManagementService.markReviewCommentAsResolved(
-                            {
-                                organizationAndTeamData,
-                                repository,
-                                prNumber: pr.number,
-                                commentId: commentId,
-                            },
-                        );
-                    },
-                );
-
-                // timeout mechanism for the Promise.allSettled operation to prevent potential hanging.
-                await Promise.race([
-                    Promise.allSettled(promises),
-                    new Promise((_, reject) =>
-                        setTimeout(
-                            () => reject(new Error('Operation timed out')),
-                            30000,
-                        ),
-                    ),
-                ]);
-            }
-        } catch (error) {
-            this.logger.error({
-                message: `Error while resolving comments for PR#${prNumber}`,
-                context: this.stageName,
-                error,
-                metadata: {
-                    organizationAndTeamData,
-                    prNumber,
-                    repositoryName: repository.name,
-                },
-            });
-            return;
-        }
-    }
-
-    private getImplementedSuggestionsCommentIds(
-        pr: PullRequestsEntity,
-    ): number[] {
-        const implementedSuggestionsCommentIds: number[] = [];
-
-        pr.files?.forEach((file) => {
-            if (file.suggestions.length > 0) {
-                file.suggestions
-                    ?.filter(
-                        (suggestion) =>
-                            suggestion.comment &&
-                            suggestion.implementationStatus !==
-                                ImplementationStatus.NOT_IMPLEMENTED &&
-                            suggestion.deliveryStatus === DeliveryStatus.SENT,
-                    )
-                    .forEach((filteredSuggestion) => {
-                        implementedSuggestionsCommentIds.push(
-                            filteredSuggestion.comment.id,
-                        );
-                    });
-            }
-        });
-
-        return implementedSuggestionsCommentIds;
     }
 }

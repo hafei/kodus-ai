@@ -17,7 +17,13 @@ import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeRevie
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
+import {
+    hasReviewMarker,
+    isKodyMentionNonReview,
+    isReviewCommand,
+} from '@libs/common/utils/codeManagement/codeCommentMarkers';
 
 @Injectable()
 export class AzureReposPullRequestHandler implements IWebhookEventHandler {
@@ -32,6 +38,7 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
         private readonly eventEmitter: EventEmitter2,
         private readonly codeManagement: CodeManagementService,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     /**
@@ -92,6 +99,7 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
     private async handlePullRequest(
         params: IWebhookEventParams,
     ): Promise<void> {
+        const { payload, event } = params;
         const prId = params.payload?.resource?.pullRequestId || 'UNKNOWN_PR_ID';
         const eventType = params.event;
         const repoName =
@@ -139,6 +147,21 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                 },
             );
 
+        // If no active automation found, complete the webhook processing immediately
+        if (!orgData?.organizationAndTeamData) {
+            this.logger.log({
+                message: `No active automation found for repository, completing webhook processing`,
+                context: AzureReposPullRequestHandler.name,
+                metadata: {
+                    prId,
+                    eventType,
+                    repoName,
+                    repositoryId: repository.id,
+                },
+            });
+            return;
+        }
+
         try {
             switch (eventType) {
                 case 'git.pullrequest.created':
@@ -146,7 +169,8 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                     await this.savePullRequestUseCase.execute(params);
                     if (
                         this.enqueueCodeReviewJobUseCase &&
-                        orgData?.organizationAndTeamData
+                        orgData?.organizationAndTeamData &&
+                        params?.payload?.resource?.status !== 'abandoned'
                     ) {
                         const jobId =
                             await this.enqueueCodeReviewJobUseCase.execute({
@@ -183,9 +207,48 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                             },
                         });
                     }
-                    await this.generateIssuesFromPrClosedUseCase.execute(
-                        params,
-                    );
+
+                    if (
+                        eventType === 'git.pullrequest.updated' &&
+                        params?.payload?.resource?.status !== 'abandoned'
+                    ) {
+                        try {
+                            if (orgData?.organizationAndTeamData) {
+                                await this.enqueueImplementationCheckUseCase.execute(
+                                    {
+                                        organizationAndTeamData:
+                                            orgData.organizationAndTeamData,
+                                        repository: {
+                                            id: repository.id,
+                                            name: repository.name,
+                                        },
+                                        pullRequestNumber: Number(prId),
+                                        commitSha:
+                                            params.payload?.resource
+                                                ?.lastMergeSourceCommit
+                                                ?.commitId,
+                                        payload: payload,
+                                        event: event,
+                                        platformType: PlatformType.AZURE_REPOS,
+                                        trigger: payload?.action,
+                                    },
+                                );
+                            }
+                        } catch (e) {
+                            this.logger.error({
+                                message:
+                                    'Failed to enqueue implementation check',
+                                context: AzureReposPullRequestHandler.name,
+                                error: e,
+                                metadata: {
+                                    repository,
+                                    prId,
+                                },
+                            });
+                        }
+                    }
+
+                    this.generateIssuesFromPrClosedUseCase.execute(params);
 
                     try {
                         if (params?.payload?.resource?.status === 'completed') {
@@ -376,18 +439,10 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                 return;
             }
 
-            // Verify if it is a start-review command
-            const commandPattern = /^\s*@kody\s+start-review/i;
-            const isStartCommand = commandPattern.test(comment.body);
+            const isStartCommand = isReviewCommand(comment.body);
+            const hasMarker = hasReviewMarker(comment.body);
 
-            // Verify if it has the review marker
-            const reviewMarkerPattern = /<!--\s*kody-codereview\s*-->/i;
-            const hasReviewMarker = reviewMarkerPattern.test(comment.body);
-
-            // Verify if the comment mentions Kody and is not a start-review command
-            const kodyMentionPattern = /^\s*@kody\b(?!\s+start-review)/i;
-
-            if (isStartCommand && !hasReviewMarker) {
+            if (isStartCommand && !hasMarker) {
                 this.logger.log({
                     message: `@kody start command detected in Azure Repos comment for PR#${prId}`,
                     serviceName: AzureReposPullRequestHandler.name,
@@ -424,9 +479,9 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
 
             // For pull_request_review_comment that is not a start-review command
             if (
-                !hasReviewMarker &&
+                !hasMarker &&
                 !isStartCommand &&
-                kodyMentionPattern.test(comment.body)
+                isKodyMentionNonReview(comment.body)
             ) {
                 this.chatWithKodyFromGitUseCase.execute(params);
                 return;

@@ -65,13 +65,19 @@ export class MongooseFactory implements MongooseOptionsFactory {
         };
         const poolConfig = poolConfigs[componentType] || poolConfigs.default;
 
+        // maxIdleTimeMS: Time a connection can remain idle before being removed
+        // PERF: Increased from 50s to 5min to reduce connection churn
+        // The connection_pool.js ensureMinPoolSize was consuming ~20% CPU
+        // due to frequent connection destruction/recreation cycles
+        const maxIdleTimeMS = this.configService.get<number>('MG_MAX_IDLE_TIME_MS', 300000);
+
         return {
             uri: uri,
             dbName: this.config.database,
             connectionFactory: createForInstance,
             minPoolSize: poolConfig.min,
             maxPoolSize: poolConfig.max,
-            maxIdleTimeMS: 50000,
+            maxIdleTimeMS,
         };
     }
 }

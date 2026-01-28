@@ -11,7 +11,6 @@ import { KodyRulesRepository } from '@libs/ee/kodyRules/repository/kodyRules.rep
 import { KodyRulesValidationService } from '@libs/ee/kodyRules/service/kody-rules-validation.service';
 import { KodyRulesService } from '@libs/ee/kodyRules/service/kodyRules.service';
 import { LicenseModule } from '@libs/ee/license/license.module';
-import { LicenseService } from '@libs/ee/license/license.service';
 import { PermissionValidationModule } from '@libs/ee/shared/permission-validation.module';
 
 import { IntegrationModule } from '@libs/integrations/modules/integrations.module';
@@ -103,7 +102,6 @@ import { McpCoreModule } from '@libs/mcp-server/mcp-core.module';
         KodyRulesSyncService,
         KodyRuleDependencyService,
         ExternalReferenceLoaderService,
-        LicenseService,
         AddLibraryKodyRulesUseCase,
         CheckSyncStatusUseCase,
         DeleteRuleInOrganizationByIdKodyRulesUseCase,
@@ -135,7 +133,6 @@ import { McpCoreModule } from '@libs/mcp-server/mcp-core.module';
         KodyRuleDependencyService,
         ExternalReferenceLoaderService,
         SyncSelectedRepositoriesKodyRulesUseCase,
-        LicenseService,
         AddLibraryKodyRulesUseCase,
         CheckSyncStatusUseCase,
         DeleteRuleInOrganizationByIdKodyRulesUseCase,

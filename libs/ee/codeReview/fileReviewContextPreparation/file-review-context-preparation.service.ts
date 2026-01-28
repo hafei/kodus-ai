@@ -8,10 +8,8 @@ import { BYOKConfig, LLMModelProvider } from '@kodus/kodus-common/llm';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
-import {
-    AST_ANALYSIS_SERVICE_TOKEN,
-    IASTAnalysisService,
-} from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
+
+
 import { BaseFileReviewContextPreparation } from '@libs/code-review/infrastructure/adapters/services/code-analysis/file/base-file-review.abstract';
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/infrastructure/adapters/services/llmAnalysis.service';
 import { BackoffPresets } from '@libs/common/utils/polling';
@@ -22,7 +20,6 @@ import {
     ReviewModeConfig,
     ReviewModeResponse,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { WorkflowPausedError } from '@libs/core/infrastructure/pipeline/errors/workflow-paused.error';
 import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 
 /**
@@ -118,7 +115,7 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
             return null;
         }
 
-        let fileContext: AnalysisContext = {
+        const fileContext: AnalysisContext = {
             ...baseContext.fileContext,
             workflowJobId: context.workflowJobId, // Pass workflowJobId from pipeline context
         };

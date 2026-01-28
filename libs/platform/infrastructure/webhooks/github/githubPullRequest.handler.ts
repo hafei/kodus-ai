@@ -12,9 +12,15 @@ import {
 import { EnqueueCodeReviewJobUseCase } from '@libs/core/workflow/application/use-cases/enqueue-code-review-job.use-case';
 import { CodeManagementService } from '../../adapters/services/codeManagement.service';
 import { getMappedPlatform } from '@libs/common/utils/webhooks';
+import {
+    hasReviewMarker,
+    isKodyMentionNonReview,
+    isReviewCommand,
+} from '@libs/common/utils/codeManagement/codeCommentMarkers';
 import { SavePullRequestUseCase } from '@libs/platformData/application/use-cases/pullRequests/save.use-case';
 import { RunCodeReviewAutomationUseCase } from '@libs/ee/automation/runCodeReview.use-case';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
+import { EnqueueImplementationCheckUseCase } from '@libs/code-review/application/use-cases/enqueue-implementation-check.use-case';
 
 /**
  * Handler for GitHub webhook events.
@@ -31,6 +37,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
         private readonly generateIssuesFromPrClosedUseCase: GenerateIssuesFromPrClosedUseCase,
         private readonly eventEmitter: EventEmitter2,
         private readonly enqueueCodeReviewJobUseCase: EnqueueCodeReviewJobUseCase,
+        private readonly enqueueImplementationCheckUseCase: EnqueueImplementationCheckUseCase,
     ) {}
 
     public canHandle(params: IWebhookEventParams): boolean {
@@ -128,91 +135,134 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 },
             );
 
+        // If no active automation found, complete the webhook processing immediately
+        if (!validationResult?.organizationAndTeamData) {
+            this.logger.log({
+                message: `No active automation found for repository, completing webhook processing`,
+                context: GitHubPullRequestHandler.name,
+                metadata: {
+                    prNumber,
+                    repositoryId: repository.id,
+                    repositoryName: repository.name,
+                },
+            });
+            return;
+        }
+
         try {
             await this.savePullRequestUseCase.execute(params);
 
-            if (
-                this.enqueueCodeReviewJobUseCase &&
-                validationResult?.organizationAndTeamData
-            ) {
-                const jobId = await this.enqueueCodeReviewJobUseCase.execute({
-                    payload: payload,
-                    event: event,
-                    platformType: PlatformType.GITHUB,
-                    organizationAndTeam:
-                        validationResult.organizationAndTeamData,
-                    correlationId: params.correlationId,
-                });
+            if (this.enqueueCodeReviewJobUseCase) {
+                this.enqueueCodeReviewJobUseCase
+                    .execute({
+                        payload: payload,
+                        event: event,
+                        platformType: PlatformType.GITHUB,
+                        organizationAndTeam:
+                            validationResult.organizationAndTeamData,
+                        correlationId: params.correlationId,
+                    })
+                    .then((jobId) => {
+                        this.logger.log({
+                            message:
+                                'Code review job enqueued for asynchronous processing',
+                            context: GitHubPullRequestHandler.name,
+                            metadata: {
+                                jobId,
+                                prNumber,
+                                repositoryId: repository.id,
+                            },
+                        });
+                    })
+                    .catch((error) => {
+                        this.logger.error({
+                            message: 'Failed to enqueue code review job',
+                            context: GitHubPullRequestHandler.name,
+                            error,
+                            metadata: {
+                                prNumber,
+                                repositoryId: repository.id,
+                            },
+                        });
+                    });
+            }
 
-                this.logger.log({
-                    message:
-                        'Code review job enqueued for asynchronous processing',
-                    context: GitHubPullRequestHandler.name,
-                    metadata: {
-                        jobId,
-                        prNumber,
-                        repositoryId: repository.id,
-                    },
-                });
-            } else {
-                this.logger.log({
-                    message:
-                        'Skipping code review job enqueue (missing org/team or enqueue use case)',
-                    context: GitHubPullRequestHandler.name,
-                    metadata: {
-                        hasOrgAndTeam:
-                            !!validationResult?.organizationAndTeamData,
-                        prNumber,
-                        repositoryId: repository.id,
-                        userGitId,
-                    },
-                });
+            if (payload?.action === 'synchronize') {
+                this.enqueueImplementationCheckUseCase
+                    .execute({
+                        payload: payload,
+                        event: event,
+                        organizationAndTeamData:
+                            validationResult.organizationAndTeamData,
+                        repository: {
+                            id: repository.id,
+                            name: repository.name,
+                        },
+                        platformType: PlatformType.GITHUB,
+                        pullRequestNumber: payload?.pull_request?.number,
+                        commitSha: payload?.after || payload?.head?.sha,
+                        trigger: payload?.action,
+                    })
+                    .catch((e) => {
+                        this.logger.error({
+                            message:
+                                'Failed to enqueue implementation check',
+                            context: GitHubPullRequestHandler.name,
+                            error: e,
+                            metadata: {
+                                organizationAndTeamData:
+                                    validationResult.organizationAndTeamData,
+                                repository,
+                                pullRequestNumber:
+                                    payload?.pull_request?.number,
+                            },
+                        });
+                    });
             }
 
             if (payload?.action === 'closed') {
-                await this.generateIssuesFromPrClosedUseCase.execute(params);
+                this.generateIssuesFromPrClosedUseCase.execute(params);
 
                 // If merged into default branch, trigger Kody Rules sync for main
                 const merged = payload?.pull_request?.merged === true;
                 const baseRef = payload?.pull_request?.base?.ref;
+
                 if (merged && baseRef) {
                     try {
-                        if (validationResult?.organizationAndTeamData) {
-                            const defaultBranch =
-                                await this.codeManagement.getDefaultBranch({
+                        const defaultBranch =
+                            await this.codeManagement.getDefaultBranch({
+                                organizationAndTeamData:
+                                    validationResult.organizationAndTeamData,
+                                repository: {
+                                    id: repository.id,
+                                    name: repository.name,
+                                },
+                            });
+                        if (baseRef !== defaultBranch) {
+                            return;
+                        }
+                        // fetch changed files
+                        const changedFiles =
+                            await this.codeManagement.getFilesByPullRequestId(
+                                {
                                     organizationAndTeamData:
                                         validationResult.organizationAndTeamData,
                                     repository: {
                                         id: repository.id,
                                         name: repository.name,
                                     },
-                                });
-                            if (baseRef !== defaultBranch) {
-                                return;
-                            }
-                            // fetch changed files
-                            const changedFiles =
-                                await this.codeManagement.getFilesByPullRequestId(
-                                    {
-                                        organizationAndTeamData:
-                                            validationResult.organizationAndTeamData,
-                                        repository: {
-                                            id: repository.id,
-                                            name: repository.name,
-                                        },
-                                        prNumber: payload?.pull_request?.number,
-                                    },
-                                );
-                            this.eventEmitter.emit(
-                                'pull-request.closed',
-                                new PullRequestClosedEvent(
-                                    validationResult.organizationAndTeamData,
-                                    repository,
-                                    payload?.pull_request?.number,
-                                    changedFiles || [],
-                                ),
+                                    prNumber: payload?.pull_request?.number,
+                                },
                             );
-                        }
+                        this.eventEmitter.emit(
+                            'pull-request.closed',
+                            new PullRequestClosedEvent(
+                                validationResult.organizationAndTeamData,
+                                repository,
+                                payload?.pull_request?.number,
+                                changedFiles || [],
+                            ),
+                        );
                     } catch (e) {
                         this.logger.error({
                             message: 'Failed to sync Kody Rules after PR merge',
@@ -220,7 +270,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                             error: e,
                             metadata: {
                                 organizationAndTeamData:
-                                    validationResult?.organizationAndTeamData,
+                                    validationResult.organizationAndTeamData,
                                 repository,
                                 pullRequestNumber:
                                     payload?.pull_request?.number,
@@ -229,6 +279,7 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                     }
                 }
             }
+
             return;
         } catch (error) {
             this.logger.error({
@@ -285,21 +336,13 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                 return;
             }
 
-            // Verify if it is a start-review command
-            const commandPattern = /^\s*@kody\s+start-review/i;
-            const isStartCommand = commandPattern.test(comment.body);
-
-            // Verify if it has the review marker
-            const reviewMarkerPattern = /<!--\s*kody-codereview\s*-->/i;
-            const hasReviewMarker = reviewMarkerPattern.test(comment.body);
+            const isStartCommand = isReviewCommand(comment.body);
+            const hasMarker = hasReviewMarker(comment.body);
 
             const pullRequest = mappedPlatform.mapPullRequest({ payload });
 
-            // Verify if the comment mentions Kody and is not a start-review command
-            const kodyMentionPattern = /^\s*@kody\b(?!\s+start-review)/i;
-
             // If it is a start-review command and does not have the review marker
-            if (isStartCommand && !hasReviewMarker) {
+            if (isStartCommand && !hasMarker) {
                 this.logger.log({
                     message: `@kody start command detected in GitHub comment for PR#${pullRequest?.number}`,
                     serviceName: GitHubPullRequestHandler.name,
@@ -453,9 +496,9 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
             if (
                 (event === 'pull_request_review_comment' ||
                     event === 'issue_comment') &&
-                !hasReviewMarker &&
+                !hasMarker &&
                 !isStartCommand &&
-                kodyMentionPattern.test(comment.body)
+                isKodyMentionNonReview(comment.body)
             ) {
                 this.chatWithKodyFromGitUseCase.execute(params);
                 return;
