@@ -10,7 +10,6 @@ import type {
 
 export interface IAuthApi {
   login(email: string, password: string): Promise<AuthResponse>;
-  signup(email: string, password: string): Promise<AuthResponse>;
   refresh(refreshToken: string): Promise<AuthResponse>;
   logout(accessToken: string): Promise<void>;
   generateCIToken(accessToken: string): Promise<string>;

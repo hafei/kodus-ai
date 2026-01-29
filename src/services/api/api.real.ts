@@ -49,6 +49,7 @@ function getApiBaseUrl(): string {
 }
 
 const API_BASE_URL = getApiBaseUrl();
+const REQUEST_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
 async function request<T>(
   endpoint: string,
@@ -60,13 +61,28 @@ async function request<T>(
     console.log(`[API] ${options.method || 'GET'} ${url}`);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(408, 'Request timed out. The server took too long to respond. Please try again.');
+    }
+    throw error;
+  }
+
+  clearTimeout(timeout);
 
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
@@ -125,9 +141,45 @@ async function request<T>(
   return json as T;
 }
 
+const RETRY_BACKOFF_MS = [1000, 3000];
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+async function requestWithRetry<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= RETRY_BACKOFF_MS.length; attempt++) {
+    try {
+      return await request<T>(endpoint, options);
+    } catch (error) {
+      lastError = error;
+
+      const isLastAttempt = attempt >= RETRY_BACKOFF_MS.length;
+      if (isLastAttempt) break;
+
+      // Only retry on network errors or retryable status codes
+      const isRetryable =
+        (error instanceof ApiError && RETRYABLE_STATUS_CODES.has(error.statusCode)) ||
+        (!(error instanceof ApiError) && error instanceof Error);
+
+      if (!isRetryable) break;
+
+      if (process.env.KODUS_VERBOSE) {
+        console.log(`[API] Retry ${attempt + 1}/${RETRY_BACKOFF_MS.length} after ${RETRY_BACKOFF_MS[attempt]}ms`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, RETRY_BACKOFF_MS[attempt]));
+    }
+  }
+
+  throw lastError;
+}
+
 class RealAuthApi implements IAuthApi {
   async login(email: string, password: string): Promise<AuthResponse> {
-    const response = await request<{ accessToken: string; refreshToken: string }>('/auth/login', {
+    const response = await requestWithRetry<{ accessToken: string; refreshToken: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -145,20 +197,15 @@ class RealAuthApi implements IAuthApi {
     };
   }
 
-  async signup(email: string, password: string): Promise<AuthResponse> {
-    // Signup não é permitido via CLI - só via app.kodus.io
-    throw new Error('Signup is not available via CLI. Please sign up at https://app.kodus.io');
-  }
-
   async refresh(refreshToken: string): Promise<AuthResponse> {
-    return request<AuthResponse>('/auth/refresh', {
+    return requestWithRetry<AuthResponse>('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refreshToken }),
     });
   }
 
   async logout(accessToken: string): Promise<void> {
-    await request<void>('/auth/logout', {
+    await requestWithRetry<void>('/auth/logout', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -167,7 +214,7 @@ class RealAuthApi implements IAuthApi {
   }
 
   async generateCIToken(accessToken: string): Promise<string> {
-    const response = await request<{ token: string }>('/auth/ci-token', {
+    const response = await requestWithRetry<{ token: string }>('/auth/ci-token', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -233,7 +280,7 @@ class RealReviewApi implements IReviewApi {
     }
 
     if (isTeamKey) {
-      return request<ReviewResult>('/cli/review', {
+      return requestWithRetry<ReviewResult>('/cli/review', {
         method: 'POST',
         headers: {
           'X-Team-Key': accessToken,
@@ -252,7 +299,7 @@ class RealReviewApi implements IReviewApi {
 
     const endpoint = teamId ? `/cli/review?teamId=${encodeURIComponent(teamId)}` : '/cli/review';
 
-    return request<ReviewResult>(endpoint, {
+    return requestWithRetry<ReviewResult>(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -270,7 +317,7 @@ class RealReviewApi implements IReviewApi {
     const isTeamKey = accessToken.startsWith('kodus_');
 
     if (isTeamKey) {
-      return request<ReviewResult>('/cli/review', {
+      return requestWithRetry<ReviewResult>('/cli/review', {
         method: 'POST',
         headers: {
           'X-Team-Key': accessToken,
@@ -319,7 +366,7 @@ class RealReviewApi implements IReviewApi {
     const queryString = query.toString();
     const endpoint = `/pull-requests/suggestions${queryString ? `?${queryString}` : ''}`;
 
-    return request<PullRequestSuggestionsResponse>(endpoint, {
+    return requestWithRetry<PullRequestSuggestionsResponse>(endpoint, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -333,7 +380,7 @@ class RealReviewApi implements IReviewApi {
       console.log(`[API]   - fingerprint: ${fingerprint.substring(0, 8)}...`);
     }
 
-    return request<TrialReviewResult>('/cli/trial/review', {
+    return requestWithRetry<TrialReviewResult>('/cli/trial/review', {
       method: 'POST',
       body: JSON.stringify({ diff, fingerprint }),
     });
@@ -342,7 +389,7 @@ class RealReviewApi implements IReviewApi {
 
 class RealTrialApi implements ITrialApi {
   async getStatus(fingerprint: string): Promise<TrialStatus> {
-    return request<TrialStatus>(`/cli/trial/status?fingerprint=${fingerprint}`);
+    return requestWithRetry<TrialStatus>(`/cli/trial/status?fingerprint=${fingerprint}`);
   }
 }
 

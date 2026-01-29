@@ -18,11 +18,6 @@ class AuthService {
     await this.storeAuthResponse(response);
   }
 
-  async signup(email: string, password: string): Promise<void> {
-    const response = await api.auth.signup(email, password);
-    await this.storeAuthResponse(response);
-  }
-
   async logout(): Promise<void> {
     const credentials = await this.getCredentials();
     
@@ -112,5 +107,6 @@ class AuthService {
   }
 }
 
+export { AuthService };
 export const authService = new AuthService();
 

@@ -298,47 +298,6 @@ npm run dev
 node dist/index.js review
 ```
 
-## Telemetry
-
-Kodus CLI collects anonymous usage data to help improve the product. We take privacy seriously:
-
-**What we collect:**
-- Command usage (which commands you run)
-- Feature usage (interactive mode, fix mode, etc)
-- Performance metrics (review duration, files analyzed)
-- Error events (to improve reliability)
-
-**What we DON'T collect:**
-- Your code or file contents
-- File names or paths (only basenames)
-- Passwords, tokens, or secrets
-- Any personally identifiable information
-
-### Managing Telemetry
-
-```bash
-# Check telemetry status
-kodus telemetry status
-
-# Disable telemetry (opt-out)
-kodus telemetry disable
-
-# Enable telemetry
-kodus telemetry enable
-```
-
-### Environment Variables
-
-You can also control telemetry via environment variables:
-
-```bash
-# Disable telemetry
-export KODUS_TELEMETRY=false
-
-# Or use standard DO_NOT_TRACK
-export DO_NOT_TRACK=1
-```
-
 ## Environment Variables
 
 | Variable | Description | Security Notes |
@@ -347,10 +306,6 @@ export DO_NOT_TRACK=1
 | `KODUS_VERBOSE` | Set to `true` to enable verbose logging | ⚠️ **DO NOT use in production/CI** - may expose sensitive data in logs |
 | `KODUS_TOKEN` | CI/CD token for non-interactive environments | - |
 | `KODUS_TEAM_KEY` | Team authentication key for AI coding agents (Codex, Claude Code, Cursor) | - |
-| `KODUS_TELEMETRY` | Set to `false` to disable telemetry | - |
-| `DO_NOT_TRACK` | Set to `1` to disable telemetry | Standard privacy flag |
-| `POSTHOG_API_KEY` | Custom PostHog API key | Development only |
-| `POSTHOG_HOST` | Custom PostHog host | Development only |
 
 ### Verbose Mode
 

@@ -23,10 +23,6 @@ export async function statusAction(): Promise<void> {
         console.log(`${chalk.dim('Organization:')} ${teamConfig?.organizationName ?? '(unknown)'}`);
         console.log(`${chalk.dim('Team:')}         ${teamConfig?.teamName ?? '(unknown)'}`);
         console.log(`${chalk.dim('Token:')}        ${chalk.green('Configured')}`);
-        if (process.env.KODUS_VERBOSE) {
-          console.log(chalk.dim('\nDebug - team config:'));
-          console.log(chalk.dim(JSON.stringify(teamConfig, null, 2)));
-        }
         return;
       }
 
@@ -64,15 +60,6 @@ export async function statusAction(): Promise<void> {
         });
       }
 
-      if (process.env.KODUS_VERBOSE) {
-        console.log(chalk.dim('\nDebug - stored credentials:'));
-        console.log(chalk.dim(JSON.stringify(credentials, null, 2)));
-        if (teamConfig) {
-          console.log(chalk.dim('\nDebug - team config:'));
-          console.log(chalk.dim(JSON.stringify(teamConfig, null, 2)));
-        }
-      }
-
     } else {
       spinner.start(chalk.blue('Checking trial status...'));
       
@@ -90,7 +77,7 @@ export async function statusAction(): Promise<void> {
         console.log(chalk.yellow('\n⚡ Daily limit reached!'));
       }
 
-      console.log(chalk.dim('\nSign up to remove limits: ') + chalk.cyan('kodus auth signup'));
+      console.log(chalk.dim('\nSign up to remove limits: ') + chalk.cyan('kodus auth login'));
     }
 
   } catch (error) {

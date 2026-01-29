@@ -23,6 +23,7 @@
     "start:qa": "KODUS_API_URL=https://qa.api.kodus.io node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "npm run build && vitest run --config vitest.integration.config.ts",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build"

@@ -72,19 +72,6 @@ export async function loginAction(options: LoginOptions): Promise<void> {
 
     spinner.succeed(chalk.green(`Logged in as ${email}`));
 
-    if (process.env.KODUS_VERBOSE) {
-      try {
-        const creds = await authService.getCredentials();
-        if (creds) {
-          console.log(chalk.dim('\nDebug - Stored credentials:'));
-          console.log(chalk.dim(JSON.stringify(creds, null, 2)));
-        }
-      } catch (postLoginError) {
-        console.log(chalk.dim('\nDebug - Post-login operations failed:'));
-        console.log(chalk.dim(postLoginError instanceof Error ? postLoginError.message : String(postLoginError)));
-      }
-    }
-
   } catch (error) {
     spinner.fail(chalk.red('Login failed'));
 

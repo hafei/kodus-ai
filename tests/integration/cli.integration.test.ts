@@ -1,0 +1,228 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { startMockServer, type MockServer } from './mock-server.js';
+
+const execFileAsync = promisify(execFile);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const CLI_PATH = path.join(PROJECT_ROOT, 'dist/index.js');
+
+let mockServer: MockServer;
+let tmpHome: string;
+let gitRepoDir: string;
+
+interface CliResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+async function runCli(
+  args: string[],
+  opts: { cwd?: string; env?: Record<string, string> } = {},
+): Promise<CliResult> {
+  try {
+    const { stdout, stderr } = await execFileAsync('node', [CLI_PATH, ...args], {
+      cwd: opts.cwd ?? gitRepoDir,
+      env: {
+        PATH: process.env.PATH,
+        HOME: tmpHome,
+        KODUS_API_URL: mockServer.url,
+        NO_COLOR: '1',
+        FORCE_COLOR: '0',
+        NODE_NO_WARNINGS: '1',
+        ...opts.env,
+      },
+      timeout: 30_000,
+    });
+    return { stdout, stderr, exitCode: 0 };
+  } catch (error: any) {
+    return {
+      stdout: error.stdout ?? '',
+      stderr: error.stderr ?? '',
+      exitCode: typeof error.code === 'number' ? error.code : 1,
+    };
+  }
+}
+
+async function createTempGitRepo(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kodus-test-repo-'));
+  await execFileAsync('git', ['init'], { cwd: dir });
+  await execFileAsync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir });
+  await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+  return dir;
+}
+
+beforeAll(async () => {
+  // 1. Isolated HOME so ~/.kodus is temp
+  tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'kodus-test-home-'));
+  const kodusDir = path.join(tmpHome, '.kodus');
+  await fs.mkdir(kodusDir, { recursive: true });
+
+  // 2. Team key config
+  await fs.writeFile(
+    path.join(kodusDir, 'config.json'),
+    JSON.stringify({
+      teamKey: 'kodus_test_key',
+      teamName: 'Test Team',
+      organizationName: 'Test Org',
+    }),
+  );
+
+  // 3. Git repo with uncommitted changes
+  gitRepoDir = await createTempGitRepo();
+  await fs.writeFile(path.join(gitRepoDir, 'test.ts'), 'let x = 1;\nlet y = 2;\n');
+  await execFileAsync('git', ['add', '.'], { cwd: gitRepoDir });
+  await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: gitRepoDir });
+  await fs.writeFile(path.join(gitRepoDir, 'test.ts'), 'let x = 1;\nlet y = 2;\nlet z = 3;\n');
+
+  // 4. Mock API server
+  mockServer = await startMockServer();
+});
+
+afterAll(async () => {
+  await mockServer?.close();
+  if (tmpHome) await fs.rm(tmpHome, { recursive: true, force: true });
+  if (gitRepoDir) await fs.rm(gitRepoDir, { recursive: true, force: true });
+});
+
+beforeEach(() => {
+  mockServer.reset();
+});
+
+// ---------------------------------------------------------------------------
+// Smoke tests — no API needed
+// ---------------------------------------------------------------------------
+describe('CLI smoke', () => {
+  it('prints version', async () => {
+    const pkg = JSON.parse(await fs.readFile(path.join(PROJECT_ROOT, 'package.json'), 'utf-8'));
+    const { stdout, exitCode } = await runCli(['--version']);
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe(pkg.version);
+  });
+
+  it('prints help with main commands', async () => {
+    const { stdout, exitCode } = await runCli(['--help']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('review');
+    expect(stdout).toContain('auth');
+  });
+
+  it('prints review subcommand help', async () => {
+    const { stdout, exitCode } = await runCli(['review', '--help']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('--staged');
+    expect(stdout).toContain('--fast');
+    expect(stdout).toContain('--prompt-only');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review command — full round-trip through mock server
+// ---------------------------------------------------------------------------
+describe('review integration', () => {
+  it('returns JSON review result', async () => {
+    const { stdout, exitCode } = await runCli(['review', '--fast', '--format', 'json']);
+    expect(exitCode).toBe(0);
+
+    const json = JSON.parse(stdout);
+    expect(json).toHaveProperty('summary');
+    expect(json).toHaveProperty('issues');
+    expect(json.issues).toHaveLength(2);
+    expect(json.filesAnalyzed).toBe(1);
+    expect(json.duration).toBe(1234);
+  });
+
+  it('sends X-Team-Key header when using team key', async () => {
+    await runCli(['review', '--fast', '--format', 'json']);
+
+    const req = mockServer.requests.find((r) => r.url === '/cli/review');
+    expect(req).toBeDefined();
+    expect(req!.headers['x-team-key']).toBe('kodus_test_key');
+    // Should NOT have Authorization header
+    expect(req!.headers['authorization']).toBeUndefined();
+  });
+
+  it('sends diff in request body', async () => {
+    await runCli(['review', '--fast', '--format', 'json']);
+
+    const req = mockServer.requests.find((r) => r.url === '/cli/review');
+    expect(req).toBeDefined();
+    expect(req!.body).toHaveProperty('diff');
+    expect(req!.body.diff).toContain('let z = 3');
+  });
+
+  it('reports "No changes" when working tree is clean', async () => {
+    const cleanRepo = await createTempGitRepo();
+    await fs.writeFile(path.join(cleanRepo, 'file.ts'), 'const x = 1;\n');
+    await execFileAsync('git', ['add', '.'], { cwd: cleanRepo });
+    await execFileAsync('git', ['commit', '-m', 'init'], { cwd: cleanRepo });
+
+    try {
+      const { stdout, stderr } = await runCli(['review', '--format', 'json'], { cwd: cleanRepo });
+      const output = stdout + stderr;
+      expect(output).toContain('No changes to review');
+    } finally {
+      await fs.rm(cleanRepo, { recursive: true, force: true });
+    }
+  });
+
+  it('respects --staged flag (only staged diff)', async () => {
+    await fs.writeFile(path.join(gitRepoDir, 'staged.ts'), 'const staged = true;\n');
+    await execFileAsync('git', ['add', 'staged.ts'], { cwd: gitRepoDir });
+
+    try {
+      const { exitCode } = await runCli(['review', '--staged', '--fast', '--format', 'json']);
+      expect(exitCode).toBe(0);
+
+      const req = mockServer.requests.find((r) => r.url === '/cli/review');
+      expect(req).toBeDefined();
+      // staged diff should contain the new file, NOT the unstaged test.ts change
+      expect(req!.body.diff).toContain('staged');
+    } finally {
+      await execFileAsync('git', ['reset', 'HEAD', 'staged.ts'], { cwd: gitRepoDir }).catch(() => {});
+      await fs.unlink(path.join(gitRepoDir, 'staged.ts')).catch(() => {});
+    }
+  });
+
+  it('outputs markdown format', async () => {
+    const { stdout, exitCode } = await runCli(['review', '--fast', '--format', 'markdown']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Found 2 issues');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auth status — team key and trial paths
+// ---------------------------------------------------------------------------
+describe('auth status integration', () => {
+  it('shows team key mode', async () => {
+    const { stdout, stderr, exitCode } = await runCli(['auth', 'status']);
+    expect(exitCode).toBe(0);
+    const output = stdout + stderr;
+    expect(output).toContain('Team Key');
+    expect(output).toContain('Test Org');
+    expect(output).toContain('Test Team');
+  });
+
+  it('shows trial mode when no auth configured', async () => {
+    const noAuthHome = await fs.mkdtemp(path.join(os.tmpdir(), 'kodus-noauth-'));
+
+    try {
+      const { stdout, stderr, exitCode } = await runCli(['auth', 'status'], {
+        env: { HOME: noAuthHome },
+      });
+      expect(exitCode).toBe(0);
+      const output = stdout + stderr;
+      expect(output).toContain('Trial');
+      expect(output).toContain('2/5');
+    } finally {
+      await fs.rm(noAuthHome, { recursive: true, force: true });
+    }
+  });
+});
