@@ -910,7 +910,7 @@ ${JSON.stringify(context?.suggestions) || 'No suggestions provided'}
     ): Promise<ReviewModeResponse> {
         const fallbackProvider =
             provider === LLMModelProvider.OPENAI_GPT_4O
-                ? LLMModelProvider.NOVITA_DEEPSEEK_V3_0324
+                ? LLMModelProvider.OPENAI_GPT_4O_MINI
                 : LLMModelProvider.OPENAI_GPT_4O;
         const runName = 'selectReviewMode';
 

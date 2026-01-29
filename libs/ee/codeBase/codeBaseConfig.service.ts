@@ -129,7 +129,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                     this.DEFAULT_CONFIG.languageResultPrompt,
                 baseBranchDefault: defaultBranch,
                 kodyRules,
-                reviewModeConfig,
+                reviewModeConfig: mergedConfigs.reviewModeConfig ?? reviewModeConfig,
                 kodyFineTuningConfig,
                 ignorePaths: mergedConfigs.ignorePaths.concat(
                     globalIgnorePathsJson?.paths ?? [],
@@ -166,37 +166,37 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
 
         const categories = overrides.categories?.descriptions
             ? {
-                  descriptions: {
-                      bug: sanitizeString(
-                          overrides.categories.descriptions.bug,
-                      ),
-                      performance: sanitizeString(
-                          overrides.categories.descriptions.performance,
-                      ),
-                      security: sanitizeString(
-                          overrides.categories.descriptions.security,
-                      ),
-                  },
-              }
+                descriptions: {
+                    bug: sanitizeString(
+                        overrides.categories.descriptions.bug,
+                    ),
+                    performance: sanitizeString(
+                        overrides.categories.descriptions.performance,
+                    ),
+                    security: sanitizeString(
+                        overrides.categories.descriptions.security,
+                    ),
+                },
+            }
             : undefined;
 
         const severity = overrides.severity?.flags
             ? {
-                  flags: {
-                      critical: sanitizeString(
-                          overrides.severity.flags.critical,
-                      ),
-                      high: sanitizeString(overrides.severity.flags.high),
-                      medium: sanitizeString(overrides.severity.flags.medium),
-                      low: sanitizeString(overrides.severity.flags.low),
-                  },
-              }
+                flags: {
+                    critical: sanitizeString(
+                        overrides.severity.flags.critical,
+                    ),
+                    high: sanitizeString(overrides.severity.flags.high),
+                    medium: sanitizeString(overrides.severity.flags.medium),
+                    low: sanitizeString(overrides.severity.flags.low),
+                },
+            }
             : undefined;
 
         const generation = overrides.generation
             ? {
-                  main: sanitizeString(overrides.generation.main),
-              }
+                main: sanitizeString(overrides.generation.main),
+            }
             : undefined;
 
         return {
@@ -291,7 +291,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         if (
             directoryConfig &&
             directoryConfig?.configs?.kodusConfigFileOverridesWebPreferences !==
-                undefined
+            undefined
         ) {
             return directoryConfig.configs
                 .kodusConfigFileOverridesWebPreferences;
@@ -300,7 +300,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         if (
             repoConfig &&
             repoConfig?.configs?.kodusConfigFileOverridesWebPreferences !==
-                undefined
+            undefined
         ) {
             return repoConfig.configs.kodusConfigFileOverridesWebPreferences;
         }
@@ -316,6 +316,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                 ...kodusConfigYMLfile,
                 languageResultPrompt: LanguageValue.ENGLISH,
                 kodyRules: [],
+                reviewModeConfig: undefined,
             };
 
             return DEFAULT_CONFIG as CodeReviewConfig;
@@ -458,8 +459,8 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
             return authDetails.authMode === AuthMode.TOKEN
                 ? decrypt(authDetails?.authToken)
                 : await this.codeManagementService.getAuthenticationOAuthToken({
-                      organizationAndTeamData,
-                  });
+                    organizationAndTeamData,
+                });
         }
 
         if (platform === 'gitlab') {
