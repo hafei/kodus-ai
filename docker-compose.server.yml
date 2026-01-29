@@ -8,7 +8,7 @@ services:
   # Application Services (预构建镜像)
   #----------------------------------------------------------------
   api:
-    image: ghcr.io/kodustech/kodus-ai-api:2.0.7
+    image: kodus-ai-api:2.0.11
     container_name: kodus_api
     ports:
       - '${API_PORT:-3001}:${API_PORT:-3001}'
@@ -43,7 +43,7 @@ services:
         condition: service_healthy
 
   worker:
-    image: ghcr.io/kodustech/kodus-ai-worker:2.0.7
+    image: kodus-ai-worker:2.0.11
     container_name: kodus_worker
     env_file:
       - ${ENV_FILE:-.env.server}
@@ -76,7 +76,7 @@ services:
         condition: service_healthy
 
   webhooks:
-    image: ghcr.io/kodustech/kodus-ai-webhook:2.0.7
+    image: kodus-ai-webhooks:2.0.11
     container_name: kodus_webhooks
     ports:
       - '${WEBHOOKS_PORT:-3332}:${WEBHOOKS_PORT:-3332}'
@@ -111,9 +111,9 @@ services:
 
   kodus-ast:
     image: kodus-ast:0.0.1
-    container_name: kodus_ast
+    container_name: ${API_AST_CONTAINER_NAME:-kodus_ast}
     ports:
-      - '3002:3002'
+      - '${API_AST_PORT:-3002}:${API_AST_PORT:-3002}'
       - '5001:5001'
     env_file:
       - ${ENV_FILE:-.env.server}
@@ -121,6 +121,31 @@ services:
       - ENV=production
       - API_NODE_ENV=production
       - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - RABBITMQ_URI=${API_RABBITMQ_URI}
+      - AMQP_URI=${API_RABBITMQ_URI}
+      - AMQP_URL=${API_RABBITMQ_URI}
+      - RABBIT_URL=${API_RABBITMQ_URI}
+      - CONTAINER_NAME=${API_AST_CONTAINER_NAME:-kodus_ast}
+      - API_PG_DB_SCHEMA=${API_AST_PG_DB_SCHEMA:-kodus_workflow}
+
+      # RabbitMQ Advanced
+      - RABBIT_RETRY_QUEUE=${API_AST_RABBIT_RETRY_QUEUE:-ast.jobs.retry.q}
+      - RABBIT_RETRY_TTL_MS=${API_AST_RABBIT_RETRY_TTL_MS:-60000}
+      - RABBIT_PREFETCH=${API_AST_RABBIT_PREFETCH:-1}
+      - RABBIT_PUBLISH_TIMEOUT_MS=${API_AST_RABBIT_PUBLISH_TIMEOUT_MS:-5000}
+
+      # S3
+      - S3_ENABLED=${API_AST_S3_ENABLED:-false}
+      - S3_BUCKET_NAME=${API_AWS_BUCKET_NAME_ASSISTANT}
+      - AWS_REGION=${API_AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${API_AWS_USERNAME}
+      - AWS_SECRET_ACCESS_KEY=${API_AWS_PASSWORD}
+
+      # LangChain
+      - LANGCHAIN_PROJECT=${API_AST_LANGCHAIN_PROJECT:-kodus-service-ast}
+
+      # Core Configuration
+      - API_PORT=${API_AST_PORT:-3002}
     restart: unless-stopped
     volumes:
       - kodus_ast_logs:/app/logs
@@ -140,13 +165,37 @@ services:
     image: kodus-mcp-manager:0.0.1
     container_name: kodus_mcp_manager
     ports:
-      - '3101:3101'
+      - '${API_MCP_MANAGER_PORT:-3101}:3101'
       - '9140:9140'
     env_file:
       - ${ENV_FILE:-.env.server}
     environment:
       - NODE_ENV=production
       - API_MCP_MANAGER_NODE_ENV=production
+
+      # Core
+      - API_MCP_MANAGER_PORT=${API_MCP_MANAGER_PORT:-3101}
+      - API_MCP_MANAGER_LOG_LEVEL=${API_MCP_MANAGER_LOG_LEVEL:-info}
+
+      # Database
+      - API_PG_DB_HOST=${API_PG_DB_HOST}
+      - API_PG_DB_PORT=${API_PG_DB_PORT}
+      - API_PG_DB_USERNAME=${API_PG_DB_USERNAME}
+      - API_PG_DB_PASSWORD=${API_PG_DB_PASSWORD}
+      - API_PG_DB_DATABASE=${API_PG_DB_DATABASE}
+      - API_MCP_MANAGER_PG_DB_SCHEMA=${API_MCP_MANAGER_PG_DB_SCHEMA:-mcp-manager}
+      # Disable SSL for internal docker network
+      - API_MCP_MANAGER_DB_SSL=false
+
+      # Secrets (优先使用 .env.server 中定义的值，如果为空则回退到全局变量)
+      - API_MCP_MANAGER_JWT_SECRET=${API_MCP_MANAGER_JWT_SECRET:-${API_JWT_SECRET}}
+      - API_MCP_MANAGER_ENCRYPTION_SECRET=${API_MCP_MANAGER_ENCRYPTION_SECRET:-${API_CRYPTO_KEY}}
+
+      # Composio & Providers
+      - API_MCP_MANAGER_MCP_PROVIDERS=${API_MCP_MANAGER_MCP_PROVIDERS:-composio}
+      - API_MCP_MANAGER_REDIRECT_URI=${API_MCP_MANAGER_REDIRECT_URI}
+      - API_MCP_MANAGER_COMPOSIO_BASE_URL=${API_MCP_MANAGER_COMPOSIO_BASE_URL}
+      - API_MCP_MANAGER_COMPOSIO_API_KEY=${API_MCP_MANAGER_COMPOSIO_API_KEY}
     restart: unless-stopped
     volumes:
       - kodus_mcp_manager_logs:/app/logs
