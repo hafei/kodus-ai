@@ -68,9 +68,9 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
 
             const shouldCheckMode =
                 context?.codeReviewConfig?.reviewModeConfig ===
-                ReviewModeConfig.LIGHT_MODE_FULL ||
+                    ReviewModeConfig.LIGHT_MODE_FULL ||
                 context?.codeReviewConfig?.reviewModeConfig ===
-                ReviewModeConfig.LIGHT_MODE_PARTIAL;
+                    ReviewModeConfig.LIGHT_MODE_PARTIAL;
 
             if (shouldCheckMode) {
                 reviewMode = await this.getReviewMode(options, byokConfig);
@@ -130,7 +130,7 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
         const response = await this.aiAnalysisService.selectReviewMode(
             options.context.organizationAndTeamData,
             options.context.pullRequest.number,
-            LLMModelProvider.OPENAI_GPT_4O,
+            LLMModelProvider.NOVITA_DEEPSEEK_V3_0324,
             options.fileChangeContext.file,
             options.patch,
             byokConfig,
