@@ -907,6 +907,7 @@ ${JSON.stringify(context?.suggestions) || 'No suggestions provided'}
         provider: LLMModelProvider,
         file: FileChange,
         codeDiff: string,
+        byokConfig: BYOKConfig,
     ): Promise<ReviewModeResponse> {
         const fallbackProvider =
             provider === LLMModelProvider.OPENAI_GPT_4O
@@ -914,10 +915,17 @@ ${JSON.stringify(context?.suggestions) || 'No suggestions provided'}
                 : LLMModelProvider.OPENAI_GPT_4O;
         const runName = 'selectReviewMode';
 
+        const promptRunner = new BYOKPromptRunnerService(
+            this.promptRunnerService,
+            provider,
+            fallbackProvider,
+            byokConfig,
+        );
+
         const payload = { file, codeDiff };
         const spanName = `${LLMAnalysisService.name}::${runName}`;
         const spanAttrs = {
-            type: 'system',
+            type: promptRunner.executeMode,
             organizationId: organizationAndTeamData?.organizationId,
             prNumber,
         };
@@ -928,12 +936,8 @@ ${JSON.stringify(context?.suggestions) || 'No suggestions provided'}
                 runName,
                 attrs: spanAttrs,
                 exec: async (callbacks) => {
-                    return await this.promptRunnerService
+                    return await promptRunner
                         .builder()
-                        .setProviders({
-                            main: provider,
-                            fallback: fallbackProvider,
-                        })
                         .setParser(ParserType.STRING)
                         .setLLMJsonMode(true)
                         .setTemperature(0)
@@ -948,8 +952,10 @@ ${JSON.stringify(context?.suggestions) || 'No suggestions provided'}
                                 organizationAndTeamData?.organizationId,
                             teamId: organizationAndTeamData?.teamId,
                             pullRequestId: prNumber,
-                            provider,
-                            fallbackProvider,
+                            provider: byokConfig?.main?.provider || provider,
+                            model: byokConfig?.main?.model,
+                            fallbackProvider: byokConfig?.fallback?.provider || fallbackProvider,
+                            fallbackModel: byokConfig?.fallback?.model,
                             runName,
                         })
                         .setRunName(runName)

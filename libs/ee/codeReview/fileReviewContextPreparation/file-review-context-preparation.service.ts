@@ -8,6 +8,10 @@ import { BYOKConfig, LLMModelProvider } from '@kodus/kodus-common/llm';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
+import {
+    AST_ANALYSIS_SERVICE_TOKEN,
+    IASTAnalysisService,
+} from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
 
 
 import { BaseFileReviewContextPreparation } from '@libs/code-review/infrastructure/adapters/services/code-analysis/file/base-file-review.abstract';
@@ -33,6 +37,8 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
     constructor(
         @Inject(LLM_ANALYSIS_SERVICE_TOKEN)
         private readonly aiAnalysisService: IAIAnalysisService,
+        @Inject(AST_ANALYSIS_SERVICE_TOKEN)
+        private readonly astAnalysisService: IASTAnalysisService,
     ) {
         super();
     }
@@ -148,39 +154,72 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
         hasRelevantContent?: boolean;
     }> {
         try {
-            const { taskId } = context.tasks.astAnalysis;
+            const enableAst = process.env.API_ENABLE_CODE_REVIEW_AST === 'true';
+            const taskId = context?.tasks?.astAnalysis?.taskId;
 
-            if (!taskId) {
-                this.logger.warn({
-                    message:
-                        'No AST analysis task ID found, returning file content',
-                    context: FileReviewContextPreparation.name,
-                    metadata: {
-                        ...context?.organizationAndTeamData,
-                        filename: file.filename,
-                    },
-                });
-
+            if (!enableAst || !taskId) {
                 return {
                     relevantContent: file.fileContent || file.content || null,
                     hasRelevantContent: false,
                     taskStatus: TaskStatus.TASK_STATUS_FAILED,
                 };
-            } else {
+            }
+
+            const taskInfo = await this.astAnalysisService.awaitTask(
+                taskId,
+                context.organizationAndTeamData,
+                this.getHeavyTaskBackoffConfig(),
+            );
+
+            const taskStatus =
+                taskInfo?.task?.status ?? TaskStatus.TASK_STATUS_FAILED;
+
+            if (taskStatus !== TaskStatus.TASK_STATUS_COMPLETED) {
                 this.logger.warn({
-                    message: 'No relevant content found for the file',
+                    message:
+                        'AST task not completed, returning file content fallback',
                     context: FileReviewContextPreparation.name,
                     metadata: {
                         ...context?.organizationAndTeamData,
                         filename: file.filename,
-                        task: { taskId },
+                        task: { taskId, status: taskStatus },
                     },
                 });
+
                 return {
                     relevantContent: file.fileContent || file.content || null,
                     hasRelevantContent: false,
+                    taskStatus,
                 };
             }
+
+            const diff = file.patch || '';
+
+            const response = await this.astAnalysisService.getRelatedContentFromDiff(
+                context.repository,
+                context.pullRequest,
+                context.platformType,
+                context.organizationAndTeamData,
+                diff,
+                file.filename,
+                taskId,
+            );
+
+            const astContent = response?.content?.trim() || '';
+
+            if (!astContent) {
+                return {
+                    relevantContent: file.fileContent || file.content || null,
+                    hasRelevantContent: false,
+                    taskStatus,
+                };
+            }
+
+            return {
+                relevantContent: astContent,
+                hasRelevantContent: true,
+                taskStatus,
+            };
         } catch (error) {
             this.logger.error({
                 message: 'Error retrieving relevant file content',

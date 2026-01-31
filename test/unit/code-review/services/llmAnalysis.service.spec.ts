@@ -238,6 +238,7 @@ describe('LLMAnalysisService', () => {
                 'gemini-2.5-pro' as any,
                 file as any,
                 codeDiff,
+                null,
             );
 
             expect(result).toBe(ReviewModeResponse.LIGHT_MODE);

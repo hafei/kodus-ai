@@ -179,8 +179,8 @@ export class SavePullRequestUseCase {
                                 prNumber: pullRequest?.number,
                                 filesCount: changedFiles.length,
                                 commitsCount: pullRequestCommits.length,
+                                organizationAndTeamData,
                             },
-                            organizationAndTeamData,
                         });
                     }
                 }

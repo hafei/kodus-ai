@@ -215,7 +215,7 @@ services:
   # Web Frontend (预构建镜像)
   #----------------------------------------------------------------
   web:
-    image: kodus-web:latest
+    image: kodus-web:2.0.11
     container_name: kodus_web
     ports:
       - '${WEB_PORT:-3000}:3000'

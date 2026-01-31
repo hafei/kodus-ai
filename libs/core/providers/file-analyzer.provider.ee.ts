@@ -12,6 +12,7 @@ import { FileReviewContextPreparation } from '@libs/ee/codeReview/fileReviewCont
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/infrastructure/adapters/services/llmAnalysis.service';
 import {
     AST_ANALYSIS_SERVICE_TOKEN,
+    IASTAnalysisService,
 } from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
 import { environment } from '@libs/ee/configs/environment';
@@ -21,10 +22,12 @@ export const FILE_REVIEW_CONTEXT_PREPARATION_PROVIDER: Provider = {
     useFactory: (
         corePreparation: CoreFileReviewContextPreparation,
         aiAnalysisService: IAIAnalysisService,
+        astAnalysisService: IASTAnalysisService,
     ): IFileReviewContextPreparation => {
         // Force HEAVY_MODE (EE implementation) regardless of the environment
         return new FileReviewContextPreparation(
             aiAnalysisService,
+            astAnalysisService,
         );
     },
     inject: [
