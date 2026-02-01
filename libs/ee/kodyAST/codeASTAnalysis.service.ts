@@ -431,6 +431,8 @@ export class CodeAstAnalysisService implements IASTAnalysisService {
                 defaultBranch: pullRequest.head?.ref,
                 fullName:
                     repository.full_name ||
+                    repository.fullName ||
+                    repository.path_with_namespace ||
                     `${repository.owner}/${repository.name}`,
                 platform: platformType as
                     | 'github'
@@ -453,6 +455,8 @@ export class CodeAstAnalysisService implements IASTAnalysisService {
                 defaultBranch: pullRequest.base?.ref,
                 fullName:
                     repository.full_name ||
+                    repository.fullName ||
+                    repository.path_with_namespace ||
                     `${repository.owner}/${repository.name}`,
                 platform: platformType as
                     | 'github'

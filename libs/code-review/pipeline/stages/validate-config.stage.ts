@@ -79,7 +79,24 @@ export class ValidateConfigStage extends BasePipelineStage<CodeReviewPipelineCon
                 );
 
             context = this.updateContext(context, (draft) => {
-                draft.codeReviewConfig.byokConfig = byokConfig?.configValue;
+                draft.codeReviewConfig.byokConfig =
+                    byokConfig?.configValue ??
+                    draft.codeReviewConfig.byokConfig;
+            });
+
+            this.logger.log({
+                message: 'BYOK config resolved for code review',
+                context: this.stageName,
+                metadata: {
+                    organizationAndTeamData: context.organizationAndTeamData,
+                    hasByokConfig: Boolean(
+                        context.codeReviewConfig?.byokConfig,
+                    ),
+                    byokProvider:
+                        context.codeReviewConfig?.byokConfig?.main?.provider,
+                    byokModel:
+                        context.codeReviewConfig?.byokConfig?.main?.model,
+                },
             });
 
             const cadenceResult = await this.evaluateReviewCadence(context);
