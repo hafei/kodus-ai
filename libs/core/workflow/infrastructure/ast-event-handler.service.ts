@@ -116,7 +116,7 @@ export class ASTEventHandler {
                 context: ASTEventHandler.name,
                 metadata: { messageId, correlationId },
             });
-            throw new Error('Message already claimed but not finished');
+            return;
         }
 
         return await this.observability.runInSpan(

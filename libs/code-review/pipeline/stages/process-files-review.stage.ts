@@ -50,6 +50,25 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
     private readonly concurrencyLimit = 30;
     private readonly logger = createLogger(ProcessFilesReview.name);
 
+    private logMemoryUsage(
+        stage: string,
+        metadata: Record<string, unknown> = {},
+    ): void {
+        const usage = process.memoryUsage();
+        this.logger.debug({
+            message: `Memory usage ${stage}`,
+            context: ProcessFilesReview.name,
+            metadata: {
+                ...metadata,
+                rss: usage.rss,
+                heapTotal: usage.heapTotal,
+                heapUsed: usage.heapUsed,
+                external: usage.external,
+                arrayBuffers: usage.arrayBuffers,
+            },
+        });
+    }
+
     constructor(
         @Inject(SUGGESTION_SERVICE_TOKEN)
         private readonly suggestionService: ISuggestionService,
@@ -81,7 +100,11 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             });
             return context;
         }
-
+        let updatedContext: CodeReviewPipelineContext;
+        this.logMemoryUsage('file_review_start', {
+            prNumber: context.pullRequest.number,
+            filesCount: context.changedFiles.length,
+        });
         try {
             const {
                 validSuggestions,
@@ -89,12 +112,12 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 fileMetadata,
                 tasks,
             } = await this.analyzeChangedFilesInBatches(context);
-
-            return this.updateContext(context, (draft) => {
+            updatedContext = this.updateContext(context, (draft) => {
                 draft.validSuggestions = validSuggestions;
                 draft.discardedSuggestions = discardedSuggestions;
                 draft.fileMetadata = fileMetadata;
                 draft.tasks = tasks;
+                this.pruneContextAfterFileAnalysis(draft);
             });
         } catch (error) {
             this.logger.error({
@@ -109,12 +132,19 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             });
 
             // Mesmo em caso de erro, retornamos o contexto para que o pipeline continue
-            return this.updateContext(context, (draft) => {
+            updatedContext = this.updateContext(context, (draft) => {
                 draft.validSuggestions = [];
                 draft.discardedSuggestions = [];
                 draft.fileMetadata = new Map();
+                this.pruneContextAfterFileAnalysis(draft);
+            });
+        } finally {
+            this.logMemoryUsage('file_review_end', {
+                prNumber: context.pullRequest.number,
             });
         }
+
+        return updatedContext;
     }
 
     async analyzeChangedFilesInBatches(
@@ -942,5 +972,40 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         }
 
         return Object.keys(map).length ? map : undefined;
+    }
+
+    private pruneContextAfterFileAnalysis(
+        draft: CodeReviewPipelineContext,
+    ): void {
+        if (draft.changedFiles?.length) {
+            draft.changedFiles = draft.changedFiles.map((file) =>
+                this.scrubFilePayload(file),
+            );
+        }
+
+        draft.batches = [];
+        draft.preparedFileContexts = [];
+        draft.fileAnalysisResults = [];
+        draft.externalPromptContext = undefined;
+        draft.externalPromptLayers = undefined;
+        draft.sharedContextPack = undefined;
+        draft.augmentationsByFile = undefined;
+        draft.fileContextMap = undefined;
+    }
+
+    private scrubFilePayload(file: FileChange): FileChange {
+        const scrubbed = {
+            ...file,
+        } as FileChange & {
+            content?: string;
+            patch?: string;
+            patchWithLinesStr?: string;
+        };
+
+        scrubbed.patch = undefined;
+        scrubbed.patchWithLinesStr = undefined;
+        scrubbed.content = undefined;
+
+        return scrubbed;
     }
 }

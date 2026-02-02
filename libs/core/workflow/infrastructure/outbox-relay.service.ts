@@ -57,6 +57,15 @@ function parsePositiveIntEnv(envKey: string, fallback: number): number {
     return parsed;
 }
 
+function parseBooleanEnv(envKey: string, fallback: boolean): boolean {
+    const raw = process.env[envKey];
+    if (raw === undefined) return fallback;
+    const normalized = raw.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+    return fallback;
+}
+
 // Helper interface to type the payload content we expect
 interface MessagePayloadContent {
     correlationId?: string;
@@ -81,9 +90,24 @@ export class OutboxRelayService
         DEFAULT_OUTBOX_PUBLISH_TIMEOUT_MS,
     );
 
-    private readonly BATCH_SIZE = 50;
-    private readonly MIN_INTERVAL = 100; // 100ms when there is work
-    private readonly MAX_INTERVAL = 3000; // 3s when idle (optimized for better latency)
+    private readonly outboxRelayEnabled = parseBooleanEnv(
+        'WORKFLOW_OUTBOX_RELAY_ENABLED',
+        true,
+    );
+
+    private readonly batchSize = parsePositiveIntEnv(
+        'WORKFLOW_OUTBOX_BATCH_SIZE',
+        50,
+    );
+    private readonly minIntervalMs = parsePositiveIntEnv(
+        'WORKFLOW_OUTBOX_POLL_MIN_MS',
+        500,
+    );
+    private readonly maxIntervalMs = parsePositiveIntEnv(
+        'WORKFLOW_OUTBOX_POLL_MAX_MS',
+        30000,
+    );
+
     private currentInterval = 1000;
 
     private readonly logger = createLogger(OutboxRelayService.name);
@@ -101,6 +125,21 @@ export class OutboxRelayService
     ) {}
 
     onApplicationBootstrap() {
+        if (!this.outboxRelayEnabled) {
+            this.logger.log({
+                message: 'OutboxRelayService disabled by configuration',
+                context: OutboxRelayService.name,
+                metadata: {
+                    instanceId: this.instanceId,
+                },
+            });
+            return;
+        }
+
+        const minInterval = this.getMinInterval();
+        const maxInterval = this.getMaxInterval();
+        this.currentInterval = minInterval;
+
         this.logger.log({
             message: 'Starting OutboxRelayService with adaptive polling',
             context: OutboxRelayService.name,
@@ -108,6 +147,9 @@ export class OutboxRelayService
                 instanceId: this.instanceId,
                 maxAttemptsOutbox: this.maxAttemptsOutbox,
                 publishTimeoutMs: this.publishTimeoutMs,
+                batchSize: this.batchSize,
+                minIntervalMs: minInterval,
+                maxIntervalMs: maxInterval,
             },
         });
 
@@ -133,13 +175,16 @@ export class OutboxRelayService
         try {
             const processedCount = await this.processOutbox();
 
+            const minInterval = this.getMinInterval();
+            const maxInterval = this.getMaxInterval();
+
             // Adaptive interval
             if (processedCount > 0) {
-                this.currentInterval = this.MIN_INTERVAL;
+                this.currentInterval = minInterval;
             } else {
                 this.currentInterval = Math.min(
                     this.currentInterval * 2,
-                    this.MAX_INTERVAL,
+                    maxInterval,
                 );
             }
         } catch (error) {
@@ -148,7 +193,7 @@ export class OutboxRelayService
                 context: OutboxRelayService.name,
                 error,
             });
-            this.currentInterval = this.MAX_INTERVAL;
+            this.currentInterval = this.getMaxInterval();
         } finally {
             if (!this.isDestroyed) {
                 setTimeout(() => this.poll(), this.currentInterval);
@@ -163,7 +208,7 @@ export class OutboxRelayService
     async processOutbox(): Promise<number> {
         // Claim a batch of messages atomically
         const messages = await this.outboxRepository.claimBatch(
-            this.BATCH_SIZE,
+            this.batchSize,
             this.instanceId,
         );
 
@@ -525,5 +570,13 @@ export class OutboxRelayService
                 }
             },
         );
+    }
+
+    private getMinInterval(): number {
+        return Math.min(this.minIntervalMs, this.maxIntervalMs);
+    }
+
+    private getMaxInterval(): number {
+        return Math.max(this.minIntervalMs, this.maxIntervalMs);
     }
 }

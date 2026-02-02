@@ -43,6 +43,25 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
     private readonly JOB_PROTECTION_MINUTES = 60;
     private activeJobs = 0;
 
+    private logMemoryUsage(
+        stage: string,
+        metadata: Record<string, unknown> = {},
+    ): void {
+        const usage = process.memoryUsage();
+        this.logger.debug({
+            message: `Memory usage ${stage}`,
+            context: WorkflowJobConsumer.name,
+            metadata: {
+                ...metadata,
+                rss: usage.rss,
+                heapTotal: usage.heapTotal,
+                heapUsed: usage.heapUsed,
+                external: usage.external,
+                arrayBuffers: usage.arrayBuffers,
+            },
+        });
+    }
+
     constructor(
         @Inject(JOB_PROCESSOR_SERVICE_TOKEN)
         private readonly jobProcessor: IJobProcessorService,
@@ -293,7 +312,7 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
                     queueName,
                 },
             });
-            throw new Error('Message already claimed but not finished');
+            return;
         }
 
         // 2. Start observability span
@@ -301,102 +320,132 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             this.observability.setContext(correlationId);
         }
 
-        return await this.observability.runInSpan(
-            'workflow.job.consume',
-            async (span) => {
-                span.setAttributes({
-                    'workflow.job.id': unwrappedMessage.jobId,
-                    'workflow.correlation.id': correlationId,
-                    'workflow.message.id': messageId,
-                    'workflow.queue.name': queueName,
-                });
+        this.logMemoryUsage('job_start', {
+            messageId,
+            jobId: unwrappedMessage.jobId,
+            correlationId,
+            queueName,
+        });
 
-                try {
-                    await this.jobProcessor.process(unwrappedMessage.jobId);
-
-                    await this.inboxRepository.markAsProcessed(
-                        messageId,
-                        consumerId,
-                    );
-
-                    this.logger.log({
-                        message: 'Workflow job processed successfully',
-                        context: WorkflowJobConsumer.name,
-                        metadata: {
-                            messageId,
-                            jobId: unwrappedMessage.jobId,
-                            correlationId,
-                            queueName,
-                        },
-                    });
-
+        try {
+            return await this.observability.runInSpan(
+                'workflow.job.consume',
+                async (span) => {
                     span.setAttributes({
-                        'workflow.job.processed': true,
-                    });
-                } catch (error) {
-                    span.setAttributes({
-                        'error': true,
-                        'exception.type': error.name,
-                        'exception.message': error.message,
+                        'workflow.job.id': unwrappedMessage.jobId,
+                        'workflow.correlation.id': correlationId,
+                        'workflow.message.id': messageId,
+                        'workflow.queue.name': queueName,
                     });
 
-                    this.logger.error({
-                        message: 'Failed to process workflow job',
-                        context: WorkflowJobConsumer.name,
-                        error,
-                        metadata: {
-                            messageId,
-                            jobId: unwrappedMessage.jobId,
-                            correlationId,
-                            queueName,
-                        },
-                    });
-
-                    // CRITICAL: Always mark job as FAILED to prevent stuck PENDING jobs
                     try {
-                        await this.jobRepository.update(unwrappedMessage.jobId, {
-                            status: JobStatus.FAILED,
-                            errorClassification: ErrorClassification.PERMANENT,
-                            lastError: error.message,
-                        });
+                        await this.jobProcessor.process(
+                            unwrappedMessage.jobId,
+                        );
+
+                        await this.inboxRepository.markAsProcessed(
+                            messageId,
+                            consumerId,
+                        );
+
+                        await this.jobRepository.update(
+                            unwrappedMessage.jobId,
+                            {
+                                pipelineState: null,
+                            },
+                        );
 
                         this.logger.log({
-                            message: 'Job marked as FAILED after processing error',
+                            message: 'Workflow job processed successfully',
                             context: WorkflowJobConsumer.name,
                             metadata: {
+                                messageId,
                                 jobId: unwrappedMessage.jobId,
-                                error: error.message,
+                                correlationId,
+                                queueName,
                             },
                         });
-                    } catch (updateError) {
+
+                        span.setAttributes({
+                            'workflow.job.processed': true,
+                        });
+                    } catch (error) {
+                        span.setAttributes({
+                            'error': true,
+                            'exception.type': error.name,
+                            'exception.message': error.message,
+                        });
+
                         this.logger.error({
-                            message: 'Failed to update job status to FAILED',
+                            message: 'Failed to process workflow job',
                             context: WorkflowJobConsumer.name,
-                            error: updateError,
+                            error,
                             metadata: {
+                                messageId,
                                 jobId: unwrappedMessage.jobId,
-                                originalError: error.message,
+                                correlationId,
+                                queueName,
                             },
                         });
+
+                        // CRITICAL: Always mark job as FAILED to prevent stuck PENDING jobs
+                        try {
+                            await this.jobRepository.update(
+                                unwrappedMessage.jobId,
+                                {
+                                    status: JobStatus.FAILED,
+                                    errorClassification:
+                                        ErrorClassification.PERMANENT,
+                                    lastError: error.message,
+                                    pipelineState: null,
+                                },
+                            );
+
+                            this.logger.log({
+                                message: 'Job marked as FAILED after processing error',
+                                context: WorkflowJobConsumer.name,
+                                metadata: {
+                                    jobId: unwrappedMessage.jobId,
+                                    error: error.message,
+                                },
+                            });
+                        } catch (updateError) {
+                            this.logger.error({
+                                message: 'Failed to update job status to FAILED',
+                                context: WorkflowJobConsumer.name,
+                                error: updateError,
+                                metadata: {
+                                    jobId: unwrappedMessage.jobId,
+                                    originalError: error.message,
+                                },
+                            });
+                        }
+
+                        // Release lock so message can be re-claimed on retry
+                        // Retry scheduling is handled by RabbitMQErrorHandler (single source of truth)
+                        await this.inboxRepository.releaseLock(
+                            messageId,
+                            consumerId,
+                            error.message,
+                        );
+
+                        // Re-throw so RabbitMQErrorHandler can republish with delay
+                        throw error;
                     }
-
-                    // Release lock so message can be re-claimed on retry
-                    // Retry scheduling is handled by RabbitMQErrorHandler (single source of truth)
-                    await this.inboxRepository.releaseLock(
-                        messageId,
-                        consumerId,
-                        error.message,
-                    );
-
-                    // Re-throw so RabbitMQErrorHandler can republish with delay
-                    throw error;
-                }
-            },
-            {
-                'workflow.component': 'consumer',
-                'workflow.operation': 'process_job',
-            },
-        );
+                },
+                {
+                    'workflow.component': 'consumer',
+                    'workflow.operation': 'process_job',
+                },
+            );
+        } finally {
+            this.logMemoryUsage('job_end', {
+                messageId,
+                jobId: unwrappedMessage.jobId,
+                correlationId,
+                queueName,
+            });
+        }
     }
 
     async onApplicationShutdown(signal?: string): Promise<void> {

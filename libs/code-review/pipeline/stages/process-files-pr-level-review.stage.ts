@@ -19,6 +19,25 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
     private readonly logger = createLogger(ProcessFilesPrLevelReviewStage.name);
     readonly stageName = 'PRLevelReviewStage';
 
+    private logMemoryUsage(
+        stage: string,
+        metadata: Record<string, unknown> = {},
+    ): void {
+        const usage = process.memoryUsage();
+        this.logger.debug({
+            message: `Memory usage ${stage}`,
+            context: ProcessFilesPrLevelReviewStage.name,
+            metadata: {
+                ...metadata,
+                rss: usage.rss,
+                heapTotal: usage.heapTotal,
+                heapUsed: usage.heapUsed,
+                external: usage.external,
+                arrayBuffers: usage.arrayBuffers,
+            },
+        });
+    }
+
     constructor(
         @Inject(KODY_RULES_PR_LEVEL_ANALYSIS_SERVICE_TOKEN)
         private readonly kodyRulesPrLevelAnalysisService: KodyRulesPrLevelAnalysisService,
@@ -32,10 +51,17 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
     protected async executeStage(
         context: CodeReviewPipelineContext,
     ): Promise<CodeReviewPipelineContext> {
+        this.logMemoryUsage('pr_level_review_start', {
+            prNumber: context?.pullRequest?.number,
+            filesCount: context?.changedFiles?.length || 0,
+        });
         if (!context?.organizationAndTeamData) {
             this.logger.error({
                 message: 'Missing organizationAndTeamData in context',
                 context: this.stageName,
+            });
+            this.logMemoryUsage('pr_level_review_end', {
+                prNumber: context?.pullRequest?.number,
             });
             return context;
         }
@@ -47,6 +73,9 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
                 metadata: {
                     organizationAndTeamData: context.organizationAndTeamData,
                 },
+            });
+            this.logMemoryUsage('pr_level_review_end', {
+                prNumber: context?.pullRequest?.number,
             });
             return context;
         }
@@ -60,6 +89,9 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
                     prNumber: context.pullRequest.number,
                 },
             });
+            this.logMemoryUsage('pr_level_review_end', {
+                prNumber: context?.pullRequest?.number,
+            });
             return context;
         }
 
@@ -72,6 +104,9 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
                         context.organizationAndTeamData.organizationId,
                     prNumber: context.pullRequest.number,
                 },
+            });
+            this.logMemoryUsage('pr_level_review_end', {
+                prNumber: context?.pullRequest?.number,
             });
             return context;
         }
@@ -215,6 +250,9 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
             });
         }
         //#endregion Cross-file analysis
+        this.logMemoryUsage('pr_level_review_end', {
+            prNumber: context?.pullRequest?.number,
+        });
         return context;
     }
 }

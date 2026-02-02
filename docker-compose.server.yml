@@ -146,6 +146,7 @@ services:
 
       # Core Configuration
       - API_PORT=${API_AST_PORT:-3002}
+      - ALLOWED_GIT_DOMAINS=${ALLOWED_GIT_DOMAINS}
     restart: unless-stopped
     volumes:
       - kodus_ast_logs:/app/logs

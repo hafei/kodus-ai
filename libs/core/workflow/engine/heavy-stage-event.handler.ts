@@ -123,7 +123,7 @@ export class HeavyStageEventHandler {
                 context: HeavyStageEventHandler.name,
                 metadata: { messageId, correlationId },
             });
-            throw new Error('Message already claimed but not finished');
+            return;
         }
 
         return await this.observability.runInSpan(
