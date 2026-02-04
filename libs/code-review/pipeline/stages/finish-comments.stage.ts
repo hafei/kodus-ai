@@ -89,6 +89,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                     isCommitRun,
                     false,
                     context.externalPromptContext,
+                    lineComments,
                 );
 
             await this.commentManagerService.updateSummarizationInPR(
@@ -131,7 +132,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
 
         if (
             endReviewMessage.status ===
-                PullRequestMessageStatus.ONLY_WHEN_OPENED &&
+            PullRequestMessageStatus.ONLY_WHEN_OPENED &&
             context.lastExecution
         ) {
             return context;
@@ -140,14 +141,14 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
         if (
             (endReviewMessage.status === PullRequestMessageStatus.ACTIVE ||
                 endReviewMessage.status ===
-                    PullRequestMessageStatus.EVERY_PUSH ||
+                PullRequestMessageStatus.EVERY_PUSH ||
                 (endReviewMessage.status ===
                     PullRequestMessageStatus.ONLY_WHEN_OPENED &&
                     !context.lastExecution)) &&
             startReviewMessage &&
             (startReviewMessage.status === PullRequestMessageStatus.ACTIVE ||
                 startReviewMessage.status ===
-                    PullRequestMessageStatus.EVERY_PUSH ||
+                PullRequestMessageStatus.EVERY_PUSH ||
                 (startReviewMessage.status ===
                     PullRequestMessageStatus.ONLY_WHEN_OPENED &&
                     !context.lastExecution))
@@ -182,13 +183,13 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
         if (
             (endReviewMessage.status === PullRequestMessageStatus.ACTIVE ||
                 endReviewMessage.status ===
-                    PullRequestMessageStatus.EVERY_PUSH ||
+                PullRequestMessageStatus.EVERY_PUSH ||
                 (endReviewMessage.status ===
                     PullRequestMessageStatus.ONLY_WHEN_OPENED &&
                     !context.lastExecution)) &&
             (!startReviewMessage ||
                 startReviewMessage.status ===
-                    PullRequestMessageStatus.INACTIVE ||
+                PullRequestMessageStatus.INACTIVE ||
                 startReviewMessage.status === PullRequestMessageStatus.OFF ||
                 (startReviewMessage.status ===
                     PullRequestMessageStatus.ONLY_WHEN_OPENED &&

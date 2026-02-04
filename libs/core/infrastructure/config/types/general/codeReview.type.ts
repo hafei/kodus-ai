@@ -200,13 +200,13 @@ export type FileChange = {
     sha: string;
     filename: string;
     status:
-        | 'added'
-        | 'removed'
-        | 'modified'
-        | 'renamed'
-        | 'copied'
-        | 'changed'
-        | 'unchanged';
+    | 'added'
+    | 'removed'
+    | 'modified'
+    | 'renamed'
+    | 'copied'
+    | 'changed'
+    | 'unchanged';
     additions: number;
     deletions: number;
     changes: number;
@@ -250,6 +250,7 @@ export type CommentResult = {
         pullRequestReviewId: number;
         suggestionId: string;
     };
+    codeSuggestion?: CodeSuggestion; // Added to support accessing violation IDs in summary generation
 };
 
 export type ReviewComment = {

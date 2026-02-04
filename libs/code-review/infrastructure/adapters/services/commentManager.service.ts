@@ -30,6 +30,10 @@ import {
     PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
 import { ICommentManagerService } from '@libs/code-review/domain/contracts/CommentManagerService.contract';
+import {
+    IKodyRulesService,
+    KODY_RULES_SERVICE_TOKEN,
+} from '@libs/kodyRules/domain/contracts/kodyRules.service.contract';
 import { LLMResponseProcessor } from '@libs/ai-engine/infrastructure/adapters/services/llmResponseProcessor.transform';
 import {
     MessageTemplateProcessor,
@@ -45,6 +49,7 @@ import {
 import { prompt_repeated_suggestion_clustering_system } from '@libs/common/utils/langchainCommon/prompts/repeatedCodeReviewSuggestionClustering';
 import { createLogger } from '@kodus/flow';
 import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
+import { LabelType } from '@libs/common/utils/codeManagement/labels';
 
 interface ClusteredSuggestion {
     id: string;
@@ -66,6 +71,8 @@ export class CommentManagerService implements ICommentManagerService {
         private readonly observabilityService: ObservabilityService,
         private readonly permissionValidationService: PermissionValidationService,
         private readonly codeManagementService: CodeManagementService,
+        @Inject(KODY_RULES_SERVICE_TOKEN)
+        private readonly kodyRulesService: IKodyRulesService,
     ) {
         this.llmResponseProcessor = new LLMResponseProcessor();
     }
@@ -81,6 +88,7 @@ export class CommentManagerService implements ICommentManagerService {
         isCommitRun?: boolean,
         prPreview?: boolean,
         externalPromptContext?: any,
+        comments?: CommentResult[],
     ): Promise<string> {
         let byokConfigValue: BYOKConfig | null = byokConfig ?? null;
 
@@ -136,7 +144,7 @@ export class CommentManagerService implements ICommentManagerService {
                     !isCommitRun &&
                     updatedPR?.body &&
                     summaryConfig?.behaviourForExistingDescription ===
-                        BehaviourForExistingDescription.COMPLEMENT
+                    BehaviourForExistingDescription.COMPLEMENT
                 ) {
                     promptBase += `\n\n**Additional Instructions**:
                     - Focus on generating new insights and relevant information based on the code changes
@@ -180,6 +188,8 @@ export class CommentManagerService implements ICommentManagerService {
                     - Use only the code changes provided. Do not add inferred information beyond what the code clearly shows.
                     - You must always respond in ${languageResultPrompt}.
 
+                    ${await this.getKodyRuleViolationsContext(comments)}
+
                     **Pull Request Details**:
                     - **Repository**: ${pullRequest?.head?.repo?.fullName || 'Unknown'}
                     - **Source Branch**: \`${pullRequest?.head?.ref}\`
@@ -200,7 +210,7 @@ export class CommentManagerService implements ICommentManagerService {
                 if (
                     isCommitRun &&
                     summaryConfig?.behaviourForNewCommits ===
-                        BehaviourForNewCommits.REPLACE
+                    BehaviourForNewCommits.REPLACE
                 ) {
                     userPrompt = `
                     This is the updated pull request summary:
@@ -349,7 +359,7 @@ export class CommentManagerService implements ICommentManagerService {
                     if (
                         updatedPR?.body &&
                         summaryConfig?.behaviourForExistingDescription ===
-                            BehaviourForExistingDescription.CONCATENATE
+                        BehaviourForExistingDescription.CONCATENATE
                     ) {
                         // Log for debugging
                         this.logger.log({
@@ -794,6 +804,7 @@ export class CommentManagerService implements ICommentManagerService {
                     commentResults.push({
                         comment,
                         deliveryStatus: DeliveryStatus.SENT,
+                        codeSuggestion: comment.suggestion,
                         codeReviewFeedbackData: {
                             commentId: createdComment?.id,
                             pullRequestReviewId:
@@ -807,6 +818,7 @@ export class CommentManagerService implements ICommentManagerService {
                         comment,
                         deliveryStatus:
                             error.errorType || DeliveryStatus.FAILED,
+                        codeSuggestion: comment.suggestion,
                     });
                 }
             }
@@ -1344,11 +1356,11 @@ ${reviewOptions}
     ): string {
         return platformType === PlatformType.BITBUCKET
             ? markdown
-                  .replace(
-                      /(<\/?details>)|(<\/?summary>)|(<!-- kody-codereview -->(\n|\\n)?&#8203;)/g,
-                      '',
-                  )
-                  .trim()
+                .replace(
+                    /(<\/?details>)|(<\/?summary>)|(<!-- kody-codereview -->(\n|\\n)?&#8203;)/g,
+                    '',
+                )
+                .trim()
             : markdown;
     }
 
@@ -1733,5 +1745,92 @@ ${reviewOptions}
             language,
             platformType,
         };
+    }
+    async updateRulesStatusByFilter(
+        organizationAndTeamData: OrganizationAndTeamData,
+        filter: string,
+        status: boolean,
+    ): Promise<void> {
+        throw new Error('Method not implemented.');
+    }
+
+    private async getKodyRuleViolationsContext(
+        comments: CommentResult[],
+    ): Promise<string> {
+        if (!comments || comments.length === 0) {
+            return '';
+        }
+
+        const violations: string[] = [];
+        const processedRuleIds = new Set<string>();
+
+        for (const c of comments) {
+            const suggestion = c.codeSuggestion ?? c.comment?.suggestion;
+
+            if (!suggestion || suggestion.label !== LabelType.KODY_RULES) {
+                continue;
+            }
+
+            // Combine IDs from broken and violated arrays
+            const ids = [
+                ...((suggestion as any)?.brokenKodyRulesIds || []),
+                ...((suggestion as any)?.violatedKodyRulesIds || []),
+            ];
+
+            // If no explicit IDs, try to extract from content (simplified regex check if needed, or skip)
+            if (ids.length === 0) {
+                continue;
+            }
+
+            for (const id of ids) {
+                if (processedRuleIds.has(id)) {
+                    continue;
+                }
+                processedRuleIds.add(id);
+
+                try {
+                    const rule = await this.kodyRulesService.findById(id);
+                    if (rule) {
+                        const baseUrl =
+                            process.env.API_USER_INVITE_BASE_URL || '';
+                        let ruleLink: string;
+
+                        if (rule.repositoryId === 'global') {
+                            ruleLink = `${baseUrl}/settings/code-review/global/kody-rules/${id}`;
+                        } else {
+                            ruleLink = `${baseUrl}/settings/code-review/${rule.repositoryId}/kody-rules/${id}`;
+                        }
+
+                        const escapeMarkdownSyntax = (text: string): string =>
+                            text.replace(/([\[\]\\`*_{}()#+\-.!])/g, '\\$1');
+
+                        // Format: - [Rule Title](Link) - File: Path (Line N)
+                        violations.push(
+                            `- [${escapeMarkdownSyntax(
+                                rule.title,
+                            )}](${ruleLink}) - File: \`${c.comment.path}\` (Line ${c.comment.line})`,
+                        );
+                    }
+                } catch (error) {
+                    this.logger.error({
+                        message: 'Error fetching Kody Rule details for summary',
+                        context: CommentManagerService.name,
+                        error,
+                        metadata: { ruleId: id },
+                    });
+                }
+            }
+        }
+
+        if (violations.length === 0) {
+            return '';
+        }
+
+        return `
+<kody_rule_violations>
+The following Kody Rules were violated in this PR:
+${violations.join('\n')}
+</kody_rule_violations>
+`;
     }
 }

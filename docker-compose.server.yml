@@ -8,7 +8,7 @@ services:
   # Application Services (预构建镜像)
   #----------------------------------------------------------------
   api:
-    image: kodus-ai-api:2.0.11
+    image: kodus-ai-api:2.0.12
     container_name: kodus_api
     ports:
       - '${API_PORT:-3001}:${API_PORT:-3001}'
@@ -43,7 +43,7 @@ services:
         condition: service_healthy
 
   worker:
-    image: kodus-ai-worker:2.0.11
+    image: kodus-ai-worker:2.0.12
     container_name: kodus_worker
     env_file:
       - ${ENV_FILE:-.env.server}
@@ -76,7 +76,7 @@ services:
         condition: service_healthy
 
   webhooks:
-    image: kodus-ai-webhooks:2.0.11
+    image: kodus-ai-webhooks:2.0.12
     container_name: kodus_webhooks
     ports:
       - '${WEBHOOKS_PORT:-3332}:${WEBHOOKS_PORT:-3332}'
@@ -110,7 +110,7 @@ services:
         condition: service_healthy
 
   kodus-ast:
-    image: kodus-ast:0.0.1
+    image: kodus-ast:0.0.2
     container_name: ${API_AST_CONTAINER_NAME:-kodus_ast}
     ports:
       - '${API_AST_PORT:-3002}:${API_AST_PORT:-3002}'

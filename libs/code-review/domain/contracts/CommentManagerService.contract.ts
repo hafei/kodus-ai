@@ -50,6 +50,7 @@ export interface ICommentManagerService {
         isCommitRun?: boolean,
         prPreview?: boolean,
         externalPromptContext?: any,
+        comments?: CommentResult[],
     ): Promise<string>;
 
     updateOverallComment(

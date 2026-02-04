@@ -10,6 +10,7 @@ import { PromptsModule } from '@libs/code-review/modules/prompts.module';
 import { ContextReferenceModule } from '@libs/code-review/modules/contextReference.module';
 import { PullRequestMessagesModule } from '@libs/code-review/modules/pullRequestMessages.module';
 import { IntegrationConfigModule } from '@libs/integrations/modules/config.module';
+import { PlatformDataModule } from '@libs/platformData/platformData.module';
 
 import { ApplyCodeReviewPresetUseCase } from '../application/use-cases/configuration/apply-code-review-preset.use-case';
 import { DeleteRepositoryCodeReviewParameterUseCase } from '../application/use-cases/configuration/delete-repository-code-review-parameter.use-case';
@@ -34,6 +35,7 @@ import { PreviewPrSummaryUseCase } from '../application/use-cases/summary/previe
         forwardRef(() => ContextReferenceModule),
         forwardRef(() => PullRequestMessagesModule),
         forwardRef(() => IntegrationConfigModule),
+        forwardRef(() => PlatformDataModule),
     ],
     providers: [
         ApplyCodeReviewPresetUseCase,
