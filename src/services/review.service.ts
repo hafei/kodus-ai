@@ -206,13 +206,15 @@ class ReviewService {
   private filterFiles(files: FileContent[]): FileContent[] {
     const skipped: string[] = [];
     const filtered = files.filter(f => {
-      if (f.diff.length > MAX_DIFF_SIZE) {
-        const sizeKB = Math.round(f.diff.length / 1024);
+      const diffBytes = Buffer.byteLength(f.diff, 'utf8');
+      const contentBytes = Buffer.byteLength(f.content, 'utf8');
+      if (diffBytes > MAX_DIFF_SIZE) {
+        const sizeKB = Math.round(diffBytes / 1024);
         skipped.push(`  - ${f.path} (diff: ${sizeKB}KB, max: ${MAX_DIFF_SIZE / 1024}KB)`);
         return false;
       }
-      if (f.content.length > MAX_CONTENT_SIZE) {
-        const sizeMB = (f.content.length / (1024 * 1024)).toFixed(1);
+      if (contentBytes > MAX_CONTENT_SIZE) {
+        const sizeMB = (contentBytes / (1024 * 1024)).toFixed(1);
         skipped.push(`  - ${f.path} (content: ${sizeMB}MB, max: ${MAX_CONTENT_SIZE / (1024 * 1024)}MB)`);
         return false;
       }
