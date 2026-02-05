@@ -5,7 +5,11 @@ import { getTrialIdentifier } from '../utils/rate-limit.js';
 import { loadConfig } from '../utils/config.js';
 import { CLI_VERSION } from '../constants.js';
 import chalk from 'chalk';
-import type { ReviewConfig, ReviewResult, TrialReviewResult, PullRequestSuggestionsResponse, ReviewIssue, ApiFileSuggestion, ApiPrLevelSuggestion, ApiSuggestionsObject, Severity } from '../types/index.js';
+import type { ReviewConfig, ReviewResult, TrialReviewResult, PullRequestSuggestionsResponse, ReviewIssue, ApiFileSuggestion, ApiPrLevelSuggestion, ApiSuggestionsObject, Severity, FileContent } from '../types/index.js';
+
+const MAX_FILES = 100;
+const MAX_DIFF_SIZE = 500 * 1024;       // 500KB
+const MAX_CONTENT_SIZE = 2 * 1024 * 1024; // 2MB
 
 class ReviewService {
   private verbose: boolean = false;
@@ -33,7 +37,7 @@ class ReviewService {
     };
 
     if (!fast) {
-      reviewConfig.files = await gitService.getFullFileContents(
+      const allFiles = await gitService.getFullFileContents(
         options?.files,
         {
           staged: options?.staged,
@@ -41,7 +45,9 @@ class ReviewService {
           branch: options?.branch,
         }
       );
-      
+
+      reviewConfig.files = this.filterFiles(allFiles);
+
       if (this.verbose) {
         console.log(chalk.dim(`[verbose] Full file contents: ${reviewConfig.files?.length || 0} file(s)`));
         if (reviewConfig.files && reviewConfig.files.length > 0) {
@@ -195,6 +201,35 @@ class ReviewService {
       suggestion: s.oneSentenceSummary,
       ruleId: s.label,
     }));
+  }
+
+  private filterFiles(files: FileContent[]): FileContent[] {
+    const skipped: string[] = [];
+    const filtered = files.filter(f => {
+      if (f.diff.length > MAX_DIFF_SIZE) {
+        const sizeKB = Math.round(f.diff.length / 1024);
+        skipped.push(`  - ${f.path} (diff: ${sizeKB}KB, max: ${MAX_DIFF_SIZE / 1024}KB)`);
+        return false;
+      }
+      if (f.content.length > MAX_CONTENT_SIZE) {
+        const sizeMB = (f.content.length / (1024 * 1024)).toFixed(1);
+        skipped.push(`  - ${f.path} (content: ${sizeMB}MB, max: ${MAX_CONTENT_SIZE / (1024 * 1024)}MB)`);
+        return false;
+      }
+      return true;
+    });
+
+    if (skipped.length > 0) {
+      console.log(chalk.yellow(`⚠ Skipped ${skipped.length} file(s) exceeding size limits:`));
+      skipped.forEach(msg => console.log(chalk.yellow(msg)));
+    }
+
+    if (filtered.length > MAX_FILES) {
+      console.log(chalk.yellow(`⚠ Too many files (${filtered.length}), sending first ${MAX_FILES}`));
+      return filtered.slice(0, MAX_FILES);
+    }
+
+    return filtered;
   }
 
   normalizeSeverity(severity?: string): Severity {
