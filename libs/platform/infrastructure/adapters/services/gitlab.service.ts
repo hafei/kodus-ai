@@ -92,6 +92,22 @@ export class GitlabService implements Omit<
     | 'requestChangesPullRequest'
 > {
     private readonly logger = createLogger(GitlabService.name);
+    private readonly gitlabRequestTimeoutMs = this.parsePositiveIntEnv(
+        'GITLAB_REQUEST_TIMEOUT_MS',
+        60000,
+    );
+    private readonly gitlabConnectTimeoutMs = this.parsePositiveIntEnv(
+        'GITLAB_CONNECT_TIMEOUT_MS',
+        30000,
+    );
+    private readonly gitlabMaxRetries = this.parsePositiveIntEnv(
+        'GITLAB_MAX_RETRIES',
+        2,
+    );
+    private readonly gitlabRetryBaseDelayMs = this.parsePositiveIntEnv(
+        'GITLAB_RETRY_BASE_DELAY_MS',
+        750,
+    );
 
     constructor(
         @Inject(INTEGRATION_SERVICE_TOKEN)
@@ -281,15 +297,86 @@ export class GitlabService implements Omit<
     }
 
     private instanceGitlabApi(gitlabAuthDetail: GitlabAuthDetail) {
-        return new Gitlab({
+        // gitbeaker types do not expose requesterOptions in this version
+        const gitlabOptions = {
             oauthToken:
                 gitlabAuthDetail.authMode === AuthMode.OAUTH
                     ? gitlabAuthDetail.accessToken
                     : decrypt(gitlabAuthDetail.accessToken),
             ...(gitlabAuthDetail.host && { host: gitlabAuthDetail.host }),
+            requesterOptions: {
+                timeout: this.gitlabRequestTimeoutMs,
+                connectTimeout: this.gitlabConnectTimeoutMs,
+            },
             queryTimeout: 600000,
             camelize: false,
-        });
+        } as any;
+
+        return new Gitlab(gitlabOptions);
+    }
+
+    private parsePositiveIntEnv(envKey: string, fallback: number): number {
+        const raw = this.configService.get<string>(envKey);
+        if (!raw) return fallback;
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+        return parsed;
+    }
+
+    private isRetryableGitlabError(error: unknown): boolean {
+        const err = error as {
+            message?: string;
+            name?: string;
+            code?: string;
+            cause?: { code?: string; name?: string; message?: string };
+        };
+
+        const message = err?.message || err?.cause?.message || '';
+        const name = err?.name || err?.cause?.name || '';
+        const code = err?.code || err?.cause?.code || '';
+
+        return (
+            code === 'UND_ERR_CONNECT_TIMEOUT' ||
+            code === 'ETIMEDOUT' ||
+            name.includes('Timeout') ||
+            message.includes('Connect Timeout Error') ||
+            message.includes('timeout')
+        );
+    }
+
+    private async withGitlabRetry<T>(
+        operation: () => Promise<T>,
+        context: Record<string, unknown>,
+    ): Promise<T> {
+        const maxAttempts = Math.max(1, this.gitlabMaxRetries + 1);
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+                return await operation();
+            } catch (error) {
+                const retryable = this.isRetryableGitlabError(error);
+                if (!retryable || attempt === maxAttempts) {
+                    throw error;
+                }
+
+                const delayMs = this.gitlabRetryBaseDelayMs * attempt;
+                this.logger.warn({
+                    message: 'Retrying GitLab request after timeout',
+                    context: GitlabService.name,
+                    error,
+                    metadata: {
+                        attempt,
+                        maxAttempts,
+                        delayMs,
+                        ...context,
+                    },
+                });
+
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+        }
+
+        throw new Error('Unexpected GitLab retry loop exit');
     }
 
     private async handleIntegration(
@@ -1595,9 +1682,17 @@ export class GitlabService implements Omit<
 
         try {
             // 1. Retrieve the MR versions to determine the `baseSha` and `startSha`
-            const versions = await gitlabAPI.MergeRequests.allDiffVersions(
-                repository.id,
-                prNumber,
+            const versions = await this.withGitlabRetry(
+                () =>
+                    gitlabAPI.MergeRequests.allDiffVersions(
+                        repository.id,
+                        prNumber,
+                    ),
+                {
+                    action: 'MergeRequests.allDiffVersions',
+                    repositoryId: repository.id,
+                    prNumber,
+                },
             );
 
             // 2. The `baseSha` usually comes from the `base_commit_sha` of the first version
@@ -1617,24 +1712,33 @@ export class GitlabService implements Omit<
                 suggestionCopyPrompt,
             );
 
-            const discussion = await gitlabAPI.MergeRequestDiscussions.create(
-                repository.id,
-                prNumber,
-                bodyFormatted,
+            const discussion = await this.withGitlabRetry(
+                () =>
+                    gitlabAPI.MergeRequestDiscussions.create(
+                        repository.id,
+                        prNumber,
+                        bodyFormatted,
+                        {
+                            position: {
+                                positionType: 'text',
+                                baseSha: baseSha,
+                                startSha: startSha,
+                                headSha: commit?.sha,
+                                newPath: lineComment.path,
+                                newLine: lineComment.start_line
+                                    ? lineComment.start_line
+                                    : lineComment.line,
+                                endLine: lineComment.start_line
+                                    ? lineComment.line
+                                    : null,
+                            },
+                        },
+                    ),
                 {
-                    position: {
-                        positionType: 'text',
-                        baseSha: baseSha,
-                        startSha: startSha,
-                        headSha: commit?.sha,
-                        newPath: lineComment.path,
-                        newLine: lineComment.start_line
-                            ? lineComment.start_line
-                            : lineComment.line,
-                        endLine: lineComment.start_line
-                            ? lineComment.line
-                            : null,
-                    },
+                    action: 'MergeRequestDiscussions.create',
+                    repositoryId: repository.id,
+                    prNumber,
+                    path: lineComment.path,
                 },
             );
 
@@ -1652,7 +1756,12 @@ export class GitlabService implements Omit<
                 updatedAt: discussion?.notes[0]?.updated_at,
             };
         } catch (error) {
-            const isLineMismatch = error.cause.description.includes(
+            const errorDescription =
+                (error as { cause?: { description?: string } })?.cause
+                    ?.description ||
+                (error as { message?: string })?.message ||
+                '';
+            const isLineMismatch = errorDescription.includes(
                 'must be a valid line code',
             );
 
@@ -1689,10 +1798,18 @@ export class GitlabService implements Omit<
             const gitlabAPI = this.instanceGitlabApi(gitlabAuthDetail);
 
             // Create the comment in the Merge Request
-            const response = await gitlabAPI.MergeRequestDiscussions.create(
-                repository.id,
-                prNumber,
-                body,
+            const response = await this.withGitlabRetry(
+                () =>
+                    gitlabAPI.MergeRequestDiscussions.create(
+                        repository.id,
+                        prNumber,
+                        body,
+                    ),
+                {
+                    action: 'MergeRequestDiscussions.create',
+                    repositoryId: repository.id,
+                    prNumber,
+                },
             );
 
             return response;
@@ -1721,10 +1838,18 @@ export class GitlabService implements Omit<
             const gitlabAPI = this.instanceGitlabApi(gitlabAuthDetail);
 
             // Create the comment in the Merge Request
-            const response = await gitlabAPI.MergeRequestNotes.create(
-                repository.id,
-                prNumber,
-                body,
+            const response = await this.withGitlabRetry(
+                () =>
+                    gitlabAPI.MergeRequestNotes.create(
+                        repository.id,
+                        prNumber,
+                        body,
+                    ),
+                {
+                    action: 'MergeRequestNotes.create',
+                    repositoryId: repository.id,
+                    prNumber,
+                },
             );
 
             return response;
@@ -1756,14 +1881,28 @@ export class GitlabService implements Omit<
         const gitlabAPI = this.instanceGitlabApi(gitlabAuthDetail);
 
         try {
-            const response = await gitlabAPI.MergeRequestNotes.create(
-                repository.id,
-                prNumber,
-                overallComment,
+            const response = await this.withGitlabRetry(
+                () =>
+                    gitlabAPI.MergeRequestNotes.create(
+                        repository.id,
+                        prNumber,
+                        overallComment,
+                    ),
+                {
+                    action: 'MergeRequestNotes.create',
+                    repositoryId: repository.id,
+                    prNumber,
+                },
             );
             return response;
         } catch (error) {
-            console.error('Error creating comment in GitLab:', error);
+            this.logger.error({
+                message: 'Error creating comment in GitLab:',
+                context: GitlabService.name,
+                serviceName: 'GitlabService createCommentInPullRequest',
+                error,
+                metadata: { ...params },
+            });
             return null;
         }
     }
@@ -2009,12 +2148,22 @@ export class GitlabService implements Omit<
             const gitlabAPI = this.instanceGitlabApi(gitlabAuthDetail);
 
             // Update the comment in the Merge Request
-            const response = await gitlabAPI.MergeRequestDiscussions.editNote(
-                repository.id,
-                prNumber,
-                commentId,
-                noteId,
-                { body: body },
+            const response = await this.withGitlabRetry(
+                () =>
+                    gitlabAPI.MergeRequestDiscussions.editNote(
+                        repository.id,
+                        prNumber,
+                        commentId,
+                        noteId,
+                        { body: body },
+                    ),
+                {
+                    action: 'MergeRequestDiscussions.editNote',
+                    repositoryId: repository.id,
+                    prNumber,
+                    commentId,
+                    noteId,
+                },
             );
 
             return response;

@@ -59,7 +59,7 @@ export class GetReactionsUseCase implements IUseCase {
                 await this.codeManagementService.getPullRequestReviewComment({
                     organizationAndTeamData,
                     filters: {
-                        repository: pr.repository.name,
+                        repository: pr.repository,
                         pullRequestNumber: pr.number,
                     },
                 });
