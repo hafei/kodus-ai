@@ -49,14 +49,15 @@ services:
       - ${ENV_FILE:-.env.server}
     environment:
       - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
-      - NODE_OPTIONS=--max-old-space-size=800 --max-semi-space-size=64
+      - NODE_OPTIONS=--max-old-space-size=3072 --max-semi-space-size=64
       - COMPONENT_TYPE=worker
       - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
     restart: unless-stopped
+    mem_limit: 4g
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 4G
         reservations:
           memory: 512M
     healthcheck:
