@@ -109,9 +109,13 @@ export class PermissionValidationService {
         contextName?: string,
     ): Promise<ValidationResult> {
         try {
-            // Self-hosted always allows execution
+            // Self-hosted/dev: allow execution, but still honor BYOK if configured
             if (!this.isCloud || this.isDevelopment) {
-                return { allowed: true };
+                const byokConfig = await this.getBYOKConfig(
+                    organizationAndTeamData,
+                );
+
+                return { allowed: true, byokConfig };
             }
 
             // 1. Validate organization license

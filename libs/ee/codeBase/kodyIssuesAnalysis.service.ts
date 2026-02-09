@@ -6,9 +6,10 @@ import {
     PromptRole,
     BYOKConfig,
 } from '@kodus/kodus-common/llm';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
+import { OrganizationParametersKey } from '@libs/core/domain/enums';
 import { BYOKPromptRunnerService } from '@libs/core/infrastructure/services/tokenTracking/byokPromptRunner.service';
 import { ObservabilityService } from '@libs/core/log/observability.service';
 import { environment } from '../configs/environment';
@@ -18,6 +19,10 @@ import {
 } from '@libs/common/utils/langchainCommon/prompts/kodyIssuesManagement';
 import { contextToGenerateIssues } from '@libs/issues/domain/interfaces/kodyIssuesManagement.interface';
 import { tryParseJSONObject } from '@libs/common/utils/transforms/json';
+import {
+    IOrganizationParametersService,
+    ORGANIZATION_PARAMETERS_SERVICE_TOKEN,
+} from '@libs/organization/domain/organizationParameters/contracts/organizationParameters.service.contract';
 
 export const KODY_ISSUES_ANALYSIS_SERVICE_TOKEN = Symbol(
     'KodyIssuesAnalysisService',
@@ -32,6 +37,8 @@ export class KodyIssuesAnalysisService {
     constructor(
         private readonly promptRunnerService: PromptRunnerService,
         private readonly observabilityService: ObservabilityService,
+        @Inject(ORGANIZATION_PARAMETERS_SERVICE_TOKEN)
+        private readonly organizationParametersService: IOrganizationParametersService,
     ) {
         this.isCloud = environment.API_CLOUD_MODE;
         this.isDevelopment = environment.API_DEVELOPMENT_MODE;
@@ -48,11 +55,15 @@ export class KodyIssuesAnalysisService {
             const fallbackProvider = LLMModelProvider.VERTEX_CLAUDE_3_5_SONNET;
             const runName = 'mergeSuggestionsIntoIssues';
 
+            const resolvedByokConfig =
+                byokConfig ??
+                (await this.getByokConfig(organizationAndTeamData));
+
             const promptRunner = new BYOKPromptRunnerService(
                 this.promptRunnerService,
                 provider,
                 fallbackProvider,
-                byokConfig,
+                resolvedByokConfig,
             );
             const spanName = `${KodyIssuesAnalysisService.name}::${runName}`;
             const spanAttrs = {
@@ -82,12 +93,13 @@ export class KodyIssuesAnalysisService {
                         .addMetadata({
                             organizationAndTeamData,
                             prNumber: pullRequest?.number,
-                            provider: byokConfig?.main?.provider || provider,
+                            provider:
+                                resolvedByokConfig?.main?.provider || provider,
                             fallbackProvider:
-                                byokConfig?.fallback?.provider ||
+                                resolvedByokConfig?.fallback?.provider ||
                                 fallbackProvider,
-                            model: byokConfig?.main?.model,
-                            fallbackModel: byokConfig?.fallback?.model,
+                            model: resolvedByokConfig?.main?.model,
+                            fallbackModel: resolvedByokConfig?.fallback?.model,
                             runName,
                         })
                         .addTags([
@@ -145,11 +157,15 @@ export class KodyIssuesAnalysisService {
             const fallbackProvider = LLMModelProvider.NOVITA_DEEPSEEK_V3;
             const runName = 'resolveExistingIssues';
 
+            const resolvedByokConfig =
+                byokConfig ??
+                (await this.getByokConfig(context.organizationAndTeamData));
+
             const promptRunner = new BYOKPromptRunnerService(
                 this.promptRunnerService,
                 provider,
                 fallbackProvider,
-                byokConfig,
+                resolvedByokConfig,
             );
 
             const spanName = `${KodyIssuesAnalysisService.name}::${runName}`;
@@ -181,12 +197,13 @@ export class KodyIssuesAnalysisService {
                             organizationAndTeamData:
                                 context.organizationAndTeamData,
                             prNumber: context.pullRequest.number,
-                            provider: byokConfig?.main?.provider || provider,
+                            provider:
+                                resolvedByokConfig?.main?.provider || provider,
                             fallbackProvider:
-                                byokConfig?.fallback?.provider ||
+                                resolvedByokConfig?.fallback?.provider ||
                                 fallbackProvider,
-                            model: byokConfig?.main?.model,
-                            fallbackModel: byokConfig?.fallback?.model,
+                            model: resolvedByokConfig?.main?.model,
+                            fallbackModel: resolvedByokConfig?.fallback?.model,
                             runName,
                         })
                         .addCallbacks(callbacks) // captures usage/token per provider
@@ -233,6 +250,17 @@ export class KodyIssuesAnalysisService {
         tier: 'primary' | 'fallback',
     ) {
         return [`model:${provider}`, `tier:${tier}`, 'kodyIssues'];
+    }
+
+    private async getByokConfig(
+        organizationAndTeamData: OrganizationAndTeamData,
+    ): Promise<BYOKConfig | null> {
+        const byokConfig = await this.organizationParametersService.findByKey(
+            OrganizationParametersKey.BYOK_CONFIG,
+            organizationAndTeamData,
+        );
+
+        return byokConfig?.configValue || null;
     }
 
     private processLLMResponse(response: string, organizationId: string): any {
