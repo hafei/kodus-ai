@@ -245,13 +245,38 @@ export class MongoDBExporter implements LogProcessor, ObservabilityExporter {
         try {
             const { MongoClient: mongoClient } = await import('mongodb');
 
+            const maxPoolSize = parseInt(
+                process.env.MG_EXPORTER_POOL_MAX || '20',
+                10,
+            );
+            const minPoolSize = parseInt(
+                process.env.MG_EXPORTER_POOL_MIN || '5',
+                10,
+            );
+            const serverSelectionTimeoutMS = parseInt(
+                process.env.MG_EXPORTER_SERVER_SELECTION_TIMEOUT_MS || '10000',
+                10,
+            );
+            const connectTimeoutMS = parseInt(
+                process.env.MG_EXPORTER_CONNECT_TIMEOUT_MS || '10000',
+                10,
+            );
+            const socketTimeoutMS = parseInt(
+                process.env.MG_EXPORTER_SOCKET_TIMEOUT_MS || '30000',
+                10,
+            );
+            const maxIdleTimeMS = parseInt(
+                process.env.MG_EXPORTER_MAX_IDLE_TIME_MS || '30000',
+                10,
+            );
+
             this.client = new mongoClient(this.config.connectionString, {
-                maxPoolSize: 20, // Aumentado para alto volume
-                minPoolSize: 5, // Pool mínimo sempre ativo
-                serverSelectionTimeoutMS: 3000, // Mais rápido
-                connectTimeoutMS: 5000, // Timeout menor
-                socketTimeoutMS: 30000, // Evita conexões travadas
-                maxIdleTimeMS: 30000, // Limpa conexões idle
+                maxPoolSize, // Aumentado para alto volume
+                minPoolSize, // Pool mínimo sempre ativo
+                serverSelectionTimeoutMS, // Mais rápido
+                connectTimeoutMS, // Timeout menor
+                socketTimeoutMS, // Evita conexões travadas
+                maxIdleTimeMS, // Limpa conexões idle
                 retryWrites: true, // Retry automático em caso de falha
                 retryReads: true, // Retry reads também
             });
