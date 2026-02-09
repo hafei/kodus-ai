@@ -397,6 +397,24 @@ export class ObservabilityService implements OnModuleInit {
     ) {
         const uri = this.buildConnectionString(config);
 
+        const envSamplingRate = this.parseEnvNumber(
+            'OBSERVABILITY_SAMPLING_RATE',
+        );
+        const envTtlDays = this.parseEnvNumber('OBSERVABILITY_TTL_DAYS');
+        const envBatchSize = this.parseEnvNumber('OBSERVABILITY_BATCH_SIZE');
+        const envFlushIntervalMs = this.parseEnvNumber(
+            'OBSERVABILITY_FLUSH_INTERVAL_MS',
+        );
+        const envSpanTimeoutMs = this.parseEnvNumber(
+            'OBSERVABILITY_SPAN_TIMEOUT_MS',
+        );
+        const envLogsEnabled = this.parseEnvBoolean(
+            'OBSERVABILITY_LOGS_ENABLED',
+        );
+        const envTelemetryEnabled = this.parseEnvBoolean(
+            'OBSERVABILITY_TELEMETRY_ENABLED',
+        );
+
         const collections =
             options.enableCollections !== false
                 ? {
@@ -410,7 +428,7 @@ export class ObservabilityService implements OnModuleInit {
                 : undefined;
 
         return {
-            logging: { enabled: true },
+            logging: { enabled: envLogsEnabled ?? true },
             mongodb: {
                 type: 'mongodb' as const,
                 connectionString: uri,
@@ -418,12 +436,15 @@ export class ObservabilityService implements OnModuleInit {
                 ...(collections && { collections }),
                 batchSize:
                     options.customSettings?.batchSize ??
+                    envBatchSize ??
                     ObservabilityService.DEFAULT_SETTINGS.batchSize,
                 flushIntervalMs:
                     options.customSettings?.flushIntervalMs ??
+                    envFlushIntervalMs ??
                     ObservabilityService.DEFAULT_SETTINGS.flushIntervalMs,
                 ttlDays:
                     options.customSettings?.ttlDays ??
+                    envTtlDays ??
                     ObservabilityService.DEFAULT_SETTINGS.ttlDays,
                 enableObservability: true,
                 secondaryIndexes:
@@ -434,23 +455,50 @@ export class ObservabilityService implements OnModuleInit {
                     ObservabilityService.DEFAULT_SETTINGS.bucketKeys,
             },
             telemetry: {
-                enabled: true,
+                enabled: envTelemetryEnabled ?? true,
                 serviceName: options.serviceName,
                 sampling: {
                     rate:
                         options.customSettings?.samplingRate ??
+                        envSamplingRate ??
                         ObservabilityService.DEFAULT_SETTINGS.samplingRate,
                     strategy: 'probabilistic' as const,
                 },
                 privacy: { includeSensitiveData: false },
-                ...(options.customSettings?.spanTimeoutMs && {
+                ...((options.customSettings?.spanTimeoutMs ??
+                    envSpanTimeoutMs) && {
                     spanTimeouts: {
                         enabled: true,
-                        maxDurationMs: options.customSettings.spanTimeoutMs,
+                        maxDurationMs:
+                            options.customSettings?.spanTimeoutMs ??
+                            envSpanTimeoutMs,
                     },
                 }),
             },
         };
+    }
+
+    private parseEnvNumber(name: string): number | undefined {
+        const raw = process.env[name];
+        if (!raw) {
+            return undefined;
+        }
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : undefined;
+    }
+
+    private parseEnvBoolean(name: string): boolean | undefined {
+        const raw = process.env[name];
+        if (!raw) {
+            return undefined;
+        }
+        if (raw === 'true' || raw === '1') {
+            return true;
+        }
+        if (raw === 'false' || raw === '0') {
+            return false;
+        }
+        return undefined;
     }
 
     public buildConnectionString(config: DatabaseConnection): string {
