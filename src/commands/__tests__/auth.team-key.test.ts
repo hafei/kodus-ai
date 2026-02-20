@@ -83,7 +83,7 @@ describe('auth team-key command', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/cli/validate-key'),
       expect.objectContaining({
-        headers: { 'X-Team-Key': 'kodus_abc123' },
+        headers: expect.objectContaining({ 'X-Team-Key': 'kodus_abc123' }),
       }),
     );
   });

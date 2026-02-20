@@ -8,6 +8,7 @@ import type {
 } from '../../types/index.js';
 import { ApiError } from '../../types/index.js';
 import type { IKodusApi, IAuthApi, IReviewApi, ITrialApi, GitMetrics } from './api.interface.js';
+import { getDeviceIdentity, updateDeviceToken } from '../../utils/device.js';
 
 /**
  * Validates and returns the API base URL
@@ -51,6 +52,15 @@ function getApiBaseUrl(): string {
 const API_BASE_URL = getApiBaseUrl();
 const REQUEST_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
+interface ApiErrorPayload {
+  message?: string;
+  code?: string;
+  details?: {
+    limit?: number;
+    activeDevices?: number;
+  };
+}
+
 function getDefaultApiErrorMessage(statusCode: number, endpoint: string): string {
   const endpointPath = endpoint.split('?')[0] || endpoint;
 
@@ -88,9 +98,18 @@ function getDefaultApiErrorMessage(statusCode: number, endpoint: string): string
   return `Request failed with status ${statusCode}`;
 }
 
-function normalizeApiErrorMessage(statusCode: number, endpoint: string, apiMessage?: string): string {
+function normalizeApiErrorMessage(statusCode: number, endpoint: string, errorData: ApiErrorPayload): string {
+  if (errorData.code === 'DEVICE_LIMIT_REACHED') {
+    const limit = errorData.details?.limit;
+    const activeDevices = errorData.details?.activeDevices;
+    if (typeof limit === 'number' && typeof activeDevices === 'number') {
+      return `Device limit reached (${activeDevices}/${limit}). Remove an old device or contact your admin.`;
+    }
+    return 'Device limit reached for this organization. Remove an old device or contact your admin.';
+  }
+
   const fallbackMessage = getDefaultApiErrorMessage(statusCode, endpoint);
-  if (!apiMessage || typeof apiMessage !== 'string') {
+  if (!errorData.message || typeof errorData.message !== 'string') {
     return fallbackMessage;
   }
 
@@ -99,7 +118,7 @@ function normalizeApiErrorMessage(statusCode: number, endpoint: string, apiMessa
     return fallbackMessage;
   }
 
-  const trimmed = apiMessage.trim();
+  const trimmed = errorData.message.trim();
   if (!trimmed) {
     return fallbackMessage;
   }
@@ -117,9 +136,18 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  let deviceIdentity: { deviceId: string; deviceToken?: string } | undefined;
 
   if (process.env.KODUS_VERBOSE) {
     console.log(`[API] ${options.method || 'GET'} ${url}`);
+  }
+
+  try {
+    deviceIdentity = await getDeviceIdentity();
+  } catch (error) {
+    if (process.env.KODUS_VERBOSE) {
+      console.warn('[API] Unable to resolve device id:', error);
+    }
   }
 
   const controller = new AbortController();
@@ -132,6 +160,8 @@ async function request<T>(
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...(deviceIdentity?.deviceId ? { 'X-Kodus-Device-Id': deviceIdentity.deviceId } : {}),
+        ...(deviceIdentity?.deviceToken ? { 'X-Kodus-Device-Token': deviceIdentity.deviceToken } : {}),
         ...options.headers,
       },
     });
@@ -145,14 +175,25 @@ async function request<T>(
 
   clearTimeout(timeout);
 
+  const responseDeviceToken = response.headers.get('x-kodus-device-token');
+  if (responseDeviceToken) {
+    await updateDeviceToken(responseDeviceToken).catch(() => {});
+  }
+
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
 
   if (!response.ok) {
-    const errorData = isJson
-      ? await response.json().catch(() => ({ message: 'Request failed' })) as { message?: string }
+    const rawError = isJson
+      ? await response.json().catch(() => ({ message: 'Request failed' }))
       : { message: `Request failed with status ${response.status}` };
-    const errorMessage = normalizeApiErrorMessage(response.status, endpoint, errorData.message);
+    // Unwrap API envelope: errors may arrive as { data: { code, message, ... } }
+    // Only unwrap if the top-level object has no message/code of its own.
+    const errorData: ApiErrorPayload =
+      rawError && typeof rawError === 'object' && 'data' in rawError && rawError.data && typeof rawError.data === 'object' && !('message' in rawError) && !('code' in rawError)
+        ? rawError.data as ApiErrorPayload
+        : rawError as ApiErrorPayload;
+    const errorMessage = normalizeApiErrorMessage(response.status, endpoint, errorData);
 
     if (process.env.KODUS_VERBOSE) {
       console.error('[API] Error:', {

@@ -137,7 +137,8 @@ describe('AuthService', () => {
   });
 
   describe('getValidToken', () => {
-    it('returns teamKey when it exists', async () => {
+    it('returns teamKey when no personal credentials exist', async () => {
+      mockLoadCredentials.mockResolvedValue(null);
       mockLoadConfig.mockResolvedValue({ teamKey: 'kodus_team_key' } as any);
       mockLoadCredentials.mockResolvedValue(null);
 
