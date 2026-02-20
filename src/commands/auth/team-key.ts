@@ -9,6 +9,7 @@ interface TeamKeyErrorPayload {
   code?: string;
   details?: {
     limit?: number;
+    current?: number;
     activeDevices?: number;
   };
 }
@@ -16,7 +17,7 @@ interface TeamKeyErrorPayload {
 function getTeamKeyErrorMessage(payload: TeamKeyErrorPayload): string {
   if (payload.code === 'DEVICE_LIMIT_REACHED') {
     const limit = payload.details?.limit;
-    const activeDevices = payload.details?.activeDevices;
+    const activeDevices = payload.details?.current ?? payload.details?.activeDevices;
     if (typeof limit === 'number' && typeof activeDevices === 'number') {
       return `Device limit reached (${activeDevices}/${limit}). Remove an old device or contact your admin.`;
     }

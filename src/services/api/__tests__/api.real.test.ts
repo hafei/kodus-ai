@@ -99,6 +99,24 @@ describe('RealApi request headers', () => {
       new Response(
         JSON.stringify({
           code: 'DEVICE_LIMIT_REACHED',
+          details: { limit: 5, current: 5 },
+        }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    const api = new RealApi();
+    await expect(api.trial.getStatus('fp')).rejects.toThrow('Device limit reached (5/5).');
+  });
+
+  it('keeps compatibility with legacy activeDevices field', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 'DEVICE_LIMIT_REACHED',
           details: { limit: 5, activeDevices: 5 },
         }),
         {

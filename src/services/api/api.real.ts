@@ -58,6 +58,7 @@ interface ApiErrorPayload {
   code?: string;
   details?: {
     limit?: number;
+    current?: number;
     activeDevices?: number;
   };
 }
@@ -102,7 +103,7 @@ function getDefaultApiErrorMessage(statusCode: number, endpoint: string): string
 function normalizeApiErrorMessage(statusCode: number, endpoint: string, errorData: ApiErrorPayload): string {
   if (errorData.code === 'DEVICE_LIMIT_REACHED') {
     const limit = errorData.details?.limit;
-    const activeDevices = errorData.details?.activeDevices;
+    const activeDevices = errorData.details?.current ?? errorData.details?.activeDevices;
     if (typeof limit === 'number' && typeof activeDevices === 'number') {
       return `Device limit reached (${activeDevices}/${limit}). Remove an old device or contact your admin.`;
     }
