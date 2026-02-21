@@ -7,7 +7,8 @@ import type {
   TrialStatus,
 } from '../../types/index.js';
 import { ApiError } from '../../types/index.js';
-import type { IKodusApi, IAuthApi, IReviewApi, ITrialApi, GitMetrics } from './api.interface.js';
+import type { MemoryCaptureApiRequest, MemoryCaptureApiResponse } from '../../types/index.js';
+import type { IKodusApi, IAuthApi, IReviewApi, ITrialApi, IMemoryApi, GitMetrics } from './api.interface.js';
 import { getDeviceIdentity, updateDeviceToken } from '../../utils/device.js';
 
 /**
@@ -57,6 +58,7 @@ interface ApiErrorPayload {
   code?: string;
   details?: {
     limit?: number;
+    current?: number;
     activeDevices?: number;
   };
 }
@@ -101,7 +103,7 @@ function getDefaultApiErrorMessage(statusCode: number, endpoint: string): string
 function normalizeApiErrorMessage(statusCode: number, endpoint: string, errorData: ApiErrorPayload): string {
   if (errorData.code === 'DEVICE_LIMIT_REACHED') {
     const limit = errorData.details?.limit;
-    const activeDevices = errorData.details?.activeDevices;
+    const activeDevices = errorData.details?.current ?? errorData.details?.activeDevices;
     if (typeof limit === 'number' && typeof activeDevices === 'number') {
       return `Device limit reached (${activeDevices}/${limit}). Remove an old device or contact your admin.`;
     }
@@ -504,8 +506,24 @@ class RealTrialApi implements ITrialApi {
   }
 }
 
+class RealMemoryApi implements IMemoryApi {
+  async submitCapture(payload: MemoryCaptureApiRequest, accessToken: string): Promise<MemoryCaptureApiResponse> {
+    const isTeamKey = accessToken.startsWith('kodus_');
+    const headers: Record<string, string> = isTeamKey
+      ? { 'X-Team-Key': accessToken }
+      : { Authorization: `Bearer ${accessToken}` };
+
+    return request<MemoryCaptureApiResponse>('/cli/memory/captures', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
 export class RealApi implements IKodusApi {
   auth: IAuthApi = new RealAuthApi();
   review: IReviewApi = new RealReviewApi();
   trial: ITrialApi = new RealTrialApi();
+  memory: IMemoryApi = new RealMemoryApi();
 }

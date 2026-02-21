@@ -6,6 +6,8 @@ import type {
   TrialReviewResult,
   TrialStatus,
   UserInfo,
+  MemoryCaptureApiRequest,
+  MemoryCaptureApiResponse,
 } from '../../types/index.js';
 
 export interface IAuthApi {
@@ -39,8 +41,13 @@ export interface ITrialApi {
   getStatus(fingerprint: string): Promise<TrialStatus>;
 }
 
+export interface IMemoryApi {
+  submitCapture(payload: MemoryCaptureApiRequest, accessToken: string): Promise<MemoryCaptureApiResponse>;
+}
+
 export interface IKodusApi {
   auth: IAuthApi;
   review: IReviewApi;
   trial: ITrialApi;
+  memory: IMemoryApi;
 }

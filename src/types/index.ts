@@ -195,3 +195,5 @@ export interface GitInfo {
 }
 
 export type PlatformType = 'GITHUB' | 'GITLAB' | 'BITBUCKET' | 'AZURE_REPOS' | undefined;
+
+export type { MemoryCaptureApiRequest, MemoryCaptureApiResponse } from './memory.js';

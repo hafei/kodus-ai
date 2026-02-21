@@ -22,6 +22,51 @@ interface CliResult {
   exitCode: number;
 }
 
+function parseFirstJsonObject(output: string): any {
+  const start = output.indexOf('{');
+  if (start === -1) {
+    throw new Error('No JSON object found in CLI output');
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < output.length; i++) {
+    const ch = output[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{') {
+      depth += 1;
+      continue;
+    }
+
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return JSON.parse(output.slice(start, i + 1));
+      }
+    }
+  }
+
+  throw new Error('Incomplete JSON object in CLI output');
+}
+
 async function runCli(
   args: string[],
   opts: { cwd?: string; env?: Record<string, string> } = {},
@@ -130,7 +175,7 @@ describe('review integration', () => {
     const { stdout, exitCode } = await runCli(['review', '--fast', '--format', 'json']);
     expect(exitCode).toBe(0);
 
-    const json = JSON.parse(stdout);
+    const json = parseFirstJsonObject(stdout);
     expect(json).toHaveProperty('summary');
     expect(json).toHaveProperty('issues');
     expect(json.issues).toHaveLength(2);
@@ -265,6 +310,102 @@ describe('hook integration', () => {
 
     const hookPath = path.join(gitRepoDir, '.git', 'hooks', 'pre-push');
     await expect(fs.access(hookPath)).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Decision commands — enable and capture
+// ---------------------------------------------------------------------------
+describe('decisions integration', () => {
+  it('kodus decisions enable configures .claude/settings.json, ~/.codex/config.toml, post-merge hook and modules.yml', async () => {
+    const { stdout, stderr, exitCode } = await runCli([
+      'decisions',
+      'enable',
+      '--agents',
+      'claude,codex',
+    ]);
+    expect(exitCode).toBe(0);
+    const output = stdout + stderr;
+    expect(output).toContain('Decisions enabled');
+
+    const claudeSettingsPath = path.join(gitRepoDir, '.claude', 'settings.json');
+    const claudeSettings = JSON.parse(await fs.readFile(claudeSettingsPath, 'utf-8'));
+
+    expect(claudeSettings).toHaveProperty('hooks');
+    expect(claudeSettings.hooks).toHaveProperty('UserPromptSubmit');
+    expect(claudeSettings.hooks).toHaveProperty('Stop');
+
+    const userPromptSubmitJson = JSON.stringify(claudeSettings.hooks.UserPromptSubmit);
+    const stopJson = JSON.stringify(claudeSettings.hooks.Stop);
+    expect(userPromptSubmitJson).toContain('kodus decisions capture --agent claude-compatible --event user-prompt-submit');
+    expect(stopJson).toContain('kodus decisions capture --agent claude-compatible --event stop');
+
+    const codexConfigPath = path.join(tmpHome, '.codex', 'config.toml');
+    const codexConfig = await fs.readFile(codexConfigPath, 'utf-8');
+    expect(codexConfig).toContain('notify = ["kodus", "decisions", "capture", "--agent", "codex", "--event", "agent-turn-complete"]');
+
+    const hookPath = path.join(gitRepoDir, '.git', 'hooks', 'post-merge');
+    const hookContent = await fs.readFile(hookPath, 'utf-8');
+    expect(hookContent).toContain('kodus decisions promote');
+  });
+
+  it('kodus decisions capture writes markdown memory file under .kody/pr/<branch>.md', async () => {
+    const branch = (await execFileAsync('git', ['branch', '--show-current'], { cwd: gitRepoDir })).stdout.trim();
+
+    const payload = JSON.stringify({
+      session_id: 'session-1',
+      turn_id: 'turn-1',
+      prompt: 'Use idempotent cache key',
+      last_assistant_message: 'Done with fallback behavior',
+    });
+
+    const { exitCode } = await runCli([
+      'decisions',
+      'capture',
+      payload,
+      '--agent',
+      'codex',
+      '--event',
+      'agent-turn-complete',
+      '--summary',
+      'architectural decision',
+    ]);
+    expect(exitCode).toBe(0);
+
+    const memoryFilePath = path.join(gitRepoDir, '.kody', 'pr', `${branch}.md`);
+    const content = await fs.readFile(memoryFilePath, 'utf-8');
+    expect(content).toContain(`# PR Memory: ${branch}`);
+    expect(content).toContain('codex');
+    expect(content).toContain('agent-turn-complete');
+    expect(content).toContain('Use idempotent cache key');
+  });
+
+  it('kodus decisions capture resolves claude-compatible to cursor when Cursor env vars are present', async () => {
+    const branch = (await execFileAsync('git', ['branch', '--show-current'], { cwd: gitRepoDir })).stdout.trim();
+
+    const payload = JSON.stringify({
+      session_id: 'session-2',
+      prompt: 'add retry with backoff',
+    });
+
+    const { exitCode } = await runCli([
+      'decisions',
+      'capture',
+      payload,
+      '--agent',
+      'claude-compatible',
+      '--event',
+      'user-prompt-submit',
+    ], {
+      env: {
+        CURSOR_VERSION: '1.0.0',
+      },
+    });
+    expect(exitCode).toBe(0);
+
+    const memoryFilePath = path.join(gitRepoDir, '.kody', 'pr', `${branch}.md`);
+    const content = await fs.readFile(memoryFilePath, 'utf-8');
+    expect(content).toContain('| cursor | user-prompt-submit');
   });
 });
 

@@ -134,6 +134,30 @@ describe('auth team-key command', () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalled();
   });
+
+  it('shows device limit message when API returns DEVICE_LIMIT_REACHED with current count', async () => {
+    const fetchMock = vi.mocked(fetch);
+    const exitSpy = mockProcessExit();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 'DEVICE_LIMIT_REACHED',
+          details: { limit: 2, current: 2 },
+        }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    await expect(teamKeyAction({ key: 'kodus_abc123' })).rejects.toThrow('process.exit:1');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const output = errorSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(output).toContain('Device limit reached (2/2). Remove an old device or contact your admin.');
+  });
 });
 
 describe('auth team-status command', () => {

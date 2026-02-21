@@ -272,6 +272,42 @@ Similar workflow - the AI agent can autonomously:
 - ✅ Consistent with team standards
 - ✅ Faster development cycles
 
+## Decision Memory (MVP)
+
+Capture agent decisions into repository-local markdown files (`.kody/pr/by-sha/<head-sha>.md`).
+
+```bash
+# Enable decisions: installs all hooks + initializes module config
+kodus decisions enable
+
+# Optional: choose agents explicitly
+kodus decisions enable --agents claude,cursor,codex
+
+# Optional: custom Codex config path
+kodus decisions enable --agents codex --codex-config ~/.codex/config.toml
+
+# Overwrite existing modules.yml
+kodus decisions enable --force
+
+# Disable decisions: removes hooks (preserves .kody/ data)
+kodus decisions disable
+
+# Check current branch memory status
+kodus decisions status
+
+# Show PR memory or module memory
+kodus decisions show [name]
+
+# Promote PR decisions to module memory
+kodus decisions promote --branch <name> --modules <ids>
+```
+
+The capture command is internal and invoked by hooks:
+
+```bash
+kodus decisions capture '{"turn_id":"turn-1"}' --agent codex --event agent-turn-complete
+```
+
 ## Trial Mode
 
 Without an account, you can use the CLI with rate limits:

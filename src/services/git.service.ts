@@ -37,6 +37,16 @@ class GitService {
     return this.git.revparse(['--show-toplevel']);
   }
 
+  async getHeadSha(): Promise<string | null> {
+    await this.ensureRepo();
+
+    try {
+      return (await this.git.revparse(['HEAD'])).trim();
+    } catch {
+      return null;
+    }
+  }
+
   async getRemoteUrl(remote = 'origin'): Promise<string | null> {
     try {
       const remotes = await this.git.getRemotes(true);
