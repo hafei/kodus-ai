@@ -27,6 +27,7 @@ import { PermissionValidationModule } from '@libs/ee/shared/permission-validatio
 import { IssuesService } from './infrastructure/adapters/service/issues.service';
 import { UserModule } from '@libs/identity/modules/user.module';
 import { PermissionsModule } from '@libs/identity/modules/permissions.module';
+import { OrganizationParametersModule } from '@libs/organization/modules/organizationParameters.module';
 
 @Module({
     imports: [
@@ -46,6 +47,7 @@ import { PermissionsModule } from '@libs/identity/modules/permissions.module';
         GlobalCacheModule,
         forwardRef(() => LicenseModule),
         forwardRef(() => PermissionValidationModule),
+        forwardRef(() => OrganizationParametersModule),
         PermissionsModule,
     ],
     providers: [

@@ -92,22 +92,10 @@ export class GitlabService implements Omit<
     | 'requestChangesPullRequest'
 > {
     private readonly logger = createLogger(GitlabService.name);
-    private readonly gitlabRequestTimeoutMs = this.parsePositiveIntEnv(
-        'GITLAB_REQUEST_TIMEOUT_MS',
-        60000,
-    );
-    private readonly gitlabConnectTimeoutMs = this.parsePositiveIntEnv(
-        'GITLAB_CONNECT_TIMEOUT_MS',
-        30000,
-    );
-    private readonly gitlabMaxRetries = this.parsePositiveIntEnv(
-        'GITLAB_MAX_RETRIES',
-        2,
-    );
-    private readonly gitlabRetryBaseDelayMs = this.parsePositiveIntEnv(
-        'GITLAB_RETRY_BASE_DELAY_MS',
-        750,
-    );
+    private readonly gitlabRequestTimeoutMs: number;
+    private readonly gitlabConnectTimeoutMs: number;
+    private readonly gitlabMaxRetries: number;
+    private readonly gitlabRetryBaseDelayMs: number;
 
     constructor(
         @Inject(INTEGRATION_SERVICE_TOKEN)
@@ -122,7 +110,25 @@ export class GitlabService implements Omit<
         private readonly configService: ConfigService,
         private readonly cacheService: CacheService,
         private readonly mcpManagerService?: MCPManagerService,
-    ) { }
+    ) {
+        // ConfigService is injected via constructor, so read env-backed values here.
+        this.gitlabRequestTimeoutMs = this.parsePositiveIntEnv(
+            'GITLAB_REQUEST_TIMEOUT_MS',
+            60000,
+        );
+        this.gitlabConnectTimeoutMs = this.parsePositiveIntEnv(
+            'GITLAB_CONNECT_TIMEOUT_MS',
+            30000,
+        );
+        this.gitlabMaxRetries = this.parsePositiveIntEnv(
+            'GITLAB_MAX_RETRIES',
+            2,
+        );
+        this.gitlabRetryBaseDelayMs = this.parsePositiveIntEnv(
+            'GITLAB_RETRY_BASE_DELAY_MS',
+            750,
+        );
+    }
 
     async getPullRequestAuthors(params: {
         organizationAndTeamData: OrganizationAndTeamData;
