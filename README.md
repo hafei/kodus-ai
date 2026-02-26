@@ -153,7 +153,7 @@ export KODUS_TEAM_KEY=kodus_xxxxx
 kodus review --prompt-only
 ```
 
-Works with Codex, CI runners, remote dev environments, and any context where personal login isn't practical. Get your key at [app.kodus.io/settings/cli](https://app.kodus.io/settings/cli).
+Works with Codex, CI runners, remote dev environments, and any context where personal login isn't practical. Get your key at [app.kodus.io/organization/cli-keys](https://app.kodus.io/organization/cli-keys).
 
 ### Copy & Paste Workflow (interactive)
 
@@ -363,7 +363,7 @@ Or set it as an environment variable:
 export KODUS_TEAM_KEY=kodus_xxxxx
 ```
 
-Get your team key at [app.kodus.io/settings/cli](https://app.kodus.io/settings/cli). Team keys have configurable device limits managed from the dashboard.
+Get your team key at [app.kodus.io/organization/cli-keys](https://app.kodus.io/organization/cli-keys). Team keys have configurable device limits managed from the dashboard.
 
 This is also the recommended auth method for AI coding agents (Claude Code, Cursor, Codex) — set the env var once and every agent session is authenticated automatically.
 

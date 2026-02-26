@@ -30,7 +30,7 @@ function getTeamKeyErrorMessage(payload: TeamKeyErrorPayload): string {
 export async function teamKeyAction(options: { key?: string }): Promise<void> {
   if (!options.key) {
     console.error(chalk.red('Error: --key is required'));
-    console.log('\nGet your team key from: https://app.kodus.io/settings/cli');
+    console.log('\nGet your team key from: https://app.kodus.io/organization/cli-keys');
     process.exit(1);
   }
 
@@ -106,7 +106,7 @@ export async function teamStatusAction(): Promise<void> {
   if (!config) {
     console.log(chalk.yellow('Not authenticated with team key'));
     console.log('\nRun: kodus auth team-key --key <your-key>');
-    console.log('Get your key from: https://app.kodus.io/settings/cli');
+    console.log('Get your key from: https://app.kodus.io/organization/cli-keys');
     return;
   }
 
