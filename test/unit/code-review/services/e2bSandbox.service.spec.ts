@@ -4,11 +4,15 @@ import { E2BSandboxService } from '@libs/code-review/infrastructure/adapters/ser
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 
 // Mock e2b SDK (virtual: true because the package may not be installed)
-jest.mock('e2b', () => ({
-    Sandbox: {
-        create: jest.fn(),
-    },
-}), { virtual: true });
+jest.mock(
+    'e2b',
+    () => ({
+        Sandbox: {
+            create: jest.fn(),
+        },
+    }),
+    { virtual: true },
+);
 
 jest.mock('@kodus/flow', () => ({
     createLogger: () => ({
@@ -82,12 +86,10 @@ describe('E2BSandboxService', () => {
 
         it('should use oauth2 for GitLab', () => {
             const header = buildAuthHeader(PlatformType.GITLAB, 'mytoken');
-            const expectedBase64 = Buffer.from('oauth2:mytoken').toString(
-                'base64',
-            );
+            const expectedBase64 =
+                Buffer.from('oauth2:mytoken').toString('base64');
             expect(header).toBe(`Authorization: Basic ${expectedBase64}`);
         });
-
     });
 
     // ─── getPrRefspec ──────────────────────────────────────────────────────
@@ -111,7 +113,6 @@ describe('E2BSandboxService', () => {
                 'refs/merge-requests/42/head',
             );
         });
-
     });
 
     // ─── createSandboxWithRepo ─────────────────────────────────────────────
@@ -127,7 +128,9 @@ describe('E2BSandboxService', () => {
 
         const setupSandboxMock = () => {
             const mockKill = jest.fn().mockResolvedValue(undefined);
-            const mockRun = jest.fn().mockResolvedValue({ stdout: '', stderr: '' });
+            const mockRun = jest
+                .fn()
+                .mockResolvedValue({ stdout: '', stderr: '' });
             const mockSandbox = {
                 commands: { run: mockRun },
                 kill: mockKill,
@@ -206,7 +209,9 @@ describe('E2BSandboxService', () => {
             expect(gitCommand).toContain('git init /home/user/repo');
             expect(gitCommand).toContain('refs/pull/42/head:pr-head');
             expect(gitCommand).toContain('git checkout pr-head');
-            expect(gitCommand).toContain(`git remote add origin ${defaultParams.cloneUrl}`);
+            expect(gitCommand).toContain(
+                `git remote add origin ${defaultParams.cloneUrl}`,
+            );
             expect(gitCommand).toContain('no-push-allowed');
 
             // Auth header passed via envs, not embedded in URL
@@ -227,7 +232,6 @@ describe('E2BSandboxService', () => {
             expect(typeof result.remoteCommands.listDir).toBe('function');
             expect(typeof result.cleanup).toBe('function');
         });
-
     });
 
     // ─── cleanup ────────────────────────────────────────────────────────────
@@ -259,7 +263,9 @@ describe('E2BSandboxService', () => {
         it('should swallow sandbox.kill() errors (logged internally)', async () => {
             service = await createService({ API_E2B_KEY: 'key' });
 
-            const mockKill = jest.fn().mockRejectedValue(new Error('kill failed'));
+            const mockKill = jest
+                .fn()
+                .mockRejectedValue(new Error('kill failed'));
             const { Sandbox } = require('e2b');
             Sandbox.create.mockResolvedValue({
                 commands: { run: jest.fn().mockResolvedValue({ stdout: '' }) },
@@ -310,7 +316,10 @@ describe('E2BSandboxService', () => {
 
         describe('grep()', () => {
             it('should run rg with pattern and resolved path', async () => {
-                const result = await remoteCommands.grep('myFunc\\(', 'src/index.ts');
+                const result = await remoteCommands.grep(
+                    'myFunc\\(',
+                    'src/index.ts',
+                );
 
                 expect(mockRun).toHaveBeenCalledWith(
                     "rg --no-heading -n 'myFunc\\(' '/home/user/repo/src/index.ts'",
@@ -387,6 +396,5 @@ describe('E2BSandboxService', () => {
                 'Path traversal using ".." is not allowed',
             );
         });
-
     });
 });

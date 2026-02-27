@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Checkbox } from "@components/ui/checkbox";
+import { CodeInputSimple } from "@components/ui/code-input-simple";
 import {
     Collapsible,
     CollapsibleContent,
@@ -17,34 +18,40 @@ import {
 } from "@components/ui/dialog";
 import { FormControl } from "@components/ui/form-control";
 import { Heading } from "@components/ui/heading";
-import { Input } from "@components/ui/input";
-import { Label } from "@components/ui/label";
-import { magicModal } from "@components/ui/magic-modal";
-import { Separator } from "@components/ui/separator";
-import { SliderWithMarkers } from "@components/ui/slider-with-markers";
-import { Switch } from "@components/ui/switch";
-import { useToast } from "@components/ui/toaster/use-toast";
-import { ToggleGroup } from "@components/ui/toggle-group";
-import { RichTextEditorWithMentions, type RichTextEditorWithMentionsRef, type MentionGroup, type MentionGroupItem } from "@components/ui/rich-text-editor-with-mentions";
-import { CodeInputSimple } from "@components/ui/code-input-simple";
-import { useMCPMentions } from "src/core/hooks/use-mcp-mentions";
 import {
     HoverCard,
     HoverCardContent,
     HoverCardTrigger,
 } from "@components/ui/hover-card";
+import { Input } from "@components/ui/input";
+import { KodyReviewPreview } from "@components/ui/kody-review-preview";
+import { Label } from "@components/ui/label";
+import { magicModal } from "@components/ui/magic-modal";
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from "@components/ui/popover";
-import { KodyReviewPreview } from "@components/ui/kody-review-preview";
+import {
+    RichTextEditorWithMentions,
+    type MentionGroup,
+    type MentionGroupItem,
+    type RichTextEditorWithMentionsRef,
+} from "@components/ui/rich-text-editor-with-mentions";
+import { Separator } from "@components/ui/separator";
+import { SliderWithMarkers } from "@components/ui/slider-with-markers";
+import { Switch } from "@components/ui/switch";
+import { useToast } from "@components/ui/toaster/use-toast";
+import { ToggleGroup } from "@components/ui/toggle-group";
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
 } from "@components/ui/tooltip";
-import { createOrUpdateKodyRule, getRecommendedKodyRules } from "@services/kodyRules/fetch";
+import {
+    createOrUpdateKodyRule,
+    getRecommendedKodyRules,
+} from "@services/kodyRules/fetch";
 import {
     KodyRuleInheritanceOrigin,
     KodyRulesOrigin,
@@ -71,12 +78,11 @@ import {
     XIcon,
 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import { useMCPMentions } from "src/core/hooks/use-mcp-mentions";
 import { cn } from "src/core/utils/components";
-import { ExternalReferencesDisplay } from "../[repositoryId]/pr-summary/_components/external-references-display";
 
-import type {
-    FormattedDirectoryCodeReviewConfig,
-} from "../_types";
+import type { FormattedDirectoryCodeReviewConfig } from "../_types";
+import { ExternalReferencesDisplay } from "../[repositoryId]/pr-summary/_components/external-references-display";
 
 const severityLevelFilterOptions = {
     low: { label: "Low", value: 0 },
@@ -177,11 +183,11 @@ const RULE_SUGGESTIONS = [
     },
 ];
 
-function RuleSuggestions({ 
+function RuleSuggestions({
     onSelectSuggestion,
     currentValue,
-    disabled 
-}: { 
+    disabled,
+}: {
     onSelectSuggestion: (rule: string) => void;
     currentValue: string;
     disabled?: boolean;
@@ -210,22 +216,25 @@ function RuleSuggestions({
 
     if (currentValue) return null;
 
-    const apiSuggestions = recommendedRules.map(r => ({ 
-        title: r.title, 
-        rule: r.rule 
+    const apiSuggestions = recommendedRules.map((r) => ({
+        title: r.title,
+        rule: r.rule,
     }));
 
-    const fallbackSuggestions = RULE_SUGGESTIONS.map(s => ({
+    const fallbackSuggestions = RULE_SUGGESTIONS.map((s) => ({
         title: s.title,
-        rule: s.rule
+        rule: s.rule,
     }));
 
     const suggestions = [...apiSuggestions];
-    
+
     if (suggestions.length < 5) {
         const needed = 5 - suggestions.length;
         const fallbackToAdd = fallbackSuggestions
-            .filter(fallback => !suggestions.some(s => s.title === fallback.title))
+            .filter(
+                (fallback) =>
+                    !suggestions.some((s) => s.title === fallback.title),
+            )
             .slice(0, needed);
         suggestions.push(...fallbackToAdd);
     }
@@ -233,18 +242,18 @@ function RuleSuggestions({
     return (
         <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
-                <Lightbulb className="size-3.5 text-primary-light" />
+                <Lightbulb className="text-primary-light size-3.5" />
                 <span className="text-text-secondary text-xs font-medium">
                     Start with a popular template:
                 </span>
             </div>
-            
+
             {isLoading ? (
                 <div className="flex flex-wrap gap-2">
                     {[...Array(4)].map((_, i) => (
-                        <div 
+                        <div
                             key={i}
-                            className="h-8 w-32 bg-card-lv3/50 rounded-full animate-pulse"
+                            className="bg-card-lv3/50 h-8 w-32 animate-pulse rounded-full"
                             style={{ animationDelay: `${i * 100}ms` }}
                         />
                     ))}
@@ -258,23 +267,23 @@ function RuleSuggestions({
                             disabled={disabled}
                             onClick={() => onSelectSuggestion(suggestion.rule)}
                             className={cn(
-                                "group relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full",
-                                "bg-card-lv3 border border-card-lv3",
+                                "group relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
+                                "bg-card-lv3 border-card-lv3 border",
                                 "hover:border-primary-light hover:bg-primary-dark/40 hover:scale-105",
                                 "active:scale-95",
                                 "transition-all duration-200",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                                "opacity-0 animate-fade-in-up"
+                                "disabled:cursor-not-allowed disabled:opacity-50",
+                                "animate-fade-in-up opacity-0",
                             )}
-                            style={{ 
+                            style={{
                                 animationDelay: `${index * 80}ms`,
-                                animationFillMode: 'forwards'
+                                animationFillMode: "forwards",
                             }}>
-                            <Sparkles className="size-3 text-primary-light opacity-60 group-hover:opacity-100 group-hover:rotate-12 transition-all duration-200" />
-                            <span className="text-xs text-text-secondary group-hover:text-text-primary font-medium transition-colors">
+                            <Sparkles className="text-primary-light size-3 opacity-60 transition-all duration-200 group-hover:rotate-12 group-hover:opacity-100" />
+                            <span className="text-text-secondary group-hover:text-text-primary text-xs font-medium transition-colors">
                                 {suggestion.title}
                             </span>
-                            <div className="absolute inset-0 rounded-full bg-primary-light/0 group-hover:bg-primary-light/5 transition-colors duration-200" />
+                            <div className="bg-primary-light/0 group-hover:bg-primary-light/5 absolute inset-0 rounded-full transition-colors duration-200" />
                         </button>
                     ))}
                 </div>
@@ -292,7 +301,8 @@ function MCPToolsPopover({
     disabled?: boolean;
     onInsertMention: (app: string, tool: string) => void;
 }) {
-    const [selectedApp, setSelectedApp] = React.useState<MentionGroupItem | null>(null);
+    const [selectedApp, setSelectedApp] =
+        React.useState<MentionGroupItem | null>(null);
     const [tools, setTools] = React.useState<MentionGroup[] | null>(null);
     const [isOpen, setIsOpen] = React.useState(false);
 
@@ -327,13 +337,15 @@ function MCPToolsPopover({
     };
 
     return (
-        <Popover open={isOpen} onOpenChange={(open) => {
-            setIsOpen(open);
-            if (!open) {
-                setSelectedApp(null);
-                setTools(null);
-            }
-        }}>
+        <Popover
+            open={isOpen}
+            onOpenChange={(open) => {
+                setIsOpen(open);
+                if (!open) {
+                    setSelectedApp(null);
+                    setTools(null);
+                }
+            }}>
             <PopoverTrigger asChild>
                 <Button
                     size="xs"
@@ -348,22 +360,22 @@ function MCPToolsPopover({
             </PopoverTrigger>
             <PopoverContent
                 align="end"
-                className="w-80 p-0 flex flex-col max-h-[320px]">
-                <div className="p-3 border-b border-card-lv3 flex items-center gap-2 shrink-0">
+                className="flex max-h-[320px] w-80 flex-col p-0">
+                <div className="border-card-lv3 flex shrink-0 items-center gap-2 border-b p-3">
                     {selectedApp && (
                         <button
                             type="button"
                             onClick={handleBack}
-                            className="text-xs text-text-secondary hover:text-text-primary transition-colors">
+                            className="text-text-secondary hover:text-text-primary text-xs transition-colors">
                             ← Back
                         </button>
                     )}
-                    <span className="text-xs font-medium text-text-primary truncate">
+                    <span className="text-text-primary truncate text-xs font-medium">
                         {selectedApp ? selectedApp.label : "Select MCP"}
                     </span>
                 </div>
                 <div
-                    className="overflow-y-auto p-2 min-h-0 flex-1"
+                    className="min-h-0 flex-1 overflow-y-auto p-2"
                     onWheel={(e) => e.stopPropagation()}>
                     {!selectedApp ? (
                         <div className="flex flex-col gap-1">
@@ -371,14 +383,14 @@ function MCPToolsPopover({
                                 <button
                                     key={app.value}
                                     type="button"
-                                    className="flex items-center justify-between w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-card-lv3 transition-colors"
+                                    className="hover:bg-card-lv3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors"
                                     onClick={() => handleSelectApp(app)}>
                                     <span>{app.label}</span>
-                                    <ChevronDown className="size-4 -rotate-90 text-text-secondary" />
+                                    <ChevronDown className="text-text-secondary size-4 -rotate-90" />
                                 </button>
                             ))}
                             {apps.length === 0 && (
-                                <p className="text-xs text-text-secondary text-center py-4">
+                                <p className="text-text-secondary py-4 text-center text-xs">
                                     No MCP connections available
                                 </p>
                             )}
@@ -390,11 +402,11 @@ function MCPToolsPopover({
                                     <button
                                         key={tool.value}
                                         type="button"
-                                        className="text-xs font-mono bg-tertiary-dark text-tertiary-light px-2 py-1 rounded hover:brightness-125 transition-all"
+                                        className="bg-tertiary-dark text-tertiary-light rounded px-2 py-1 font-mono text-xs transition-all hover:brightness-125"
                                         onClick={() => handleInsertTool(tool)}>
                                         {tool.label}
                                     </button>
-                                ))
+                                )),
                             )}
                         </div>
                     )}
@@ -450,9 +462,9 @@ export const KodyRuleAddOrUpdateItemModal = ({
                 initialScope === "pull-request"
                     ? ""
                     : rule
-                        ? !directory
-                            ? rule.path
-                            : (() => {
+                      ? !directory
+                          ? rule.path
+                          : (() => {
                                 const pathWithoutDirectory =
                                     getKodyRulePathWithoutDirectoryPath({
                                         directory,
@@ -463,9 +475,9 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                     DEFAULT_PATH_FOR_DIRECTORIES
                                 );
                             })()
-                        : directory
-                            ? DEFAULT_PATH_FOR_DIRECTORIES
-                            : "",
+                      : directory
+                        ? DEFAULT_PATH_FOR_DIRECTORIES
+                        : "",
             rule: rule?.rule ?? "",
             title: rule?.title ?? "",
             severity: rule?.severity ?? "high",
@@ -648,7 +660,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                             href="https://docs.kodus.io/how_to_use/en/code_review/configs/kody_rules"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-text-secondary hover:text-primary-light transition-colors">
+                            className="text-text-secondary hover:text-primary-light flex items-center gap-1 text-xs transition-colors">
                             Docs
                             <ExternalLink className="size-3" />
                         </a>
@@ -738,7 +750,9 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                     <FormControl.Root>
                                         <FormControl.Label className="mb-0 flex flex-row gap-1">
                                             Execution mode
-                                            <HoverCard openDelay={100} closeDelay={200}>
+                                            <HoverCard
+                                                openDelay={100}
+                                                closeDelay={200}>
                                                 <HoverCardTrigger asChild>
                                                     <button type="button">
                                                         <HelpCircle
@@ -752,40 +766,65 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                     align="start"
                                                     side="right"
                                                     className="w-96 p-0">
-                                                    <div className="p-4 border-b border-card-lv3">
-                                                        <h4 className="text-sm font-medium text-text-primary mb-1">
+                                                    <div className="border-card-lv3 border-b p-4">
+                                                        <h4 className="text-text-primary mb-1 text-sm font-medium">
                                                             Execution mode
                                                         </h4>
-                                                        <p className="text-xs text-text-secondary">
-                                                            Choose how Kody analyzes your code and where comments appear.
+                                                        <p className="text-text-secondary text-xs">
+                                                            Choose how Kody
+                                                            analyzes your code
+                                                            and where comments
+                                                            appear.
                                                         </p>
                                                     </div>
 
-                                                    <div className="p-4 space-y-4">
+                                                    <div className="space-y-4 p-4">
                                                         <div className="space-y-2">
                                                             <div className="flex items-center gap-2">
-                                                                <FileCode className="size-4 text-primary-light" />
-                                                                <span className="text-xs font-medium text-text-primary">Per file</span>
+                                                                <FileCode className="text-primary-light size-4" />
+                                                                <span className="text-text-primary text-xs font-medium">
+                                                                    Per file
+                                                                </span>
                                                             </div>
-                                                            <p className="text-xs text-text-secondary pl-6">
-                                                                Rule runs once for each changed file. Best for file-specific validations like code style, patterns, or security checks.
+                                                            <p className="text-text-secondary pl-6 text-xs">
+                                                                Rule runs once
+                                                                for each changed
+                                                                file. Best for
+                                                                file-specific
+                                                                validations like
+                                                                code style,
+                                                                patterns, or
+                                                                security checks.
                                                             </p>
                                                             <div className="pl-6">
                                                                 <KodyReviewPreview
                                                                     mode="inline"
                                                                     comment="Consider adding error handling here."
-                                                                    codeLine={{ number: 12, content: "await fetchData();" }}
+                                                                    codeLine={{
+                                                                        number: 12,
+                                                                        content:
+                                                                            "await fetchData();",
+                                                                    }}
                                                                 />
                                                             </div>
                                                         </div>
 
-                                                        <div className="border-t border-card-lv3 pt-4 space-y-2">
+                                                        <div className="border-card-lv3 space-y-2 border-t pt-4">
                                                             <div className="flex items-center gap-2">
-                                                                <GitPullRequest className="size-4 text-primary-light" />
-                                                                <span className="text-xs font-medium text-text-primary">Per PR</span>
+                                                                <GitPullRequest className="text-primary-light size-4" />
+                                                                <span className="text-text-primary text-xs font-medium">
+                                                                    Per PR
+                                                                </span>
                                                             </div>
-                                                            <p className="text-xs text-text-secondary pl-6">
-                                                                Rule runs once for the entire PR. Best for cross-file analysis, business logic validation, or summary reviews.
+                                                            <p className="text-text-secondary pl-6 text-xs">
+                                                                Rule runs once
+                                                                for the entire
+                                                                PR. Best for
+                                                                cross-file
+                                                                analysis,
+                                                                business logic
+                                                                validation, or
+                                                                summary reviews.
                                                             </p>
                                                             <div className="pl-6">
                                                                 <KodyReviewPreview
@@ -810,7 +849,8 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                             value={field.value}
                                             disabled={field.disabled}
                                             onValueChange={(value) => {
-                                                if (value) field.onChange(value);
+                                                if (value)
+                                                    field.onChange(value);
 
                                                 if (value === "file") {
                                                     let newPath = "";
@@ -830,9 +870,13 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                         }
                                                     }
 
-                                                    form.setValue("path", newPath, {
-                                                        shouldValidate: true,
-                                                    });
+                                                    form.setValue(
+                                                        "path",
+                                                        newPath,
+                                                        {
+                                                            shouldValidate: true,
+                                                        },
+                                                    );
                                                 } else if (
                                                     value === "pull-request"
                                                 ) {
@@ -841,57 +885,83 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                     });
                                                 }
                                             }}>
-                                            {executionModeOptions.map((option) => {
-                                                const Icon = option.icon;
-                                                const isSelected = option.value === field.value;
-                                                return (
-                                                    <ToggleGroup.ToggleGroupItem
-                                                        asChild
-                                                        key={option.value}
-                                                        value={option.value}>
-                                                        <Button
-                                                            size="md"
-                                                            variant="helper"
-                                                            className={cn(
-                                                                "h-auto flex-1 items-start py-4 px-4",
-                                                                isSelected && "ring-2 ring-primary-light"
-                                                            )}>
-                                                            <div className="flex w-full items-start justify-between gap-3">
-                                                                <div className="flex items-start gap-3">
-                                                                    <div className={cn(
-                                                                        "flex size-9 items-center justify-center rounded-lg",
-                                                                        isSelected ? "bg-primary-light/20" : "bg-card-lv3"
-                                                                    )}>
-                                                                        <Icon className={cn(
-                                                                            "size-5",
-                                                                            isSelected ? "text-primary-light" : "text-text-secondary"
-                                                                        )} />
+                                            {executionModeOptions.map(
+                                                (option) => {
+                                                    const Icon = option.icon;
+                                                    const isSelected =
+                                                        option.value ===
+                                                        field.value;
+                                                    return (
+                                                        <ToggleGroup.ToggleGroupItem
+                                                            asChild
+                                                            key={option.value}
+                                                            value={
+                                                                option.value
+                                                            }>
+                                                            <Button
+                                                                size="md"
+                                                                variant="helper"
+                                                                className={cn(
+                                                                    "h-auto flex-1 items-start px-4 py-4",
+                                                                    isSelected &&
+                                                                        "ring-primary-light ring-2",
+                                                                )}>
+                                                                <div className="flex w-full items-start justify-between gap-3">
+                                                                    <div className="flex items-start gap-3">
+                                                                        <div
+                                                                            className={cn(
+                                                                                "flex size-9 items-center justify-center rounded-lg",
+                                                                                isSelected
+                                                                                    ? "bg-primary-light/20"
+                                                                                    : "bg-card-lv3",
+                                                                            )}>
+                                                                            <Icon
+                                                                                className={cn(
+                                                                                    "size-5",
+                                                                                    isSelected
+                                                                                        ? "text-primary-light"
+                                                                                        : "text-text-secondary",
+                                                                                )}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="flex flex-col gap-1 text-left">
+                                                                            <span className="text-sm font-medium">
+                                                                                {
+                                                                                    option.name
+                                                                                }
+                                                                            </span>
+                                                                            <span className="text-text-secondary text-xs">
+                                                                                {
+                                                                                    option.description
+                                                                                }
+                                                                            </span>
+                                                                            <span
+                                                                                className={cn(
+                                                                                    "text-xs",
+                                                                                    isSelected
+                                                                                        ? "text-primary-light"
+                                                                                        : "text-text-placeholder",
+                                                                                )}>
+                                                                                →{" "}
+                                                                                {
+                                                                                    option.output
+                                                                                }
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="flex flex-col gap-1 text-left">
-                                                                        <span className="text-sm font-medium">
-                                                                            {option.name}
-                                                                        </span>
-                                                                        <span className="text-xs text-text-secondary">
-                                                                            {option.description}
-                                                                        </span>
-                                                                        <span className={cn(
-                                                                            "text-xs",
-                                                                            isSelected ? "text-primary-light" : "text-text-placeholder"
-                                                                        )}>
-                                                                            → {option.output}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
 
-                                                                <Checkbox
-                                                                    decorative
-                                                                    checked={isSelected}
-                                                                />
-                                                            </div>
-                                                        </Button>
-                                                    </ToggleGroup.ToggleGroupItem>
-                                                );
-                                            })}
+                                                                    <Checkbox
+                                                                        decorative
+                                                                        checked={
+                                                                            isSelected
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </Button>
+                                                        </ToggleGroup.ToggleGroupItem>
+                                                    );
+                                                },
+                                            )}
                                         </ToggleGroup.Root>
                                     </FormControl.Input>
                                 </div>
@@ -983,14 +1053,14 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                 error={fieldState.error}
                                                 className={cn(
                                                     directory &&
-                                                    !isInherited &&
-                                                    watchScope === "file" &&
-                                                    "rounded-l-none",
+                                                        !isInherited &&
+                                                        watchScope === "file" &&
+                                                        "rounded-l-none",
                                                 )}
                                                 disabled={
                                                     field.disabled ||
                                                     watchScope ===
-                                                    "pull-request"
+                                                        "pull-request"
                                                 }
                                                 onChange={(e) =>
                                                     field.onChange(
@@ -1075,10 +1145,12 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                     <code className="text-primary-light">
                                                         {"{{file.path}}"}
                                                     </code>{" "}
-                                                    to reference dynamic context.
+                                                    to reference dynamic
+                                                    context.
                                                 </p>
                                                 <p>
-                                                    Reference files from any connected repository using{" "}
+                                                    Reference files from any
+                                                    connected repository using{" "}
                                                     <code className="text-primary-light">
                                                         @repo/path/to/file
                                                     </code>
@@ -1104,10 +1176,14 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                 )
                                             }
                                             disabled={field.disabled}
-                                            placeholder={INSTRUCTIONS_PLACEHOLDER}
+                                            placeholder={
+                                                INSTRUCTIONS_PLACEHOLDER
+                                            }
                                             saveFormat="text"
                                             groups={mcpGroups}
-                                            formatInsertByType={formatInsertByType}
+                                            formatInsertByType={
+                                                formatInsertByType
+                                            }
                                             className="min-h-32"
                                             toolbarExtraActions={
                                                 <>
@@ -1117,10 +1193,16 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                                 size="xs"
                                                                 variant="cancel"
                                                                 type="button"
-                                                                disabled={field.disabled}
+                                                                disabled={
+                                                                    field.disabled
+                                                                }
                                                                 className="h-7 gap-1"
-                                                                rightIcon={<ChevronDown className="size-3" />}
-                                                                leftIcon={<Code2 className="size-3" />}>
+                                                                rightIcon={
+                                                                    <ChevronDown className="size-3" />
+                                                                }
+                                                                leftIcon={
+                                                                    <Code2 className="size-3" />
+                                                                }>
                                                                 Variables
                                                             </Button>
                                                         </PopoverTrigger>
@@ -1128,27 +1210,37 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                             align="end"
                                                             className="w-72 p-3">
                                                             <div className="flex flex-col gap-3">
-                                                                <span className="text-xs font-medium text-text-primary">
-                                                                    {watchScope === "file"
+                                                                <span className="text-text-primary text-xs font-medium">
+                                                                    {watchScope ===
+                                                                    "file"
                                                                         ? "File context"
                                                                         : "PR context"}
                                                                 </span>
                                                                 <div className="flex flex-wrap gap-1.5">
-                                                                    {(watchScope === "file"
+                                                                    {(watchScope ===
+                                                                    "file"
                                                                         ? FILE_CONTEXT_VARIABLES
                                                                         : PR_CONTEXT_VARIABLES
-                                                                    ).map((v) => (
-                                                                        <button
-                                                                            key={v.key}
-                                                                            type="button"
-                                                                            className="text-xs font-mono bg-primary-dark text-primary-light px-2 py-1 rounded hover:brightness-125 transition-all"
-                                                                            onClick={() => {
-                                                                                editorRef.current?.insertText(v.label);
-                                                                                editorRef.current?.focus();
-                                                                            }}>
-                                                                            {v.label}
-                                                                        </button>
-                                                                    ))}
+                                                                    ).map(
+                                                                        (v) => (
+                                                                            <button
+                                                                                key={
+                                                                                    v.key
+                                                                                }
+                                                                                type="button"
+                                                                                className="bg-primary-dark text-primary-light rounded px-2 py-1 font-mono text-xs transition-all hover:brightness-125"
+                                                                                onClick={() => {
+                                                                                    editorRef.current?.insertText(
+                                                                                        v.label,
+                                                                                    );
+                                                                                    editorRef.current?.focus();
+                                                                                }}>
+                                                                                {
+                                                                                    v.label
+                                                                                }
+                                                                            </button>
+                                                                        ),
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </PopoverContent>
@@ -1156,10 +1248,20 @@ export const KodyRuleAddOrUpdateItemModal = ({
 
                                                     {mcpGroups.length > 0 && (
                                                         <MCPToolsPopover
-                                                            mcpGroups={mcpGroups}
-                                                            disabled={field.disabled}
-                                                            onInsertMention={(app, tool) => {
-                                                                editorRef.current?.insertMCPMention(app, tool);
+                                                            mcpGroups={
+                                                                mcpGroups
+                                                            }
+                                                            disabled={
+                                                                field.disabled
+                                                            }
+                                                            onInsertMention={(
+                                                                app,
+                                                                tool,
+                                                            ) => {
+                                                                editorRef.current?.insertMCPMention(
+                                                                    app,
+                                                                    tool,
+                                                                );
                                                             }}
                                                         />
                                                     )}
@@ -1174,8 +1276,12 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                         {!rule && (
                                             <RuleSuggestions
                                                 currentValue={field.value || ""}
-                                                onSelectSuggestion={(suggestionRule) => {
-                                                    field.onChange(suggestionRule);
+                                                onSelectSuggestion={(
+                                                    suggestionRule,
+                                                ) => {
+                                                    field.onChange(
+                                                        suggestionRule,
+                                                    );
                                                     editorRef.current?.focus();
                                                 }}
                                                 disabled={field.disabled}
@@ -1184,9 +1290,17 @@ export const KodyRuleAddOrUpdateItemModal = ({
 
                                         <ExternalReferencesDisplay
                                             externalReferences={{
-                                                references: rule?.externalReferences || [],
-                                                syncErrors: rule?.syncErrors || (rule?.syncError ? [rule.syncError] : []),
-                                                processingStatus: rule?.referenceProcessingStatus || "completed"
+                                                references:
+                                                    rule?.externalReferences ||
+                                                    [],
+                                                syncErrors:
+                                                    rule?.syncErrors ||
+                                                    (rule?.syncError
+                                                        ? [rule.syncError]
+                                                        : []),
+                                                processingStatus:
+                                                    rule?.referenceProcessingStatus ||
+                                                    "completed",
                                             }}
                                             compact
                                         />
@@ -1337,7 +1451,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                         <CollapsibleTrigger asChild>
                             <button
                                 type="button"
-                                className="flex w-full items-center gap-2 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
+                                className="text-text-secondary hover:text-text-primary flex w-full items-center gap-2 py-2 text-sm transition-colors">
                                 <Settings2 className="size-4" />
                                 <span>Advanced settings</span>
                                 <CollapsibleIndicator className="ml-auto" />
@@ -1364,13 +1478,15 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                         align="start"
                                                         className="flex max-w-prose flex-col gap-1 text-xs">
                                                         <p>
-                                                            When enabled, this rule can
-                                                            be inherited by lower
+                                                            When enabled, this
+                                                            rule can be
+                                                            inherited by lower
                                                             scopes.
                                                         </p>
                                                         <p>
-                                                            If disabled, the rule will
-                                                            only apply to the current
+                                                            If disabled, the
+                                                            rule will only apply
+                                                            to the current
                                                             scope.
                                                         </p>
                                                     </TooltipContent>
@@ -1395,7 +1511,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                             <Separator />
 
                             <div className="flex flex-col gap-4">
-                                <span className="text-sm font-medium text-text-secondary">
+                                <span className="text-text-secondary text-sm font-medium">
                                     Code examples
                                 </span>
 
@@ -1425,16 +1541,27 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                             <FormControl.Input>
                                                 <div>
                                                     <CodeInputSimple
-                                                        value={field.value || ""}
-                                                        onChangeAction={(value) =>
-                                                            field.onChange(value)
+                                                        value={
+                                                            field.value || ""
                                                         }
-                                                        disabled={field.disabled}
+                                                        onChangeAction={(
+                                                            value,
+                                                        ) =>
+                                                            field.onChange(
+                                                                value,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            field.disabled
+                                                        }
                                                         language="javascript"
                                                     />
 
                                                     <FormControl.Error>
-                                                        {fieldState.error?.message}
+                                                        {
+                                                            fieldState.error
+                                                                ?.message
+                                                        }
                                                     </FormControl.Error>
                                                 </div>
                                             </FormControl.Input>
@@ -1468,16 +1595,27 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                             <FormControl.Input>
                                                 <div>
                                                     <CodeInputSimple
-                                                        value={field.value || ""}
-                                                        onChangeAction={(value) =>
-                                                            field.onChange(value)
+                                                        value={
+                                                            field.value || ""
                                                         }
-                                                        disabled={field.disabled}
+                                                        onChangeAction={(
+                                                            value,
+                                                        ) =>
+                                                            field.onChange(
+                                                                value,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            field.disabled
+                                                        }
                                                         language="javascript"
                                                     />
 
                                                     <FormControl.Error>
-                                                        {fieldState.error?.message}
+                                                        {
+                                                            fieldState.error
+                                                                ?.message
+                                                        }
                                                     </FormControl.Error>
                                                 </div>
                                             </FormControl.Input>

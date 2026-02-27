@@ -1,13 +1,14 @@
 import { Thread } from '@kodus/flow';
 
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
+import { CapabilityExecutionTrace } from '@libs/agents/skills/runtime/skill-runtime.types';
+import type { TaskContextNormalized } from '@libs/agents/skills/capabilities';
 import { BlueprintContext } from '@libs/shared/blueprint/blueprint.types';
 
 export type TaskQuality = 'EMPTY' | 'MINIMAL' | 'PARTIAL' | 'COMPLETE';
 
 export interface BusinessRulesPrepareContext extends Record<string, unknown> {
     userQuestion?: string;
-    pullRequestNumber?: number;
     pullRequestDescription?: string;
     repository?: {
         id?: string;
@@ -20,6 +21,10 @@ export interface BusinessRulesPrepareContext extends Record<string, unknown> {
         baseRef?: string;
     };
     taskContext?: string;
+    customInstructions?: string;
+
+    enableAgenticFallback?: boolean;
+    taskContextResolutionMode?: 'cache_first' | 'agent_first';
 }
 
 export interface ValidationResult {
@@ -27,6 +32,7 @@ export interface ValidationResult {
     missingInfo?: string;
     summary: string;
 }
+export type { TaskContextNormalized };
 
 /**
  * Typed context for the Business Rules Validation skill.
@@ -43,10 +49,14 @@ export interface BusinessRulesContext extends BlueprintContext {
     prBody?: string;
     /** External task context (Jira, Notion, etc.) fetched by fetchTaskContext step */
     taskContext?: string;
+    /** Normalized task payload fetched from provider-specific MCP tools */
+    taskContextNormalized?: TaskContextNormalized;
     /** Quality classification set by fetchTaskContext step */
     taskQuality?: TaskQuality;
     /** Structured result parsed from the LLM analyzer output */
     validationResult?: ValidationResult;
     /** Final markdown string returned by execute() */
     formattedResponse?: string;
+    /** Trace of tools used per capability for strategy learning */
+    capabilityExecutionTrace?: CapabilityExecutionTrace[];
 }

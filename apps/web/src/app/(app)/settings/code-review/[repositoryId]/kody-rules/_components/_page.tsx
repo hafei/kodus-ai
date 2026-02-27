@@ -72,7 +72,9 @@ const KodyRulesPageContent = () => {
         directoryId,
     });
 
-    const { activeRules: kodyRules, pendingRules } = safeArray(scopeKodyRules).reduce<{
+    const { activeRules: kodyRules, pendingRules } = safeArray(
+        scopeKodyRules,
+    ).reduce<{
         activeRules: KodyRule[];
         pendingRules: KodyRule[];
     }>(

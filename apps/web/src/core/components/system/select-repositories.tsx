@@ -46,12 +46,8 @@ export const SelectRepositories = (props: {
 
     const sortedRepositories = useMemo(() => {
         return [...repositories].sort((a, b) => {
-            const aTime = a.lastActivityAt
-                ? Date.parse(a.lastActivityAt)
-                : 0;
-            const bTime = b.lastActivityAt
-                ? Date.parse(b.lastActivityAt)
-                : 0;
+            const aTime = a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0;
+            const bTime = b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0;
 
             if (bTime !== aTime) return bTime - aTime;
 

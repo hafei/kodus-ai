@@ -104,8 +104,9 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
                 },
             });
 
-            const businessLogicSettled =
-                await Promise.allSettled([businessLogicPromise]);
+            const businessLogicSettled = await Promise.allSettled([
+                businessLogicPromise,
+            ]);
             const businessLogicContext =
                 businessLogicSettled[0].status === 'fulfilled'
                     ? businessLogicSettled[0].value
@@ -132,9 +133,12 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
                 return businessLogicContext ?? context;
             }
 
-            return this.updateContext(businessLogicContext ?? context, (draft) => {
-                draft.errors.push(businessLogicError);
-            });
+            return this.updateContext(
+                businessLogicContext ?? context,
+                (draft) => {
+                    draft.errors.push(businessLogicError);
+                },
+            );
         }
 
         const [kodyRulesSettled, crossFileSettled, businessLogicSettled] =
@@ -147,12 +151,26 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
         const kodyRulesResult =
             kodyRulesSettled.status === 'fulfilled'
                 ? kodyRulesSettled.value
-                : { suggestions: [], error: this.settledError(kodyRulesSettled, 'KodyRulesAnalysis', context) };
+                : {
+                      suggestions: [],
+                      error: this.settledError(
+                          kodyRulesSettled,
+                          'KodyRulesAnalysis',
+                          context,
+                      ),
+                  };
 
         const crossFileResult =
             crossFileSettled.status === 'fulfilled'
                 ? crossFileSettled.value
-                : { suggestions: [], error: this.settledError(crossFileSettled, 'CrossFileAnalysis', context) };
+                : {
+                      suggestions: [],
+                      error: this.settledError(
+                          crossFileSettled,
+                          'CrossFileAnalysis',
+                          context,
+                      ),
+                  };
 
         const businessLogicContext =
             businessLogicSettled.status === 'fulfilled'
@@ -175,44 +193,41 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
             });
         }
 
-        return this.updateContext(
-            businessLogicContext ?? context,
-            (draft) => {
-                // Kody Rules Results
-                if (kodyRulesResult?.suggestions?.length > 0) {
-                    if (!draft.validSuggestionsByPR) {
-                        draft.validSuggestionsByPR = [];
-                    }
-                    draft.validSuggestionsByPR.push(...kodyRulesResult.suggestions);
+        return this.updateContext(businessLogicContext ?? context, (draft) => {
+            // Kody Rules Results
+            if (kodyRulesResult?.suggestions?.length > 0) {
+                if (!draft.validSuggestionsByPR) {
+                    draft.validSuggestionsByPR = [];
                 }
+                draft.validSuggestionsByPR.push(...kodyRulesResult.suggestions);
+            }
 
-                // Cross File Results
-                if (crossFileResult?.suggestions?.length > 0) {
-                    if (!draft.prAnalysisResults) {
-                        draft.prAnalysisResults = {};
-                    }
-                    if (!draft.prAnalysisResults.validCrossFileSuggestions) {
-                        draft.prAnalysisResults.validCrossFileSuggestions = [];
-                    }
-                    draft.prAnalysisResults.validCrossFileSuggestions.push(
-                        ...crossFileResult.suggestions,
-                    );
+            // Cross File Results
+            if (crossFileResult?.suggestions?.length > 0) {
+                if (!draft.prAnalysisResults) {
+                    draft.prAnalysisResults = {};
                 }
+                if (!draft.prAnalysisResults.validCrossFileSuggestions) {
+                    draft.prAnalysisResults.validCrossFileSuggestions = [];
+                }
+                draft.prAnalysisResults.validCrossFileSuggestions.push(
+                    ...crossFileResult.suggestions,
+                );
+            }
 
-                // Aggregate Errors
-                if (kodyRulesResult?.error) {
-                    draft.errors.push(kodyRulesResult.error);
-                }
+            // Aggregate Errors
+            if (kodyRulesResult?.error) {
+                draft.errors.push(kodyRulesResult.error);
+            }
 
-                if (crossFileResult?.error) {
-                    draft.errors.push(crossFileResult.error);
-                }
+            if (crossFileResult?.error) {
+                draft.errors.push(crossFileResult.error);
+            }
 
-                if (businessLogicError) {
-                    draft.errors.push(businessLogicError);
-                }
-            },
-        );
+            if (businessLogicError) {
+                draft.errors.push(businessLogicError);
+            }
+        });
     }
 
     private async runKodyRulesAnalysis(
@@ -519,8 +534,8 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
         }
 
         const currentHash = this.computePrBodyHash(prBody);
-        const lastHash =
-            (context.pipelineMetadata?.lastExecution as any)?.businessLogicHash;
+        const lastHash = (context.pipelineMetadata?.lastExecution as any)
+            ?.businessLogicHash;
         if (lastHash && lastHash === currentHash) {
             return false;
         }
@@ -556,8 +571,8 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
 
     private detectRequirementKeywords(body: string): string[] {
         const lower = body.toLowerCase();
-        return ProcessFilesPrLevelReviewStage.REQUIREMENT_KEYWORDS.filter((kw) =>
-            lower.includes(kw),
+        return ProcessFilesPrLevelReviewStage.REQUIREMENT_KEYWORDS.filter(
+            (kw) => lower.includes(kw),
         );
     }
 

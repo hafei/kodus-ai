@@ -17,9 +17,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
     readonly label = 'Gathering Cross-File Context';
     readonly visibility = StageVisibility.PRIMARY;
 
-    private readonly logger = createLogger(
-        CollectCrossFileContextStage.name,
-    );
+    private readonly logger = createLogger(CollectCrossFileContextStage.name);
 
     constructor(
         @Inject(COLLECT_CROSS_FILE_CONTEXTS_SERVICE_TOKEN)
@@ -45,7 +43,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
             });
             return context;
         }
-        
+
         // Guard: skip if no changed files
         if (!context?.changedFiles?.length) {
             this.logger.log({
@@ -76,25 +74,22 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
 
         try {
             // 1. Get clone params from the platform
-            const cloneParams =
-                await this.codeManagementService.getCloneParams(
-                    {
-                        repository: context.repository,
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                    },
-                    context.platformType,
-                );
+            const cloneParams = await this.codeManagementService.getCloneParams(
+                {
+                    repository: context.repository,
+                    organizationAndTeamData: context.organizationAndTeamData,
+                },
+                context.platformType,
+            );
 
             // 2. Create E2B sandbox and clone repo
-            const sandbox =
-                await this.e2bSandboxService.createSandboxWithRepo({
-                    cloneUrl: cloneParams.url,
-                    authToken: cloneParams.auth?.token || '',
-                    branch: context.branch,
-                    prNumber: context.pullRequest.number,
-                    platform: context.platformType,
-                });
+            const sandbox = await this.e2bSandboxService.createSandboxWithRepo({
+                cloneUrl: cloneParams.url,
+                authToken: cloneParams.auth?.token || '',
+                branch: context.branch,
+                prNumber: context.pullRequest.number,
+                platform: context.platformType,
+            });
 
             cleanup = sandbox.cleanup;
 

@@ -19,6 +19,7 @@ import type { KodyRuleWithInheritanceDetails } from "@services/kodyRules/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 import { EditIcon, EyeIcon, InfoIcon, TrashIcon } from "lucide-react";
+import { SuggestionsModal } from "src/app/(app)/library/kody-rules/_components/suggestions-modal";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { cn } from "src/core/utils/components";
 import { addSearchParamsToUrl } from "src/core/utils/url";
@@ -26,7 +27,6 @@ import { addSearchParamsToUrl } from "src/core/utils/url";
 import { DeleteKodyRuleConfirmationModal } from "../../../_components/delete-confirmation-modal";
 import { useCodeReviewRouteParams } from "../../../../_hooks";
 import { ExternalReferencesDisplay } from "../../pr-summary/_components/external-references-display";
-import { SuggestionsModal } from "src/app/(app)/library/kody-rules/_components/suggestions-modal";
 
 export const KodyRuleItem = ({
     rule,
@@ -125,7 +125,11 @@ export const KodyRuleItem = ({
 
                 <div className="flex items-center gap-2">
                     {showSuggestionsButton && rule.uuid && (
-                        <SuggestionsModal ruleId={rule.uuid} ruleTitle={rule.title} variant="icon" />
+                        <SuggestionsModal
+                            ruleId={rule.uuid}
+                            ruleTitle={rule.title}
+                            variant="icon"
+                        />
                     )}
 
                     <Link
@@ -230,11 +234,13 @@ export const KodyRuleItem = ({
                                 {rule.rule}
                             </Section.Content>
 
-                            <ExternalReferencesDisplay 
+                            <ExternalReferencesDisplay
                                 externalReferences={{
                                     references: rule.externalReferences || [],
                                     syncErrors: rule.syncErrors || [],
-                                    processingStatus: rule.referenceProcessingStatus || "completed"
+                                    processingStatus:
+                                        rule.referenceProcessingStatus ||
+                                        "completed",
                                 }}
                                 compact
                             />

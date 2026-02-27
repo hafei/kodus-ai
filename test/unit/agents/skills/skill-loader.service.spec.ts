@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { SkillLoaderService } from '@libs/agents/skills/skill-loader.service';
 
 describe('SkillLoaderService', () => {
@@ -15,12 +18,11 @@ describe('SkillLoaderService', () => {
     it('loads skill metadata from SKILL.md frontmatter', () => {
         const service = new SkillLoaderService();
 
-        const meta =
-            service.loadSkillMetaFromFilesystem('business-rules-validation');
+        const meta = service.loadSkillMetaFromFilesystem(
+            'business-rules-validation',
+        );
 
         expect(meta.name).toBe('business-rules-validation');
-        expect(meta.apiVersion).toBe('skills.kodus.ai/v1');
-        expect(meta.kind).toBe('Skill');
         expect(meta.version).toBe('1.0.0');
         expect(meta.capabilities).toEqual([
             'pr.metadata.read',
@@ -40,7 +42,7 @@ describe('SkillLoaderService', () => {
             onMcpConnectError: 'fail',
             fetcherTimeoutMs: 120000,
             analyzerTimeoutMs: 120000,
-            fetcherMaxIterations: 4,
+            fetcherMaxIterations: 2,
             analyzerMaxIterations: 1,
         });
         expect(meta.contracts).toEqual({
@@ -48,7 +50,7 @@ describe('SkillLoaderService', () => {
                 requiredContextFields: [
                     'organizationAndTeamData.organizationId',
                     'organizationAndTeamData.teamId',
-                    'prepareContext.pullRequestNumber',
+                    'prepareContext.pullRequest.pullRequestNumber',
                     'prepareContext.repository.id',
                 ],
             },
@@ -73,28 +75,28 @@ name: business-rules-validation
 description: >
   Validate PR code changes against task requirements
   with multiline YAML support
-allowed-tools:
-  - "KODUS_GET_PULL_REQUEST_DIFF"
-fetcher-policy:
-  tool-mode: all
-  allow-without-tools: false
-required-mcps:
-  - category: task-management
-    label: "Task Management"
-    examples: "Jira: Cloud, Linear"
+allowed-tools: KODUS_GET_PULL_REQUEST_DIFF KODUS_GET_PULL_REQUEST
 metadata:
   version: "2.0.0"
-execution-policy:
-  on-missing-mcp: fallback
-  on-mcp-connect-error: fail
-  fetcher-timeout-ms: 50000
-contracts:
-  input:
-    required-context-fields:
-      - "prepareContext.pullRequestNumber"
-  output:
-    required-fields:
-      - "summary"
+  kodus:
+    fetcher-policy:
+      tool-mode: all
+      allow-without-tools: false
+    required-mcps:
+      - category: task-management
+        label: "Task Management"
+        examples: "Jira: Cloud, Linear"
+    execution-policy:
+      on-missing-mcp: fallback
+      on-mcp-connect-error: fail
+      fetcher-timeout-ms: 50000
+    contracts:
+      input:
+        required-context-fields:
+          - "prepareContext.pullRequest.pullRequestNumber"
+      output:
+        required-fields:
+          - "summary"
 ---
 
 # Body`);
@@ -102,7 +104,10 @@ contracts:
         expect(parsed.meta.description).toBe(
             'Validate PR code changes against task requirements with multiline YAML support\n',
         );
-        expect(parsed.meta.allowedTools).toEqual(['KODUS_GET_PULL_REQUEST_DIFF']);
+        expect(parsed.meta.allowedTools).toEqual([
+            'KODUS_GET_PULL_REQUEST_DIFF',
+            'KODUS_GET_PULL_REQUEST',
+        ]);
         expect(parsed.meta.fetcherPolicy).toEqual({
             toolMode: 'all',
             allowWithoutTools: false,
@@ -125,11 +130,133 @@ contracts:
         });
         expect(parsed.meta.contracts).toEqual({
             input: {
-                requiredContextFields: ['prepareContext.pullRequestNumber'],
+                requiredContextFields: [
+                    'prepareContext.pullRequest.pullRequestNumber',
+                ],
             },
             output: {
                 requiredFields: ['summary'],
             },
         });
+    });
+
+    it('keeps backward compatibility with legacy Kodus top-level keys', () => {
+        const service = new SkillLoaderService() as any;
+
+        const parsed = service.parseFrontmatter(`---
+name: legacy-skill
+description: Legacy format
+allowed-tools:
+  - KODUS_GET_PULL_REQUEST_DIFF
+capabilities:
+  - pr.diff.read
+fetcher-policy:
+  tool-mode: any
+contracts:
+  output:
+    required-fields:
+      - summary
+---
+
+# Body`);
+
+        expect(parsed.meta.allowedTools).toEqual([
+            'KODUS_GET_PULL_REQUEST_DIFF',
+        ]);
+        expect(parsed.meta.capabilities).toEqual(['pr.diff.read']);
+        expect(parsed.meta.fetcherPolicy).toEqual({
+            toolMode: 'any',
+            allowWithoutTools: undefined,
+        });
+        expect(parsed.meta.contracts).toEqual({
+            input: undefined,
+            output: {
+                requiredFields: ['summary'],
+            },
+        });
+    });
+
+    it('normalizes capabilityToolMap from SKILL.md frontmatter', () => {
+        const service = new SkillLoaderService() as any;
+
+        const parsed = service.parseFrontmatter(`---
+name: multi-tool-skill
+description: Skill with capability-tool-map
+metadata:
+  kodus:
+    capability-tool-map:
+      task.context.read: getLinearIssue getNotionPage
+      custom.read:
+        - getCustomData
+        - getOtherData
+---
+
+# Body`);
+
+        expect(parsed.meta.capabilityToolMap).toEqual({
+            'task.context.read': ['getLinearIssue', 'getNotionPage'],
+            'custom.read': ['getCustomData', 'getOtherData'],
+        });
+    });
+
+    it('returns undefined capabilityToolMap when not declared', () => {
+        const service = new SkillLoaderService() as any;
+
+        const parsed = service.parseFrontmatter(`---
+name: basic-skill
+description: No capability-tool-map
+---
+
+# Body`);
+
+        expect(parsed.meta.capabilityToolMap).toBeUndefined();
+    });
+
+    it('warns and ignores invalid metadata.kodus schema', () => {
+        const service = new SkillLoaderService() as any;
+        const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+        const parsed = service.parseFrontmatter(`---
+name: invalid-kodus
+description: Invalid kodus metadata
+metadata:
+  kodus:
+    fetcher-policy: invalid
+---
+
+# Body`);
+
+        expect(parsed.meta.fetcherPolicy).toBeUndefined();
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('invalid metadata.kodus schema'),
+        );
+    });
+
+    it('merges team overlay instructions when teamId is provided', () => {
+        const service = new SkillLoaderService() as any;
+        const overlayPath = '/tmp/skill-overlay-team-1.md';
+        fs.writeFileSync(overlayPath, 'TEAM OVERLAY', 'utf-8');
+
+        jest.spyOn(service, 'loadFromFilesystem').mockReturnValue('BASE');
+        jest.spyOn(service, 'resolveSkillFilePath').mockImplementation(
+            (_skillName: string, fileName: string) =>
+                fileName === path.join('overrides', 'teams', 'team-1.md')
+                    ? overlayPath
+                    : null,
+        );
+        try {
+            const result = service.loadInstructions(
+                'business-rules-validation',
+                {
+                    teamId: 'team-1',
+                },
+            );
+
+            expect(result).toContain('BASE');
+            expect(result).toContain('## Custom Instructions');
+            expect(result).toContain('TEAM OVERLAY');
+        } finally {
+            fs.unlinkSync(overlayPath);
+        }
     });
 });

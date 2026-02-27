@@ -1,0 +1,16 @@
+{
+  "name": "empty-task-short-circuit",
+  "input": {
+    "pullRequestNumber": 200,
+    "prBody": "Fix bug",
+    "prDiff": "diff --git a/src/file.ts b/src/file.ts\n+ // small fix",
+    "taskContext": ""
+  },
+  "expectedTrajectory": [
+    { "step": "classifyTaskContext", "output": { "taskQuality": "EMPTY" } },
+    { "step": "validateContext", "passed": false }
+  ],
+  "expectedOutcome": {
+    "needsMoreInfo": true
+  }
+}

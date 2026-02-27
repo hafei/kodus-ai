@@ -422,16 +422,20 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         );
 
         // Create mutable copies with AST content attached (originals may be frozen by Immer)
-        const filesWithAst = astResults.size > 0
-            ? batch.map((file) => {
-                  const astResult = astResults.get(file.filename);
-                  return astResult
-                      ? { ...file, astFormattedContent: astResult.content }
-                      : file;
-              })
-            : batch;
+        const filesWithAst =
+            astResults.size > 0
+                ? batch.map((file) => {
+                      const astResult = astResults.get(file.filename);
+                      return astResult
+                          ? { ...file, astFormattedContent: astResult.content }
+                          : file;
+                  })
+                : batch;
 
-        const preparedFiles = await this.filterAndPrepareFiles(filesWithAst, context);
+        const preparedFiles = await this.filterAndPrepareFiles(
+            filesWithAst,
+            context,
+        );
 
         const astFailed = preparedFiles.find((file) => {
             const task = file.fileContext.tasks?.astAnalysis;
@@ -530,7 +534,11 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             }
 
             // Fallback: same text-based matching for both hop 1 and hop 2
-            return this.matchSnippetByTextHeuristics(snippet, diff, diffIdentifiers);
+            return this.matchSnippetByTextHeuristics(
+                snippet,
+                diff,
+                diffIdentifiers,
+            );
         });
     }
 

@@ -97,7 +97,9 @@ ${JSON.stringify(
     2,
 )}
 
-${payload?.crossFileContexts?.length ? `## Retrieved Cross-File Context
+${
+    payload?.crossFileContexts?.length
+        ? `## Retrieved Cross-File Context
 
 The following code snippets were retrieved from files OUTSIDE this PR that consume or depend on the changed code. Use these to detect real breakage, inconsistencies, or missed updates.
 
@@ -117,7 +119,9 @@ ${ctx.content}
 - **PRIORITIZE** real breakage detected in the retrieved snippets (e.g., callers using removed parameters, consumers expecting old return types)
 - Issues backed by retrieved context evidence should be rated at least **HIGH** severity
 - Do not re-report issues that are already visible in the PR diff alone — focus on cross-file impact revealed by the retrieved context
-` : ''}
+`
+        : ''
+}
 ## Analysis Focus
 
 Look for cross-file issues that require multiple file context **AND represent an unintentional oversight**:

@@ -1,0 +1,12 @@
+{
+    "providerType": "notion",
+    "capability": "task.context.read",
+    "tools": [
+        "search",
+        "fetch",
+        "getPage",
+        "searchPages",
+        "queryDatabase",
+        "searchDatabase"
+    ]
+}

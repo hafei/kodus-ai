@@ -106,7 +106,9 @@ describe('prompt_codereview_system_gemini_v2', () => {
 
         // Verify each snippet is formatted
         expect(result).toContain('### src/types/plan.ts (symbol: PlanType)');
-        expect(result).toContain('**Rationale:** PlanType enum was renamed from PREMIUM to PRO');
+        expect(result).toContain(
+            '**Rationale:** PlanType enum was renamed from PREMIUM to PRO',
+        );
         expect(result).toContain('export enum PlanType { FREE, PRO }');
 
         // Snippet without relatedSymbol should omit the "(symbol: ...)" part
@@ -125,6 +127,8 @@ describe('prompt_codereview_system_gemini_v2', () => {
         const result = prompt_codereview_system_gemini_v2(payload);
 
         expect(result).not.toContain('### Codebase Context');
-        expect(result).not.toContain('## External Context & Injected Knowledge');
+        expect(result).not.toContain(
+            '## External Context & Injected Knowledge',
+        );
     });
 });

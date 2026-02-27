@@ -60,11 +60,7 @@ export const ByokModelSelect = () => {
 // Exported lightweight manual input for external fallbacks
 export const ByokManualModelInput = () => <ModelInput />;
 
-const ModelInput = ({
-    onBackToSelect,
-}: {
-    onBackToSelect?: () => void;
-}) => {
+const ModelInput = ({ onBackToSelect }: { onBackToSelect?: () => void }) => {
     const form = useFormContext<EditKeyForm>();
     const provider = form.watch("provider");
     const baseURL = form.watch("baseURL");
@@ -112,11 +108,7 @@ const ModelInput = ({
     );
 };
 
-const ModelSelect = ({
-    onUseManual,
-}: {
-    onUseManual?: () => void;
-}) => {
+const ModelSelect = ({ onUseManual }: { onUseManual?: () => void }) => {
     const form = useFormContext<EditKeyForm>();
     const [open, setOpen] = useState(false);
     const provider = form.watch("provider");

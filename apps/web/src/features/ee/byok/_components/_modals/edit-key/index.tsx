@@ -21,7 +21,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import type { BYOKConfig } from "../../../_types";
 import { ByokBaseURLInput } from "./_components/baseurl-input";
 import { ByokKeyInput } from "./_components/key-input";
-import { ByokModelSelect, ByokManualModelInput } from "./_components/models";
+import { ByokManualModelInput, ByokModelSelect } from "./_components/models";
 import { ByokProviderSelect } from "./_components/provider";
 import { editKeySchema, type EditKeyForm } from "./_types";
 

@@ -12,8 +12,10 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@components/ui/tooltip";
-import type { CodeReviewTimelineItem } from "@services/pull-requests";
-import { buildPullRequestUrl } from "@services/pull-requests";
+import {
+    buildPullRequestUrl,
+    type CodeReviewTimelineItem,
+} from "@services/pull-requests";
 import { ChevronDownIcon, ExternalLinkIcon, GitBranchIcon } from "lucide-react";
 import { cn } from "src/core/utils/components";
 
@@ -457,10 +459,12 @@ export const PrListItem = ({ group }: PrListItemProps) => {
                                                 item.metadata &&
                                                 typeof item.metadata ===
                                                     "object" &&
-                                                (item.metadata as Record<
-                                                    string,
-                                                    any
-                                                >).visibility === "secondary",
+                                                (
+                                                    item.metadata as Record<
+                                                        string,
+                                                        any
+                                                    >
+                                                ).visibility === "secondary",
                                         );
                                     const isDebugVisible =
                                         debugVisibleByExecution[executionKey] ??
@@ -473,10 +477,12 @@ export const PrListItem = ({ group }: PrListItemProps) => {
                                                       item.metadata &&
                                                       typeof item.metadata ===
                                                           "object" &&
-                                                      (item.metadata as Record<
-                                                          string,
-                                                          any
-                                                      >).visibility ===
+                                                      (
+                                                          item.metadata as Record<
+                                                              string,
+                                                              any
+                                                          >
+                                                      ).visibility ===
                                                           "secondary"
                                                   ),
                                           );
@@ -514,7 +520,7 @@ export const PrListItem = ({ group }: PrListItemProps) => {
                                                         className={cn(
                                                             "text-text-tertiary size-4 shrink-0 transition-transform duration-200",
                                                             !isReviewCollapsed &&
-                                                                "rotate-180 text-text-secondary",
+                                                                "text-text-secondary rotate-180",
                                                         )}
                                                     />
                                                     <span className="text-text-primary text-sm font-semibold tabular-nums">
@@ -585,7 +591,9 @@ export const PrListItem = ({ group }: PrListItemProps) => {
                                                                         size: "xs",
                                                                     },
                                                                 )}
-                                                                onClick={(event) => {
+                                                                onClick={(
+                                                                    event,
+                                                                ) => {
                                                                     event.stopPropagation();
                                                                     toggleDebugVisibility(
                                                                         executionKey,
@@ -692,29 +700,34 @@ export const PrListItem = ({ group }: PrListItemProps) => {
                                                                                 </p>
                                                                                 {stageInfo.duration &&
                                                                                     !isAutomationStart && (
-                                                                                    <p className="text-text-tertiary text-xs tabular-nums">
-                                                                                        {item.status ===
-                                                                                        "in_progress"
-                                                                                            ? "Elapsed: "
-                                                                                            : "Duration: "}
-                                                                                        {
-                                                                                            stageInfo.duration
-                                                                                        }
-                                                                                    </p>
-                                                                                )}
+                                                                                        <p className="text-text-tertiary text-xs tabular-nums">
+                                                                                            {item.status ===
+                                                                                            "in_progress"
+                                                                                                ? "Elapsed: "
+                                                                                                : "Duration: "}
+                                                                                            {
+                                                                                                stageInfo.duration
+                                                                                            }
+                                                                                        </p>
+                                                                                    )}
                                                                                 {item.status ===
                                                                                     "partial_error" &&
-                                                                                    stageInfo.partialErrors
+                                                                                    stageInfo
+                                                                                        .partialErrors
                                                                                         .length >
                                                                                         0 && (
                                                                                         <details className="text-warning/90 mt-2 text-xs">
                                                                                             <summary className="cursor-pointer">
-                                                                                                View failed files (
+                                                                                                View
+                                                                                                failed
+                                                                                                files
+                                                                                                (
                                                                                                 {
                                                                                                     stageInfo
                                                                                                         .partialErrors
                                                                                                         .length
                                                                                                 }
+
                                                                                                 )
                                                                                             </summary>
                                                                                             <ul className="mt-2 space-y-1 pl-4">

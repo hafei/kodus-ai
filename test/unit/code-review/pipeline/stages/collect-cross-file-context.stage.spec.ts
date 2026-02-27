@@ -1,7 +1,11 @@
 // Mock e2b before any imports that transitively depend on it
-jest.mock('e2b', () => ({
-    Sandbox: { create: jest.fn() },
-}), { virtual: true });
+jest.mock(
+    'e2b',
+    () => ({
+        Sandbox: { create: jest.fn() },
+    }),
+    { virtual: true },
+);
 
 jest.mock('@kodus/flow', () => ({
     createLogger: () => ({
@@ -153,9 +157,7 @@ describe('CollectCrossFileContextStage', () => {
 
             const result = await stage.execute(context);
 
-            expect(
-                mockCodeManagementService.getCloneParams,
-            ).toHaveBeenCalled();
+            expect(mockCodeManagementService.getCloneParams).toHaveBeenCalled();
             expect(
                 mockE2bSandboxService.createSandboxWithRepo,
             ).toHaveBeenCalled();
@@ -227,9 +229,7 @@ describe('CollectCrossFileContextStage', () => {
                 },
                 cleanup: failingCleanup,
             });
-            mockCollectContexts.mockRejectedValue(
-                new Error('some error'),
-            );
+            mockCollectContexts.mockRejectedValue(new Error('some error'));
 
             const context = createCrossFileBaseContext();
 

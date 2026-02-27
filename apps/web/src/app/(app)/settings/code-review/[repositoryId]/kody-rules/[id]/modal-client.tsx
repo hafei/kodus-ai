@@ -53,7 +53,7 @@ export function KodyRuleModalClient({
         await queryClient.invalidateQueries({
             predicate: (query) =>
                 query.queryKey[0] ===
-                KODY_RULES_PATHS.FIND_BY_ORGANIZATION_ID_AND_FILTER ||
+                    KODY_RULES_PATHS.FIND_BY_ORGANIZATION_ID_AND_FILTER ||
                 query.queryKey[0] === KODY_RULES_PATHS.GET_INHERITED_RULES ||
                 query.queryKey[0] === KODY_RULES_PATHS.FIND_BY_ORGANIZATION_ID,
         });

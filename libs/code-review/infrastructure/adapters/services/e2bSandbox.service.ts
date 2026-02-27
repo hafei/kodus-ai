@@ -102,10 +102,7 @@ export class E2BSandboxService {
         }
     }
 
-    private buildAuthHeader(
-        platform: PlatformType,
-        token: string,
-    ): string {
+    private buildAuthHeader(platform: PlatformType, token: string): string {
         // Git http.extraHeader sends an Authorization header — token never embedded in URLs
         switch (platform) {
             case PlatformType.GITHUB:
@@ -119,10 +116,7 @@ export class E2BSandboxService {
         }
     }
 
-    private getPrRefspec(
-        platform: PlatformType,
-        prNumber: number,
-    ): string {
+    private getPrRefspec(platform: PlatformType, prNumber: number): string {
         switch (platform) {
             case PlatformType.GITHUB:
                 return `refs/pull/${prNumber}/head`;

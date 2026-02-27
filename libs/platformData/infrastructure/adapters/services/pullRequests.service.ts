@@ -967,10 +967,7 @@ export class PullRequestsService implements IPullRequestsService {
              */
             if (data?.role) {
                 const usernameForLookup =
-                    data?.login ||
-                    data?.username ||
-                    data?.nickname ||
-                    '';
+                    data?.login || data?.username || data?.nickname || '';
                 // Only call getUserByUsername if we have a non-empty username
                 const completeUser = usernameForLookup
                     ? await this.codeManagement.getUserByUsername(

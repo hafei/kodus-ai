@@ -914,7 +914,8 @@ export class CommentManagerService implements ICommentManagerService {
         const isTransientError = (error: any): boolean => {
             const status = error?.status || error?.response?.status;
             if (status >= 500 && status < 600) return true;
-            if (error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT') return true;
+            if (error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT')
+                return true;
             return false;
         };
 
@@ -923,11 +924,10 @@ export class CommentManagerService implements ICommentManagerService {
             return NON_RETRYABLE_STATUS_CODES.includes(status);
         };
 
-        const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        const sleep = (ms: number) =>
+            new Promise((resolve) => setTimeout(resolve, ms));
 
-        const attemptCreateComment = async (
-            comment: Comment,
-        ): Promise<any> => {
+        const attemptCreateComment = async (comment: Comment): Promise<any> => {
             return this.codeManagementService.createReviewComment(
                 {
                     ...restParams,
@@ -989,10 +989,14 @@ export class CommentManagerService implements ICommentManagerService {
             };
 
             try {
-                const createdComment = await attemptCreateComment(commentAttempt2);
+                const createdComment =
+                    await attemptCreateComment(commentAttempt2);
                 return { createdComment, attemptUsed: 2 };
             } catch (error2) {
-                if (isNonRetryableError(error2) || !isLineMismatchError(error2)) {
+                if (
+                    isNonRetryableError(error2) ||
+                    !isLineMismatchError(error2)
+                ) {
                     throw error2;
                 }
 
@@ -1013,7 +1017,8 @@ export class CommentManagerService implements ICommentManagerService {
                     line: lineComment.start_line,
                 };
 
-                const createdComment = await attemptCreateComment(commentAttempt3);
+                const createdComment =
+                    await attemptCreateComment(commentAttempt3);
                 return { createdComment, attemptUsed: 3 };
             }
         }
