@@ -442,6 +442,47 @@ describe('GenericSkillRunnerService', () => {
         );
     });
 
+    it('resolves required tools from capabilityDefinitions', async () => {
+        skillLoaderService.loadSkillMetaFromFilesystem.mockReturnValue(
+            withSkillMeta({
+                capabilities: ['custom.capability.read'],
+                capabilityDefinitions: {
+                    'custom.capability.read': {
+                        mode: 'fixed_tools',
+                        tools: ['getCustomCapability'],
+                    },
+                },
+                fetcherPolicy: {
+                    toolMode: 'all',
+                    allowWithoutTools: false,
+                },
+            }),
+        );
+        mcpManagerService.getConnections.mockResolvedValue([
+            {
+                provider: 'kodusmcp',
+                allowedTools: ['getCustomCapability'],
+            },
+        ] as any);
+
+        await service.createFetcherOrchestration(
+            'business-rules-validation',
+            {} as any,
+            organizationAndTeamData,
+        );
+
+        expect(createMCPAdapterMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                servers: expect.arrayContaining([
+                    expect.objectContaining({
+                        provider: 'kodusmcp',
+                        allowedTools: ['getCustomCapability'],
+                    }),
+                ]),
+            }),
+        );
+    });
+
     it('records setup metrics with stage/status labels on fetcher success', async () => {
         const metricsCollector = {
             recordHistogram: jest.fn(),

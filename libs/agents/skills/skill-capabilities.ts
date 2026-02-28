@@ -1,3 +1,5 @@
+import { SkillCapabilityDefinition } from './skill-loader.service';
+
 /**
  * Capability catalog for skill orchestration.
  *
@@ -34,7 +36,23 @@ export const SKILL_CAPABILITY_REGISTRY: Record<
 function resolveCapabilityDefinition(params: {
     capability: string;
     capabilityToolMap?: Record<string, string[]>;
+    capabilityDefinitions?: Record<string, SkillCapabilityDefinition>;
 }): CapabilityResolutionDefinition | undefined {
+    const customDefinition = params.capabilityDefinitions?.[params.capability];
+    if (customDefinition) {
+        if (customDefinition.mode === 'provider_dynamic') {
+            return { mode: 'provider_dynamic' };
+        }
+
+        const customTools = customDefinition.tools ?? [];
+        if (customTools.length) {
+            return {
+                mode: 'fixed_tools',
+                tools: customTools,
+            };
+        }
+    }
+
     const builtin = SKILL_CAPABILITY_REGISTRY[params.capability];
     if (builtin) {
         return builtin;
@@ -54,6 +72,7 @@ function resolveCapabilityDefinition(params: {
 export function resolveCapabilityTools(
     capabilities?: string[],
     capabilityToolMap?: Record<string, string[]>,
+    capabilityDefinitions?: Record<string, SkillCapabilityDefinition>,
 ): {
     tools: string[];
     unknownCapabilities: string[];
@@ -69,6 +88,7 @@ export function resolveCapabilityTools(
         const definition = resolveCapabilityDefinition({
             capability,
             capabilityToolMap,
+            capabilityDefinitions,
         });
         if (!definition) {
             unknownCapabilities.push(capability);
@@ -94,6 +114,7 @@ export interface CapabilityToolSelectionParams {
     capabilities?: string[];
     allowedTools?: string[];
     capabilityToolMap?: Record<string, string[]>;
+    capabilityDefinitions?: Record<string, SkillCapabilityDefinition>;
     registeredTools?: string[];
     toolMode?: CapabilityToolMode;
 }
@@ -130,6 +151,7 @@ export function resolveCapabilityToolSelection(
         const definition = resolveCapabilityDefinition({
             capability,
             capabilityToolMap: params.capabilityToolMap,
+            capabilityDefinitions: params.capabilityDefinitions,
         });
         if (!definition) {
             unknownCapabilities.push(capability);

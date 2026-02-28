@@ -234,4 +234,70 @@ describe('fetchTaskContext capability', () => {
         expect(callAgent).toHaveBeenCalled();
         expect(result.normalized?.description).toBe('Fallback context');
     });
+
+    it('extracts task context from provider payload embedded as JSON text content', async () => {
+        const callTool = jest.fn<ToolCaller['callTool']>().mockResolvedValue({
+            result: {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            id: 'PAGE-42',
+                            properties: {
+                                Name: {
+                                    title: [{ plain_text: 'Notion Task Title' }],
+                                },
+                                'Acceptance Criteria': {
+                                    rich_text: [{ plain_text: 'Must support flow X' }],
+                                },
+                            },
+                            description: {
+                                rich_text: [{ plain_text: 'Detailed context from provider' }],
+                            },
+                            url: 'https://example.notion.site/PAGE-42',
+                        }),
+                    },
+                ],
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'searchTasks' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'searchTasks',
+                    parameters: {
+                        required: ['query'],
+                        properties: {
+                            query: { type: 'string', description: 'Search query' },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['searchTasks']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('notion'),
+            createBaseParams(),
+            hooks,
+        );
+
+        expect(result.normalized).toMatchObject({
+            id: 'PAGE-42',
+            title: 'Notion Task Title',
+            description: 'Detailed context from provider',
+            acceptanceCriteria: ['Must support flow X'],
+            sourceProvider: 'notion',
+        });
+    });
 });

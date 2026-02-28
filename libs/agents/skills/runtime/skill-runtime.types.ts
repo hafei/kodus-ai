@@ -1,4 +1,8 @@
-import { SkillContracts, SkillFetcherPolicy } from '../skill-loader.service';
+import {
+    SkillCapabilityDefinition,
+    SkillContracts,
+    SkillFetcherPolicy,
+} from '../skill-loader.service';
 
 export interface ToolExecutionResponse {
     result?: unknown;
@@ -22,6 +26,7 @@ export interface SkillCapabilityRuntimeConfig {
     capabilities: string[];
     allowedTools: string[];
     capabilityToolMap?: Record<string, string[]>;
+    capabilityDefinitions?: Record<string, SkillCapabilityDefinition>;
     fetcherPolicy: Required<SkillFetcherPolicy>;
     /** Primary external provider (first non-kodusmcp connection). */
     providerType: string;

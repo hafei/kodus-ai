@@ -9,6 +9,15 @@ metadata:
             - pr.metadata.read
             - pr.diff.read
             - task.context.read
+        capability-definitions:
+            pr.metadata.read:
+                mode: fixed_tools
+                tools: KODUS_GET_PULL_REQUEST
+            pr.diff.read:
+                mode: fixed_tools
+                tools: KODUS_GET_PULL_REQUEST_DIFF
+            task.context.read:
+                mode: provider_dynamic
         fetcher-policy:
             tool-mode: any
             allow-without-tools: false
@@ -52,14 +61,33 @@ Every validation must be grounded in specific business requirements from the ext
 `TASK_QUALITY` is classified by the runtime deterministic stage. Do not reclassify it.
 Apply the task-quality policy exactly as provided in the user prompt.
 
+## Grounding Rules (MANDATORY)
+
+Every finding MUST be traceable to a specific requirement from ACCEPTANCE_CRITERIA or FULL_TASK_CONTEXT.
+
+- **Quote the source**: Each finding MUST include the exact text from the task that establishes the requirement. If you cannot quote a specific sentence, the finding is INVALID — remove it.
+- **No invented requirements**: Do NOT infer requirements that are not written in the task. "Common sense" or "best practice" findings without task backing are forbidden.
+- **No restating the diff**: Findings that describe what the code DOES (instead of what it DOESN'T do) are not findings — they belong in "Implemented Correctly".
+- **Specificity over quantity**: 2 grounded findings beat 10 vague ones. Prefer fewer, precise findings over many generic ones.
+
+## Analysis Method
+
+You will receive ACCEPTANCE_CRITERIA as a numbered list (when available) and FULL_TASK_CONTEXT as raw text.
+
+For EACH acceptance criterion:
+1. Search the PR_DIFF for code that satisfies it
+2. Classify: IMPLEMENTED / MISSING / PARTIAL
+3. If MISSING or PARTIAL — create a finding with the exact requirement quote
+
+After checking all criteria, scan PR_DIFF for code that contradicts or misinterprets any requirement.
+
 ## Critical Analysis Questions
 
-- ❌ What business requirements are **NOT implemented** in the code?
-- ❌ What **validation rules** were forgotten?
-- ❌ What **business edge cases** were overlooked?
-- ❌ What **security or compliance** requirements are missing?
-- ❌ What **business assumptions** might be incorrect?
-- ❌ What **potential business risks** exist in the implementation?
+- What acceptance criteria are **NOT implemented** in the code?
+- What **validation rules** from the task were forgotten?
+- What **business edge cases** described in the task were overlooked?
+- What **security or compliance** requirements from the task are missing?
+- What task requirements were **partially implemented** or **misinterpreted**?
 
 ## Output Format
 
@@ -111,22 +139,24 @@ Set `summary` to a complete markdown validation report using this structure:
 ### Findings
 
 #### MUST_FIX: [finding title]
-**Requirement:** [task requirement excerpt]
-**Missing in code:** [what is absent or wrong in the implementation]
+**Requirement:** "[exact quote from task context that establishes this requirement]" (AC #N or source)
+**Missing in code:** [what is absent or wrong — reference file:line when possible]
 **Suggested action:** [concrete implementation action]
 
 #### SUGGESTION: [finding title]
-**Requirement:** [task requirement excerpt]
+**Requirement:** "[exact quote from task context]" (AC #N or source)
 **Missing in code:** [what is partially covered or risky]
 **Suggested action:** [concrete improvement]
 
 #### INFO: [finding title]
-**Requirement:** [task requirement excerpt]
-**Missing in code:** [non-blocking observation]
+**Requirement:** "[exact quote from task context]" (AC #N or source)
+**Observation:** [non-blocking observation]
 **Suggested action:** [optional follow-up]
 
-### Implemented Correctly
-[What was correctly implemented per task requirements]
+### Requirements Verified
+For each acceptance criterion checked, briefly state what code satisfies it:
+- AC #1: "[requirement]" → Implemented in `file:line` — [brief explanation]
+- AC #2: "[requirement]" → Implemented in `file:line` — [brief explanation]
 
 ---
 *Analysis performed by Kodus AI Business Rules Validator*

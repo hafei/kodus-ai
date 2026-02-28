@@ -29,6 +29,19 @@ describe('SkillLoaderService', () => {
             'pr.diff.read',
             'task.context.read',
         ]);
+        expect(meta.capabilityDefinitions).toEqual({
+            'pr.metadata.read': {
+                mode: 'fixed_tools',
+                tools: ['KODUS_GET_PULL_REQUEST'],
+            },
+            'pr.diff.read': {
+                mode: 'fixed_tools',
+                tools: ['KODUS_GET_PULL_REQUEST_DIFF'],
+            },
+            'task.context.read': {
+                mode: 'provider_dynamic',
+            },
+        });
         expect(meta.allowedTools).toEqual([
             'KODUS_GET_PULL_REQUEST',
             'KODUS_GET_PULL_REQUEST_DIFF',
@@ -210,6 +223,41 @@ description: No capability-tool-map
 # Body`);
 
         expect(parsed.meta.capabilityToolMap).toBeUndefined();
+    });
+
+    it('normalizes capabilityDefinitions from SKILL.md frontmatter', () => {
+        const service = new SkillLoaderService() as any;
+
+        const parsed = service.parseFrontmatter(`---
+name: dynamic-capability-skill
+description: Skill with capability definitions
+metadata:
+  kodus:
+    capability-definitions:
+      task.context.read:
+        mode: provider_dynamic
+      custom.read:
+        mode: fixed_tools
+        tools: getCustomData getMoreData
+      inferred.fixed:
+        tools:
+          - getA
+          - getB
+---
+
+# Body`);
+
+        expect(parsed.meta.capabilityDefinitions).toEqual({
+            'task.context.read': { mode: 'provider_dynamic' },
+            'custom.read': {
+                mode: 'fixed_tools',
+                tools: ['getCustomData', 'getMoreData'],
+            },
+            'inferred.fixed': {
+                mode: 'fixed_tools',
+                tools: ['getA', 'getB'],
+            },
+        });
     });
 
     it('warns and ignores invalid metadata.kodus schema', () => {

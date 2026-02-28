@@ -102,5 +102,40 @@ describe('skill-capabilities', () => {
             expect(result.missingCapabilities).toEqual(['custom.read']);
             expect(result.hasRequiredTools).toBe(false);
         });
+
+        it('supports provider_dynamic capabilities via capabilityDefinitions', () => {
+            const result = resolveCapabilityTools(
+                ['task.custom.read'],
+                undefined,
+                {
+                    'task.custom.read': {
+                        mode: 'provider_dynamic',
+                    },
+                },
+            );
+
+            expect(result.tools).toEqual([]);
+            expect(result.unknownCapabilities).toEqual([]);
+        });
+
+        it('supports fixed_tools capabilities via capabilityDefinitions', () => {
+            const result = resolveCapabilityToolSelection({
+                capabilities: ['task.custom.read'],
+                capabilityDefinitions: {
+                    'task.custom.read': {
+                        mode: 'fixed_tools',
+                        tools: ['getCustomTask'],
+                    },
+                },
+                registeredTools: ['getCustomTask'],
+                toolMode: 'all',
+            });
+
+            expect(result.toolByCapability['task.custom.read']).toBe(
+                'getCustomTask',
+            );
+            expect(result.missingCapabilities).toEqual([]);
+            expect(result.hasRequiredTools).toBe(true);
+        });
     });
 });

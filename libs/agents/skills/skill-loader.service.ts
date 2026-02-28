@@ -18,6 +18,13 @@ export interface SkillRequiredMcp {
     examples?: string;
 }
 
+export type SkillCapabilityResolutionMode = 'fixed_tools' | 'provider_dynamic';
+
+export interface SkillCapabilityDefinition {
+    mode: SkillCapabilityResolutionMode;
+    tools?: string[];
+}
+
 export type SkillToolMode = 'any' | 'all';
 export type SkillFailureMode = 'fail' | 'fallback';
 
@@ -74,6 +81,8 @@ export interface SkillMeta {
     capabilities?: string[];
     /** Optional per-skill capability -> fixed tools map to extend built-in registry. */
     capabilityToolMap?: Record<string, string[]>;
+    /** Optional per-skill capability registry extension/override. */
+    capabilityDefinitions?: Record<string, SkillCapabilityDefinition>;
     /** MCP tool names the skill's fetcher agent is allowed to use. */
     allowedTools?: string[];
     /** External MCP plugin categories required for this skill to work. */
@@ -130,6 +139,15 @@ const KodusExtensionsSchema = z.looseObject({
     'capability-tool-map': z
         .record(z.string(), z.union([z.string(), z.array(z.string())]))
         .optional(),
+    'capability-definitions': z
+        .record(
+            z.string(),
+            z.looseObject({
+                mode: z.enum(['fixed_tools', 'provider_dynamic']).optional(),
+                tools: z.union([z.string(), z.array(z.string())]).optional(),
+            }),
+        )
+        .optional(),
     'required-mcps': z.array(RequiredMcpSchema).optional(),
     'execution-policy': ExecutionPolicySchema.optional(),
     'fetcher-policy': FetcherPolicySchema.optional(),
@@ -148,6 +166,15 @@ const SkillFrontmatterSchema = z.looseObject({
 
     // Legacy Kodus top-level extension keys (kept for backwards compatibility).
     'capabilities': z.array(z.string()).optional(),
+    'capability-definitions': z
+        .record(
+            z.string(),
+            z.looseObject({
+                mode: z.enum(['fixed_tools', 'provider_dynamic']).optional(),
+                tools: z.union([z.string(), z.array(z.string())]).optional(),
+            }),
+        )
+        .optional(),
     'required-mcps': z.array(RequiredMcpSchema).optional(),
     'execution-policy': ExecutionPolicySchema.optional(),
     'fetcher-policy': FetcherPolicySchema.optional(),
@@ -340,6 +367,7 @@ export class SkillLoaderService {
         const kodus = kodusMetadata.success ? kodusMetadata.data : {};
         const legacyExtensionsUsed =
             parsed.data.capabilities !== undefined ||
+            parsed.data['capability-definitions'] !== undefined ||
             parsed.data['required-mcps'] !== undefined ||
             parsed.data['execution-policy'] !== undefined ||
             parsed.data['fetcher-policy'] !== undefined ||
@@ -366,6 +394,10 @@ export class SkillLoaderService {
         const capabilityToolMap = this.normalizeCapabilityToolMap(
             kodus['capability-tool-map'],
         );
+        const capabilityDefinitions = this.normalizeCapabilityDefinitions(
+            kodus['capability-definitions'] ??
+                parsed.data['capability-definitions'],
+        );
         const allowedTools = this.normalizeAllowedTools(
             parsed.data['allowed-tools'],
         );
@@ -386,6 +418,7 @@ export class SkillLoaderService {
                 metadata,
                 capabilities,
                 capabilityToolMap,
+                capabilityDefinitions,
                 allowedTools,
                 requiredMcps,
                 executionPolicy,
@@ -485,6 +518,48 @@ export class SkillLoaderService {
             }
 
             normalized[capability] = tools;
+        }
+
+        return Object.keys(normalized).length ? normalized : undefined;
+    }
+
+    private normalizeCapabilityDefinitions(
+        value: unknown,
+    ): Record<string, SkillCapabilityDefinition> | undefined {
+        const record = asRecord(value);
+        if (!Object.keys(record).length) {
+            return undefined;
+        }
+
+        const normalized: Record<string, SkillCapabilityDefinition> = {};
+        for (const [capability, rawDefinition] of Object.entries(record)) {
+            const trimmedCapability = capability.trim();
+            if (!trimmedCapability) {
+                continue;
+            }
+
+            const definition = asRecord(rawDefinition);
+            const modeValue = definition.mode;
+            const parsedMode =
+                modeValue === 'fixed_tools' || modeValue === 'provider_dynamic'
+                    ? modeValue
+                    : undefined;
+            const tools = this.normalizeAllowedTools(definition.tools);
+            const mode =
+                parsedMode ??
+                (tools?.length ? 'fixed_tools' : undefined);
+
+            if (!mode) {
+                continue;
+            }
+            if (mode === 'fixed_tools' && !tools?.length) {
+                continue;
+            }
+
+            normalized[trimmedCapability] =
+                mode === 'provider_dynamic'
+                    ? { mode }
+                    : { mode, tools };
         }
 
         return Object.keys(normalized).length ? normalized : undefined;

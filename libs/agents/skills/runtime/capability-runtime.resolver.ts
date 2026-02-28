@@ -18,6 +18,7 @@ export function createCapabilityToolRuntime(params: {
         capabilities: params.config.capabilities,
         allowedTools: params.config.allowedTools,
         capabilityToolMap: params.config.capabilityToolMap,
+        capabilityDefinitions: params.config.capabilityDefinitions,
         registeredTools: params.registeredTools,
         toolMode: params.config.fetcherPolicy.toolMode,
     });

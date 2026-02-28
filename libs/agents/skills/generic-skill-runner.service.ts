@@ -358,6 +358,7 @@ export class GenericSkillRunnerService {
             capabilities: meta.capabilities ?? [],
             allowedTools: meta.allowedTools ?? [],
             capabilityToolMap: meta.capabilityToolMap,
+            capabilityDefinitions: meta.capabilityDefinitions,
             fetcherPolicy: this.resolveFetcherPolicy(meta.fetcherPolicy),
             providerType: options?.providerType ?? 'external',
             allProviderTypes: options?.allProviderTypes,
@@ -720,7 +721,11 @@ export class GenericSkillRunnerService {
     private resolveRequiredTools(meta: SkillMeta, skillName: string): string[] {
         const explicitTools = meta.allowedTools ?? [];
         const { tools: capabilityTools, unknownCapabilities } =
-            resolveCapabilityTools(meta.capabilities, meta.capabilityToolMap);
+            resolveCapabilityTools(
+                meta.capabilities,
+                meta.capabilityToolMap,
+                meta.capabilityDefinitions,
+            );
 
         if (unknownCapabilities.length > 0) {
             this.logger.warn(
