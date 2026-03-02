@@ -53,14 +53,18 @@ services:
             - API_LOG_PRETTY=true
             - CHOKIDAR_USEPOLLING=false
             - API_DEVELOPMENT_MODE=${API_DEVELOPMENT_MODE:-true}
-            - RUN_MIGRATIONS=true
-            - RUN_SEEDS=true
+            - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
+            - RUN_SEEDS=${RUN_SEEDS:-true}
             - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
-            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-true}
+            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-false}
 
     worker:
         <<: *app-service-defaults
         container_name: kodus_worker
+        volumes:
+            - .:/usr/src/app:delegated
+            - node_modules_cache:/usr/src/app/node_modules:nocopy
+            - yalc_store:/root/.yalc
         ports:
             - '9231:9231'
             - '8001:8001'
@@ -84,11 +88,15 @@ services:
             - COMPONENT_TYPE=worker
             - API_LOG_PRETTY=true
             - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
-            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-true}
+            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-false}
 
     webhooks:
         <<: *app-service-defaults
         container_name: kodus_webhooks
+        volumes:
+            - .:/usr/src/app:delegated
+            - node_modules_cache:/usr/src/app/node_modules:nocopy
+            - yalc_store:/root/.yalc
         ports:
             - '${API_WEBHOOKS_PORT:-3332}:${API_WEBHOOKS_PORT:-3332}'
             - '9232:9232'
@@ -112,7 +120,7 @@ services:
             - DEBUG_PORT=9232
             - API_LOG_PRETTY=true
             - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
-            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-true}
+            - PYROSCOPE_HEAP_PROFILING=${PYROSCOPE_HEAP_PROFILING:-false}
 
     #----------------------------------------------------------------
     # Web Frontend
@@ -135,7 +143,13 @@ services:
             - web_next_cache:/usr/src/app/.next
         restart: unless-stopped
         healthcheck:
-            test: ['CMD', 'curl', '-f', 'http://localhost:3000']
+            test:
+                [
+                    'CMD',
+                    'node',
+                    '-e',
+                    "fetch('http://localhost:3000').then((res)=>process.exit(res.ok?0:1)).catch(()=>process.exit(1))",
+                ]
             interval: 30s
             timeout: 10s
             retries: 3

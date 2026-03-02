@@ -29,6 +29,7 @@ import {
     GetImpactAnalysisResponse,
     TaskStatus,
 } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
+import { CrossFileContextSnippet } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { IClusterizedSuggestion } from '@libs/kodyFineTuning/domain/interfaces/kodyFineTuning.interface';
 import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { OrganizationAndTeamData } from './organizationAndTeamData';
@@ -129,6 +130,8 @@ export type AnalysisContext<TPullRequest = any> = {
     fileAugmentations?: ContextAugmentationsMap;
     /** Dynamically generated augmentations during pipeline, mapped by filename. */
     augmentationsByFile?: Record<string, ContextAugmentationsMap>;
+    /** Cross-file context snippets relevant to the current file under review. */
+    crossFileSnippets?: CrossFileContextSnippet[];
 };
 
 export type ASTAnalysisResult = {
@@ -170,6 +173,7 @@ export type CodeSuggestion = {
     label: string;
     llmPrompt?: string;
     severity?: string;
+    crossFileEvidence?: boolean;
     rankScore?: number;
     priorityStatus?: PriorityStatus;
     deliveryStatus?: DeliveryStatus;
@@ -227,6 +231,7 @@ export type FileChange = {
         safeguard?: string;
     };
     patchWithLinesStr?: string;
+    astFormattedContent?: string;
 };
 
 export type FileChangeContext = {
@@ -277,6 +282,7 @@ export const reviewOptionsSchema = z.object({
     performance: z.boolean(),
     security: z.boolean(),
     cross_file: z.boolean(),
+    business_logic: z.boolean().optional(),
 });
 
 export interface ReviewOptions {
@@ -284,6 +290,7 @@ export interface ReviewOptions {
     performance?: boolean;
     security?: boolean;
     cross_file?: boolean;
+    business_logic?: boolean;
 }
 
 export interface SummaryConfig {
@@ -378,6 +385,7 @@ export type CodeReviewConfig = {
     contextReferenceId?: string;
     contextRequirementsHash?: string;
     enableCommittableSuggestions?: boolean;
+    crossFileDependenciesAnalysis?: boolean;
     // This is the default branch of the repository, used only during the review process
     // This field is populated dynamically from the API (GitHub/GitLab) and should NOT be saved to the database
     // It represents the repository's default branch (e.g., 'main', 'develop') that comes from the code management platform

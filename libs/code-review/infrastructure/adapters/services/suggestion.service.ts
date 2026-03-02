@@ -8,6 +8,7 @@ import {
     ICommentManagerService,
 } from '@libs/code-review/domain/contracts/CommentManagerService.contract';
 import { ISuggestionService } from '@libs/code-review/domain/contracts/SuggestionService.contract';
+import { CrossFileContextSnippet } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import {
     ClusteringType,
     CodeReviewConfig,
@@ -233,6 +234,7 @@ export class SuggestionService implements ISuggestionService {
         languageResultPrompt: string,
         reviewMode: ReviewModeResponse,
         byokConfig: BYOKConfig,
+        crossFileSnippets?: CrossFileContextSnippet[],
         memories?: Array<Partial<IKodyRule>>,
         externalReferences?: unknown[],
         externalReferenceErrors?: unknown[] | string,
@@ -251,6 +253,7 @@ export class SuggestionService implements ISuggestionService {
             languageResultPrompt,
             reviewMode,
             byokConfig,
+            crossFileSnippets,
             memories,
             externalReferences,
             externalReferenceErrors,
