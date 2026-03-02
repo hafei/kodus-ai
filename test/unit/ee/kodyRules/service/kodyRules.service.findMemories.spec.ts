@@ -187,4 +187,88 @@ describe('KodyRulesService.findMemories', () => {
             'pathless-memory',
         ]);
     });
+
+    it('filters memories by keywords and trims keyword input', async () => {
+        const memoryA = createMemoryRule({
+            uuid: 'memory-a',
+            title: 'Use strict typing',
+            rule: 'Prefer explicit return types',
+            repositoryId: 'repo-1',
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        });
+
+        const memoryB = createMemoryRule({
+            uuid: 'memory-b',
+            title: 'Logging',
+            rule: 'Log retry attempts',
+            repositoryId: 'repo-1',
+            createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        });
+
+        const { service } = setup([memoryA, memoryB]);
+
+        const result = await service.findMemories(organizationAndTeamData, {
+            repositoryId: 'repo-1',
+            keywords: ['  strict  '],
+        });
+
+        expect(result.map((memory) => memory.uuid)).toEqual(['memory-a']);
+    });
+
+    it('clamps limit to min 1 and max 20', async () => {
+        const memories = Array.from({ length: 25 }).map((_, index) =>
+            createMemoryRule({
+                uuid: `m-${index}`,
+                repositoryId: 'repo-1',
+                createdAt: new Date(
+                    `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+                ),
+            }),
+        );
+
+        const { service } = setup(memories);
+
+        const limitedToOne = await service.findMemories(
+            organizationAndTeamData,
+            {
+                repositoryId: 'repo-1',
+                limit: 0,
+            },
+        );
+
+        const limitedToTwenty = await service.findMemories(
+            organizationAndTeamData,
+            {
+                repositoryId: 'repo-1',
+                limit: 999,
+            },
+        );
+
+        expect(limitedToOne).toHaveLength(1);
+        expect(limitedToTwenty).toHaveLength(20);
+    });
+
+    it('returns most recent memories first', async () => {
+        const oldMemory = createMemoryRule({
+            uuid: 'old-memory',
+            repositoryId: 'repo-1',
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        });
+        const newMemory = createMemoryRule({
+            uuid: 'new-memory',
+            repositoryId: 'repo-1',
+            createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        });
+
+        const { service } = setup([oldMemory, newMemory]);
+
+        const result = await service.findMemories(organizationAndTeamData, {
+            repositoryId: 'repo-1',
+        });
+
+        expect(result.map((memory) => memory.uuid)).toEqual([
+            'new-memory',
+            'old-memory',
+        ]);
+    });
 });
