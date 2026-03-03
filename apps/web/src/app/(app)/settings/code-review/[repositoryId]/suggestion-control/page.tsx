@@ -12,7 +12,7 @@ import {
     KodyLearningStatus,
     ParametersConfigKey,
 } from "@services/parameters/types";
-import { Save } from "lucide-react";
+import { RotateCcwIcon, Save } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { unformatConfig } from "src/core/utils/helpers";
@@ -116,6 +116,16 @@ export default function SuggestionControl(
                 <hr />
 
                 <Page.HeaderActions>
+                    {formIsDirty && (
+                        <Button
+                            size="md"
+                            variant="cancel"
+                            leftIcon={<RotateCcwIcon />}
+                            onClick={() => form.reset()}>
+                            Reset
+                        </Button>
+                    )}
+
                     <Button
                         size="md"
                         variant="primary"
@@ -129,7 +139,9 @@ export default function SuggestionControl(
             </Page.Header>
 
             <Page.Content className="mt-10 flex-none">
-                <SuggestionGroupingMode />
+                <div data-field-name="suggestionControl.suggestionGroupingMode">
+                    <SuggestionGroupingMode />
+                </div>
 
                 <div className="mt-10 flex flex-col gap-8">
                     <div>
@@ -140,8 +152,12 @@ export default function SuggestionControl(
                         </span>
                     </div>
 
-                    <ApplyFiltersToKodyRules />
-                    <LimitationTypeField />
+                    <div data-field-name="suggestionControl.applyFiltersToKodyRules">
+                        <ApplyFiltersToKodyRules />
+                    </div>
+                    <div data-field-name="suggestionControl.limitationType">
+                        <LimitationTypeField />
+                    </div>
 
                     {limitationType === LimitationType.SEVERITY ? (
                         <React.Fragment key="severity-limitation">

@@ -22,7 +22,7 @@ import {
 } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
-import { EyeIcon, Save } from "lucide-react";
+import { EyeIcon, RotateCcwIcon, Save } from "lucide-react";
 import { Controller, useFormContext } from "react-hook-form";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { unformatConfig } from "src/core/utils/helpers";
@@ -179,6 +179,16 @@ export default function PRSummary(props: AutomationCodeReviewConfigPageProps) {
                 <Page.Title>PR summary</Page.Title>
 
                 <Page.HeaderActions>
+                    {formIsDirty && (
+                        <Button
+                            size="md"
+                            variant="cancel"
+                            leftIcon={<RotateCcwIcon />}
+                            onClick={() => form.reset()}>
+                            Reset
+                        </Button>
+                    )}
+
                     <Button
                         size="md"
                         variant="primary"
@@ -192,6 +202,7 @@ export default function PRSummary(props: AutomationCodeReviewConfigPageProps) {
             </Page.Header>
 
             <Page.Content className="gap-8">
+                <div data-field-name="summary.generatePRSummary.value">
                 <Controller
                     name="summary.generatePRSummary.value"
                     control={form.control}
@@ -222,6 +233,8 @@ export default function PRSummary(props: AutomationCodeReviewConfigPageProps) {
                         </Button>
                     )}
                 />
+                </div>
+                <div data-field-name="summary.behaviourForNewCommits.value">
                 <Controller
                     name="summary.behaviourForNewCommits.value"
                     control={form.control}
@@ -301,7 +314,9 @@ export default function PRSummary(props: AutomationCodeReviewConfigPageProps) {
                         </FormControl.Root>
                     )}
                 />
+                </div>
 
+                <div data-field-name="summary.behaviourForExistingDescription.value">
                 <Controller
                     name="summary.behaviourForExistingDescription.value"
                     control={form.control}
@@ -379,7 +394,9 @@ export default function PRSummary(props: AutomationCodeReviewConfigPageProps) {
                         </FormControl.Root>
                     )}
                 />
+                </div>
 
+                <div data-field-name="summary.customInstructions.value">
                 <Controller
                     name="summary.customInstructions.value"
                     control={form.control}
@@ -453,6 +470,7 @@ export default function PRSummary(props: AutomationCodeReviewConfigPageProps) {
                         </FormControl.Root>
                     )}
                 />
+                </div>
 
                 <div className="-mt-3 flex justify-end">
                     <Button

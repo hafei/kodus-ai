@@ -2,12 +2,16 @@
 
 import NextLink from "next/link";
 import { cn } from "src/core/utils/components";
+import {
+    hasUnsavedChanges,
+    triggerNavigationBlock,
+} from "src/core/utils/navigation-guard";
 
 export const Link = ({
     disabled,
     noHoverUnderline,
     ...props
-}: React.ComponentProps<typeof NextLink> & { 
+}: React.ComponentProps<typeof NextLink> & {
     disabled?: boolean;
     noHoverUnderline?: boolean;
 }) => {
@@ -22,6 +26,14 @@ export const Link = ({
     return (
         <NextLink
             {...props}
+            onClick={(e) => {
+                if (hasUnsavedChanges()) {
+                    e.preventDefault();
+                    triggerNavigationBlock();
+                    return;
+                }
+                props.onClick?.(e);
+            }}
             className={cn(
                 "group/link",
                 "w-fit underline-offset-5 transition",

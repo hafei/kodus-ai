@@ -16,7 +16,7 @@ import {
 } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
-import { DownloadIcon, SaveIcon } from "lucide-react";
+import { DownloadIcon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { FormProvider, useFormContext } from "react-hook-form";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { unformatConfig } from "src/core/utils/helpers";
@@ -207,6 +207,16 @@ export default function General() {
                         Download {downloadFileText} YML configuration file
                     </Button>
 
+                    {formIsDirty && (
+                        <Button
+                            size="md"
+                            variant="cancel"
+                            leftIcon={<RotateCcwIcon />}
+                            onClick={() => form.reset()}>
+                            Reset
+                        </Button>
+                    )}
+
                     <Button
                         size="md"
                         variant="primary"
@@ -220,27 +230,51 @@ export default function General() {
             </Page.Header>
 
             <Page.Content>
-                <AutomatedReviewActive />
-                <KodusConfigFileOverridesWebPreferences />
-                <PullRequestApprovalActive />
+                <div data-field-name="automatedReviewActive">
+                    <AutomatedReviewActive />
+                </div>
+                <div data-field-name="kodusConfigFileOverridesWebPreferences">
+                    <KodusConfigFileOverridesWebPreferences />
+                </div>
+                <div data-field-name="pullRequestApprovalActive">
+                    <PullRequestApprovalActive />
+                </div>
                 <AsyncBoundary errorVariant="minimal">
-                    <IsRequestChangesActive />
+                    <div data-field-name="isRequestChangesActive">
+                        <IsRequestChangesActive />
+                    </div>
                 </AsyncBoundary>
-                <RunOnDraft />
-                <ShowStatusFeedback />
+                <div data-field-name="runOnDraft">
+                    <RunOnDraft />
+                </div>
+                <div data-field-name="showStatusFeedback">
+                    <ShowStatusFeedback />
+                </div>
                 <AsyncBoundary errorVariant="minimal">
-                    <EnableCommittableSuggestions />
+                    <div data-field-name="enableCommittableSuggestions">
+                        <EnableCommittableSuggestions />
+                    </div>
                 </AsyncBoundary>
                 <AsyncBoundary errorVariant="minimal">
-                    <CrossfileDependenciesAnalysis />
+                    <div data-field-name="crossfileDependenciesAnalysis">
+                        <CrossfileDependenciesAnalysis />
+                    </div>
                 </AsyncBoundary>
-                <IgnorePaths />
-                <IgnoredTitleKeywords />
-                <BaseBranches />
+                <div data-field-name="ignorePaths">
+                    <IgnorePaths />
+                </div>
+                <div data-field-name="ignoredTitleKeywords">
+                    <IgnoredTitleKeywords />
+                </div>
+                <div data-field-name="baseBranches">
+                    <BaseBranches />
+                </div>
 
                 {repositoryId === "global" && (
                     <FormProvider {...form}>
-                        <LanguageSelector />
+                        <div data-field-name="language">
+                            <LanguageSelector />
+                        </div>
                     </FormProvider>
                 )}
             </Page.Content>

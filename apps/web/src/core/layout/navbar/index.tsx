@@ -2,8 +2,8 @@
 
 import { Suspense, useMemo } from "react";
 import dynamic from "next/dynamic";
-import NextLink from "next/link";
 import { usePathname } from "next/navigation";
+import { Link } from "@components/ui/link";
 import { SvgKodus } from "@components/ui/icons/SvgKodus";
 import {
     NavigationMenu,
@@ -165,9 +165,9 @@ export const NavMenu = () => {
 
     return (
         <div className="border-primary-dark bg-card-lv1 z-50 flex h-16 shrink-0 gap-4 border-b-2 px-6">
-            <NextLink href="/" className="flex items-center">
+            <Link href="/" noHoverUnderline className="flex items-center text-inherit">
                 <SvgKodus className="h-8 max-w-max" />
-            </NextLink>
+            </Link>
 
             <div className="-mb-1 h-full flex-1">
                 <NavigationMenu className="h-full *:h-full">
