@@ -170,7 +170,10 @@ describe('business-rules blueprint', () => {
             },
             userLanguage: 'en-US',
             prepareContext: {
-                repository: { id: 123456 as unknown as string, name: 'my-repo' },
+                repository: {
+                    id: 123456 as unknown as string,
+                    name: 'my-repo',
+                },
                 pullRequest: { pullRequestNumber: 12 },
             },
         } as BusinessRulesContext);
@@ -484,7 +487,7 @@ describe('business-rules blueprint', () => {
                     if (
                         toolName === 'getJiraIssue' &&
                         (_args as Record<string, unknown>)?.cloudId ===
-                            'kodustech.atlassian.net' &&
+                            'https://kodustech.atlassian.net' &&
                         (_args as Record<string, unknown>)?.issueIdOrKey ===
                             'PROJ-123'
                     ) {
@@ -587,7 +590,7 @@ describe('business-rules blueprint', () => {
         expect(taskToolCall).toBeDefined();
         expect((taskToolCall as unknown[])[1]).toEqual(
             expect.objectContaining({
-                cloudId: 'kodustech.atlassian.net',
+                cloudId: 'https://kodustech.atlassian.net',
                 issueIdOrKey: 'PROJ-123',
             }),
         );
