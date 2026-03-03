@@ -73,8 +73,10 @@ export default async function Layout({ children }: React.PropsWithChildren) {
     const isTrial = organizationLicense?.subscriptionStatus === "trial";
 
     const canManageCodeReview = !!(
-        permissions as Record<string, Record<string, boolean>>
-    )?.[ResourceType.CodeReviewSettings]?.[Action.Manage];
+        (
+            permissions as Record<string, Record<string, boolean>> | undefined
+        )?.[ResourceType.CodeReviewSettings]?.[Action.Manage]
+    );
 
     return (
         <Providers

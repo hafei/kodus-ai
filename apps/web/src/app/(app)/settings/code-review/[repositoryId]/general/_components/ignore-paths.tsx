@@ -42,16 +42,16 @@ export const IgnorePaths = () => {
                                 disabled={field.disabled}
                                 value={draftValue}
                                 onChange={(ev) => {
-                                    setDraftValue(ev.target.value);
-                                }}
-                                onBlur={() => {
-                                    const ignorePaths = draftValue
+                                    const nextValue = ev.target.value;
+                                    setDraftValue(nextValue);
+                                    const ignorePaths = nextValue
                                         .split("\n")
                                         .map((item) => item.trim())
                                         .filter((item) => item !== "");
 
                                     field.onChange(ignorePaths);
                                 }}
+                                onBlur={field.onBlur}
                                 placeholder={`List the files to be ignored here, one per line. Example:\n\nyarn.lock\npackage-lock.json\npackage.json\n.env`}
                                 maxLength={1000}
                                 className="min-h-40"

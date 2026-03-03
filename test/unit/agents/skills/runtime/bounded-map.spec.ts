@@ -37,6 +37,21 @@ describe('BoundedMap', () => {
         expect(map.has('c')).toBe(true);
     });
 
+    it('preserves FIFO order when updating an existing key', () => {
+        const map = new BoundedMap<string, number>(3);
+        map.set('a', 1);
+        map.set('b', 2);
+        map.set('c', 3);
+
+        map.set('a', 10);
+        map.set('d', 4);
+
+        expect(map.has('a')).toBe(false);
+        expect(map.has('b')).toBe(true);
+        expect(map.has('c')).toBe(true);
+        expect(map.has('d')).toBe(true);
+    });
+
     it('supports delete and clear', () => {
         const map = new BoundedMap<string, number>(10);
         map.set('a', 1);

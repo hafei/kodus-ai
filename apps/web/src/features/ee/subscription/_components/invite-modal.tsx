@@ -22,12 +22,16 @@ import { z } from "zod";
 
 const emailSchema = z.object({
     email: z
-        .email({
-            error: "Please enter a valid email",
-        })
+        .string()
+        .trim()
         .min(1, {
             error: "Email is required",
-        }),
+        })
+        .pipe(
+            z.email({
+                error: "Please enter a valid email",
+            }),
+        ),
 });
 
 type EmailFormValues = z.infer<typeof emailSchema>;

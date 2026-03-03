@@ -29,7 +29,8 @@ export interface ExecuteDeterministicToolParams<TOutput> {
 export async function executeDeterministicTool<TOutput>(
     params: ExecuteDeterministicToolParams<TOutput>,
 ): Promise<TOutput> {
-    if (!params.toolName?.trim()) {
+    const toolName = params.toolName;
+    if (!toolName?.trim()) {
         params.onFallback?.('tool_unavailable');
         return params.fallback;
     }
@@ -41,7 +42,7 @@ export async function executeDeterministicTool<TOutput>(
     }
 
     try {
-        const toolResult = await params.callTool(params.toolName, params.args);
+        const toolResult = await params.callTool(toolName, params.args);
         if (toolResult.result === undefined) {
             params.onFallback?.('missing_result');
             return params.fallback;

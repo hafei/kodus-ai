@@ -21,9 +21,7 @@ export class BoundedMap<K, V> {
     }
 
     set(key: K, value: V): this {
-        if (this.store.has(key)) {
-            this.store.delete(key);
-        } else if (this.store.size >= this.maxSize) {
+        if (!this.store.has(key) && this.store.size >= this.maxSize) {
             const oldest = this.store.keys().next().value;
             if (oldest !== undefined) {
                 this.store.delete(oldest);

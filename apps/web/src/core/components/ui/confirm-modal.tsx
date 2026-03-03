@@ -51,6 +51,7 @@ export const ConfirmModal = ({
                         size="md"
                         variant={variant}
                         loading={loading}
+                        disabled={loading}
                         onClick={onConfirm}>
                         {confirmText}
                     </Button>

@@ -188,6 +188,55 @@ describe('business-rules blueprint', () => {
         expect(next.prDiff).toBe('diff content');
     });
 
+    it('accepts legacy top-level pullRequestNumber in prepareContext', async () => {
+        const fetcher = {
+            callTool: jest.fn().mockResolvedValue({
+                result: { result: { success: true, data: 'diff content' } },
+            }),
+            getRegisteredTools: jest
+                .fn()
+                .mockReturnValue([{ name: 'KODUS_GET_PULL_REQUEST_DIFF' }]),
+        } as any;
+
+        const steps = createBusinessRulesBlueprint(
+            fetcher,
+            defaultRuntimeConfig,
+        );
+        const diffStep = steps.find(
+            (step) =>
+                step.type === 'deterministic' &&
+                step.name === 'fetchPullRequestDiff',
+        );
+
+        if (!diffStep || diffStep.type !== 'deterministic') {
+            throw new Error('fetchPullRequestDiff step not found');
+        }
+
+        const next = await diffStep.fn({
+            organizationAndTeamData: {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            },
+            userLanguage: 'en-US',
+            prepareContext: {
+                repository: {
+                    id: 'repo-legacy',
+                    name: 'my-repo',
+                },
+                pullRequestNumber: 44,
+            },
+        } as BusinessRulesContext);
+
+        expect(fetcher.callTool).toHaveBeenCalledWith(
+            'KODUS_GET_PULL_REQUEST_DIFF',
+            expect.objectContaining({
+                repositoryId: 'repo-legacy',
+                prNumber: 44,
+            }),
+        );
+        expect(next.prDiff).toBe('diff content');
+    });
+
     it('fetches metadata via MCP when PR description is not preloaded', async () => {
         const fetcher = {
             callTool: jest.fn().mockImplementation((toolName: string) => {

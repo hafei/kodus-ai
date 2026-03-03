@@ -273,6 +273,10 @@ function resolvePullRequestNumber(
     if (typeof nested === 'number') {
         return nested;
     }
+    const legacy = ctx.prepareContext?.pullRequestNumber;
+    if (typeof legacy === 'number') {
+        return legacy;
+    }
     return undefined;
 }
 
@@ -329,7 +333,11 @@ function resolvePullRequestHeadRef(
     ctx: BusinessRulesContext,
 ): string | undefined {
     const headRef = ctx.prepareContext?.pullRequest?.headRef;
-    return typeof headRef === 'string' ? headRef : undefined;
+    if (typeof headRef === 'string') {
+        return headRef;
+    }
+    const legacy = ctx.prepareContext?.headRef;
+    return typeof legacy === 'string' ? legacy : undefined;
 }
 
 function readPrepareContextString(
