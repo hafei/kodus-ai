@@ -11,14 +11,13 @@ import { BlueprintStep } from '@libs/shared/blueprint/blueprint.types';
 
 import { BusinessRulesContext } from './types';
 import {
-    canProceedWithBusinessRulesAnalysis,
+    buildBusinessLogicEligibility,
     getPullRequestDiffMissingInfoMessage,
     getTaskContextMissingInfoMessage,
-    hasUsablePullRequestDiff,
 } from './task-quality.rules';
 import {
     SKILL_NAME,
-    classifyTaskQuality,
+    classifyTaskQualityFromSources,
     createBusinessRulesBlueprintTooling,
     resolvePullRequestDescription,
     resolveTaskContext,
@@ -40,10 +39,6 @@ const hasPrDiffSchema = z.looseObject({
     prDiff: z.string(),
 });
 
-const hasNonEmptyPrDiffSchema = z.looseObject({
-    prDiff: z.string().trim().min(1),
-});
-
 const hasTaskContextSchema = z.looseObject({
     taskContext: z.string(),
 });
@@ -54,10 +49,50 @@ const hasTaskQualitySchema = z.looseObject({
     taskQuality: taskQualitySchema,
 });
 
+const validateContextInputSchema = z.looseObject({
+    taskQuality: taskQualitySchema,
+    prDiff: z.string(),
+});
+
+const analyzeBusinessRulesInputSchema = z.looseObject({
+    taskQuality: taskQualitySchema,
+    prDiff: z.string().trim().min(1),
+});
+
 const validationResultPayloadSchema = z.looseObject({
     needsMoreInfo: z.boolean(),
     missingInfo: z.string().optional(),
     summary: z.string(),
+    mode: z.enum(['full_analysis', 'limitation_response']).optional(),
+    reason: z
+        .enum([
+            'analysis_ready',
+            'task_context_missing',
+            'task_context_weak',
+            'pr_diff_missing',
+            'analyzer_failure',
+            'parser_fallback',
+        ])
+        .optional(),
+    taskContextStatus: z.enum(['missing', 'weak', 'usable']).optional(),
+    prDiffStatus: z.enum(['missing', 'usable']).optional(),
+    confidence: z.enum(['low', 'medium', 'high']).optional(),
+});
+
+const analysisEligibilitySchema = z.looseObject({
+    analysisEligibility: z.looseObject({
+        mode: z.enum(['full_analysis', 'limitation_response']),
+        reason: z.enum([
+            'analysis_ready',
+            'task_context_missing',
+            'task_context_weak',
+            'pr_diff_missing',
+            'analyzer_failure',
+            'parser_fallback',
+        ]),
+        taskContextStatus: z.enum(['missing', 'weak', 'usable']),
+        prDiffStatus: z.enum(['missing', 'usable']),
+    }),
 });
 
 const baseValidationResultSchema = z.looseObject({
@@ -91,8 +126,10 @@ export function createBusinessRulesBlueprint(
         requiredOutputPaths,
     );
     const gateOutputSchema = z.union([
-        hasTaskQualitySchema,
-        hasTaskQualitySchema.and(hasValidationResultSchema),
+        hasTaskQualitySchema.and(analysisEligibilitySchema),
+        hasTaskQualitySchema
+            .and(analysisEligibilitySchema)
+            .and(hasValidationResultSchema),
     ]);
 
     const tooling = createBusinessRulesBlueprintTooling(
@@ -143,6 +180,16 @@ export function createBusinessRulesBlueprint(
                 return {
                     ...ctx,
                     prDiff: diff.value,
+                    analysisEligibility:
+                        ctx.taskQuality !== undefined
+                            ? buildBusinessLogicEligibility({
+                                  taskQuality: ctx.taskQuality,
+                                  taskContext: ctx.taskContext,
+                                  taskContextNormalized:
+                                      ctx.taskContextNormalized,
+                                  prDiff: diff.value,
+                              })
+                            : ctx.analysisEligibility,
                     capabilityExecutionTrace: appendCapabilityTraces(
                         ctx,
                         diff.traces,
@@ -189,37 +236,69 @@ export function createBusinessRulesBlueprint(
             name: 'classifyTaskContext',
             contract: {
                 input: hasTaskContextSchema,
-                output: hasTaskQualitySchema,
+                output: hasTaskQualitySchema.and(analysisEligibilitySchema),
             },
-            fn: async (ctx): Promise<BusinessRulesContext> => ({
-                ...ctx,
-                taskQuality: classifyTaskQuality(ctx.taskContext ?? ''),
-            }),
+            fn: async (ctx): Promise<BusinessRulesContext> => {
+                const taskQuality = classifyTaskQualityFromSources({
+                    taskContext: ctx.taskContext,
+                    taskContextNormalized: ctx.taskContextNormalized,
+                });
+                return {
+                    ...ctx,
+                    taskQuality,
+                    analysisEligibility: buildBusinessLogicEligibility({
+                        taskQuality,
+                        taskContext: ctx.taskContext,
+                        taskContextNormalized: ctx.taskContextNormalized,
+                        prDiff: ctx.prDiff,
+                    }),
+                };
+            },
         },
         {
             type: 'gate',
             name: 'validateContext',
             contract: {
-                input: hasTaskQualitySchema.and(hasPrDiffSchema),
+                input: validateContextInputSchema,
                 output: gateOutputSchema,
             },
             condition: (ctx) =>
-                canProceedWithBusinessRulesAnalysis(ctx.taskQuality) &&
-                hasUsablePullRequestDiff(ctx.prDiff),
+                (
+                    ctx.analysisEligibility ??
+                    buildBusinessLogicEligibility({
+                        taskQuality: ctx.taskQuality,
+                        taskContext: ctx.taskContext,
+                        taskContextNormalized: ctx.taskContextNormalized,
+                        prDiff: ctx.prDiff,
+                    })
+                ).mode === 'full_analysis',
             onFail: (ctx): BusinessRulesContext => {
-                const missingInfo = canProceedWithBusinessRulesAnalysis(
-                    ctx.taskQuality,
-                )
-                    ? getPullRequestDiffMissingInfoMessage()
-                    : getTaskContextMissingInfoMessage(ctx.taskQuality);
+                const analysisEligibility =
+                    ctx.analysisEligibility ??
+                    buildBusinessLogicEligibility({
+                        taskQuality: ctx.taskQuality,
+                        taskContext: ctx.taskContext,
+                        taskContextNormalized: ctx.taskContextNormalized,
+                        prDiff: ctx.prDiff,
+                    });
+                const missingInfo =
+                    analysisEligibility.reason === 'pr_diff_missing'
+                        ? getPullRequestDiffMissingInfoMessage()
+                        : getTaskContextMissingInfoMessage(ctx.taskQuality);
                 return {
                     ...ctx,
+                    analysisEligibility,
                     validationResult: {
                         needsMoreInfo: true,
+                        mode: 'limitation_response',
+                        reason: analysisEligibility.reason,
+                        taskContextStatus:
+                            analysisEligibility.taskContextStatus,
+                        prDiffStatus: analysisEligibility.prDiffStatus,
+                        confidence: 'low',
                         missingInfo,
-                        summary: '',
+                        summary: missingInfo,
                     },
-                    formattedResponse: missingInfo,
                 };
             },
         },
@@ -227,7 +306,7 @@ export function createBusinessRulesBlueprint(
             type: 'llm',
             name: 'analyzeBusinessRules',
             contract: {
-                input: hasTaskQualitySchema.and(hasNonEmptyPrDiffSchema),
+                input: analyzeBusinessRulesInputSchema,
                 output: hasValidationResultSchema,
             },
             skill: SKILL_NAME,

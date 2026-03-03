@@ -413,27 +413,19 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
         const prBodyHash = this.computePrBodyHash(prBody);
         const signals = this.detectSignals(prBody);
 
-        this.logger.log({
-            message: `Starting BusinessLogicValidation for PR#${context.pullRequest.number}`,
-            context: this.stageName,
-            metadata: {
-                organizationId: context.organizationAndTeamData?.organizationId,
-                prNumber: context.pullRequest.number,
-                signals,
-                status: 'triggered',
-            },
-        });
-
         try {
             const prepareContext = {
                 userQuestion: '@kody -v business-logic',
-                pullRequestNumber: context.pullRequest.number,
+                pullRequest: {
+                    pullRequestNumber: context.pullRequest.number,
+                    headRef: context.pullRequest?.head?.ref,
+                    baseRef: context.pullRequest?.base?.ref,
+                },
                 repository: context.repository,
                 pullRequestDescription: prBody,
                 platformType: context.platformType,
-                headRef: context.pullRequest?.head?.ref,
-                baseRef: context.pullRequest?.base?.ref,
                 defaultBranch: context.pullRequest?.base?.ref,
+                businessSignals: signals,
             };
             const thread = this.createBusinessLogicThread(context);
 
@@ -546,8 +538,7 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
     private hasBusinessSignals(body: string): boolean {
         return (
             this.detectTicketKeys(body).length > 0 ||
-            this.detectTaskLinks(body).length > 0 ||
-            this.detectRequirementKeywords(body).length > 0
+            this.detectTaskLinks(body).length > 0
         );
     }
 
@@ -586,6 +577,26 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
         }
 
         const lower = result.toLowerCase();
+        const limitationIndicators = [
+            'need task information',
+            'need pull request diff',
+            'insufficient task context',
+            'limited task context',
+            'could not validate',
+            'without the actual code changes, i can',
+            'preciso do diff da pull request',
+            'preciso de informacoes da task',
+            'contexto insuficiente da task',
+            'contexto limitado da task',
+            'nao consegui validar',
+            'sem as alteracoes de codigo',
+        ];
+        if (
+            limitationIndicators.some((indicator) => lower.includes(indicator))
+        ) {
+            return false;
+        }
+
         const noGapIndicators = [
             'no gaps',
             'no issues',
@@ -596,6 +607,8 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
             'no violations',
             '✅ compliant',
             'status: ✅',
+            'sem bloqueios identificados',
+            'requirements covered',
             '"needsmoreinfo": false',
         ];
         return !noGapIndicators.some((indicator) => lower.includes(indicator));

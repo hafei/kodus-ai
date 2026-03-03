@@ -6,25 +6,40 @@ describe('CapabilityResourcePlanService', () => {
 
         const tools = service.getSeedTools('jira', 'task.context.read');
 
-        expect(tools).toEqual(
-            expect.arrayContaining([
-                'getAccessibleAtlassianResources',
-                'getJiraIssue',
-                'searchJiraIssuesUsingJql',
-                'search',
-                'fetch',
-            ]),
-        );
+        expect(tools).toEqual([
+            'getJiraIssue',
+            'searchJiraIssuesUsingJql',
+            'search',
+            'fetch',
+        ]);
     });
 
     it('loads seeded tools for non-jira providers', () => {
         const service = new CapabilityResourcePlanService();
 
         const linearTools = service.getSeedTools('linear', 'task.context.read');
+        const notionTools = service.getSeedTools('notion', 'task.context.read');
+        const clickupTools = service.getSeedTools('clickup', 'task.context.read');
 
-        expect(linearTools).toEqual(
-            expect.arrayContaining(['search', 'fetch', 'getIssue']),
-        );
+        expect(linearTools).toEqual([
+            'get_issue',
+            'list_issues',
+            'get_project',
+            'get_team',
+        ]);
+        expect(notionTools).toEqual([
+            'Fetch Notion Data',
+            'Search Notion page',
+            'Fetch database row',
+            'Query database',
+            'Get page property',
+        ]);
+        expect(clickupTools).toEqual([
+            'Get Task',
+            'Get Tasks',
+            'Get List',
+            'Get Space',
+        ]);
     });
 
     it('stores and retrieves cached tools by tenant scope', async () => {

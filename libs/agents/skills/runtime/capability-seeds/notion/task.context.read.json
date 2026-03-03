@@ -2,11 +2,10 @@
     "providerType": "notion",
     "capability": "task.context.read",
     "tools": [
-        "search",
-        "fetch",
-        "getPage",
-        "searchPages",
-        "queryDatabase",
-        "searchDatabase"
+        "Fetch Notion Data",
+        "Search Notion page",
+        "Fetch database row",
+        "Query database",
+        "Get page property"
     ]
 }

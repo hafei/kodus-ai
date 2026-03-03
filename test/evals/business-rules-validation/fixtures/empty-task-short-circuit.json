@@ -11,6 +11,8 @@
     { "step": "validateContext", "passed": false }
   ],
   "expectedOutcome": {
-    "needsMoreInfo": true
+    "needsMoreInfo": true,
+    "mode": "limitation_response",
+    "reason": "task_context_missing"
   }
 }

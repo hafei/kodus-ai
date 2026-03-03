@@ -4,7 +4,18 @@ import {
     ToolCaller,
 } from '@libs/agents/skills/runtime/skill-runtime.types';
 
-function createCapabilityRuntime(providerType = 'external'): SkillCapabilityRuntimeConfig {
+type CallToolMock = jest.Mock<
+    ReturnType<ToolCaller['callTool']>,
+    Parameters<ToolCaller['callTool']>
+>;
+type CallAgentMock = jest.Mock<
+    ReturnType<NonNullable<ToolCaller['callAgent']>>,
+    Parameters<NonNullable<ToolCaller['callAgent']>>
+>;
+
+function createCapabilityRuntime(
+    providerType = 'external',
+): SkillCapabilityRuntimeConfig {
     return {
         capabilities: ['task.context.read'],
         allowedTools: ['searchTasks', 'getIssue', 'editTask'],
@@ -35,7 +46,7 @@ function createBaseParams() {
 
 describe('fetchTaskContext capability', () => {
     it('resolves context deterministically and respects seeded boundary', async () => {
-        const callTool = jest.fn<ToolCaller['callTool']>().mockResolvedValue({
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
             result: {
                 data: {
                     key: 'TASK-1',
@@ -100,16 +111,14 @@ describe('fetchTaskContext capability', () => {
     });
 
     it('falls back to agent when deterministic candidates are empty', async () => {
-        const callAgent = jest
-            .fn<ToolCaller['callAgent']>()
-            .mockResolvedValue({
-                result: JSON.stringify({
-                    taskContext: 'Agent context',
-                    title: 'Agent title',
-                    id: 'AG-1',
-                    toolsUsed: ['search'],
-                }),
-            });
+        const callAgent: CallAgentMock = jest.fn().mockResolvedValue({
+            result: JSON.stringify({
+                taskContext: 'Agent context',
+                title: 'Agent title',
+                id: 'AG-1',
+                toolsUsed: ['search'],
+            }),
+        });
 
         const toolCaller: ToolCaller = {
             callTool: jest.fn(),
@@ -145,9 +154,324 @@ describe('fetchTaskContext capability', () => {
         expect(callAgent).toHaveBeenCalled();
         expect(
             result.traces.some(
-                (trace) => trace.mode === 'agentic' && trace.status === 'success',
+                (trace) =>
+                    trace.mode === 'agentic' && trace.status === 'success',
             ),
         ).toBe(true);
+    });
+
+    it('explores registered deterministic tools when no seed boundary is available', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                data: {
+                    key: 'TASK-9',
+                    fields: {
+                        summary: 'Explored task',
+                        description: 'Resolved without seeded tools',
+                    },
+                },
+            },
+        });
+        const callAgent: CallAgentMock = jest.fn();
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            callAgent,
+            getRegisteredTools: () => [{ name: 'searchTasks' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'searchTasks',
+                    parameters: {
+                        required: ['query'],
+                        properties: {
+                            query: {
+                                type: 'string',
+                                description: 'Search query',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => []),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('jira'),
+            createBaseParams(),
+            hooks,
+        );
+
+        expect(callTool).toHaveBeenCalledWith(
+            'searchTasks',
+            expect.objectContaining({ query: 'TASK-1' }),
+        );
+        expect(callAgent).not.toHaveBeenCalled();
+        expect(result.normalized).toMatchObject({
+            id: 'TASK-9',
+            title: 'Explored task',
+            description: 'Resolved without seeded tools',
+            sourceProvider: 'jira',
+        });
+    });
+
+    it('uses structured business signals as additional deterministic hints', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                data: {
+                    key: 'KC-1441',
+                    fields: {
+                        summary: 'Kody rules por time',
+                        description: 'Resolved from structured signals',
+                    },
+                },
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'searchTasks' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'searchTasks',
+                    parameters: {
+                        required: ['query'],
+                        properties: {
+                            query: {
+                                type: 'string',
+                                description: 'Search query',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => []),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('jira'),
+            {
+                ...createBaseParams(),
+                userQuestion: '@kody -v business-logic',
+                pullRequestDescription: 'General cleanup in extension commands',
+                prBody: 'No direct ticket reference in the body',
+                businessSignals: {
+                    ticketKeys: ['KC-1441'],
+                    taskLinks: [
+                        'https://kodustech.atlassian.net/jira/software/c/projects/KC/boards/2?selectedIssue=KC-1441',
+                    ],
+                    requirementKeywords: ['acceptance criteria'],
+                },
+            },
+            hooks,
+        );
+
+        expect(callTool).toHaveBeenCalledWith(
+            'searchTasks',
+            expect.objectContaining({ query: 'KC-1441' }),
+        );
+        expect(result.normalized).toMatchObject({
+            id: 'KC-1441',
+            title: 'Kody rules por time',
+            description: 'Resolved from structured signals',
+            sourceProvider: 'jira',
+        });
+    });
+
+    it('matches seeded tool aliases against registered tool name variants', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                issue: {
+                    id: 'issue-uuid-1',
+                    identifier: 'KC-1441',
+                    title: 'Kody rules por time',
+                    description: 'Resolved from aliased Linear tool name.',
+                },
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'Get Linear issue' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'Get Linear issue',
+                    parameters: {
+                        required: ['id'],
+                        properties: {
+                            id: {
+                                type: 'string',
+                                description: 'Issue id or key',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['get_issue']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('linear'),
+            {
+                ...createBaseParams(),
+                userQuestion: '@kody KC-1441',
+                pullRequestDescription: 'Related to KC-1441',
+                prBody: 'PR text KC-1441',
+            },
+            hooks,
+        );
+
+        expect(callTool).toHaveBeenCalledWith(
+            'Get Linear issue',
+            expect.objectContaining({ id: 'KC-1441' }),
+        );
+        expect(result.normalized).toMatchObject({
+            id: 'KC-1441',
+            title: 'Kody rules por time',
+            description: 'Resolved from aliased Linear tool name.',
+            sourceProvider: 'linear',
+        });
+    });
+
+    it('matches tool aliases even when the registered name includes provider qualifiers', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                task: {
+                    id: '86d123',
+                    name: 'Kody rules por time',
+                    description: 'Resolved from provider-qualified tool name.',
+                },
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'Create ClickUp task' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'Create ClickUp task',
+                    parameters: {
+                        required: ['taskId'],
+                        properties: {
+                            taskId: { type: 'string', description: 'Task ID' },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['create_task']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('clickup'),
+            {
+                ...createBaseParams(),
+                userQuestion: '@kody TASK-86',
+                pullRequestDescription: 'Related to TASK-86',
+                prBody: 'PR text TASK-86',
+            },
+            hooks,
+        );
+
+        expect(callTool).toHaveBeenCalledWith(
+            'Create ClickUp task',
+            expect.objectContaining({ taskId: 'TASK-86' }),
+        );
+        expect(result.normalized).toMatchObject({
+            id: '86d123',
+            title: 'Kody rules por time',
+            description: 'Resolved from provider-qualified tool name.',
+            sourceProvider: 'clickup',
+        });
+    });
+
+    it('prefers issue key over internal numeric id when both are present in Jira payload', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                data: {
+                    id: '15604',
+                    key: 'KC-1441',
+                    fields: {
+                        summary: 'Kody rules por time',
+                        description: 'Resolved from Jira issue payload',
+                    },
+                },
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'searchTasks' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'searchTasks',
+                    parameters: {
+                        required: ['query'],
+                        properties: {
+                            query: {
+                                type: 'string',
+                                description: 'Search query',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => []),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('jira'),
+            {
+                ...createBaseParams(),
+                userQuestion: '@kody -v business-logic KC-1441',
+            },
+            hooks,
+        );
+
+        expect(result.normalized).toMatchObject({
+            id: 'KC-1441',
+            title: 'Kody rules por time',
+            description: 'Resolved from Jira issue payload',
+            sourceProvider: 'jira',
+        });
     });
 
     it('skips when no deterministic candidates and agent fallback disabled', async () => {
@@ -185,15 +509,13 @@ describe('fetchTaskContext capability', () => {
     });
 
     it('avoids deterministic execution when required schema is non-string and uses agent fallback', async () => {
-        const callTool = jest.fn<ToolCaller['callTool']>();
-        const callAgent = jest
-            .fn<ToolCaller['callAgent']>()
-            .mockResolvedValue({
-                result: JSON.stringify({
-                    taskContext: 'Fallback context',
-                    toolsUsed: ['search'],
-                }),
-            });
+        const callTool: CallToolMock = jest.fn();
+        const callAgent: CallAgentMock = jest.fn().mockResolvedValue({
+            result: JSON.stringify({
+                taskContext: 'Fallback context',
+                toolsUsed: ['search'],
+            }),
+        });
 
         const toolCaller: ToolCaller = {
             callTool,
@@ -236,7 +558,7 @@ describe('fetchTaskContext capability', () => {
     });
 
     it('extracts task context from provider payload embedded as JSON text content', async () => {
-        const callTool = jest.fn<ToolCaller['callTool']>().mockResolvedValue({
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
             result: {
                 content: [
                     {
@@ -244,15 +566,24 @@ describe('fetchTaskContext capability', () => {
                         text: JSON.stringify({
                             id: 'PAGE-42',
                             properties: {
-                                Name: {
-                                    title: [{ plain_text: 'Notion Task Title' }],
+                                'Name': {
+                                    title: [
+                                        { plain_text: 'Notion Task Title' },
+                                    ],
                                 },
                                 'Acceptance Criteria': {
-                                    rich_text: [{ plain_text: 'Must support flow X' }],
+                                    rich_text: [
+                                        { plain_text: 'Must support flow X' },
+                                    ],
                                 },
                             },
                             description: {
-                                rich_text: [{ plain_text: 'Detailed context from provider' }],
+                                rich_text: [
+                                    {
+                                        plain_text:
+                                            'Detailed context from provider',
+                                    },
+                                ],
                             },
                             url: 'https://example.notion.site/PAGE-42',
                         }),
@@ -270,7 +601,10 @@ describe('fetchTaskContext capability', () => {
                     parameters: {
                         required: ['query'],
                         properties: {
-                            query: { type: 'string', description: 'Search query' },
+                            query: {
+                                type: 'string',
+                                description: 'Search query',
+                            },
                         },
                     },
                 },
@@ -301,6 +635,121 @@ describe('fetchTaskContext capability', () => {
         });
     });
 
+    it('extracts task context from a Linear issue-style payload', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                issue: {
+                    id: 'issue-uuid-1',
+                    identifier: 'KC-1441',
+                    title: 'Kody rules por time',
+                    description:
+                        'Rules must be resolved deterministically by team and billing context.',
+                    url: 'https://linear.app/kodus/issue/KC-1441',
+                },
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'get_issue' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'get_issue',
+                    parameters: {
+                        required: ['id'],
+                        properties: {
+                            id: {
+                                type: 'string',
+                                description: 'Issue id or key',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['get_issue']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('linear'),
+            createBaseParams(),
+            hooks,
+        );
+
+        expect(result.normalized).toMatchObject({
+            id: 'KC-1441',
+            title: 'Kody rules por time',
+            description:
+                'Rules must be resolved deterministically by team and billing context.',
+            links: ['https://linear.app/kodus/issue/KC-1441'],
+            sourceProvider: 'linear',
+        });
+    });
+
+    it('extracts task context from a ClickUp task-style payload', async () => {
+        const callTool: CallToolMock = jest.fn().mockResolvedValue({
+            result: {
+                task: {
+                    id: '86d123',
+                    name: 'Kody rules por time',
+                    description:
+                        'Adicionar escopo por time nas regras e no billing para evitar comportamento imprevisivel.',
+                    url: 'https://app.clickup.com/t/86d123',
+                },
+            },
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'Get Task' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'Get Task',
+                    parameters: {
+                        required: ['taskId'],
+                        properties: {
+                            taskId: { type: 'string', description: 'Task ID' },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['Get Task']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('clickup'),
+            {
+                ...createBaseParams(),
+                userQuestion: '@kody 86d123',
+            },
+            hooks,
+        );
+
+        expect(result.normalized).toMatchObject({
+            id: '86d123',
+            title: 'Kody rules por time',
+            description:
+                'Adicionar escopo por time nas regras e no billing para evitar comportamento imprevisivel.',
+            links: ['https://app.clickup.com/t/86d123'],
+            sourceProvider: 'clickup',
+        });
+    });
+
     it('does not crash when provider payload contains empty objects in text fields', async () => {
         const callTool = jest.fn<ToolCaller['callTool']>().mockResolvedValue({
             result: {
@@ -323,7 +772,10 @@ describe('fetchTaskContext capability', () => {
                     parameters: {
                         required: ['query'],
                         properties: {
-                            query: { type: 'string', description: 'Search query' },
+                            query: {
+                                type: 'string',
+                                description: 'Search query',
+                            },
                         },
                     },
                 },
@@ -353,8 +805,8 @@ describe('fetchTaskContext capability', () => {
     });
 
     it('continues to the next deterministic tool when Jira issue details only contain smart-link metadata', async () => {
-        const callTool = jest
-            .fn<ToolCaller['callTool']>()
+        const callTool: CallToolMock = jest
+            .fn()
             .mockImplementation((toolName: string) => {
                 if (toolName === 'getJiraIssue') {
                     return Promise.resolve({
@@ -485,6 +937,143 @@ describe('fetchTaskContext capability', () => {
                 'Open supported Atlassian links inside the extension',
                 'Reject unsupported hosts with a clear message',
             ],
+            sourceProvider: 'jira',
+        });
+    });
+
+    it('uses the Jira site URL as cloudId candidate when issue link is available', async () => {
+        const callTool: CallToolMock = jest
+            .fn()
+            .mockImplementation(
+                (toolName: string, args: Record<string, unknown>) => {
+                    if (toolName === 'getJiraIssue') {
+                        return Promise.resolve({
+                            result: {
+                                data: {
+                                    key: String(args.issueIdOrKey),
+                                    fields: {
+                                        summary: 'Jira task',
+                                        description:
+                                            'Resolved from Jira issue details',
+                                    },
+                                },
+                            },
+                        });
+                    }
+
+                    return Promise.resolve({ result: {} });
+                },
+            );
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            getRegisteredTools: () => [{ name: 'getJiraIssue' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'getJiraIssue',
+                    parameters: {
+                        required: ['cloudId', 'issueIdOrKey'],
+                        properties: {
+                            cloudId: {
+                                type: 'string',
+                                description: 'Cloud ID (UUID or site URL)',
+                            },
+                            issueIdOrKey: {
+                                type: 'string',
+                                description: 'Issue ID or key',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['getJiraIssue']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('jira'),
+            {
+                ...createBaseParams(),
+                userQuestion:
+                    '@kody https://kodustech.atlassian.net/jira/software/c/projects/KC/boards/2?selectedIssue=KC-1441',
+                pullRequestDescription: '',
+                prBody: '',
+            },
+            hooks,
+        );
+
+        expect(callTool).toHaveBeenCalledWith(
+            'getJiraIssue',
+            expect.objectContaining({
+                cloudId: 'https://kodustech.atlassian.net',
+                issueIdOrKey: 'KC-1441',
+            }),
+        );
+    });
+
+    it('does not execute Jira fetch without an ARI identifier', async () => {
+        const callTool: CallToolMock = jest.fn();
+        const callAgent: CallAgentMock = jest.fn().mockResolvedValue({
+            result: JSON.stringify({
+                taskContext: 'Fallback context',
+                id: 'KC-1441',
+                title: 'Jira task',
+                toolsUsed: ['search'],
+            }),
+        });
+
+        const toolCaller: ToolCaller = {
+            callTool,
+            callAgent,
+            getRegisteredTools: () => [{ name: 'fetch' }],
+            getToolsForLLM: () => [
+                {
+                    name: 'fetch',
+                    parameters: {
+                        required: ['id'],
+                        properties: {
+                            id: {
+                                type: 'string',
+                                description:
+                                    'Resource Identifier (ARI) from search results',
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const hooks = {
+            getSeedTaskContextTools: jest.fn(async () => ['fetch']),
+            getCachedTaskContextTools: jest.fn(async () => []),
+            saveCachedTaskContextTools: jest.fn(async () => undefined),
+            resolvePreferredTool: jest.fn(async () => undefined),
+            recordExecution: jest.fn(async () => undefined),
+        };
+
+        const result = await fetchTaskContext(
+            toolCaller,
+            createCapabilityRuntime('jira'),
+            {
+                ...createBaseParams(),
+                userQuestion: '@kody KC-1441',
+            },
+            hooks,
+        );
+
+        expect(callTool).not.toHaveBeenCalled();
+        expect(callAgent).toHaveBeenCalled();
+        expect(result.normalized).toMatchObject({
+            id: 'KC-1441',
+            title: 'Jira task',
+            description: 'Fallback context',
             sourceProvider: 'jira',
         });
     });

@@ -40,6 +40,12 @@ export interface SkillErrorContext<TPrepareContext = unknown> {
     error: unknown;
 }
 
+export interface SkillFeedbackContext<TPrepareContext = unknown> {
+    userLanguage: string;
+    context: SkillExecutionContext<TPrepareContext>;
+    feedback: string;
+}
+
 export abstract class AbstractSkillProvider<
     TContext extends BlueprintContext & {
         capabilityExecutionTrace?: CapabilityExecutionTrace[];
@@ -113,6 +119,16 @@ export abstract class AbstractSkillProvider<
         return typeof formatted === 'string' ? formatted : '';
     }
 
+    protected async formatExecutionFeedback(
+        params: SkillFeedbackContext<TPrepareContext>,
+    ): Promise<string> {
+        return params.feedback;
+    }
+
+    protected async buildResponse(ctx: TContext): Promise<string> {
+        return this.extractResponse(ctx);
+    }
+
     async execute(context: SkillExecutionContext<TPrepareContext>): Promise<string> {
         const organizationAndTeamData = context.organizationAndTeamData;
         if (!organizationAndTeamData) {
@@ -135,7 +151,11 @@ export abstract class AbstractSkillProvider<
             userLanguage,
         );
         if (fetcherInitialization.feedback) {
-            return fetcherInitialization.feedback;
+            return this.formatExecutionFeedback({
+                userLanguage,
+                context,
+                feedback: fetcherInitialization.feedback,
+            });
         }
         const fetcherRuntime = fetcherInitialization.runtime;
 
@@ -165,18 +185,23 @@ export abstract class AbstractSkillProvider<
             userLanguage,
         );
         if (blueprintExecution.feedback) {
-            return blueprintExecution.feedback;
+            return this.formatExecutionFeedback({
+                userLanguage,
+                context,
+                feedback: blueprintExecution.feedback,
+            });
         }
         const result = blueprintExecution.result;
+        const response = await this.buildResponse(result.context);
 
-        this.logExecutionCompleted(result, organizationAndTeamData);
+        this.logExecutionCompleted(result, organizationAndTeamData, response);
 
         const traces = result.context.capabilityExecutionTrace ?? [];
         if (traces.length > 0) {
             this.logCapabilityTraces(traces, organizationAndTeamData);
         }
 
-        return this.extractResponse(result.context);
+        return response;
     }
 
     private async initializeFetcherRuntime(
@@ -311,6 +336,7 @@ export abstract class AbstractSkillProvider<
     private logExecutionCompleted(
         result: Awaited<ReturnType<typeof runBlueprint<TContext>>>,
         organizationAndTeamData: OrganizationAndTeamData,
+        response: string,
     ): void {
         this.runtimeLogger.log({
             message: `${this.skillName} execution completed`,
@@ -322,7 +348,7 @@ export abstract class AbstractSkillProvider<
                 teamId: organizationAndTeamData.teamId,
                 completedSteps: result.completedSteps,
                 skippedAt: result.skippedAt,
-                responseLength: this.extractResponse(result.context).length,
+                responseLength: response.length,
             },
         });
     }

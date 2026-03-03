@@ -20,6 +20,9 @@
   ],
   "expectedOutcome": {
     "needsMoreInfo": false,
-    "summaryContains": ["APP-456", "onboarding"]
+    "mode": "full_analysis",
+    "reason": "analysis_ready",
+    "resolvedTaskContextContains": ["APP-456", "onboarding"],
+    "summaryContains": ["Validation summary"]
   }
 }

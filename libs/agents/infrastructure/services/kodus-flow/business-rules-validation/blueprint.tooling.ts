@@ -65,17 +65,69 @@ export function resolveTaskContext(ctx: BusinessRulesContext): string {
 }
 
 export function classifyTaskQuality(taskContext: string): TaskQuality {
-    const normalized = taskContext.trim();
+    return classifyTaskQualityFromSources({ taskContext });
+}
+
+export function classifyTaskQualityFromSources(input: {
+    taskContext?: string;
+    taskContextNormalized?: TaskContextNormalized;
+}): TaskQuality {
+    const normalizedTask = input.taskContextNormalized;
+    if (normalizedTask) {
+        const hasTitle = hasMeaningfulText(normalizedTask.title);
+        const hasDescription = hasMeaningfulText(normalizedTask.description);
+        const hasAcceptanceCriteria =
+            Array.isArray(normalizedTask.acceptanceCriteria) &&
+            normalizedTask.acceptanceCriteria.some((item) =>
+                hasMeaningfulText(item),
+            );
+
+        if (!hasTitle && !hasDescription && !hasAcceptanceCriteria) {
+            return 'EMPTY';
+        }
+
+        if (hasAcceptanceCriteria && (hasTitle || hasDescription)) {
+            return 'COMPLETE';
+        }
+
+        if (hasTitle && hasDescription) {
+            return 'PARTIAL';
+        }
+
+        if (hasDescription) {
+            return normalizedTask.description!.trim().length >= 80
+                ? 'PARTIAL'
+                : 'MINIMAL';
+        }
+
+        return 'MINIMAL';
+    }
+
+    const normalized = input.taskContext?.trim() ?? '';
     if (!normalized.length) {
         return 'EMPTY';
     }
-    if (normalized.length < 80) {
-        return 'MINIMAL';
+
+    const hasAcceptanceCriteriaSection =
+        /(^|\n)\s*acceptance criteria\s*:/im.test(normalized);
+    const hasTitleSection = /(^|\n)\s*title\s*:/im.test(normalized);
+    const hasDescriptionSection = /(^|\n)\s*description\s*:/im.test(normalized);
+    const bulletLikeRequirements = countRequirementListItems(normalized);
+
+    if (
+        (hasAcceptanceCriteriaSection || bulletLikeRequirements >= 2) &&
+        (hasDescriptionSection ||
+            hasTitleSection ||
+            normalized.length >= 120)
+    ) {
+        return 'COMPLETE';
     }
-    if (normalized.length < 260) {
+
+    if (hasDescriptionSection || normalized.length >= 80) {
         return 'PARTIAL';
     }
-    return 'COMPLETE';
+
+    return 'MINIMAL';
 }
 
 function resolvePullRequestMetadataToolArgs(
@@ -193,6 +245,9 @@ export function createBusinessRulesBlueprintTooling(
                     userLanguage: ctx.userLanguage,
                     thread: ctx.thread,
                     excludedTools: resolveExcludedTools(capabilityTools),
+                    businessSignals: asBusinessSignalHints(
+                        ctx.prepareContext?.businessSignals,
+                    ),
                     taskContextResolutionMode:
                         hooks?.resolveTaskContextMode?.(ctx, providerType) ??
                         'cache_first',
@@ -333,4 +388,68 @@ async function recordCapabilityExecutionTraces(
     await Promise.all(
         traces.map((trace) => hooks?.recordExecution?.(trace)),
     );
+}
+
+function asBusinessSignalHints(
+    value: BusinessRulesContext['prepareContext'] extends { businessSignals?: infer T }
+        ? T
+        : unknown,
+):
+    | {
+          ticketKeys?: string[];
+          taskLinks?: string[];
+          requirementKeywords?: string[];
+      }
+    | undefined {
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+
+    const input = value as {
+        ticketKeys?: unknown;
+        taskLinks?: unknown;
+        requirementKeywords?: unknown;
+    };
+
+    const ticketKeys = sanitizeStringArray(input.ticketKeys);
+    const taskLinks = sanitizeStringArray(input.taskLinks);
+    const requirementKeywords = sanitizeStringArray(
+        input.requirementKeywords,
+    );
+
+    if (!ticketKeys && !taskLinks && !requirementKeywords) {
+        return undefined;
+    }
+
+    return {
+        ticketKeys,
+        taskLinks,
+        requirementKeywords,
+    };
+}
+
+function sanitizeStringArray(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+
+    const sanitized = value.filter(
+        (item): item is string =>
+            typeof item === 'string' && item.trim().length > 0,
+    );
+
+    return sanitized.length ? sanitized : undefined;
+}
+
+function hasMeaningfulText(value: string | undefined): boolean {
+    return typeof value === 'string' && value.trim().length > 0;
+}
+
+function countRequirementListItems(value: string): number {
+    return value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) =>
+            /^(?:[-*]\s+|\d+\.\s+)(?!\[[ xX]\]\s*$).{10,}$/u.test(line),
+        ).length;
 }

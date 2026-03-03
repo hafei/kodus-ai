@@ -1,10 +1,17 @@
 import { TASK_QUALITY_ANALYZER_POLICY } from './task-quality.rules';
 import { BusinessRulesContext } from './types';
 
+const DEFAULT_USER_LANGUAGE = 'en-US';
+
 export function buildBusinessRulesAnalysisPrompt(ctx: BusinessRulesContext): string {
     const acceptanceCriteria = formatAcceptanceCriteria(ctx);
     const taskId = ctx.taskContextNormalized?.id;
     const taskTitle = ctx.taskContextNormalized?.title;
+    const taskLinks = ctx.taskContextNormalized?.links ?? [];
+    const userLanguage =
+        typeof ctx.userLanguage === 'string' && ctx.userLanguage.trim().length > 0
+            ? ctx.userLanguage
+            : DEFAULT_USER_LANGUAGE;
 
     const sections: string[] = [
         'Perform business rules gap analysis.',
@@ -17,6 +24,10 @@ export function buildBusinessRulesAnalysisPrompt(ctx: BusinessRulesContext): str
             '',
             `TASK: ${[taskId, taskTitle].filter(Boolean).join(' — ')}`,
         );
+    }
+
+    if (taskLinks.length > 0) {
+        sections.push('', 'TASK_LINKS:', taskLinks.join('\n'));
     }
 
     sections.push(
@@ -33,7 +44,7 @@ export function buildBusinessRulesAnalysisPrompt(ctx: BusinessRulesContext): str
         'PR_DESCRIPTION:',
         formatPromptValue(ctx.prBody, '(not available)'),
         '',
-        `USER LANGUAGE: ${ctx.userLanguage}`,
+        `USER LANGUAGE: ${userLanguage}`,
         '',
         'TASK_QUALITY_POLICY:',
         TASK_QUALITY_ANALYZER_POLICY,
@@ -41,6 +52,9 @@ export function buildBusinessRulesAnalysisPrompt(ctx: BusinessRulesContext): str
         'INSTRUCTIONS:',
         'Check EACH acceptance criterion against the PR_DIFF. For each one, determine: IMPLEMENTED, MISSING, or PARTIAL.',
         'Then scan for any task requirements in FULL_TASK_CONTEXT not covered by the acceptance criteria list.',
+        'Write ALL generated prose in USER LANGUAGE.',
+        'Only requirement quotes copied from task context may remain in the original source language.',
+        'Do not mix languages in headings, status labels, findings, explanations, or suggested actions.',
         'Follow the grounding rules and output format from your system prompt exactly. Return ONLY a JSON object.',
     );
 

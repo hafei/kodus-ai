@@ -15,6 +15,66 @@ describe('SkillLoaderService', () => {
         expect(instructions).not.toContain('## Reference Material');
     });
 
+    it('loads business-rules instructions that require diff-grounded evidence wording', () => {
+        const service = new SkillLoaderService();
+
+        const instructions = service.loadInstructions(
+            'business-rules-validation',
+        );
+
+        expect(instructions).toContain('No evidence in this PR diff');
+        expect(instructions).toContain('scope mismatch');
+        expect(instructions).toContain(
+            'Do not state current system or backend behavior as fact unless that behavior appears in the PR_DIFF',
+        );
+    });
+
+    it('loads business-rules instructions that require intent and alignment analysis before detailed findings', () => {
+        const service = new SkillLoaderService();
+
+        const instructions = service.loadInstructions(
+            'business-rules-validation',
+        );
+
+        expect(instructions).toContain('Task Intent');
+        expect(instructions).toContain('PR Intent');
+        expect(instructions).toContain('Alignment');
+        expect(instructions).toContain('scope_mismatch');
+    });
+
+    it('loads business-rules instructions that enforce generated prose in USER LANGUAGE', () => {
+        const service = new SkillLoaderService();
+
+        const instructions = service.loadInstructions(
+            'business-rules-validation',
+        );
+
+        expect(instructions).toContain(
+            'Write all generated prose, headings, status labels, findings, explanations, and suggested actions in `USER LANGUAGE`.',
+        );
+        expect(instructions).toContain(
+            'Only quoted requirement text copied from the task may remain in the original source language.',
+        );
+        expect(instructions).toContain(
+            'Do not mix languages in generated prose.',
+        );
+    });
+
+    it('loads business-rules instructions that omit empty verification sections and include task reference details', () => {
+        const service = new SkillLoaderService();
+
+        const instructions = service.loadInstructions(
+            'business-rules-validation',
+        );
+
+        expect(instructions).toContain(
+            'If no task requirements were verified from the diff, omit the "Requirements Verified" section entirely.',
+        );
+        expect(instructions).toContain(
+            'Include a short task reference near the top of the summary when task id, title, or link is available.',
+        );
+    });
+
     it('loads skill metadata from SKILL.md frontmatter', () => {
         const service = new SkillLoaderService();
 

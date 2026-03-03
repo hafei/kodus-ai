@@ -32,6 +32,9 @@ export function parseBusinessRulesValidationResult(
 
     return {
         needsMoreInfo: true,
+        mode: 'limitation_response',
+        reason: 'parser_fallback',
+        confidence: 'low',
         missingInfo: 'Error parsing validation result. Please try again.',
         summary:
             '❌ **Error processing validation**\n\nAn error occurred while processing the system response. Please try again.',
@@ -91,7 +94,9 @@ function tryParseValidationObject(result: unknown): ValidationResult | undefined
     const hasKnownKeys =
         'needsMoreInfo' in record ||
         'summary' in record ||
-        'missingInfo' in record;
+        'missingInfo' in record ||
+        'mode' in record ||
+        'reason' in record;
     if (!hasKnownKeys) {
         return undefined;
     }
@@ -103,9 +108,46 @@ function tryParseValidationObject(result: unknown): ValidationResult | undefined
 
     const missingInfo =
         typeof record.missingInfo === 'string' ? record.missingInfo : '';
+    const mode =
+        record.mode === 'full_analysis' ||
+        record.mode === 'limitation_response'
+            ? record.mode
+            : record.needsMoreInfo === true
+              ? 'limitation_response'
+              : 'full_analysis';
+    const reason =
+        record.reason === 'analysis_ready' ||
+        record.reason === 'task_context_missing' ||
+        record.reason === 'task_context_weak' ||
+        record.reason === 'pr_diff_missing' ||
+        record.reason === 'analyzer_failure' ||
+        record.reason === 'parser_fallback'
+            ? record.reason
+            : undefined;
+    const taskContextStatus =
+        record.taskContextStatus === 'missing' ||
+        record.taskContextStatus === 'weak' ||
+        record.taskContextStatus === 'usable'
+            ? record.taskContextStatus
+            : undefined;
+    const prDiffStatus =
+        record.prDiffStatus === 'missing' || record.prDiffStatus === 'usable'
+            ? record.prDiffStatus
+            : undefined;
+    const confidence =
+        record.confidence === 'low' ||
+        record.confidence === 'medium' ||
+        record.confidence === 'high'
+            ? record.confidence
+            : undefined;
 
     return {
         needsMoreInfo: record.needsMoreInfo === true,
+        mode,
+        reason,
+        taskContextStatus,
+        prDiffStatus,
+        confidence,
         missingInfo,
         summary,
     };

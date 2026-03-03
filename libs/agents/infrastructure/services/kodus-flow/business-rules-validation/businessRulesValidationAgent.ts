@@ -46,6 +46,7 @@ import {
 import { MetricsCollectorService } from '@libs/core/infrastructure/metrics/metrics-collector.service';
 import {
     AbstractSkillProvider,
+    SkillFeedbackContext,
     SkillErrorContext,
 } from '../../../../skills/abstract-skill-provider';
 import { buildBusinessRulesAnalysisPrompt } from './analysis-prompt.builder';
@@ -245,6 +246,24 @@ export class BusinessRulesValidationAgentProvider extends AbstractSkillProvider<
         return undefined;
     }
 
+    protected async formatExecutionFeedback(
+        params: SkillFeedbackContext<BusinessRulesPrepareContext>,
+    ): Promise<string> {
+        return this.formatUserFacingMessage(
+            params.feedback,
+            params.userLanguage,
+            'feedback',
+        );
+    }
+
+    protected async buildResponse(ctx: BusinessRulesContext): Promise<string> {
+        if (ctx.validationResult) {
+            return this.formatValidationResponse(ctx.validationResult, ctx);
+        }
+
+        return super.buildResponse(ctx);
+    }
+
     private async runAnalyzer(
         _step: LLMStep,
         ctx: BusinessRulesContext,
@@ -271,15 +290,30 @@ export class BusinessRulesValidationAgentProvider extends AbstractSkillProvider<
             maxAttempts,
             timeoutMs: executionPolicy.analyzerTimeoutMs,
         });
-        const formattedResponse =
-            this.formatValidationResponse(validationResult);
+        const normalizedValidationResult = this.applyValidationDefaults(
+            validationResult,
+            ctx,
+        );
+        this.recordValidationOutcomeMetric(ctx, normalizedValidationResult);
+        const formattedResponse = await this.formatValidationResponse(
+            normalizedValidationResult,
+            ctx,
+        );
 
-        return { ...ctx, validationResult, formattedResponse };
+        return {
+            ...ctx,
+            validationResult: normalizedValidationResult,
+            formattedResponse,
+        };
     }
 
     private isParserFallback(result: ValidationResult): boolean {
         if (!result.needsMoreInfo) {
             return false;
+        }
+
+        if (result.reason === 'parser_fallback') {
+            return true;
         }
 
         const message = (result.missingInfo ?? '').toLowerCase();
@@ -453,6 +487,9 @@ export class BusinessRulesValidationAgentProvider extends AbstractSkillProvider<
     private buildAnalyzerFailureResult(lastError: unknown): ValidationResult {
         return {
             needsMoreInfo: true,
+            mode: 'limitation_response',
+            reason: 'analyzer_failure',
+            confidence: 'low',
             missingInfo:
                 lastError instanceof Error
                     ? `Analyzer execution failed: ${lastError.message}`
@@ -462,12 +499,135 @@ export class BusinessRulesValidationAgentProvider extends AbstractSkillProvider<
         };
     }
 
-    private formatValidationResponse(result: ValidationResult): string {
+    private applyValidationDefaults(
+        result: ValidationResult,
+        ctx: BusinessRulesContext,
+    ): ValidationResult {
+        const eligibility = ctx.analysisEligibility;
+        const mode =
+            result.mode ??
+            (result.needsMoreInfo
+                ? 'limitation_response'
+                : eligibility?.mode ?? 'full_analysis');
+        const reason =
+            result.reason ??
+            (result.needsMoreInfo
+                ? eligibility?.reason
+                : eligibility?.reason ?? 'analysis_ready');
+        const taskContextStatus =
+            result.taskContextStatus ?? eligibility?.taskContextStatus;
+        const prDiffStatus = result.prDiffStatus ?? eligibility?.prDiffStatus;
+        const confidence =
+            result.confidence ??
+            (mode === 'limitation_response' ? 'low' : 'medium');
+
+        return {
+            ...result,
+            mode,
+            reason,
+            taskContextStatus,
+            prDiffStatus,
+            confidence,
+        };
+    }
+
+    private async formatValidationResponse(
+        result: ValidationResult,
+        ctx: BusinessRulesContext,
+    ): Promise<string> {
         if (result.needsMoreInfo) {
-            return result.missingInfo ?? DEFAULT_NEEDS_MORE_INFO_MESSAGE;
+            const limitationMessage = result.summary?.trim();
+            if (limitationMessage) {
+                return this.formatUserFacingMessage(
+                    limitationMessage,
+                    ctx.userLanguage,
+                    'limitation',
+                );
+            }
+            return this.formatUserFacingMessage(
+                result.missingInfo ?? DEFAULT_NEEDS_MORE_INFO_MESSAGE,
+                ctx.userLanguage,
+                'limitation',
+            );
         }
 
         return result.summary ?? '';
+    }
+
+    private async formatUserFacingMessage(
+        message: string,
+        userLanguage: string,
+        mode: 'feedback' | 'limitation',
+    ): Promise<string> {
+        if (typeof message !== 'string' || message.trim().length === 0) {
+            return message;
+        }
+
+        if (userLanguage.trim().toLowerCase() === DEFAULT_LANGUAGE.toLowerCase()) {
+            return message;
+        }
+
+        try {
+            const adapter = super.createLLMAdapter(
+                'BusinessRulesValidation',
+                'businessRulesUserFacingFormatter',
+            );
+            const formatted = await adapter.call({
+                messages: [
+                    {
+                        role: AgentInputEnum.SYSTEM,
+                        content:
+                            'Rewrite the provided markdown for the end user in the requested USER LANGUAGE. Preserve markdown structure, code spans, links, and bullet lists. Preserve quoted requirement text exactly when it is explicitly quoted from task context. Do not add new information.',
+                    },
+                    {
+                        role: AgentInputEnum.USER,
+                        content: `USER LANGUAGE: ${userLanguage}\nMODE: ${mode}\n\nMESSAGE:\n${message}`,
+                    },
+                ],
+                temperature: 0,
+                maxTokens: 1200,
+                maxReasoningTokens: 200,
+                stop: undefined,
+            });
+
+            return typeof formatted.content === 'string' &&
+                formatted.content.trim().length > 0
+                ? formatted.content.trim()
+                : message;
+        } catch {
+            return message;
+        }
+    }
+
+    private recordValidationOutcomeMetric(
+        ctx: BusinessRulesContext,
+        result: ValidationResult,
+    ): void {
+        const labels = {
+            skill: SKILL_NAME,
+            mode: result.mode ?? 'unknown',
+            reason: result.reason ?? 'unknown',
+            taskContextStatus: result.taskContextStatus ?? 'unknown',
+            prDiffStatus: result.prDiffStatus ?? 'unknown',
+            confidence: result.confidence ?? 'unknown',
+        };
+
+        this.metricsCollector?.recordCounter(
+            'kodus_business_logic_validation_outcome_total',
+            1,
+            labels,
+        );
+
+        this.logger.log({
+            message: 'Business logic validation outcome',
+            context: BusinessRulesValidationAgentProvider.name,
+            serviceName: BusinessRulesValidationAgentProvider.name,
+            metadata: {
+                ...labels,
+                organizationId: ctx.organizationAndTeamData?.organizationId,
+                teamId: ctx.organizationAndTeamData?.teamId,
+            },
+        });
     }
 
     private async getLanguage(

@@ -17,9 +17,16 @@ import { TaskContextNormalized } from './types';
 
 const ISSUE_KEY_REGEX = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
 const URL_REGEX = /https?:\/\/[^\s)]+/gi;
+const ARI_REGEX = /\bari:[^\s,]+/gi;
 const TASK_CONTEXT_CAPABILITY = 'task.context.read';
 
 type ResolutionMode = 'cache_first' | 'agent_first';
+
+interface TaskContextSignalHints {
+    ticketKeys?: string[];
+    taskLinks?: string[];
+    requirementKeywords?: string[];
+}
 
 export interface TaskContextReadParams {
     skillName: string;
@@ -36,6 +43,7 @@ export interface TaskContextReadParams {
     excludedTools?: string[];
     taskContextResolutionMode?: ResolutionMode;
     enableAgenticFallback?: boolean;
+    businessSignals?: TaskContextSignalHints;
 }
 
 export interface TaskContextReadResult {
@@ -68,6 +76,8 @@ interface TaskContextHints {
     issueLinks: string[];
     queryText: string;
     urlHosts: string[];
+    siteUrls: string[];
+    resourceIds: string[];
 }
 
 interface TaskContextToolSignature {
@@ -99,6 +109,21 @@ interface AgentFallbackParams {
     logger: ReturnType<typeof createLogger>;
 }
 
+interface TaskContextDiscovery {
+    scope: CapabilityStrategyScope;
+    registeredTools: string[];
+    candidateTools: string[];
+    orderedTools: string[];
+    cachedTools: string[];
+}
+
+interface DeterministicResolutionResult {
+    value: TaskContextNormalized | undefined;
+    raw: string;
+    traces: CapabilityExecutionTrace[];
+    learnedTools: string[];
+}
+
 export async function fetchTaskContext(
     toolCaller: ToolCaller,
     capabilityRuntime: SkillCapabilityRuntimeConfig,
@@ -107,73 +132,25 @@ export async function fetchTaskContext(
 ): Promise<TaskContextReadResult> {
     const logger = createLogger('TaskContextReadCapability');
     const providerType = capabilityRuntime.providerType || 'external';
-    const registeredTools = getRegisteredToolNames(toolCaller);
     const taskContextToolSignatures = getTaskContextToolSignatures(toolCaller);
-    const scope: CapabilityStrategyScope = {
-        organizationId: params.organizationId,
-        teamId: params.teamId,
-        skillName: params.skillName,
-        capability: TASK_CONTEXT_CAPABILITY,
-        provider: providerType,
-    };
-    const providerCandidates = resolveTaskContextProviders({
-        providerType,
-        allProviderTypes: capabilityRuntime.allProviderTypes,
-    });
     const hints = resolveTaskContextHints(params);
     const resolutionMode = params.taskContextResolutionMode ?? 'cache_first';
-    const allowAgenticFallback =
-        params.enableAgenticFallback !== false && registeredTools.length > 0;
-
-    const cachedTools = (await hooks?.getCachedTaskContextTools?.(scope)) ?? [];
-    const seededTools = uniqueNonEmpty(
-        (
-            await Promise.all(
-                providerCandidates.map(
-                    async (provider) =>
-                        (await hooks?.getSeedTaskContextTools?.(
-                            provider,
-                            TASK_CONTEXT_CAPABILITY,
-                        )) ?? [],
-                ),
-            )
-        ).flat(),
-    );
-
-    const discoveredCandidateTools = getTaskContextCandidateTools({
-        registeredTools,
-        allowlist: seededTools,
-        excludedTools: params.excludedTools ?? [],
+    const discovery = await resolveTaskContextDiscovery({
+        toolCaller,
+        capabilityRuntime,
+        taskContextToolSignatures,
+        params,
+        providerType,
+        hooks,
         logger,
     });
-
-    const candidateTools = seededTools.length
-        ? discoveredCandidateTools.filter((toolName) =>
-              seededTools.includes(toolName),
-          )
-        : discoveredCandidateTools;
-
-    const preferredTool = await hooks?.resolvePreferredTool?.(
-        scope,
-        candidateTools,
-    );
-    const orderedTools = orderCandidateTools({
-        candidateTools,
-        preferredTool,
-        cachedTools,
-        seededTools,
-        includeExploration:
-            preferredTool === undefined &&
-            cachedTools.length === 0 &&
-            seededTools.length === 0,
-    });
+    const allowAgenticFallback =
+        params.enableAgenticFallback !== false &&
+        discovery.registeredTools.length > 0;
 
     const traces: CapabilityExecutionTrace[] = [];
-    let bestDeterministicValue: TaskContextNormalized | undefined;
-    let bestDeterministicTool: string | undefined;
-    let bestDeterministicScore = -1;
 
-    if (!orderedTools.length && !allowAgenticFallback) {
+    if (!discovery.orderedTools.length && !allowAgenticFallback) {
         const emptyCandidatesTrace: CapabilityExecutionTrace = {
             ...createBaseTrace(params, {
                 capability: TASK_CONTEXT_CAPABILITY,
@@ -199,7 +176,7 @@ export async function fetchTaskContext(
             toolCaller,
             params,
             providerType,
-            candidateTools: orderedTools,
+            candidateTools: discovery.orderedTools,
             hooks,
             logger,
         });
@@ -207,11 +184,11 @@ export async function fetchTaskContext(
         traces.push(...agenticFirst.traces);
         await maybePersistLearnedTools(
             hooks,
-            scope,
+            discovery.scope,
             agenticFirst.learnedTools,
-            candidateTools,
-            registeredTools,
-            cachedTools,
+            discovery.candidateTools,
+            discovery.registeredTools,
+            discovery.cachedTools,
         );
 
         if (agenticFirst.value) {
@@ -223,70 +200,32 @@ export async function fetchTaskContext(
         }
     }
 
-    for (const toolName of orderedTools) {
-        const argsCandidates = buildTaskContextArgsCandidates(
-            hints,
-            taskContextToolSignatures.get(toolName),
-        );
+    const deterministic = await resolveDeterministicTaskContext({
+        params,
+        toolCaller,
+        providerType,
+        orderedTools: discovery.orderedTools,
+        taskContextToolSignatures,
+        hints,
+        hooks,
+        logger,
+    });
+    traces.push(...deterministic.traces);
 
-        for (const args of argsCandidates) {
-            const result = await executeAndTrace({
-                params,
-                toolCaller,
-                providerType,
-                toolName,
-                args,
-                canExecute: true,
-                extract: (payload) => extractTaskContextFromToolResult(payload),
-                fallback: undefined,
-                isSuccessful: (value) => Boolean(value?.description || value?.title),
-                hooks,
-                logger,
-            });
-
-            traces.push(...result.traces);
-            if (result.value) {
-                result.value.sourceProvider = providerType;
-                const normalizedScore = scoreNormalizedContext(result.value);
-                if (normalizedScore > bestDeterministicScore) {
-                    bestDeterministicValue = result.value;
-                    bestDeterministicTool = toolName;
-                    bestDeterministicScore = normalizedScore;
-                }
-
-                if (isUsableTaskContext(result.value)) {
-                    await maybePersistLearnedTools(
-                        hooks,
-                        scope,
-                        [toolName],
-                        candidateTools,
-                        registeredTools,
-                        cachedTools,
-                    );
-
-                    return {
-                        normalized: result.value,
-                        raw: result.value.description ?? '',
-                        traces,
-                    };
-                }
-            }
-        }
-    }
-
-    if (bestDeterministicValue) {
+    if (deterministic.value && deterministic.learnedTools.length) {
         await maybePersistLearnedTools(
             hooks,
-            scope,
-            bestDeterministicTool ? [bestDeterministicTool] : [],
-            candidateTools,
-            registeredTools,
-            cachedTools,
+            discovery.scope,
+            deterministic.learnedTools,
+            discovery.candidateTools,
+            discovery.registeredTools,
+            discovery.cachedTools,
         );
-
+    }
+    if (deterministic.value) {
         return {
-            normalized: bestDeterministicValue,
-            raw: bestDeterministicValue.description ?? '',
+            normalized: deterministic.value,
+            raw: deterministic.raw,
             traces,
         };
     }
@@ -303,7 +242,7 @@ export async function fetchTaskContext(
         toolCaller,
         params,
         providerType,
-        candidateTools: orderedTools,
+        candidateTools: discovery.orderedTools,
         hooks,
         logger,
     });
@@ -311,11 +250,11 @@ export async function fetchTaskContext(
     traces.push(...agenticFallback.traces);
     await maybePersistLearnedTools(
         hooks,
-        scope,
+        discovery.scope,
         agenticFallback.learnedTools,
-        candidateTools,
-        registeredTools,
-        cachedTools,
+        discovery.candidateTools,
+        discovery.registeredTools,
+        discovery.cachedTools,
     );
 
     return {
@@ -325,6 +264,123 @@ export async function fetchTaskContext(
     };
 }
 
+async function resolveTaskContextDiscovery(input: {
+    toolCaller: ToolCaller;
+    capabilityRuntime: SkillCapabilityRuntimeConfig;
+    taskContextToolSignatures: Map<string, TaskContextToolSignature>;
+    params: TaskContextReadParams;
+    providerType: string;
+    hooks?: TaskContextReadHooks;
+    logger: ReturnType<typeof createLogger>;
+}): Promise<TaskContextDiscovery> {
+    const scope: CapabilityStrategyScope = {
+        organizationId: input.params.organizationId,
+        teamId: input.params.teamId,
+        skillName: input.params.skillName,
+        capability: TASK_CONTEXT_CAPABILITY,
+        provider: input.providerType,
+    };
+    const registeredTools = getRegisteredToolNames(input.toolCaller);
+    const providerCandidates = resolveTaskContextProviders({
+        providerType: input.providerType,
+        allProviderTypes: input.capabilityRuntime.allProviderTypes,
+    });
+    const cachedTools =
+        (await input.hooks?.getCachedTaskContextTools?.(scope)) ?? [];
+    const seededTools = uniqueNonEmpty(
+        (
+            await Promise.all(
+                providerCandidates.map(
+                    async (provider) =>
+                        (await input.hooks?.getSeedTaskContextTools?.(
+                            provider,
+                            TASK_CONTEXT_CAPABILITY,
+                        )) ?? [],
+                ),
+            )
+        ).flat(),
+    );
+    const resolvedCachedTools = resolveRegisteredToolAliases(
+        cachedTools,
+        registeredTools,
+    );
+    const resolvedSeededTools = resolveRegisteredToolAliases(
+        seededTools,
+        registeredTools,
+    );
+    const explorationTools = registeredTools.filter((toolName) =>
+        input.taskContextToolSignatures.has(toolName),
+    );
+    const candidateTools = getTaskContextCandidateTools({
+        registeredTools:
+            seededTools.length && resolvedSeededTools.length
+                ? registeredTools
+                : explorationTools,
+        allowlist: resolvedSeededTools,
+        excludedTools: input.params.excludedTools ?? [],
+        logger: input.logger,
+    });
+    const preferredTool = await input.hooks?.resolvePreferredTool?.(
+        scope,
+        candidateTools,
+    );
+    const orderedTools = orderCandidateTools({
+        candidateTools,
+        preferredTool,
+        cachedTools: resolvedCachedTools,
+        seededTools: resolvedSeededTools,
+        includeExploration:
+            preferredTool === undefined &&
+            resolvedCachedTools.length === 0 &&
+            resolvedSeededTools.length === 0,
+    });
+
+    return {
+        scope,
+        registeredTools,
+        candidateTools,
+        orderedTools,
+        cachedTools: resolvedCachedTools,
+    };
+}
+
+function resolveRegisteredToolAliases(
+    desiredTools: string[],
+    registeredTools: string[],
+): string[] {
+    const seen = new Set<string>();
+    const resolved: string[] = [];
+
+    for (const desiredTool of uniqueNonEmpty(desiredTools)) {
+        const exactMatch = registeredTools.find(
+            (toolName) => toolName === desiredTool,
+        );
+        if (exactMatch && !seen.has(exactMatch)) {
+            seen.add(exactMatch);
+            resolved.push(exactMatch);
+            continue;
+        }
+
+        const desiredKey = buildToolAliasKey(desiredTool);
+        if (!desiredKey) {
+            continue;
+        }
+
+        for (const registeredTool of registeredTools) {
+            if (buildToolAliasKey(registeredTool) !== desiredKey) {
+                continue;
+            }
+            if (seen.has(registeredTool)) {
+                continue;
+            }
+            seen.add(registeredTool);
+            resolved.push(registeredTool);
+        }
+    }
+
+    return resolved;
+}
+
 function resolveTaskContextHints(params: TaskContextReadParams): TaskContextHints {
     const candidates = [
         params.taskContext,
@@ -332,19 +388,25 @@ function resolveTaskContextHints(params: TaskContextReadParams): TaskContextHint
         params.prBody,
         params.userQuestion,
         params.headRef,
+        ...(params.businessSignals?.ticketKeys ?? []),
+        ...(params.businessSignals?.taskLinks ?? []),
+        ...(params.businessSignals?.requirementKeywords ?? []),
     ]
         .filter((value): value is string => typeof value === 'string')
         .join('\n');
 
     const issueKeys = extractIssueKeys(candidates);
     const issueLinks = extractLinks(candidates);
+    const resourceIds = extractAris(candidates);
 
     const urlHosts = new Set<string>();
+    const siteUrls = new Set<string>();
     for (const link of issueLinks) {
         try {
             const parsed = new URL(link);
             if (parsed.hostname.trim().length > 0) {
                 urlHosts.add(parsed.hostname.toLowerCase());
+                siteUrls.add(`${parsed.protocol}//${parsed.hostname}`);
             }
         } catch {
             // Ignore malformed URLs extracted from free-form text.
@@ -354,8 +416,18 @@ function resolveTaskContextHints(params: TaskContextReadParams): TaskContextHint
     return {
         issueKeys,
         issueLinks,
-        queryText: params.userQuestion ?? params.pullRequestDescription ?? '',
+        queryText: [
+            params.userQuestion,
+            params.pullRequestDescription,
+            ...(params.businessSignals?.requirementKeywords ?? []),
+            ...(params.businessSignals?.ticketKeys ?? []),
+            ...(params.businessSignals?.taskLinks ?? []),
+        ]
+            .filter((value): value is string => typeof value === 'string')
+            .join('\n'),
         urlHosts: [...urlHosts],
+        siteUrls: [...siteUrls],
+        resourceIds,
     };
 }
 
@@ -379,6 +451,17 @@ function extractLinks(text: string): string[] {
     }
 
     return uniqueNonEmpty(links);
+}
+
+function extractAris(text: string): string[] {
+    const resourceIds = new Set<string>();
+    for (const match of text.matchAll(ARI_REGEX)) {
+        if (match[0]) {
+            resourceIds.add(match[0]);
+        }
+    }
+
+    return [...resourceIds];
 }
 
 function getRegisteredToolNames(toolCaller: ToolCaller): string[] {
@@ -440,10 +523,6 @@ function getTaskContextCandidateTools(params: {
     logger?: ReturnType<typeof createLogger>;
 }): string[] {
     const allowlist = new Set(uniqueNonEmpty(params.allowlist));
-    if (!allowlist.size) {
-        return [];
-    }
-
     const excluded = new Set(
         params.excludedTools.filter(
             (toolName): toolName is string =>
@@ -477,6 +556,74 @@ function getTaskContextCandidateTools(params: {
     }
 
     return candidates;
+}
+
+async function resolveDeterministicTaskContext(input: {
+    params: TaskContextReadParams;
+    toolCaller: ToolCaller;
+    providerType: string;
+    orderedTools: string[];
+    taskContextToolSignatures: Map<string, TaskContextToolSignature>;
+    hints: TaskContextHints;
+    hooks?: TaskContextReadHooks;
+    logger: ReturnType<typeof createLogger>;
+}): Promise<DeterministicResolutionResult> {
+    const traces: CapabilityExecutionTrace[] = [];
+    let bestValue: TaskContextNormalized | undefined;
+    let bestTool: string | undefined;
+    let bestScore = -1;
+
+    for (const toolName of input.orderedTools) {
+        const argsCandidates = buildTaskContextArgsCandidates(
+            input.hints,
+            input.taskContextToolSignatures.get(toolName),
+        );
+
+        for (const args of argsCandidates) {
+            const result = await executeAndTrace({
+                params: input.params,
+                toolCaller: input.toolCaller,
+                providerType: input.providerType,
+                toolName,
+                args,
+                canExecute: true,
+                extract: (payload) => extractTaskContextFromToolResult(payload),
+                fallback: undefined,
+                isSuccessful: (value) => Boolean(value?.description || value?.title),
+                hooks: input.hooks,
+                logger: input.logger,
+            });
+
+            traces.push(...result.traces);
+            if (!result.value) {
+                continue;
+            }
+
+            result.value.sourceProvider = input.providerType;
+            const normalizedScore = scoreNormalizedContext(result.value);
+            if (normalizedScore > bestScore) {
+                bestValue = result.value;
+                bestTool = toolName;
+                bestScore = normalizedScore;
+            }
+
+            if (isUsableTaskContext(result.value)) {
+                return {
+                    value: result.value,
+                    raw: result.value.description ?? '',
+                    traces,
+                    learnedTools: [toolName],
+                };
+            }
+        }
+    }
+
+    return {
+        value: bestValue,
+        raw: bestValue?.description ?? '',
+        traces,
+        learnedTools: bestTool ? [bestTool] : [],
+    };
 }
 
 function buildTaskContextArgsCandidates(
@@ -538,6 +685,8 @@ function getCandidateValuesForParam(
     const issueKeys = uniqueNonEmpty(hints.issueKeys).slice(0, 4);
     const issueLinks = uniqueNonEmpty(hints.issueLinks).slice(0, 4);
     const urlHosts = uniqueNonEmpty(hints.urlHosts).slice(0, 2);
+    const siteUrls = uniqueNonEmpty(hints.siteUrls).slice(0, 2);
+    const resourceIds = uniqueNonEmpty(hints.resourceIds).slice(0, 4);
     const queryTokens = uniqueNonEmpty([
         ...issueKeys,
         ...issueLinks,
@@ -555,11 +704,19 @@ function getCandidateValuesForParam(
     }
 
     if (intent === 'context') {
-        return urlHosts.length ? urlHosts : queryTokens;
+        return siteUrls.length
+            ? siteUrls
+            : urlHosts.length
+              ? urlHosts
+              : queryTokens;
     }
 
     if (intent === 'url') {
         return issueLinks.length ? issueLinks : queryTokens;
+    }
+
+    if (intent === 'ari') {
+        return resourceIds;
     }
 
     return queryTokens;
@@ -581,7 +738,7 @@ function getParamSchema(
     return signature.normalizedProperties[normalizeParamName(paramName)];
 }
 
-type ParamIntent = 'issue' | 'query' | 'context' | 'url' | 'generic';
+type ParamIntent = 'issue' | 'query' | 'context' | 'url' | 'ari' | 'generic';
 
 function inferParamIntent(
     paramName: string,
@@ -596,6 +753,15 @@ function inferParamIntent(
         .filter((value) => value.trim().length > 0)
         .join(' ')
         .toLowerCase();
+
+    if (
+        descriptor.includes('resource identifier') ||
+        descriptor.includes('ari') ||
+        normalizedName === 'ari' ||
+        normalizedName.includes('resourceidentifier')
+    ) {
+        return 'ari';
+    }
 
     if (
         normalizedName.includes('cloud') ||
@@ -1262,11 +1428,14 @@ function normalizeContextCandidate(
 
     const id = firstNonEmptyString([
         ...pluckValues(spaces, [
-            'id',
             'key',
             'identifier',
-            'number',
             'code',
+            'issueKey',
+            'ticketKey',
+            'taskKey',
+            'id',
+            'number',
             'issueId',
             'taskId',
             'ticketId',
@@ -1570,6 +1739,39 @@ function normalizeParamName(value: string): string {
 
 function uniqueNonEmpty(values: string[]): string[] {
     return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function buildToolAliasKey(value: string): string {
+    const normalized = value
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .toLowerCase();
+    const tokens = normalized
+        .split(/[^a-z0-9]+/i)
+        .map((token) => normalizeToolAliasToken(token))
+        .filter((token) => token.length > 0)
+        .filter((token) => !isAliasNoiseToken(token));
+
+    return tokens.join(' ');
+}
+
+function normalizeToolAliasToken(token: string): string {
+    if (token.length > 3 && token.endsWith('ies')) {
+        return `${token.slice(0, -3)}y`;
+    }
+    if (token.length > 3 && token.endsWith('s')) {
+        return token.slice(0, -1);
+    }
+    return token;
+}
+
+function isAliasNoiseToken(token: string): boolean {
+    return (
+        token === 'provider' ||
+        token === 'workspace' ||
+        token === 'workspaces' ||
+        token === 'plugin' ||
+        token === 'integration'
+    );
 }
 
 function isLikelyIssueKey(value: string): boolean {

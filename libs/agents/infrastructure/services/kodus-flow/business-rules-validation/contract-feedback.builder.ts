@@ -1,9 +1,8 @@
 export function buildBusinessRulesContractViolationFeedback(
-    userLanguage: string,
+    _userLanguage: string,
     phase: 'input' | 'output',
     missingFields: string[] | undefined,
 ): string {
-    void userLanguage;
     const fields =
         missingFields && missingFields.length > 0
             ? missingFields.join(', ')

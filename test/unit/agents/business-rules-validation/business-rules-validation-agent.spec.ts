@@ -1,4 +1,5 @@
 import { BusinessRulesValidationAgentProvider } from '@libs/agents/infrastructure/services/kodus-flow/business-rules-validation/businessRulesValidationAgent';
+import { BaseAgentProvider } from '@libs/agents/infrastructure/services/kodus-flow/base-agent.provider';
 
 function createProvider(): BusinessRulesValidationAgentProvider {
     return new BusinessRulesValidationAgentProvider(
@@ -44,6 +45,31 @@ describe('BusinessRulesValidationAgentProvider parser', () => {
 
         expect(parsed.needsMoreInfo).toBe(false);
         expect(parsed.summary).toContain('Status');
+    });
+
+    it('parses explicit limitation metadata when analyzer returns a needs-more-info payload', () => {
+        const provider = createProvider();
+
+        const payload = JSON.stringify({
+            needsMoreInfo: true,
+            mode: 'limitation_response',
+            reason: 'task_context_weak',
+            taskContextStatus: 'weak',
+            prDiffStatus: 'usable',
+            missingInfo: '## 🤔 Insufficient Task Context',
+            summary: '## 🤔 Insufficient Task Context',
+        });
+
+        const parsed = (provider as any).parseValidationResult(payload);
+
+        expect(parsed).toMatchObject({
+            needsMoreInfo: true,
+            mode: 'limitation_response',
+            reason: 'task_context_weak',
+            taskContextStatus: 'weak',
+            prDiffStatus: 'usable',
+            summary: '## 🤔 Insufficient Task Context',
+        });
     });
 });
 
@@ -123,5 +149,186 @@ describe('BusinessRulesValidationAgentProvider.isParserFallback', () => {
             summary: '',
         });
         expect(result).toBe(false);
+    });
+});
+
+describe('BusinessRulesValidationAgentProvider.formatValidationResponse', () => {
+    it('formats limitation responses through the user-facing formatter', async () => {
+        const provider = createProvider();
+        (provider as any).formatUserFacingMessage = jest
+            .fn()
+            .mockResolvedValue('## 🤔 Preciso de mais contexto');
+
+        const formatted = await (provider as any).formatValidationResponse(
+            {
+                needsMoreInfo: true,
+                mode: 'limitation_response',
+                summary: '## 🤔 Need Task Information',
+                missingInfo: 'legacy field',
+            },
+            {
+                userLanguage: 'pt-BR',
+            },
+        );
+
+        expect((provider as any).formatUserFacingMessage).toHaveBeenCalledWith(
+            '## 🤔 Need Task Information',
+            'pt-BR',
+            'limitation',
+        );
+        expect(formatted).toBe('## 🤔 Preciso de mais contexto');
+    });
+
+    it('formats early feedback through the same user-facing formatter', async () => {
+        const provider = createProvider();
+        (provider as any).formatUserFacingMessage = jest
+            .fn()
+            .mockResolvedValue('## 🔌 Integracao MCP Necessaria');
+
+        const formatted = await (provider as any).formatExecutionFeedback({
+            userLanguage: 'pt-BR',
+            context: {
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+            },
+            feedback: '## 🔌 MCP Integration Required',
+        });
+
+        expect((provider as any).formatUserFacingMessage).toHaveBeenCalledWith(
+            '## 🔌 MCP Integration Required',
+            'pt-BR',
+            'feedback',
+        );
+        expect(formatted).toBe('## 🔌 Integracao MCP Necessaria');
+    });
+});
+
+describe('BusinessRulesValidationAgentProvider analyzer execution', () => {
+    it('awaits async formatting before writing formattedResponse into context', async () => {
+        const createLLMAdapterSpy = jest
+            .spyOn(BaseAgentProvider.prototype as any, 'createLLMAdapter')
+            .mockReturnValue({} as any);
+        const provider = new BusinessRulesValidationAgentProvider(
+            {} as any,
+            {} as any,
+            {} as any,
+            {} as any,
+            {
+                getExecutionPolicy: jest.fn(() => ({
+                    analyzerTimeoutMs: 5_000,
+                    analyzerMaxIterations: 1,
+                })),
+                getAnalyzerInstructions: jest.fn(
+                    () => 'SYSTEM SKILL INSTRUCTIONS',
+                ),
+            } as any,
+            {
+                recordCounter: jest.fn(),
+                recordHistogram: jest.fn(),
+            } as any,
+        );
+
+        (provider as any).executeAnalyzerWithRetries = jest
+            .fn()
+            .mockResolvedValue({
+                needsMoreInfo: false,
+                summary: '## Business Rules Validation',
+            });
+        (provider as any).formatValidationResponse = jest
+            .fn()
+            .mockResolvedValue('## Business Rules Validation');
+
+        const result = await (provider as any).runAnalyzer(
+            {} as any,
+            {
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+                userLanguage: 'en-US',
+                taskQuality: 'COMPLETE',
+                analysisEligibility: {
+                    mode: 'full_analysis',
+                    reason: 'analysis_ready',
+                    taskContextStatus: 'usable',
+                    prDiffStatus: 'usable',
+                },
+            },
+        );
+
+        expect(result.formattedResponse).toBe(
+            '## Business Rules Validation',
+        );
+        expect(result.formattedResponse).not.toBeInstanceOf(Promise);
+        createLLMAdapterSpy.mockRestore();
+    });
+
+    it('parses analyzer JSON and applies eligibility defaults from the pipeline context', () => {
+        const metricsCollector = {
+            recordCounter: jest.fn(),
+            recordHistogram: jest.fn(),
+        };
+        const provider = new BusinessRulesValidationAgentProvider(
+            {} as any,
+            {} as any,
+            {} as any,
+            {} as any,
+            {
+                getExecutionPolicy: jest.fn(() => ({
+                    analyzerTimeoutMs: 5_000,
+                    analyzerMaxIterations: 1,
+                })),
+                getAnalyzerInstructions: jest.fn(
+                    () => 'SYSTEM SKILL INSTRUCTIONS',
+                ),
+            } as any,
+            metricsCollector as any,
+        );
+
+        const ctx = {
+            organizationAndTeamData: {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            },
+            userLanguage: 'pt-BR',
+            taskQuality: 'COMPLETE',
+            taskContext:
+                'Task ID: KC-1441\n\nTitle: Replace any-based git change parsing with typed handling\n\nDescription:\nThe PR should remove unsafe any usage from git change collection and preserve command behavior.\n\nAcceptance Criteria:\n- Git change parsing no longer relies on any',
+            taskContextNormalized: {
+                id: 'KC-1441',
+                title: 'Replace any-based git change parsing with typed handling',
+                description:
+                    'The PR should remove unsafe any usage from git change collection and preserve command behavior.',
+                acceptanceCriteria: [
+                    'Git change parsing no longer relies on any',
+                ],
+            },
+            prDiff:
+                'diff --git a/src/commands/prCommentCommands.ts b/src/commands/prCommentCommands.ts\n+ changeGroups.forEach((change: GitChangeLike) => {\n',
+            analysisEligibility: {
+                mode: 'full_analysis',
+                reason: 'analysis_ready',
+                taskContextStatus: 'usable',
+                prDiffStatus: 'usable',
+            },
+        };
+
+        const parsed = (provider as any).parseValidationResult(
+            '```json\n{"needsMoreInfo":false,"summary":"## Validação de Regras de Negócio\\n\\nTudo certo."}\n```',
+        );
+        const result = (provider as any).applyValidationDefaults(parsed, ctx);
+
+        expect(result).toMatchObject({
+            needsMoreInfo: false,
+            mode: 'full_analysis',
+            reason: 'analysis_ready',
+            taskContextStatus: 'usable',
+            prDiffStatus: 'usable',
+            confidence: 'medium',
+            summary: '## Validação de Regras de Negócio\n\nTudo certo.',
+        });
+        expect(metricsCollector.recordCounter).not.toHaveBeenCalled();
     });
 });

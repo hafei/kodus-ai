@@ -118,4 +118,58 @@ describe('ChatWithKodyFromGitUseCase', () => {
             }),
         );
     });
+
+    it('passes the original Jira URL command body to business logic validation', async () => {
+        const jiraUrl =
+            'https://kodustech.atlassian.net/jira/software/c/projects/KC/boards/2?selectedIssue=KC-1441';
+
+        await useCase.execute({
+            event: 'issue_comment',
+            platformType: PlatformType.GITHUB,
+            payload: {
+                action: 'created',
+                repository: {
+                    id: 'repo-1',
+                    name: 'kodus-extension',
+                },
+                issue: {
+                    id: 456,
+                    body: 'PR description body',
+                    pull_request: {
+                        url: 'https://api.github.com/repos/kodus/kodus-extension/pulls/132',
+                    },
+                },
+                pull_request: {
+                    head: {
+                        ref: 'feature/improve-refs',
+                    },
+                    base: {
+                        ref: 'main',
+                    },
+                },
+                comment: {
+                    id: 123,
+                    body: `@kody -v business-logic ${jiraUrl}`,
+                },
+                sender: {
+                    id: 'user-1',
+                    login: 'alice',
+                },
+            },
+        } as any);
+
+        expect(
+            businessRulesValidationAgentUseCase.execute,
+        ).toHaveBeenCalledWith(
+            expect.objectContaining({
+                prepareContext: expect.objectContaining({
+                    userQuestion: `@kody -v business-logic ${jiraUrl}`,
+                    pullRequestDescription: 'PR description body',
+                    pullRequest: expect.objectContaining({
+                        pullRequestNumber: 132,
+                    }),
+                }),
+            }),
+        );
+    });
 });

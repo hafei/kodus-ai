@@ -21,6 +21,8 @@ type EvalFixture = {
         prBody: string;
         prDiff: string;
         taskContext: string | TaskContextFixture;
+        userQuestion?: string;
+        userLanguage?: string;
         providerType?: string;
         taskContextToolName?: string;
     };
@@ -35,6 +37,16 @@ type EvalFixture = {
     >;
     expectedOutcome: {
         needsMoreInfo: boolean;
+        mode?: 'full_analysis' | 'limitation_response';
+        reason?:
+            | 'analysis_ready'
+            | 'task_context_missing'
+            | 'task_context_weak'
+            | 'pr_diff_missing';
+        taskContextStatus?: 'missing' | 'weak' | 'usable';
+        prDiffStatus?: 'missing' | 'usable';
+        summaryText?: string;
+        resolvedTaskContextContains?: string[];
         summaryContains?: string[];
     };
 };
@@ -178,7 +190,7 @@ describe('business-rules-validation eval runner', () => {
                 organizationId: 'org-eval',
                 teamId: 'team-eval',
             },
-            userLanguage: 'en-US',
+            userLanguage: fixture.input.userLanguage ?? 'en-US',
             prepareContext: {
                 repository: {
                     id: 'repo-eval',
@@ -188,11 +200,12 @@ describe('business-rules-validation eval runner', () => {
                     pullRequestNumber: fixture.input.pullRequestNumber,
                 },
                 userQuestion:
-                    typeof fixture.input.taskContext === 'object' &&
+                    fixture.input.userQuestion ??
+                    (typeof fixture.input.taskContext === 'object' &&
                     fixture.input.taskContext !== null &&
                     fixture.input.taskContext.id
                         ? `@kody -v business-logic ${fixture.input.taskContext.id}`
-                        : '@kody -v business-logic',
+                        : '@kody -v business-logic'),
                 pullRequestDescription: '',
                 taskContext:
                     typeof fixture.input.taskContext === 'string'
@@ -207,22 +220,43 @@ describe('business-rules-validation eval runner', () => {
             steps,
             context: initialContext,
             runLLMStep: async (_step: LLMStep, ctx: BusinessRulesContext) => ({
+                ...(fixture.input.userLanguage
+                    ? (() => {
+                          expect(ctx.userLanguage).toBe(
+                              fixture.input.userLanguage,
+                          );
+                          return {};
+                      })()
+                    : {}),
                 ...ctx,
                 validationResult: {
                     needsMoreInfo: fixture.expectedOutcome.needsMoreInfo,
-                    summary:
-                        fixture.expectedOutcome.needsMoreInfo === true
-                            ? ''
-                            : `Validation summary for ${fixture.name}`,
+                    mode:
+                        fixture.expectedOutcome.mode ??
+                        (fixture.expectedOutcome.needsMoreInfo
+                            ? 'limitation_response'
+                            : 'full_analysis'),
+                    reason:
+                        fixture.expectedOutcome.reason ??
+                        (fixture.expectedOutcome.needsMoreInfo
+                            ? 'task_context_missing'
+                            : 'analysis_ready'),
+                    taskContextStatus:
+                        fixture.expectedOutcome.taskContextStatus ??
+                        ctx.analysisEligibility?.taskContextStatus,
+                    prDiffStatus:
+                        fixture.expectedOutcome.prDiffStatus ??
+                        ctx.analysisEligibility?.prDiffStatus,
+                    summary: resolveFixtureSummary(fixture, ctx.userLanguage),
                     missingInfo:
                         fixture.expectedOutcome.needsMoreInfo === true
-                            ? 'Need task information'
+                            ? resolveFixtureSummary(fixture, ctx.userLanguage)
                             : '',
                 },
-                formattedResponse:
-                    fixture.expectedOutcome.needsMoreInfo === true
-                        ? 'Need task information'
-                        : `Validation summary for ${fixture.name}`,
+                formattedResponse: resolveFixtureSummary(
+                    fixture,
+                    ctx.userLanguage,
+                ),
             }),
         });
 
@@ -253,13 +287,64 @@ describe('business-rules-validation eval runner', () => {
         expect(result.context.validationResult?.needsMoreInfo).toBe(
             fixture.expectedOutcome.needsMoreInfo,
         );
+        if (fixture.expectedOutcome.mode) {
+            expect(result.context.validationResult?.mode).toBe(
+                fixture.expectedOutcome.mode,
+            );
+        }
+        if (fixture.expectedOutcome.reason) {
+            expect(result.context.validationResult?.reason).toBe(
+                fixture.expectedOutcome.reason,
+            );
+        }
+        if (fixture.expectedOutcome.taskContextStatus) {
+            expect(result.context.validationResult?.taskContextStatus).toBe(
+                fixture.expectedOutcome.taskContextStatus,
+            );
+        }
+        if (fixture.expectedOutcome.prDiffStatus) {
+            expect(result.context.validationResult?.prDiffStatus).toBe(
+                fixture.expectedOutcome.prDiffStatus,
+            );
+        }
+
+        if (fixture.expectedOutcome.resolvedTaskContextContains?.length) {
+            const resolvedTaskContext = result.context.taskContext ?? '';
+            for (const token of fixture.expectedOutcome.resolvedTaskContextContains) {
+                expect(resolvedTaskContext.toLowerCase()).toContain(
+                    token.toLowerCase(),
+                );
+            }
+        }
 
         if (fixture.expectedOutcome.summaryContains?.length) {
             const summarySource =
-                result.context.taskContext ?? result.context.formattedResponse ?? '';
+                result.context.validationResult?.summary ??
+                result.context.formattedResponse ??
+                '';
             for (const token of fixture.expectedOutcome.summaryContains) {
                 expect(summarySource.toLowerCase()).toContain(token.toLowerCase());
             }
         }
     });
 });
+
+function resolveFixtureSummary(
+    fixture: EvalFixture,
+    userLanguage: string | undefined,
+): string {
+    if (fixture.expectedOutcome.summaryText) {
+        return fixture.expectedOutcome.summaryText;
+    }
+
+    const isPortuguese = userLanguage?.toLowerCase().startsWith('pt');
+    if (fixture.expectedOutcome.needsMoreInfo) {
+        return isPortuguese
+            ? 'Preciso de mais contexto da task'
+            : 'Need task information';
+    }
+
+    return isPortuguese
+        ? `Resumo da validação para ${fixture.name}`
+        : `Validation summary for ${fixture.name}`;
+}

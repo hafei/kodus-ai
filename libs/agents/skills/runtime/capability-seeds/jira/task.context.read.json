@@ -2,7 +2,6 @@
     "providerType": "jira",
     "capability": "task.context.read",
     "tools": [
-        "getAccessibleAtlassianResources",
         "getJiraIssue",
         "searchJiraIssuesUsingJql",
         "search",

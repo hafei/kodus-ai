@@ -26,6 +26,9 @@
   ],
   "expectedOutcome": {
     "needsMoreInfo": false,
-    "summaryContains": ["LIN-99", "onboarding"]
+    "mode": "full_analysis",
+    "reason": "analysis_ready",
+    "resolvedTaskContextContains": ["LIN-99", "onboarding"],
+    "summaryContains": ["Validation summary"]
   }
 }

@@ -26,6 +26,9 @@
   ],
   "expectedOutcome": {
     "needsMoreInfo": false,
-    "summaryContains": ["PROJ-123", "authentication"]
+    "mode": "full_analysis",
+    "reason": "analysis_ready",
+    "resolvedTaskContextContains": ["PROJ-123", "authentication"],
+    "summaryContains": ["Validation summary"]
   }
 }

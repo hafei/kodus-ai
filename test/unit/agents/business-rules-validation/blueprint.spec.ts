@@ -1,4 +1,5 @@
 import { createBusinessRulesBlueprint } from '@libs/agents/infrastructure/services/kodus-flow/business-rules-validation/blueprint';
+import { classifyTaskQualityFromSources } from '@libs/agents/infrastructure/services/kodus-flow/business-rules-validation/blueprint.tooling';
 import { BusinessRulesContext } from '@libs/agents/infrastructure/services/kodus-flow/business-rules-validation/types';
 import { SkillCapabilityRuntimeConfig } from '@libs/agents/skills/generic-skill-runner.service';
 import { CapabilityStrategyScope } from '@libs/agents/skills/runtime/skill-runtime.types';
@@ -15,6 +16,39 @@ const defaultRuntimeConfig: SkillCapabilityRuntimeConfig = {
 };
 
 describe('business-rules blueprint', () => {
+    it('classifies normalized task context with acceptance criteria as COMPLETE', () => {
+        expect(
+            classifyTaskQualityFromSources({
+                taskContext:
+                    'Task ID: APP-789\n\nTitle: Melhorar fluxo de onboarding\n\nDescription:\nAdicionar início de onboarding.\n\nAcceptance Criteria:\n- Usuário pode iniciar o onboarding\n- Checklist inicial é retornado',
+                taskContextNormalized: {
+                    id: 'APP-789',
+                    title: 'Melhorar fluxo de onboarding',
+                    description: 'Adicionar início de onboarding.',
+                    acceptanceCriteria: [
+                        'Usuário pode iniciar o onboarding',
+                        'Checklist inicial é retornado',
+                    ],
+                },
+            }),
+        ).toBe('COMPLETE');
+    });
+
+    it('does not classify normalized task context without acceptance criteria as COMPLETE', () => {
+        expect(
+            classifyTaskQualityFromSources({
+                taskContext:
+                    'Task ID: APP-790\n\nTitle: Melhorar fluxo de onboarding\n\nDescription:\nAdicionar início de onboarding e tornar os primeiros passos mais previsíveis para novos usuários.',
+                taskContextNormalized: {
+                    id: 'APP-790',
+                    title: 'Melhorar fluxo de onboarding',
+                    description:
+                        'Adicionar início de onboarding e tornar os primeiros passos mais previsíveis para novos usuários.',
+                },
+            }),
+        ).toBe('PARTIAL');
+    });
+
     it('uses preloaded PR metadata and still fetches diff deterministically', async () => {
         const fetcher = {
             callTool: jest.fn().mockImplementation((toolName: string) => {
@@ -438,7 +472,7 @@ describe('business-rules blueprint', () => {
         const fetcher = {
             callTool: jest
                 .fn()
-                .mockImplementation((toolName: string, args?: unknown) => {
+                .mockImplementation((toolName: string, _args?: unknown) => {
                     if (toolName === 'KODUS_GET_PULL_REQUEST_DIFF') {
                         return Promise.resolve({
                             result: {
@@ -449,9 +483,9 @@ describe('business-rules blueprint', () => {
 
                     if (
                         toolName === 'getJiraIssue' &&
-                        (args as Record<string, unknown>)?.cloudId ===
+                        (_args as Record<string, unknown>)?.cloudId ===
                             'kodustech.atlassian.net' &&
-                        (args as Record<string, unknown>)?.issueIdOrKey ===
+                        (_args as Record<string, unknown>)?.issueIdOrKey ===
                             'PROJ-123'
                     ) {
                         return Promise.resolve({
@@ -559,7 +593,7 @@ describe('business-rules blueprint', () => {
         );
         expect(next.taskContext).toContain('Checkout validation');
         expect(next.taskContext).toContain('Reject invalid card');
-        expect(next.taskQuality).toBe('PARTIAL');
+        expect(next.taskQuality).toBe('COMPLETE');
         expect(
             fetcher.callTool.mock.calls.some(
                 (call: unknown[]) => call[0] === 'fetch',
@@ -830,7 +864,7 @@ describe('business-rules blueprint', () => {
         const fetcher = {
             callTool: jest
                 .fn()
-                .mockImplementation((toolName: string, args?: unknown) => {
+                .mockImplementation((toolName: string, _args?: unknown) => {
                     if (toolName === 'KODUS_GET_PULL_REQUEST_DIFF') {
                         return Promise.resolve({
                             result: {
@@ -990,8 +1024,164 @@ describe('business-rules blueprint', () => {
         expect(result.context.validationResult).toEqual(
             expect.objectContaining({
                 needsMoreInfo: true,
+                mode: 'limitation_response',
+                reason: 'pr_diff_missing',
+                prDiffStatus: 'missing',
+                taskContextStatus: 'usable',
             }),
         );
-        expect(result.context.formattedResponse).toContain('pull request diff');
+        expect(result.context.analysisEligibility).toEqual(
+            expect.objectContaining({
+                mode: 'limitation_response',
+                reason: 'pr_diff_missing',
+                prDiffStatus: 'missing',
+                taskContextStatus: 'usable',
+            }),
+        );
+        expect(result.context.formattedResponse).toBeUndefined();
+        expect(result.context.validationResult?.summary).toContain(
+            'pull request diff',
+        );
+    });
+
+    it('returns a limitation outcome when task context is too weak even if the diff is available', async () => {
+        const fetcher = {
+            callTool: jest.fn().mockImplementation((toolName: string) => {
+                if (toolName === 'KODUS_GET_PULL_REQUEST_DIFF') {
+                    return Promise.resolve({
+                        result: {
+                            result: {
+                                success: true,
+                                data: 'diff --git a/file.ts b/file.ts',
+                            },
+                        },
+                    });
+                }
+
+                return Promise.resolve({ result: {} });
+            }),
+            callAgent: jest.fn(),
+            getRegisteredTools: jest
+                .fn()
+                .mockReturnValue([{ name: 'KODUS_GET_PULL_REQUEST_DIFF' }]),
+        } as any;
+
+        const steps = createBusinessRulesBlueprint(
+            fetcher,
+            defaultRuntimeConfig,
+        );
+
+        const result = await runBlueprint<BusinessRulesContext>({
+            context: {
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+                userLanguage: 'en-US',
+                prepareContext: {
+                    pullRequestDescription: 'PR body',
+                    repository: { id: 'repo-1', name: 'my-repo' },
+                    pullRequest: { pullRequestNumber: 33 },
+                    taskContext: 'KC-1441 — Kody rules por time',
+                },
+            } as BusinessRulesContext,
+            steps,
+            runLLMStep: async () => {
+                throw new Error('analyzer should not run');
+            },
+        });
+
+        expect(result.skippedAt).toBe('validateContext');
+        expect(result.context.validationResult).toEqual(
+            expect.objectContaining({
+                needsMoreInfo: true,
+                mode: 'limitation_response',
+                reason: 'task_context_weak',
+                taskContextStatus: 'weak',
+                prDiffStatus: 'usable',
+            }),
+        );
+        expect(result.context.formattedResponse).toBeUndefined();
+        expect(result.context.validationResult?.summary).toContain(
+            'Insufficient Task Context',
+        );
+    });
+
+    it('allows analysis to run when PR diff has surrounding whitespace', async () => {
+        const fetcher = {
+            callTool: jest.fn().mockImplementation((toolName: string) => {
+                if (toolName === 'KODUS_GET_PULL_REQUEST_DIFF') {
+                    return Promise.resolve({
+                        result: {
+                            result: {
+                                success: true,
+                                data: '  diff --git a/file.ts b/file.ts  ',
+                            },
+                        },
+                    });
+                }
+
+                return Promise.resolve({ result: {} });
+            }),
+            callAgent: jest.fn(),
+            getRegisteredTools: jest
+                .fn()
+                .mockReturnValue([{ name: 'KODUS_GET_PULL_REQUEST_DIFF' }]),
+        } as any;
+
+        const steps = createBusinessRulesBlueprint(
+            fetcher,
+            defaultRuntimeConfig,
+        );
+
+        const result = await runBlueprint<BusinessRulesContext>({
+            context: {
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+                userLanguage: 'en-US',
+                prepareContext: {
+                    pullRequestDescription: 'PR body',
+                    repository: { id: 'repo-1', name: 'my-repo' },
+                    pullRequest: { pullRequestNumber: 32 },
+                    taskContext:
+                        'Kody rules por time. Billing must respect the selected workspace team, the lookup must not leak billing state from a different workspace, and acceptance must verify the rule creation flow when multiple teams exist in the same organization.',
+                },
+            } as BusinessRulesContext,
+            steps,
+            runLLMStep: async (_step, ctx) => ({
+                ...ctx,
+                validationResult: {
+                    needsMoreInfo: false,
+                    mode: 'full_analysis',
+                    reason: 'analysis_ready',
+                    taskContextStatus: 'usable',
+                    prDiffStatus: 'usable',
+                    summary: 'ok',
+                },
+                formattedResponse: 'ok',
+            }),
+        });
+
+        expect(result.completedSteps).toContain('analyzeBusinessRules');
+        expect(result.context.validationResult).toEqual(
+            expect.objectContaining({
+                needsMoreInfo: false,
+                mode: 'full_analysis',
+                reason: 'analysis_ready',
+                taskContextStatus: 'usable',
+                prDiffStatus: 'usable',
+                summary: 'ok',
+            }),
+        );
+        expect(result.context.analysisEligibility).toEqual(
+            expect.objectContaining({
+                mode: 'full_analysis',
+                reason: 'analysis_ready',
+                taskContextStatus: 'usable',
+                prDiffStatus: 'usable',
+            }),
+        );
     });
 });

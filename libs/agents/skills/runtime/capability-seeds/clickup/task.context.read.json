@@ -2,13 +2,9 @@
     "providerType": "clickup",
     "capability": "task.context.read",
     "tools": [
-        "search",
-        "fetch",
-        "getTask",
-        "searchTasks",
-        "listTasks",
-        "queryTasks",
-        "getList",
-        "getSpace"
+        "Get Task",
+        "Get Tasks",
+        "Get List",
+        "Get Space"
     ]
 }

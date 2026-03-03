@@ -2,13 +2,9 @@
     "providerType": "linear",
     "capability": "task.context.read",
     "tools": [
-        "search",
-        "fetch",
-        "getIssue",
-        "searchIssues",
-        "listIssues",
-        "queryIssues",
-        "getProject",
-        "getTeam"
+        "get_issue",
+        "list_issues",
+        "get_project",
+        "get_team"
     ]
 }
