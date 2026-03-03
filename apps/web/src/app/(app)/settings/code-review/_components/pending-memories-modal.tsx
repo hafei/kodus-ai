@@ -486,17 +486,27 @@ export const PendingMemoriesModal = ({
             await convertPendingUpdatesToMemoriesRequest(ids);
             setHasChanges(true);
 
-            let convertedRules: KodyRule[] = [];
-            setUpdates((previous) => {
-                convertedRules = previous.filter((rule) =>
-                    ids.includes(rule.uuid || ""),
-                );
+            setUpdates((currentUpdates) => {
+                const remainingUpdates: KodyRule[] = [];
+                const rulesToConvert: KodyRule[] = [];
 
-                return previous.filter(
-                    (rule) => !ids.includes(rule.uuid || ""),
-                );
+                for (const rule of currentUpdates) {
+                    if (ids.includes(rule.uuid || "")) {
+                        rulesToConvert.push(rule);
+                    } else {
+                        remainingUpdates.push(rule);
+                    }
+                }
+
+                if (rulesToConvert.length > 0) {
+                    setNewMemories((currentMems) => [
+                        ...currentMems,
+                        ...rulesToConvert,
+                    ]);
+                }
+
+                return remainingUpdates;
             });
-            setNewMemories((previous) => [...previous, ...convertedRules]);
             setSelectedUpdateIds((selected) =>
                 selected.filter((id) => !ids.includes(id)),
             );
