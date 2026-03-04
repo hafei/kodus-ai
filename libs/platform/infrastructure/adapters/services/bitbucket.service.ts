@@ -2056,11 +2056,11 @@ export class BitbucketService implements Omit<
         try {
             const { organizationAndTeamData, repository, prNumber } = params;
 
-            const pullRequests = await this.getPullRequests({
+            return await this.getPullRequest({
                 organizationAndTeamData,
+                repository,
+                prNumber,
             });
-
-            return pullRequests.find((pr) => pr.id === prNumber.toString());
         } catch (error) {
             this.logger.error({
                 message: 'Error to get pull request by number',
