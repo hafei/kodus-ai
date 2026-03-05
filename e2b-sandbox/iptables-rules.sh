@@ -11,7 +11,8 @@ if [ -z "$NLB_IPS" ]; then
     exit 1
 fi
 
-iptables -t nat -N SHADOWSOCKS
+# Create the chain if it doesn't exist, then flush it to ensure it's clean.
+iptables -t nat -N SHADOWSOCKS 2>/dev/null || iptables -t nat -F SHADOWSOCKS
 
 # Exclude NLB IPs from redirect (prevents sslocal → sslocal loop)
 for ip in $NLB_IPS; do
@@ -29,4 +30,5 @@ iptables -t nat -A SHADOWSOCKS -d 192.168.0.0/16 -j RETURN
 
 # Redirect all other outbound TCP to sslocal
 iptables -t nat -A SHADOWSOCKS -p tcp -j REDIRECT --to-ports 12345
-iptables -t nat -A OUTPUT -p tcp -j SHADOWSOCKS
+# Add the jump from OUTPUT only if it doesn't already exist
+iptables -t nat -C OUTPUT -p tcp -j SHADOWSOCKS 2>/dev/null || iptables -t nat -A OUTPUT -p tcp -j SHADOWSOCKS

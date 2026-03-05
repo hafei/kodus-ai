@@ -625,8 +625,16 @@ Evidence field in ${params.languageResultPrompt}.`;
                     }
                 } else if (parsed.tool === 'read') {
                     toolResult = await remoteCommands.read(parsed.path || '', 0, 0);
+                    const MAX_READ_LENGTH = 20000;
+                    if (toolResult.length > MAX_READ_LENGTH) {
+                        toolResult = toolResult.substring(0, MAX_READ_LENGTH) + `\n... (file truncated)`;
+                    }
                 } else if (parsed.tool === 'list') {
                     toolResult = await remoteCommands.listDir(parsed.path || '.', 2);
+                    const MAX_LIST_LENGTH = 10000;
+                    if (toolResult.length > MAX_LIST_LENGTH) {
+                        toolResult = toolResult.substring(0, MAX_LIST_LENGTH) + `\n... (listing truncated)`;
+                    }
                 } else {
                     toolResult = `Unknown tool: ${parsed.tool}`;
                 }

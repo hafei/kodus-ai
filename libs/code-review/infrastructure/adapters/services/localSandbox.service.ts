@@ -122,7 +122,7 @@ export class LocalSandboxService implements ISandboxProvider {
                 path: string,
                 glob?: string,
             ): Promise<string> => {
-                this.validatePath(path);
+                await this.resolveSafePath(repoDir, path);
 
                 // rg with --no-follow ensures symlinks are not followed during search.
                 // cwd = repoDir so rg outputs relative paths (downstream expects "./src/foo.ts")
