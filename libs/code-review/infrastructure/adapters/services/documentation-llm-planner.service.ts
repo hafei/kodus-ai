@@ -9,6 +9,7 @@ import {
 import { SUPPORTED_LANGUAGES } from '@libs/code-review/domain/contracts/SupportedLanguages';
 import {
     DocumentationQueryPlanByFile,
+    DocumentationQueryTask,
     RepositoryPackageReference,
 } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import {
@@ -47,8 +48,8 @@ export class DocumentationLLMPlannerService {
             return {};
         }
 
-        const provider = LLMModelProvider.GROQ_GPT_OSS_120B;
-        const fallbackProvider = LLMModelProvider.GROQ_MOONSHOTAI_KIMI_K2_;
+        const provider = LLMModelProvider.GEMINI_3_1_FLASH_LITE_PREVIEW;
+        const fallbackProvider = LLMModelProvider.GEMINI_3_FLASH_PREVIEW;
         const runName = 'documentationPlanner';
 
         const promptRunner = new BYOKPromptRunnerService(
@@ -87,10 +88,7 @@ export class DocumentationLLMPlannerService {
 
                     const response = await promptRunner
                         .builder()
-                        .setParser(ParserType.ZOD, DocumentationPlannerSchema, {
-                            provider: LLMModelProvider.OPENAI_GPT_4O_MINI,
-                            fallbackProvider: LLMModelProvider.OPENAI_GPT_4O,
-                        })
+                        .setParser(ParserType.ZOD, DocumentationPlannerSchema)
                         .setLLMJsonMode(true)
                         .setPayload(payload)
                         .addPrompt({
@@ -116,7 +114,6 @@ export class DocumentationLLMPlannerService {
                 if (settledResult.status === 'fulfilled') {
                     const mapped = this.mapResultByFile(
                         settledResult.value.result,
-                        settledResult.value.file,
                         this.getAllowedPackageNamesByFile(
                             packageSlice,
                             settledResult.value.file.filename,
@@ -172,25 +169,30 @@ export class DocumentationLLMPlannerService {
 
     private mapResultByFile(
         result: DocumentationPlannerSchemaType,
-        file: FileChange,
         allowedPackageNames: Set<string>,
     ): DocumentationQueryPlanByFile | null {
-        if (!result?.filePath || result.filePath !== file.filename) {
+        if (!result) {
             return null;
         }
 
-        const queries = this.uniqueStrings(result.queries).slice(0, 8);
-        const relevantPackages = this.uniqueStrings(result.relevantPackages)
-            .filter((pkgName) => allowedPackageNames.has(pkgName.toLowerCase()))
-            .slice(0, 8);
+        const rawQueryTasks = this.uniqueQueryTasks(result.queryTasks);
 
-        if (!queries.length || !relevantPackages.length) {
+        if (!rawQueryTasks.length) {
+            return {
+                queryTasks: [],
+            };
+        }
+
+        const queryTasks = rawQueryTasks.filter((task) =>
+            allowedPackageNames.has(task.packageName.toLowerCase()),
+        );
+
+        if (!queryTasks.length) {
             return null;
         }
 
         return {
-            relevantPackages,
-            queries,
+            queryTasks,
         };
     }
 
@@ -211,8 +213,7 @@ export class DocumentationLLMPlannerService {
 
             if (!topPackages.length) {
                 plan[file.filename] = {
-                    relevantPackages: [],
-                    queries: [],
+                    queryTasks: [],
                 };
                 continue;
             }
@@ -229,14 +230,15 @@ export class DocumentationLLMPlannerService {
                 matched.length > 0 ? matched : topPackages
             ).slice(0, 3);
 
-            const queries = relevantPackages.map(
-                (pkg) =>
-                    `Find official documentation and best practices for ${pkg} used in ${file.filename}`,
+            const queryTasks = relevantPackages.map((packageName) =>
+                this.createQueryTask(
+                    packageName,
+                    `Find official documentation and best practices for ${packageName} used in ${file.filename}`,
+                ),
             );
 
             plan[file.filename] = {
-                relevantPackages,
-                queries,
+                queryTasks,
             };
         }
 
@@ -256,10 +258,47 @@ export class DocumentationLLMPlannerService {
             this.buildFallbackPlan([file], fileScopedPackages)[
                 file.filename
             ] || {
-                relevantPackages: [],
-                queries: [],
+                queryTasks: [],
             }
         );
+    }
+
+    private uniqueQueryTasks(
+        tasks: DocumentationQueryTask[],
+    ): DocumentationQueryTask[] {
+        const seen = new Set<string>();
+        const result: DocumentationQueryTask[] = [];
+
+        for (const task of tasks || []) {
+            const normalizedPackageName = (task?.packageName || '').trim();
+            const normalizedQuery = (task?.query || '').trim();
+
+            if (!normalizedPackageName || !normalizedQuery) {
+                continue;
+            }
+
+            const key = `${normalizedPackageName.toLowerCase()}::${normalizedQuery.toLowerCase()}`;
+            if (seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            result.push(
+                this.createQueryTask(normalizedPackageName, normalizedQuery),
+            );
+        }
+
+        return result;
+    }
+
+    private createQueryTask(
+        packageName: string,
+        query: string,
+    ): DocumentationQueryTask {
+        return {
+            packageName,
+            query,
+        };
     }
 
     private filterPackagesForFile(
@@ -272,7 +311,71 @@ export class DocumentationLLMPlannerService {
             return [];
         }
 
-        return packages.filter((pkg) => ecosystems.includes(pkg.ecosystem));
+        return ecosystems.flatMap((ecosystem) =>
+            this.scopePackagesToNearestManifestDirectory(
+                filePath,
+                packages.filter((pkg) => pkg.ecosystem === ecosystem),
+            ),
+        );
+    }
+
+    private scopePackagesToNearestManifestDirectory(
+        filePath: string,
+        packages: RepositoryPackageReference[],
+    ): RepositoryPackageReference[] {
+        if (!packages.length) {
+            return [];
+        }
+
+        const fileDirectory = this.normalizeDirectory(
+            path.posix.dirname(filePath),
+        );
+
+        const manifestDirectories = [
+            ...new Set(
+                packages.map((pkg) =>
+                    this.normalizeDirectory(path.posix.dirname(pkg.sourceFile)),
+                ),
+            ),
+        ].filter((directory) =>
+            this.isAncestorDirectory(directory, fileDirectory),
+        );
+
+        if (!manifestDirectories.length) {
+            return packages;
+        }
+
+        const nearestDirectory = manifestDirectories.sort(
+            (a, b) => b.length - a.length,
+        )[0];
+
+        return packages.filter(
+            (pkg) =>
+                this.normalizeDirectory(path.posix.dirname(pkg.sourceFile)) ===
+                nearestDirectory,
+        );
+    }
+
+    private isAncestorDirectory(
+        candidateDirectory: string,
+        fileDirectory: string,
+    ): boolean {
+        if (!candidateDirectory) {
+            return true;
+        }
+
+        return (
+            fileDirectory === candidateDirectory ||
+            fileDirectory.startsWith(`${candidateDirectory}/`)
+        );
+    }
+
+    private normalizeDirectory(directory: string): string {
+        if (!directory || directory === '.' || directory === '/') {
+            return '';
+        }
+
+        return directory.replace(/^\/+|\/+$/g, '');
     }
 
     private getAllowedPackageNamesByFile(

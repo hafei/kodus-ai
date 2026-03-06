@@ -24,11 +24,12 @@ describe('DocumentationLLMPlannerService', () => {
                     setTemperature: jest.fn().mockReturnThis(),
                     setRunName: jest.fn().mockReturnThis(),
                     execute: jest.fn(async () => ({
-                        filePath: state.payload?.file?.filePath || '',
-                        relevantPackages: (state.payload?.packages || []).map(
-                            (pkg: { name: string }) => pkg.name,
+                        queryTasks: (state.payload?.packages || []).map(
+                            (pkg: { name: string }) => ({
+                                packageName: pkg.name,
+                                query: 'official documentation',
+                            }),
                         ),
-                        queries: ['official documentation'],
                     })),
                 };
             }),
@@ -102,6 +103,120 @@ describe('DocumentationLLMPlannerService', () => {
         ]);
         expect(rubyPayload.packages).toEqual([
             expect.objectContaining({ name: 'rails', ecosystem: 'ruby' }),
+        ]);
+    });
+
+    it('should keep empty queryTasks when planner succeeds with no documentation need', async () => {
+        const promptRunner = {
+            builder: jest.fn(() => {
+                const state: { payload?: any } = {};
+
+                return {
+                    setProviders: jest.fn().mockReturnThis(),
+                    setBYOKConfig: jest.fn().mockReturnThis(),
+                    setBYOKFallbackConfig: jest.fn().mockReturnThis(),
+                    setParser: jest.fn().mockReturnThis(),
+                    setLLMJsonMode: jest.fn().mockReturnThis(),
+                    setPayload: jest.fn(function (payload: any) {
+                        state.payload = payload;
+                        return this;
+                    }),
+                    addPrompt: jest.fn().mockReturnThis(),
+                    setTemperature: jest.fn().mockReturnThis(),
+                    setRunName: jest.fn().mockReturnThis(),
+                    execute: jest.fn(async () => ({
+                        queryTasks: [],
+                    })),
+                };
+            }),
+        } as unknown as PromptRunnerService;
+
+        const service = new DocumentationLLMPlannerService(promptRunner);
+
+        const result = await service.planDocumentationByFile({
+            packages: [
+                {
+                    name: '@nestjs/common',
+                    ecosystem: 'npm',
+                    sourceFile: 'package.json',
+                },
+            ],
+            changedFiles: [
+                {
+                    filename: 'src/example.ts',
+                    patch: '@@ -1,1 +1,1 @@',
+                    fileContent: 'console.log("ok")',
+                } as FileChange,
+            ],
+        });
+
+        expect(result['src/example.ts']).toEqual({
+            queryTasks: [],
+        });
+    });
+
+    it('should scope npm packages to nearest workspace manifest in monorepos', async () => {
+        const payloads: any[] = [];
+        const service = new DocumentationLLMPlannerService(
+            buildPromptRunnerMock(payloads),
+        );
+
+        const packages: RepositoryPackageReference[] = [
+            {
+                name: 'root-lib',
+                ecosystem: 'npm',
+                sourceFile: 'package.json',
+            },
+            {
+                name: '@api/lib',
+                ecosystem: 'npm',
+                sourceFile: 'apps/api/package.json',
+            },
+            {
+                name: '@web/lib',
+                ecosystem: 'npm',
+                sourceFile: 'apps/web/package.json',
+            },
+        ];
+
+        const changedFiles: FileChange[] = [
+            {
+                filename: 'apps/api/src/user.controller.ts',
+                patch: '@@',
+                fileContent: 'import { Controller } from "@nestjs/common"',
+            } as FileChange,
+            {
+                filename: 'apps/web/src/app/page.tsx',
+                patch: '@@',
+                fileContent: 'export default function Page() { return null; }',
+            } as FileChange,
+        ];
+
+        await service.planDocumentationByFile({
+            packages,
+            changedFiles,
+        });
+
+        const apiPayload = payloads.find(
+            (payload) =>
+                payload.file.filePath === 'apps/api/src/user.controller.ts',
+        );
+        const webPayload = payloads.find(
+            (payload) => payload.file.filePath === 'apps/web/src/app/page.tsx',
+        );
+
+        expect(apiPayload.packages).toEqual([
+            expect.objectContaining({
+                name: '@api/lib',
+                sourceFile: 'apps/api/package.json',
+            }),
+        ]);
+
+        expect(webPayload.packages).toEqual([
+            expect.objectContaining({
+                name: '@web/lib',
+                sourceFile: 'apps/web/package.json',
+            }),
         ]);
     });
 });

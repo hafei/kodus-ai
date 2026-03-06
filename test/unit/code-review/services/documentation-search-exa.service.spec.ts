@@ -60,8 +60,12 @@ describe('DocumentationSearchExaService', () => {
 
         const result = await service.searchByFilePlan({
             'src/a.ts': {
-                relevantPackages: ['react'],
-                queries: ['hooks'],
+                queryTasks: [
+                    {
+                        packageName: 'react',
+                        query: 'hooks',
+                    },
+                ],
             },
         });
 
@@ -100,8 +104,12 @@ describe('DocumentationSearchExaService', () => {
 
         const result = await service.searchByFilePlan({
             'src/a.ts': {
-                relevantPackages: ['@nestjs/common'],
-                queries: ['nestjs controllers'],
+                queryTasks: [
+                    {
+                        packageName: '@nestjs/common',
+                        query: 'nestjs controllers',
+                    },
+                ],
             },
         });
 
@@ -144,8 +152,12 @@ describe('DocumentationSearchExaService', () => {
 
         const result = await service.searchByFilePlan({
             'src/a.ts': {
-                relevantPackages: ['@nestjs/common'],
-                queries: ['nestjs controllers'],
+                queryTasks: [
+                    {
+                        packageName: '@nestjs/common',
+                        query: 'nestjs controllers',
+                    },
+                ],
             },
         });
 

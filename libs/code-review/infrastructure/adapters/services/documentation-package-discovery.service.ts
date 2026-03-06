@@ -3,6 +3,7 @@ import {
     IPullRequestManagerService,
     PULL_REQUEST_MANAGER_SERVICE_TOKEN,
 } from '@libs/code-review/domain/contracts/PullRequestManagerService.contract';
+import { RemoteCommands } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import {
     CodeReviewPipelineContext,
     RepositoryPackageReference,
@@ -36,7 +37,10 @@ export class DocumentationPackageDiscoveryService {
         private readonly pullRequestManager: IPullRequestManagerService,
     ) {}
 
-    async discoverPackages(context: CodeReviewPipelineContext): Promise<{
+    async discoverPackages(
+        context: CodeReviewPipelineContext,
+        options?: { remoteCommands?: RemoteCommands },
+    ): Promise<{
         packages: RepositoryPackageReference[];
         manifestFiles: string[];
     }> {
@@ -54,7 +58,26 @@ export class DocumentationPackageDiscoveryService {
             }
         }
 
-        const candidatesToFetch = new Set<string>(ROOT_MANIFEST_FILES);
+        const candidatesToFetch = new Set<string>();
+
+        const manifestCandidatesFromRipgrep =
+            await this.discoverManifestCandidatesWithRipgrep(
+                options?.remoteCommands,
+            );
+
+        for (const candidate of manifestCandidatesFromRipgrep) {
+            candidatesToFetch.add(candidate);
+        }
+
+        if (!manifestCandidatesFromRipgrep.length) {
+            for (const file of context.changedFiles) {
+                for (const candidate of this.buildManifestCandidatesForFile(
+                    file.filename,
+                )) {
+                    candidatesToFetch.add(candidate);
+                }
+            }
+        }
 
         for (const file of context.changedFiles) {
             if (this.isSupportedManifestFile(file.filename)) {
@@ -119,7 +142,8 @@ export class DocumentationPackageDiscoveryService {
         for (const [manifestPath, content] of manifestsByPath.entries()) {
             const parsed = this.parseManifest(manifestPath, content);
             for (const pkg of parsed) {
-                const key = `${pkg.ecosystem}:${pkg.name}`.toLowerCase();
+                const key =
+                    `${pkg.ecosystem}:${pkg.name}:${pkg.sourceFile}`.toLowerCase();
                 const current = packageMap.get(key);
                 if (!current || (!current.version && pkg.version)) {
                     packageMap.set(key, pkg);
@@ -136,6 +160,108 @@ export class DocumentationPackageDiscoveryService {
     private isSupportedManifestFile(filePath: string): boolean {
         const baseName = path.posix.basename(filePath);
         return ROOT_MANIFEST_FILES.includes(baseName);
+    }
+
+    private async discoverManifestCandidatesWithRipgrep(
+        remoteCommands?: RemoteCommands,
+    ): Promise<string[]> {
+        if (!remoteCommands) {
+            return [];
+        }
+
+        const discovered = new Set<string>();
+
+        try {
+            for (const manifestFile of ROOT_MANIFEST_FILES) {
+                let rgOutput: string;
+                try {
+                    rgOutput = await remoteCommands.grep(
+                        '.',
+                        '.',
+                        `**/${manifestFile}`,
+                    );
+                } catch (error) {
+                    if (error.exitCode === 1) {
+                        // No matches found, not an error in this context
+                        continue;
+                    }
+                    throw error;
+                }
+
+                for (const pathFromLine of this.extractPathsFromRipgrepOutput(
+                    rgOutput,
+                )) {
+                    if (path.posix.basename(pathFromLine) === manifestFile) {
+                        discovered.add(pathFromLine);
+                    }
+                }
+            }
+        } catch (error) {
+            this.logger.warn({
+                message:
+                    'Ripgrep manifest discovery failed in sandbox, falling back to path-based candidates',
+                context: DocumentationPackageDiscoveryService.name,
+                error,
+            });
+            return [];
+        }
+
+        return [...discovered];
+    }
+
+    private extractPathsFromRipgrepOutput(output: string): string[] {
+        const paths = new Set<string>();
+
+        for (const line of (output || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                continue;
+            }
+
+            const match = trimmed.match(/^([^:]+):\d+:/);
+            if (!match) {
+                continue;
+            }
+
+            const normalizedPath = match[1].replace(/^\.\//, '');
+            if (normalizedPath) {
+                paths.add(normalizedPath);
+            }
+        }
+
+        return [...paths];
+    }
+
+    private buildManifestCandidatesForFile(filePath: string): string[] {
+        const candidates = new Set<string>();
+        let currentDir = this.normalizeDirectory(path.posix.dirname(filePath));
+
+        while (true) {
+            for (const manifestFile of ROOT_MANIFEST_FILES) {
+                const candidatePath = currentDir
+                    ? path.posix.join(currentDir, manifestFile)
+                    : manifestFile;
+                candidates.add(candidatePath);
+            }
+
+            if (!currentDir) {
+                break;
+            }
+
+            currentDir = this.normalizeDirectory(
+                path.posix.dirname(currentDir),
+            );
+        }
+
+        return [...candidates];
+    }
+
+    private normalizeDirectory(directory: string): string {
+        if (!directory || directory === '.' || directory === '/') {
+            return '';
+        }
+
+        return directory.replace(/^\/+|\/+$/g, '');
     }
 
     private parseManifest(

@@ -1,5 +1,5 @@
-import { DocumentationSearchExaService } from '@/code-review/infrastructure/adapters/services/documentation-search-exa.service';
 import { LLMAnalysisService } from '@/code-review/infrastructure/adapters/services/llmAnalysis.service';
+import { SafeguardPipelineService } from '@/code-review/infrastructure/adapters/services/safeguardPipeline.service';
 import { ReviewModeResponse } from '@/core/infrastructure/config/types/general/codeReview.type';
 import { ObservabilityService } from '@/core/log/observability.service';
 import { PromptRunnerService } from '@kodus/kodus-common/llm';
@@ -46,8 +46,8 @@ describe('LLMAnalysisService', () => {
         teamId: 'team-456',
     };
 
-    const mockDocumentationSearchExaService = {
-        searchByFilePlan: jest.fn(),
+    const mockSafeguardPipelineService = {
+        execute: jest.fn(),
     };
 
     beforeEach(async () => {
@@ -63,8 +63,8 @@ describe('LLMAnalysisService', () => {
                     useValue: mockObservabilityService,
                 },
                 {
-                    provide: DocumentationSearchExaService,
-                    useValue: mockDocumentationSearchExaService,
+                    provide: SafeguardPipelineService,
+                    useValue: mockSafeguardPipelineService,
                 },
             ],
         }).compile();
@@ -233,24 +233,9 @@ describe('LLMAnalysisService', () => {
                 },
             ];
 
-            const mockBuilder = {
-                setParser: jest.fn().mockReturnThis(),
-                setLLMJsonMode: jest.fn().mockReturnThis(),
-                setPayload: jest.fn().mockReturnThis(),
-                addPrompt: jest.fn().mockReturnThis(),
-                addMetadata: jest.fn().mockReturnThis(),
-                addCallbacks: jest.fn().mockReturnThis(),
-                setRunName: jest.fn().mockReturnThis(),
-                setTemperature: jest.fn().mockReturnThis(),
-                setMaxReasoningTokens: jest.fn().mockReturnThis(),
-                execute: jest.fn().mockResolvedValue({
-                    result: {
-                        codeSuggestions: [{ id: 's1', action: 'keep' }],
-                    },
-                }),
-            };
-
-            mockPromptRunnerService.builder.mockReturnValue(mockBuilder);
+            mockSafeguardPipelineService.execute.mockResolvedValue({
+                suggestions,
+            });
 
             // After the function runs, suggestionEmbedded should be deleted
             await service.filterSuggestionsSafeGuard(
@@ -271,21 +256,9 @@ describe('LLMAnalysisService', () => {
 
         it('should return original suggestions on error', async () => {
             const suggestions = [{ id: 's1', suggestionContent: 'original' }];
-
-            const mockBuilder = {
-                setParser: jest.fn().mockReturnThis(),
-                setLLMJsonMode: jest.fn().mockReturnThis(),
-                setPayload: jest.fn().mockReturnThis(),
-                addPrompt: jest.fn().mockReturnThis(),
-                addMetadata: jest.fn().mockReturnThis(),
-                addCallbacks: jest.fn().mockReturnThis(),
-                setRunName: jest.fn().mockReturnThis(),
-                setTemperature: jest.fn().mockReturnThis(),
-                setMaxReasoningTokens: jest.fn().mockReturnThis(),
-                execute: jest.fn().mockRejectedValue(new Error('LLM error')),
-            };
-
-            mockPromptRunnerService.builder.mockReturnValue(mockBuilder);
+            mockSafeguardPipelineService.execute.mockRejectedValue(
+                new Error('LLM error'),
+            );
 
             const result = await service.filterSuggestionsSafeGuard(
                 mockOrganizationAndTeamData as any,

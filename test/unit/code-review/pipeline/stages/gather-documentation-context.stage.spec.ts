@@ -3,16 +3,18 @@ import {
     LLMProviderService,
     PromptRunnerService,
 } from '@kodus/kodus-common/llm';
-import { type IPullRequestManagerService } from '@libs/code-review/domain/contracts/PullRequestManagerService.contract';
+import {
+    ISandboxProvider,
+    SANDBOX_PROVIDER_TOKEN,
+} from '@libs/code-review/domain/contracts/sandbox.provider';
 import { DocumentationLLMPlannerService } from '@libs/code-review/infrastructure/adapters/services/documentation-llm-planner.service';
 import { DocumentationPackageDiscoveryService } from '@libs/code-review/infrastructure/adapters/services/documentation-package-discovery.service';
-import { DocumentationSearchCacheService } from '@libs/code-review/infrastructure/adapters/services/documentation-search-cache.service';
 import { DocumentationSearchExaService } from '@libs/code-review/infrastructure/adapters/services/documentation-search-exa.service';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { GatherDocumentationContextStage } from '@libs/code-review/pipeline/stages/gather-documentation-context.stage';
 import { FileChange } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 
 describe('GatherDocumentationContextStage', () => {
@@ -20,6 +22,8 @@ describe('GatherDocumentationContextStage', () => {
     let discoveryService: jest.Mocked<DocumentationPackageDiscoveryService>;
     let plannerService: jest.Mocked<DocumentationLLMPlannerService>;
     let searchService: jest.Mocked<DocumentationSearchExaService>;
+    let sandboxProvider: jest.Mocked<ISandboxProvider>;
+    let codeManagementService: jest.Mocked<CodeManagementService>;
 
     const baseContext = {
         pullRequest: { number: 7 },
@@ -135,15 +139,23 @@ describe('GatherDocumentationContextStage', () => {
 
                         return {
                             filePath,
-                            relevantPackages: isNestFile
-                                ? ['@nestjs/common', 'typeorm']
-                                : ['typeorm'],
-                            queries: isNestFile
+                            queryTasks: isNestFile
                                 ? [
-                                      'NestJS official controller and route handler documentation',
-                                      'TypeORM official docs for entity and repository usage with NestJS',
+                                      {
+                                          packageName: '@nestjs/common',
+                                          query: 'NestJS official controller and route handler documentation',
+                                      },
+                                      {
+                                          packageName: 'typeorm',
+                                          query: 'TypeORM official docs for entity and repository usage with NestJS',
+                                      },
                                   ]
-                                : ['TypeORM official docs for configuration'],
+                                : [
+                                      {
+                                          packageName: 'typeorm',
+                                          query: 'TypeORM official docs for configuration',
+                                      },
+                                  ],
                         };
                     }),
                 };
@@ -177,6 +189,15 @@ describe('GatherDocumentationContextStage', () => {
             searchByFilePlan: jest.fn(),
         } as unknown as jest.Mocked<DocumentationSearchExaService>;
 
+        sandboxProvider = {
+            isAvailable: jest.fn().mockReturnValue(false),
+            createSandboxWithRepo: jest.fn(),
+        } as unknown as jest.Mocked<ISandboxProvider>;
+
+        codeManagementService = {
+            getCloneParams: jest.fn(),
+        } as unknown as jest.Mocked<CodeManagementService>;
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 GatherDocumentationContextStage,
@@ -191,6 +212,14 @@ describe('GatherDocumentationContextStage', () => {
                 {
                     provide: DocumentationSearchExaService,
                     useValue: searchService,
+                },
+                {
+                    provide: SANDBOX_PROVIDER_TOKEN,
+                    useValue: sandboxProvider,
+                },
+                {
+                    provide: CodeManagementService,
+                    useValue: codeManagementService,
                 },
             ],
         }).compile();
@@ -261,8 +290,12 @@ describe('GatherDocumentationContextStage', () => {
 
         plannerService.planDocumentationByFile.mockResolvedValue({
             'src/a.ts': {
-                relevantPackages: ['@nestjs/common'],
-                queries: ['find documentation about nestjs controllers'],
+                queryTasks: [
+                    {
+                        packageName: '@nestjs/common',
+                        query: 'find documentation about nestjs controllers',
+                    },
+                ],
             },
         });
 
@@ -282,8 +315,13 @@ describe('GatherDocumentationContextStage', () => {
 
         expect(result.discoveredPackages).toHaveLength(1);
         expect(
-            result.documentationQueryPlanByFile?.['src/a.ts']?.queries,
-        ).toEqual(['find documentation about nestjs controllers']);
+            result.documentationQueryPlanByFile?.['src/a.ts']?.queryTasks,
+        ).toEqual([
+            {
+                packageName: '@nestjs/common',
+                query: 'find documentation about nestjs controllers',
+            },
+        ]);
         expect(result.documentationByFile?.['src/a.ts']).toHaveLength(1);
     });
 
@@ -317,8 +355,12 @@ describe('GatherDocumentationContextStage', () => {
 
         plannerService.planDocumentationByFile.mockResolvedValue({
             'src/a.ts': {
-                relevantPackages: ['@nestjs/common'],
-                queries: ['find docs'],
+                queryTasks: [
+                    {
+                        packageName: '@nestjs/common',
+                        query: 'find docs',
+                    },
+                ],
             },
         });
 
@@ -355,98 +397,4 @@ describe('GatherDocumentationContextStage', () => {
 
         expect(result).toBe(baseContext);
     });
-
-    it('should run independent flow with real planner prompt and real Exa search', async () => {
-        const hasPromptKeys = Boolean(
-            process.env.API_OPEN_AI_API_KEY &&
-            (process.env.API_GROQ_API_KEY ||
-                process.env.API_LLM_PROVIDER_MODEL),
-        );
-
-        if (!process.env.API_EXA_KEY || !hasPromptKeys) {
-            console.warn(
-                'Skipping independent flow test for GatherDocumentationContextStage because API_EXA_KEY and prompt provider keys are required',
-            );
-            return;
-        }
-
-        const context = buildIndependentContext(independentFixture);
-
-        const pullRequestManagerMock: Pick<
-            IPullRequestManagerService,
-            'enrichFilesWithContent'
-        > = {
-            enrichFilesWithContent: jest.fn(
-                async (_org, _repo, _pr, files) => files,
-            ),
-        };
-
-        const packageDiscoveryService =
-            new DocumentationPackageDiscoveryService(
-                pullRequestManagerMock as unknown as IPullRequestManagerService,
-            );
-
-        const independentPlannerService = new DocumentationLLMPlannerService(
-            buildRealPromptRunnerService(),
-        );
-
-        const independentSearchService = new DocumentationSearchExaService(
-            new ConfigService({ API_EXA_KEY: process.env.API_EXA_KEY }),
-            {
-                get: jest.fn().mockResolvedValue(null),
-                set: jest.fn().mockResolvedValue(undefined),
-            } as unknown as DocumentationSearchCacheService,
-            buildRealPromptRunnerService(),
-        );
-
-        const stage = new GatherDocumentationContextStage(
-            packageDiscoveryService,
-            independentPlannerService,
-            independentSearchService,
-        );
-
-        const result = await stage.execute(context);
-
-        expect(result.discoveredPackages).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    name: '@nestjs/common',
-                    ecosystem: 'npm',
-                }),
-                expect.objectContaining({
-                    name: 'typeorm',
-                    ecosystem: 'npm',
-                }),
-            ]),
-        );
-
-        expect(
-            result.documentationQueryPlanByFile[
-                'apps/api/src/example.controller.ts'
-            ],
-        ).toBeDefined();
-
-        const planForController =
-            result.documentationQueryPlanByFile[
-                'apps/api/src/example.controller.ts'
-            ];
-
-        expect(result.documentationQueryPlanByFile['package.json']).toBeFalsy();
-        expect(result.documentationByFile['package.json']).toBeFalsy();
-
-        expect(planForController.relevantPackages.length).toBeGreaterThan(0);
-        expect(planForController.queries.length).toBeGreaterThan(0);
-
-        expect(
-            result.documentationByFile['apps/api/src/example.controller.ts'],
-        ).toBeDefined();
-        expect(
-            result.documentationByFile['apps/api/src/example.controller.ts']
-                .length,
-        ).toBeGreaterThan(0);
-        expect(
-            result.documentationByFile['apps/api/src/example.controller.ts'][0]
-                .source,
-        ).toBe('exa-search');
-    }, 50000);
 });

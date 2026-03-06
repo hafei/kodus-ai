@@ -98,4 +98,122 @@ describe('DocumentationPackageDiscoveryService', () => {
             ]),
         );
     });
+
+    it('should fetch and keep workspace manifests for monorepo folders', async () => {
+        const context = {
+            organizationAndTeamData: { organizationId: 'o1', teamId: 't1' },
+            repository: { id: 'r1', name: 'repo' },
+            pullRequest: { number: 12 },
+            changedFiles: [
+                {
+                    filename: 'apps/api/src/example.controller.ts',
+                    fileContent: 'export class ExampleController {}',
+                },
+                {
+                    filename: 'apps/web/src/app/page.tsx',
+                    fileContent:
+                        'export default function Page() { return null; }',
+                },
+            ],
+        } as unknown as CodeReviewPipelineContext;
+
+        pullRequestManager.enrichFilesWithContent.mockResolvedValue([
+            {
+                filename: 'apps/api/package.json',
+                fileContent: JSON.stringify({
+                    dependencies: {
+                        '@nestjs/common': '^10.0.0',
+                    },
+                }),
+            },
+            {
+                filename: 'apps/web/package.json',
+                fileContent: JSON.stringify({
+                    dependencies: {
+                        next: '^15.0.0',
+                    },
+                }),
+            },
+        ] as any);
+
+        const result = await service.discoverPackages(context);
+
+        expect(pullRequestManager.enrichFilesWithContent).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+            expect.anything(),
+            expect.arrayContaining([
+                expect.objectContaining({ filename: 'apps/api/package.json' }),
+                expect.objectContaining({ filename: 'apps/web/package.json' }),
+            ]),
+        );
+
+        expect(result.packages).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    name: '@nestjs/common',
+                    ecosystem: 'npm',
+                    sourceFile: 'apps/api/package.json',
+                }),
+                expect.objectContaining({
+                    name: 'next',
+                    ecosystem: 'npm',
+                    sourceFile: 'apps/web/package.json',
+                }),
+            ]),
+        );
+    });
+
+    it('should use sandbox ripgrep output to discover manifest files', async () => {
+        const context = {
+            organizationAndTeamData: { organizationId: 'o1', teamId: 't1' },
+            repository: { id: 'r1', name: 'repo' },
+            pullRequest: { number: 13 },
+            changedFiles: [
+                {
+                    filename: 'apps/api/src/example.controller.ts',
+                    fileContent: 'export class ExampleController {}',
+                },
+            ],
+        } as unknown as CodeReviewPipelineContext;
+
+        const grepMock = jest.fn(
+            async (_pattern: string, _path: string, glob?: string) => {
+                if (glob === '**/package.json') {
+                    return './apps/api/package.json:1:{"dependencies":{"@nestjs/common":"^10.0.0"}}\n';
+                }
+                return '';
+            },
+        );
+
+        pullRequestManager.enrichFilesWithContent.mockResolvedValue([
+            {
+                filename: 'apps/api/package.json',
+                fileContent: JSON.stringify({
+                    dependencies: {
+                        '@nestjs/common': '^10.0.0',
+                    },
+                }),
+            },
+        ] as any);
+
+        const result = await service.discoverPackages(context, {
+            remoteCommands: {
+                grep: grepMock,
+                read: jest.fn(),
+                listDir: jest.fn(),
+            },
+        });
+
+        expect(grepMock).toHaveBeenCalledWith('.', '.', '**/package.json');
+        expect(result.manifestFiles).toContain('apps/api/package.json');
+        expect(result.packages).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    name: '@nestjs/common',
+                    sourceFile: 'apps/api/package.json',
+                }),
+            ]),
+        );
+    });
 });

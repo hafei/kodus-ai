@@ -185,8 +185,12 @@ export interface RepositoryPackageReference {
 }
 
 export interface DocumentationQueryPlanByFile {
-    relevantPackages: string[];
-    queries: string[];
+    queryTasks: DocumentationQueryTask[];
+}
+
+export interface DocumentationQueryTask {
+    packageName: string;
+    query: string;
 }
 
 export interface DocumentationItem {

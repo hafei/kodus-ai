@@ -12,8 +12,6 @@ x-app-service-template: &app-service-defaults
     restart: unless-stopped
     volumes:
         - .:/usr/src/app:delegated
-        - node_modules_cache:/usr/src/app/node_modules
-        - yalc_store:/root/.yalc
     networks:
         - kodus-backend-services
         - shared-network
@@ -63,8 +61,6 @@ services:
         container_name: kodus_worker
         volumes:
             - .:/usr/src/app:delegated
-            - node_modules_cache:/usr/src/app/node_modules:nocopy
-            - yalc_store:/root/.yalc
         ports:
             - '9231:9231'
             - '8001:8001'
@@ -95,8 +91,6 @@ services:
         container_name: kodus_webhooks
         volumes:
             - .:/usr/src/app:delegated
-            - node_modules_cache:/usr/src/app/node_modules:nocopy
-            - yalc_store:/root/.yalc
         ports:
             - '${API_WEBHOOKS_PORT:-3332}:${API_WEBHOOKS_PORT:-3332}'
             - '9232:9232'
@@ -139,8 +133,6 @@ services:
             - ${ENV_FILE:-.env}
         volumes:
             - ./apps/web:/usr/src/app:delegated
-            - web_node_modules_cache:/usr/src/app/node_modules
-            - web_next_cache:/usr/src/app/.next
         restart: unless-stopped
         healthcheck:
             test:

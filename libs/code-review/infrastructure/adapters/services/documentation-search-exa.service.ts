@@ -9,6 +9,7 @@ import { DocumentationSearchCacheService } from '@libs/code-review/infrastructur
 import {
     DocumentationItem,
     DocumentationQueryPlanByFile,
+    DocumentationQueryTask,
 } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -76,7 +77,10 @@ export class DocumentationSearchExaService {
     private async searchForPlan(
         plan: DocumentationQueryPlanByFile,
     ): Promise<DocumentationItem[]> {
-        const queryTasks = this.buildQueryTasks(plan).slice(0, 5);
+        const queryTasks = this.normalizeQueryTasks(plan.queryTasks).slice(
+            0,
+            5,
+        );
 
         if (!queryTasks.length || !this.exaClient) {
             return [];
@@ -200,31 +204,30 @@ export class DocumentationSearchExaService {
         }
     }
 
-    private buildQueryTasks(plan: DocumentationQueryPlanByFile): Array<{
-        query: string;
-        packageName: string;
-    }> {
-        const queries = (plan.queries || []).filter(Boolean);
-        const packages = (plan.relevantPackages || [])
-            .map((pkg) => (pkg || '').trim())
-            .filter(Boolean);
+    private normalizeQueryTasks(
+        tasks: DocumentationQueryTask[],
+    ): DocumentationQueryTask[] {
+        const seen = new Set<string>();
+        const normalizedTasks: DocumentationQueryTask[] = [];
 
-        if (!queries.length) {
-            return [];
+        for (const task of tasks || []) {
+            const packageName = (task?.packageName || '').trim();
+            const query = (task?.query || '').trim();
+
+            if (!packageName || !query) {
+                continue;
+            }
+
+            const key = `${packageName.toLowerCase()}::${query.toLowerCase()}`;
+            if (seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            normalizedTasks.push({ packageName, query });
         }
 
-        // Guarantee that each query is scoped to one package.
-        if (!packages.length) {
-            return queries.map((query) => ({
-                query,
-                packageName: 'framework',
-            }));
-        }
-
-        return queries.map((query, index) => ({
-            query,
-            packageName: packages[index % packages.length],
-        }));
+        return normalizedTasks;
     }
 
     private buildPackageScopedQuery(
@@ -337,8 +340,8 @@ export class DocumentationSearchExaService {
             const response = await this.promptRunnerService
                 .builder()
                 .setProviders({
-                    main: LLMModelProvider.OPENAI_GPT_4O_MINI,
-                    fallback: LLMModelProvider.OPENAI_GPT_4O,
+                    main: LLMModelProvider.GEMINI_3_1_FLASH_LITE_PREVIEW,
+                    fallback: LLMModelProvider.GEMINI_3_FLASH_PREVIEW,
                 })
                 .setParser(ParserType.STRING)
                 .setPayload(params)

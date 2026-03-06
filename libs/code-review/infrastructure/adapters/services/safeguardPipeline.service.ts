@@ -867,8 +867,12 @@ Evidence field in ${params.languageResultPrompt}.`;
 
         const planByFile: Record<string, DocumentationQueryPlanByFile> = {
             safeguard: {
-                relevantPackages: [packageForPlan],
-                queries: [normalizedQuery],
+                queryTasks: [
+                    {
+                        packageName: packageForPlan,
+                        query: normalizedQuery,
+                    },
+                ],
             },
         };
 

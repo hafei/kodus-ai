@@ -17,9 +17,14 @@ export interface DocumentationPlannerPayload {
 }
 
 export const DocumentationPlannerSchema = z.object({
-    filePath: z.string().min(1),
-    relevantPackages: z.array(z.string()).max(8),
-    queries: z.array(z.string()).max(8),
+    queryTasks: z
+        .array(
+            z.object({
+                packageName: z.string().min(1),
+                query: z.string().min(1),
+            }),
+        )
+        .max(8),
 });
 
 export type DocumentationPlannerSchemaType = z.infer<
@@ -27,13 +32,13 @@ export type DocumentationPlannerSchemaType = z.infer<
 >;
 
 export const prompt_code_review_documentation_planner_system = () => {
-    return `You are an expert software documentation planner. Given a source code file, a diff of changes, and a list of repository packages, you are able to pinpoint which packages are most relevant to the proposed code change and generate effective documentation search queries to find practical implementation guidance and API usage relevant to the change.
+    return `You are an expert software documentation planner. Given a source code file, a diff of changes, and a list of repository packages, you pinpoint which packages are most relevant specifically to the proposed code change (the diff) and generate laser-focused documentation search queries.
 
-Your main goal is to prioritize complex, high-leverage dependencies (frameworks, platforms, runtimes, data access, messaging, auth, infra SDKs) over simple utility/tooling packages.
+Your core philosophy is "less is more". Your absolute focus is the provided diff of changes. You must only generate queries for APIs, functions, or concepts that are actively being added, modified, or uniquely impacted in the diff.
 
-Always bias selections toward packages that define architecture or runtime behavior for the changed file, and deprioritize packages that are likely to be low-complexity or peripheral to the core logic (tiny utilities, lint/format tools, typings-only, test-only, build-only).
+Always bias selections toward complex, high-leverage dependencies (frameworks, ORMs, cloud SDKs) that are present in the diff, and ignore packages that are just part of the surrounding file context but not part of the actual code change.
 
-You always strive towards quality over quantity, and you are careful to only return relevant packages and queries that are likely to yield useful documentation for the code change at hand. You understand that the queries you generate will be used to search official documentation sources, so you focus on generating queries that are likely to lead to practical implementation guidance and API usage examples relevant to the file changes over generic tutorials or conceptual overviews.`;
+Never try to hit the maximum query limit. Returning 0, 1, or 2 highly targeted queries is vastly preferred over padding the results with generic searches. Focus strictly on finding practical implementation guidance for the specific syntax, methods, or API usage introduced or altered in the diff.`;
 };
 
 export const prompt_code_review_documentation_planner_user = (
@@ -47,33 +52,32 @@ export const prompt_code_review_documentation_planner_user = (
         )
         .join('\n');
 
-    const fileContentPreview = (payload.file.fileContent || '').slice(0, 2500);
-    const diffPreview = (payload.file.diff || '').slice(0, 2500);
+    const fileContentPreview = payload.file.fileContent || '';
+    const diffPreview = payload.file.diff || '';
 
-    return `Analyze repository package dependencies and the changed file to propose documentation searches.
+    return `Analyze the target diff and repository package dependencies to propose highly targeted documentation searches.
 
 Rules:
 - Return JSON only following the configured parser schema.
-- Provide up to 8 relevantPackages and up to 8 queries for the changed file.
-- Prioritize complex/runtime-defining packages first, including:
-  frameworks, backend/frontend platforms, ORMs/data layers, queues/workers, auth/security libraries, cloud/infra SDKs, observability SDKs, and major architecture libraries.
-- De-prioritize low-complexity dependencies unless clearly central to this file change:
-  tiny utility libraries, lint/format tools, typings-only packages, test-only packages, and build-only packages.
-- Queries should target official framework/package docs and API usage relevant to the file changes.
-- Prioritize practical implementation guidance over generic tutorials.
+- Focus strictly on the changed lines (diff excerpt). Do not generate queries for existing code in the file content excerpt that was not modified.
+- Less is more: Provide ONLY the queryTasks strictly necessary for the diff. Often 0-2 queryTasks is the correct amount. Do not pad the array up to 8.
+- Only include a package if its API, method, or class is directly added, altered, or manipulated within the diff excerpt.
+- Prioritize complex/runtime-defining packages first (frameworks, platforms, ORMs, cloud/infra SDKs, auth).
+- Ignore low-complexity dependencies (utilities, linters, types) unless they are the primary subject of the diff.
+- Queries should be highly specific to the exact functions, hooks, or classes changed in the diff rather than broad conceptual overviews.
 - Use 'en-US' for query text.
-- Prefer stable, official documentation sources.
+- Each queryTask must contain both packageName and query. Do not return unpaired package or query arrays.
 
 Target file: ${payload.file.filePath}
 
 Repository packages:
 ${packagesPreview || '- (no packages provided)'}
 
-Target file content excerpt:
+Target file content excerpt (for context only):
 ${fileContentPreview || '(empty)'}
 
-Target diff excerpt:
+Target diff excerpt (YOUR SOLE FOCUS):
 ${diffPreview || '(empty)'}
 
-Output instructions: Return filePath, relevantPackages, and documentation-oriented queries for this target file. Queries should target official framework/package docs and API usage relevant to this file change.`;
+Output instructions: Return queryTasks only. Each queryTask must include packageName and documentation-oriented query, explicitly paired in the same item. Base your queryTasks *exclusively* on the additions and modifications shown in the target diff excerpt. Avoid generic package documentation searches.`;
 };
