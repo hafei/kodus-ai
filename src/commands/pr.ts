@@ -264,7 +264,7 @@ async function getLocalDiffForBusinessValidation(
         return gitService.getDiffForFiles(files);
     }
 
-    if (hasBranch) {
+    if (options.branch !== undefined) {
         if (verbose) {
             cliDebug(
                 chalk.dim(
@@ -275,7 +275,7 @@ async function getLocalDiffForBusinessValidation(
         return gitService.getDiffForBranch(options.branch);
     }
 
-    if (hasCommit) {
+    if (options.commit !== undefined) {
         if (verbose) {
             cliDebug(
                 chalk.dim(
