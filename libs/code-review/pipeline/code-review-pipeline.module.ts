@@ -49,6 +49,7 @@ import { PlatformModule } from '@libs/platform/modules/platform.module';
 import { ASTContentFormatterService } from '../infrastructure/adapters/services/astContentFormatter.service';
 import { DocumentationLLMPlannerService } from '../infrastructure/adapters/services/documentation-llm-planner.service';
 import { DocumentationPackageDiscoveryService } from '../infrastructure/adapters/services/documentation-package-discovery.service';
+import { DocumentationSearchContext7Service } from '../infrastructure/adapters/services/documentation-search-context7.service';
 import { DocumentationSearchExaService } from '../infrastructure/adapters/services/documentation-search-exa.service';
 import { CodeReviewPipelineObserver } from '../infrastructure/observers/code-review-pipeline.observer';
 import { CodebaseModule } from '../modules/codebase.module';
@@ -115,6 +116,7 @@ import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.stra
         ValidateSuggestionsStage,
         DocumentationPackageDiscoveryService,
         DocumentationLLMPlannerService,
+        DocumentationSearchContext7Service,
         DocumentationSearchExaService,
 
         // EE Stages

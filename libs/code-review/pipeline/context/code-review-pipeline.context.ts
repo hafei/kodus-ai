@@ -194,5 +194,5 @@ export interface DocumentationItem {
     title: string;
     url: string;
     snippet: string;
-    source: 'exa-search';
+    source: 'exa-search' | 'context7-search';
 }
