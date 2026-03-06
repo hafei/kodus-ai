@@ -98,8 +98,7 @@ export const NavMenu = () => {
                 href: "/cockpit",
                 visible:
                     subscription.license.valid &&
-                    subscription.license.subscriptionStatus !== "self-hosted" &&
-                    subscription.license.subscriptionStatus !== "licensed-self-hosted",
+                    subscription.license.subscriptionStatus !== "self-hosted",
                 icon: <GaugeIcon className="size-6" />,
             },
 

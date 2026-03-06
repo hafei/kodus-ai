@@ -22,7 +22,8 @@ export type PlanType =
     | "enterprise_byok"
     | "enterprise_byok_annual"
     | "enterprise_managed"
-    | "enterprise_managed_annual";
+    | "enterprise_managed_annual"
+    | "enterprise";
 
 export type OrganizationLicenseActive = {
     valid: true;
@@ -39,7 +40,7 @@ export type OrganizationLicenseSelfHosted = {
 export type OrganizationLicenseLicensedSelfHosted = {
     valid: true;
     subscriptionStatus: "licensed-self-hosted";
-    planType: string;
+    planType: PlanType;
     numberOfLicenses: number;
     expiresAt?: string;
 };

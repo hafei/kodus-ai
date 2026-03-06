@@ -10,9 +10,7 @@ import {
 import { FileReviewContextPreparation as CoreFileReviewContextPreparation } from '@libs/code-review/infrastructure/adapters/services/code-analysis/file/noop-file-review.service';
 import { FileReviewContextPreparation } from '@libs/ee/codeReview/fileReviewContextPreparation/file-review-context-preparation.service';
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/infrastructure/adapters/services/llmAnalysis.service';
-import { AST_ANALYSIS_SERVICE_TOKEN } from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
-import { environment } from '@libs/ee/configs/environment';
 
 export const FILE_REVIEW_CONTEXT_PREPARATION_PROVIDER: Provider = {
     provide: FILE_REVIEW_CONTEXT_PREPARATION_TOKEN,
@@ -26,6 +24,5 @@ export const FILE_REVIEW_CONTEXT_PREPARATION_PROVIDER: Provider = {
     inject: [
         CoreFileReviewContextPreparation,
         LLM_ANALYSIS_SERVICE_TOKEN,
-        AST_ANALYSIS_SERVICE_TOKEN,
     ],
 };

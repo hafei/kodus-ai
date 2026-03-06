@@ -40,7 +40,7 @@ export const SubscriptionProvider = ({
     // Skip provider only for unlicensed self-hosted (uses context default)
     if (
         isSelfHosted &&
-        license.subscriptionStatus !== "licensed-self-hosted"
+        license.subscriptionStatus === "self-hosted"
     ) {
         return children;
     }
