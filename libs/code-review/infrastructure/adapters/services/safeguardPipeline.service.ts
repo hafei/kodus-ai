@@ -224,9 +224,48 @@ export class SafeguardPipelineService {
                     context: SafeguardPipelineService.name,
                 });
             } else if (toVerify.length > 0 && !remoteCommands) {
-                // No sandbox available — discard all "verify" suggestions (safe default)
+                // No sandbox available — fallback to prompt-only verification
+                const fallbackStart = Date.now();
+                let fallbackKept = 0;
+                let fallbackDiscarded = 0;
+
+                for (const { suggestion, features } of toVerify) {
+                    try {
+                        const result = await this.verifyWithPromptOnly(
+                            suggestion,
+                            features,
+                            params,
+                            promptRunner,
+                        );
+
+                        if (result.keep) {
+                            if (features.improvedCode_is_correct === false) {
+                                kept.push({ ...suggestion, improvedCode: null });
+                            } else {
+                                kept.push(suggestion);
+                            }
+                            fallbackKept++;
+                        } else {
+                            fallbackDiscarded++;
+                        }
+                    } catch (error) {
+                        this.logger.warn({
+                            message: `Prompt-only verification failed for suggestion ${suggestion.id}, keeping (safe default)`,
+                            context: SafeguardPipelineService.name,
+                            error,
+                        });
+                        if (features.improvedCode_is_correct === false) {
+                            kept.push({ ...suggestion, improvedCode: null });
+                        } else {
+                            kept.push(suggestion);
+                        }
+                        fallbackKept++;
+                    }
+                }
+
+                const fallbackMs = Date.now() - fallbackStart;
                 this.logger.log({
-                    message: `[TIMING] PR#${prNumber} ${fileLabel} — No E2B sandbox available, discarding ${toVerify.length} ambiguous suggestions`,
+                    message: `[TIMING] PR#${prNumber} ${fileLabel} — Prompt-only Verification (no sandbox): ${(fallbackMs / 1000).toFixed(1)}s (${toVerify.length} suggestions, ${fallbackKept} kept, ${fallbackDiscarded} discarded)`,
                     context: SafeguardPipelineService.name,
                 });
             }
@@ -366,6 +405,108 @@ export class SafeguardPipelineService {
     }
 
     /**
+     * Prompt-only fallback when no sandbox is available.
+     * Single LLM call using only the context already in hand
+     * (diff, file content, cross-file snippets).
+     */
+    private async verifyWithPromptOnly(
+        suggestion: any,
+        features: SafeguardFeatureSet,
+        params: SafeguardPipelineParams,
+        promptRunner: BYOKPromptRunnerService,
+    ): Promise<{ keep: boolean; evidence: string }> {
+        const claimedDefects = STRUCTURAL_DEFECT_FEATURES
+            .filter((f) => features[f])
+            .join(', ');
+
+        const schema = z.object({
+            verdict: z.boolean(),
+            evidence: z.string(),
+        });
+
+        const systemPrompt = `You are a code review verification assistant. A suggestion was flagged as ambiguous by triage and needs a final decision.
+
+You do NOT have access to the full codebase — only the diff, the file content, and any cross-file snippets provided below. Decide based ONLY on what you can see.
+
+## Rules
+- If the defect is clearly visible in the provided context → verdict: true (keep)
+- If the defect requires seeing code NOT shown here to confirm → verdict: false (discard — insufficient evidence)
+- If the suggestion is speculative ("what if...") without proof in the visible code → verdict: false
+- Default to false (discard) when uncertain — reducing noise is more important than catching every edge case
+
+## Suggestion Under Review
+**File**: ${suggestion.filePath || params.file?.filename || 'unknown'}
+**Claimed defect**: ${claimedDefects}
+**Suggestion**: ${suggestion.suggestionContent || ''}
+**Code in question**:
+\`\`\`
+${suggestion.existingCode || ''}
+\`\`\`
+
+Respond with JSON only: {"verdict": true/false, "evidence": "brief reason"}
+Evidence field in ${params.languageResultPrompt}.`;
+
+        const userPrompt = this.buildUserPrompt({
+            fileContent: params.file?.fileContent,
+            relevantContent: params.relevantContent,
+            patchWithLinesStr: params.codeDiff,
+            filePath: params.file?.filename,
+            suggestions: [suggestion],
+            crossFileSnippets: params.crossFileSnippets,
+            memories: params.memories,
+            externalReferences: params.externalReferences,
+            externalReferenceErrors: params.externalReferenceErrors,
+        });
+
+        const runName = 'safeguardPromptOnlyVerification';
+
+        const { result } = await this.observability.runLLMInSpan({
+            spanName: `${SafeguardPipelineService.name}::${runName}`,
+            runName,
+            attrs: {
+                organizationId: params.organizationAndTeamData?.organizationId,
+                prNumber: params.prNumber,
+                suggestionId: suggestion.id,
+            },
+            exec: async (callbacks) => {
+                return await promptRunner
+                    .builder()
+                    .setParser(ParserType.ZOD, schema as any, {
+                        provider: LLMModelProvider.OPENAI_GPT_4O_MINI,
+                        fallbackProvider: LLMModelProvider.OPENAI_GPT_4O,
+                    })
+                    .setLLMJsonMode(true)
+                    .addPrompt({
+                        prompt: systemPrompt,
+                        role: PromptRole.SYSTEM,
+                    })
+                    .addPrompt({
+                        prompt: userPrompt,
+                        role: PromptRole.USER,
+                    })
+                    .addMetadata({
+                        organizationId: params.organizationAndTeamData?.organizationId,
+                        teamId: params.organizationAndTeamData?.teamId,
+                        pullRequestId: params.prNumber,
+                        runName,
+                    })
+                    .setTemperature(0)
+                    .addCallbacks(callbacks)
+                    .setRunName(runName)
+                    .execute();
+            },
+        });
+
+        const parsed = schema.safeParse(result);
+        if (!parsed.success) {
+            // Parse failed — keep suggestion (safe default)
+            return { keep: true, evidence: 'prompt-only parse failed, keeping as safe default' };
+        }
+
+        return { keep: parsed.data.verdict, evidence: parsed.data.evidence };
+    }
+
+    /**
      * Step 3: Multi-turn agent loop that searches the codebase to verify a suggestion.
      */
     private async verifyWithAgent(
@@ -484,8 +625,16 @@ export class SafeguardPipelineService {
                     }
                 } else if (parsed.tool === 'read') {
                     toolResult = await remoteCommands.read(parsed.path || '', 0, 0);
+                    const MAX_READ_LENGTH = 20000;
+                    if (toolResult.length > MAX_READ_LENGTH) {
+                        toolResult = toolResult.substring(0, MAX_READ_LENGTH) + `\n... (file truncated)`;
+                    }
                 } else if (parsed.tool === 'list') {
                     toolResult = await remoteCommands.listDir(parsed.path || '.', 2);
+                    const MAX_LIST_LENGTH = 10000;
+                    if (toolResult.length > MAX_LIST_LENGTH) {
+                        toolResult = toolResult.substring(0, MAX_LIST_LENGTH) + `\n... (listing truncated)`;
+                    }
                 } else {
                     toolResult = `Unknown tool: ${parsed.tool}`;
                 }

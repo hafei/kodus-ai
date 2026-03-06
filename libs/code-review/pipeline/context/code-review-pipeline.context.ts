@@ -2,11 +2,9 @@ import type { ContextEvidence, ContextLayer, ContextPack } from '@kodus/flow';
 import { IExternalPromptContext } from '@libs/ai-engine/domain/prompt/interfaces/promptExternalReference.interface';
 import { ContextAugmentationsMap } from '@libs/ai-engine/infrastructure/adapters/services/context/interfaces/code-review-context-pack.interface';
 import { AutomationExecutionEntity } from '@libs/automation/domain/automationExecution/entities/automation-execution.entity';
+import { SandboxInstance } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
-import {
-    CollectCrossFileContextsResult,
-    RemoteCommands,
-} from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
+import { CollectCrossFileContextsResult } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { PlatformType } from '@libs/core/domain/enums';
 import {
     AnalysisContext,
@@ -168,11 +166,8 @@ export interface CodeReviewPipelineContext extends PipelineContext {
     documentationQueryPlanByFile?: Record<string, DocumentationQueryPlanByFile>;
     documentationByFile?: Record<string, DocumentationItem[]>;
 
-    /** E2B sandbox handle kept alive for safeguard agent verification */
-    sandboxHandle?: {
-        remoteCommands: RemoteCommands;
-        cleanup: () => Promise<void>;
-    };
+    /** Sandbox handle kept alive for safeguard agent verification */
+    sandboxHandle?: SandboxInstance;
 
     correlationId?: string;
 }

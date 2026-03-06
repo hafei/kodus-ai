@@ -175,14 +175,13 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 );
             });
         } finally {
-            // Cleanup E2B sandbox after all files are processed
+            // Cleanup sandbox after all files are processed
             if (context.sandboxHandle?.cleanup) {
                 try {
                     await context.sandboxHandle.cleanup();
                 } catch (cleanupErr) {
                     this.logger.warn({
-                        message:
-                            'E2B sandbox cleanup failed after file analysis',
+                        message: 'Sandbox cleanup failed after file analysis',
                         context: this.stageName,
                         error: cleanupErr,
                     });
@@ -1206,11 +1205,10 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             getDataPipelineKodyFineTunning?.discardedSuggestions;
 
         const discardedSuggestionsByKodyFineTuning = discardedSuggestions.map(
-            (suggestion) => {
-                suggestion.priorityStatus =
-                    PriorityStatus.DISCARDED_BY_KODY_FINE_TUNING;
-                return suggestion;
-            },
+            (suggestion) => ({
+                ...suggestion,
+                priorityStatus: PriorityStatus.DISCARDED_BY_KODY_FINE_TUNING,
+            }),
         );
 
         return {
