@@ -20,7 +20,7 @@ import {
 // Ed25519 public key used to verify self-hosted license JWTs.
 // This is the public half of the keypair held by Kodus for signing licenses.
 const LICENSE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAKBVmqmGS1j8rcDWJ11t5hR8d/qSRMFliL3UvQCpIGn4=
+MCowBQYDK2VwAyEAig1JYVU3PCPOY18JGKsMdcoPeDMrGRCRb5XPZeLniZc=
 -----END PUBLIC KEY-----`;
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
