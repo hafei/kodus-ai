@@ -296,10 +296,15 @@ export class E2BSandboxService implements ISandboxProvider {
             ): Promise<string> => {
                 const fullPath = this.resolvePath(path);
                 const escapedPath = fullPath.replace(/'/g, "'\\''");
-                const result = await sandbox.commands.run(
-                    `sed -n '${start},${end}p' '${escapedPath}'`,
-                    { timeoutMs: 10_000 },
-                );
+                // When start=0 and end=0, read the entire file (cat).
+                // GNU sed rejects address 0 so we must avoid `sed -n '0,0p'`.
+                const cmd =
+                    start === 0 && end === 0
+                        ? `cat '${escapedPath}'`
+                        : `sed -n '${start},${end}p' '${escapedPath}'`;
+                const result = await sandbox.commands.run(cmd, {
+                    timeoutMs: 10_000,
+                });
                 return result.stdout;
             },
 
