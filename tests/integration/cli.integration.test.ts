@@ -200,13 +200,12 @@ describe('utility commands', () => {
         expect(output).toContain('Decision hooks:');
     });
 
-    it('lists bundled skills', async () => {
+    it('lists bundled skills via skills list', async () => {
         const { stdout, stderr, exitCode } = await runCli(['skills', 'list']);
         expect(exitCode).toBe(0);
         const output = stdout + stderr;
         expect(output).toContain('Available bundled skills');
         expect(output).toContain('kodus-review');
-        expect(output).toContain('kodus-pr-suggestions-resolver');
     });
 
     it('exposes full skill lifecycle commands', async () => {

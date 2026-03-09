@@ -235,6 +235,7 @@ export async function showBanner() {
         'kodus hook install - install pre-push review hook',
         'kodus skills list - list bundled skills',
         'kodus skills resync - re-sync bundled skills',
+        'kodus update - update Kodus CLI version',
         'kodus --help - see all commands and options',
         '',
         '──────────────────────────────',

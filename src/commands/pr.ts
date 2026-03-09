@@ -8,7 +8,6 @@ import { terminalFormatter } from '../formatters/terminal.js';
 import { jsonFormatter } from '../formatters/json.js';
 import { markdownFormatter } from '../formatters/markdown.js';
 import { promptFormatter } from '../formatters/prompt.js';
-import { resolveBusinessValidationMode } from './pr.business-validation-mode.js';
 import type {
     GlobalOptions,
     IssueCategory,
@@ -278,32 +277,53 @@ prCommand
             const globalOpts = cmd.optsWithGlobals() as GlobalOptions;
 
             try {
-                const prNumber =
-                    options.prNumber !== undefined
-                        ? Number(options.prNumber)
-                        : undefined;
-
-                if (options.prNumber !== undefined && Number.isNaN(prNumber)) {
-                    throw new Error('Invalid --pr-number value');
+                if (options.taskUrl && options.taskId) {
+                    throw new Error('Provide only one of --task-url or --task-id.');
                 }
 
-                const mode = resolveBusinessValidationMode({
-                    files,
-                    prUrl: options.prUrl,
-                    prNumber,
-                    repoId: options.repoId,
-                    repo: options.repo,
-                    taskUrl: options.taskUrl,
-                    taskId: options.taskId,
-                    staged: options.staged,
-                    commit: options.commit,
-                    branch: options.branch,
-                });
+                const normalizedPrUrl = options.prUrl
+                    ? validateHttpUrl(options.prUrl, '--pr-url')
+                    : undefined;
+                const prNumber = parseOptionalNumber(
+                    options.prNumber,
+                    '--pr-number',
+                );
+                const hasPrContext =
+                    !!normalizedPrUrl || prNumber !== undefined;
+                const hasLocalScopeOptions =
+                    (files?.length ?? 0) > 0 ||
+                    !!options.staged ||
+                    !!options.commit ||
+                    !!options.branch;
+
+                if (normalizedPrUrl && prNumber !== undefined) {
+                    throw new Error('Provide only one of --pr-url or --pr-number.');
+                }
+
+                if (
+                    prNumber !== undefined &&
+                    !options.repoId &&
+                    !options.repo
+                ) {
+                    throw new Error(
+                        'When using --pr-number, provide --repo-id or --repo.',
+                    );
+                }
+
+                if (hasPrContext && hasLocalScopeOptions) {
+                    throw new Error(
+                        'Local diff scope options (--staged/--commit/--branch/[files]) cannot be used with --pr-url/--pr-number.',
+                    );
+                }
+
+                const mode: 'pull_request' | 'local_diff' = hasPrContext
+                    ? 'pull_request'
+                    : 'local_diff';
 
                 let diff: string | undefined;
                 let repository = options.repo;
 
-                if (mode.mode === 'local_diff') {
+                if (mode === 'local_diff') {
                     diff = await getLocalDiffForBusinessValidation(
                         files ?? [],
                         options,
@@ -312,11 +332,11 @@ prCommand
 
                     if (!diff.trim()) {
                         throw new Error(
-                            'No local changes found for the selected scope. Stage files or pick another scope (--branch/--commit/[files]).',
+                            'No local changes found for the selected scope.',
                         );
                     }
 
-                    if (!options.repo && !options.repoId) {
+                    if (!repository && !options.repoId) {
                         const orgRepo = await gitService.extractOrgRepo();
                         if (orgRepo) {
                             repository = `${orgRepo.org}/${orgRepo.repo}`;
@@ -325,17 +345,13 @@ prCommand
                 }
 
                 const payload = {
-                    prUrl:
-                        mode.mode === 'pull_request'
-                            ? options.prUrl
-                            : undefined,
-                    prNumber:
-                        mode.mode === 'pull_request' ? prNumber : undefined,
+                    prUrl: mode === 'pull_request' ? normalizedPrUrl : undefined,
+                    prNumber: mode === 'pull_request' ? prNumber : undefined,
                     repositoryId: options.repoId,
                     repository,
                     taskUrl: options.taskUrl,
                     taskId: options.taskId,
-                    diff,
+                    diff: mode === 'local_diff' ? diff : undefined,
                 };
 
                 if (options.dryRun) {
@@ -361,13 +377,15 @@ prCommand
                         chalk.green('Business validation completed.'),
                     );
                 }
+                const responseMode = response.mode ?? mode;
                 cliInfo(
                     chalk.dim(
-                        `Mode: ${response.mode === 'pull_request' ? 'pull request' : 'local diff'}`,
+                        `Mode: ${responseMode === 'pull_request' ? 'pull request' : 'local diff'}`,
                     ),
                 );
+
                 if (
-                    response.mode === 'pull_request' &&
+                    responseMode === 'pull_request' &&
                     response.prNumber !== undefined
                 ) {
                     const repositoryLabel = response.repositoryName
@@ -379,9 +397,7 @@ prCommand
                         ),
                     );
                 } else if (response.repositoryName) {
-                    cliInfo(
-                        chalk.dim(`Repository: ${response.repositoryName}`),
-                    );
+                    cliInfo(chalk.dim(`Repository: ${response.repositoryName}`));
                 }
                 if (response.taskReference) {
                     cliInfo(chalk.dim(`Task: ${response.taskReference}`));
@@ -412,7 +428,21 @@ async function getLocalDiffForBusinessValidation(
 ): Promise<string> {
     gitService.setVerbose(!!verbose);
 
-    if (files.length > 0) {
+    const hasFiles = files.length > 0;
+    const hasBranch = !!options.branch;
+    const hasCommit = !!options.commit;
+    const hasStaged = !!options.staged;
+    const selectedScopes = [hasFiles, hasBranch, hasCommit, hasStaged].filter(
+        Boolean,
+    ).length;
+
+    if (selectedScopes > 1) {
+        throw new Error(
+            'Use only one local diff scope: [files], --staged, --branch, or --commit.',
+        );
+    }
+
+    if (hasFiles) {
         if (verbose) {
             cliDebug(
                 chalk.dim(
@@ -423,7 +453,7 @@ async function getLocalDiffForBusinessValidation(
         return gitService.getDiffForFiles(files);
     }
 
-    if (options.branch) {
+    if (options.branch !== undefined) {
         if (verbose) {
             cliDebug(
                 chalk.dim(
@@ -434,7 +464,7 @@ async function getLocalDiffForBusinessValidation(
         return gitService.getDiffForBranch(options.branch);
     }
 
-    if (options.commit) {
+    if (options.commit !== undefined) {
         if (verbose) {
             cliDebug(
                 chalk.dim(
@@ -445,16 +475,17 @@ async function getLocalDiffForBusinessValidation(
         return gitService.getDiffForCommit(options.commit);
     }
 
-    if (options.staged) {
+    if (hasStaged) {
         if (verbose) {
             cliDebug(chalk.dim('[verbose] Getting local staged diff'));
         }
         return gitService.getStagedDiff();
     }
 
-    throw new Error(
-        'No local diff scope provided. Use --staged, --branch, --commit, or [files].',
-    );
+    if (verbose) {
+        cliDebug(chalk.dim('[verbose] Getting local working tree diff'));
+    }
+    return gitService.getWorkingTreeDiff();
 }
 
 function formatOutput(result: ReviewResult, format: OutputFormat): string {
