@@ -10,10 +10,8 @@ import {
 import { IgnoreBotsUseCase } from '@libs/organization/application/use-cases/organizationParameters/ignore-bots.use-case';
 import { AuthMode } from '@libs/platform/domain/platformIntegrations/enums/codeManagement/authMode.enum';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 import { createLogger } from '@kodus/flow';
 
 @Injectable()
@@ -23,8 +21,7 @@ export class CreateIntegrationUseCase implements IUseCase {
     constructor(
         private readonly codeManagementService: CodeManagementService,
 
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
 
         @Inject(REQUEST)
         private readonly request: Request & {
@@ -76,18 +73,15 @@ export class CreateIntegrationUseCase implements IUseCase {
                 });
             });
 
-        try {
-            // Buscar a auth integration criada com os dados corretos de organização/team
-            const authIntegration = await this.authIntegrationService.findOne({
-                organization: {
-                    uuid: organizationAndTeamData.organizationId,
-                },
-                team: {
-                    uuid: organizationAndTeamData.teamId,
-                },
-            });
-
-            await this.codeReviewSettingsLogService.registerIntegrationLog({
+        this.authIntegrationService.findOne({
+            organization: {
+                uuid: organizationAndTeamData.organizationId,
+            },
+            team: {
+                uuid: organizationAndTeamData.teamId,
+            },
+        }).then((authIntegration) => {
+            this.eventEmitter.emit(AuditLogEvents.INTEGRATION, {
                 organizationAndTeamData: {
                     organizationId: organizationAndTeamData.organizationId,
                     teamId: organizationAndTeamData.teamId,
@@ -104,16 +98,16 @@ export class CreateIntegrationUseCase implements IUseCase {
                 },
                 actionType: ActionType.CREATE,
             });
-        } catch (error) {
+        }).catch((error) => {
             this.logger.error({
-                message: 'Error saving code review settings log',
+                message: 'Error fetching auth integration for audit log',
                 error: error,
                 context: CreateIntegrationUseCase.name,
                 metadata: {
                     organizationAndTeamData: organizationAndTeamData,
                 },
             });
-        }
+        });
 
         return result;
     }

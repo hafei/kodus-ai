@@ -21,6 +21,7 @@ import { PullRequestMessagesLogHandler } from './infrastructure/adapters/service
 import { RepositoriesLogHandler } from './infrastructure/adapters/services/repositoriesLog.handler';
 import { UnifiedLogHandler } from './infrastructure/adapters/services/unifiedLog.handler';
 import { UserStatusLogHandler } from './infrastructure/adapters/services/userStatusLog.handler';
+import { AuditLogListener } from './listeners/audit-log.listener';
 
 @Module({
     imports: [
@@ -52,6 +53,7 @@ import { UserStatusLogHandler } from './infrastructure/adapters/services/userSta
         UserStatusLogHandler,
         RegisterUserStatusLogUseCase,
         FindCodeReviewSettingsLogsUseCase,
+        AuditLogListener,
     ],
     exports: [
         CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,

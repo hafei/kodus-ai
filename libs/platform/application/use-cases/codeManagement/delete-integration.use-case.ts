@@ -12,10 +12,8 @@ import { AuthIntegrationService } from '@libs/integrations/infrastructure/adapte
 import { IntegrationService } from '@libs/integrations/infrastructure/adapters/services/integration.service';
 import { IntegrationConfigService } from '@libs/integrations/infrastructure/adapters/services/integrationConfig.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 
 @Injectable()
 export class DeleteIntegrationUseCase {
@@ -28,8 +26,7 @@ export class DeleteIntegrationUseCase {
         private readonly authIntegrationService: AuthIntegrationService,
         @Inject(INTEGRATION_CONFIG_SERVICE_TOKEN)
         private readonly integrationConfigService: IntegrationConfigService,
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
         @Inject(REQUEST)
         private readonly request: Request & {
             user: {
@@ -72,32 +69,18 @@ export class DeleteIntegrationUseCase {
             await this.integrationConfigService.delete(integrationConfig.uuid);
         }
 
-        try {
-            this.codeReviewSettingsLogService.registerIntegrationLog({
-                organizationAndTeamData: {
-                    organizationId: params.organizationId,
-                    teamId: params.teamId,
-                },
-                userInfo: {
-                    userId: this.request.user.uuid,
-                    userEmail: this.request.user.email,
-                },
-                integration,
-                actionType: ActionType.DELETE,
-            });
-        } catch (error) {
-            this.logger.error({
-                message: 'Error saving code review settings log',
-                error: error,
-                context: DeleteIntegrationUseCase.name,
-                metadata: {
-                    organizationAndTeamData: {
-                        organizationId: this.request.user.organization.uuid,
-                        teamId: params.teamId,
-                    },
-                },
-            });
-        }
+        this.eventEmitter.emit(AuditLogEvents.INTEGRATION, {
+            organizationAndTeamData: {
+                organizationId: params.organizationId,
+                teamId: params.teamId,
+            },
+            userInfo: {
+                userId: this.request.user.uuid,
+                userEmail: this.request.user.email,
+            },
+            integration,
+            actionType: ActionType.DELETE,
+        });
 
         await this.integrationService.delete(integration.uuid);
 

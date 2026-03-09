@@ -4,7 +4,6 @@ import { ParametersModule } from '@libs/organization/modules/parameters.module';
 import { OrganizationParametersModule } from '@libs/organization/modules/organizationParameters.module';
 import { CodebaseModule } from '@libs/code-review/modules/codebase.module';
 import { PlatformModule } from '@libs/platform/modules/platform.module';
-import { CodeReviewSettingsLogModule } from '@libs/ee/codeReviewSettingsLog/codeReviewSettingsLog.module';
 import { KodyRulesModule } from '@libs/kodyRules/modules/kodyRules.module';
 import { PromptsModule } from '@libs/code-review/modules/prompts.module';
 import { ContextReferenceModule } from '@libs/code-review/modules/contextReference.module';
@@ -28,7 +27,6 @@ import { PreviewPrSummaryUseCase } from '../application/use-cases/summary/previe
         OrganizationParametersModule,
         forwardRef(() => CodebaseModule),
         forwardRef(() => PlatformModule),
-        forwardRef(() => CodeReviewSettingsLogModule),
         forwardRef(() => KodyRulesModule),
         forwardRef(() => PromptsModule),
         forwardRef(() => ContextReferenceModule),
