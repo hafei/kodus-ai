@@ -168,19 +168,24 @@ export class ClassifySessionUseCase {
                         for (const tc of p.toolCalls) {
                             if (typeof tc === 'string') {
                                 aggregated.toolCalls.push(tc);
-                            } else if (tc?.tool) {
+                            } else if (tc?.toolName || tc?.tool) {
+                                const name = tc.toolName ?? tc.tool;
                                 aggregated.toolCalls.push(
                                     tc.summary
-                                        ? `${tc.tool}: ${tc.summary}`
-                                        : tc.tool,
+                                        ? `${name}: ${tc.summary}`
+                                        : name,
                                 );
                             }
                         }
                     }
                     if (Array.isArray(p.filesModified)) {
-                        aggregated.filesModified.push(
-                            ...(p.filesModified as string[]),
-                        );
+                        for (const fm of p.filesModified) {
+                            if (typeof fm === 'string') {
+                                aggregated.filesModified.push(fm);
+                            } else if (fm?.path) {
+                                aggregated.filesModified.push(fm.path);
+                            }
+                        }
                     }
                     if (Array.isArray(p.filesRead)) {
                         aggregated.filesRead.push(

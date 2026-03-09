@@ -64,7 +64,7 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         const result = await controller.ingestSessionEvent(
-            body,
+            { body },
             'kodus_test_key',
             undefined,
             undefined,
@@ -98,7 +98,7 @@ describe('CliReviewController.ingestSessionEvent', () => {
             customField: 42,
         };
 
-        await controller.ingestSessionEvent(body, 'kodus_key', undefined, undefined);
+        await controller.ingestSessionEvent({ body }, 'kodus_key', undefined, undefined);
 
         expect(ingestUseCase.execute).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -121,7 +121,7 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         await expect(
-            controller.ingestSessionEvent(body, 'bad_key', undefined, undefined),
+            controller.ingestSessionEvent({ body }, 'bad_key', undefined, undefined),
         ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -134,7 +134,7 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         await expect(
-            controller.ingestSessionEvent(body, undefined, undefined, undefined),
+            controller.ingestSessionEvent({ body }, undefined, undefined, undefined),
         ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -147,7 +147,7 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         await controller.ingestSessionEvent(
-            body,
+            { body },
             undefined,
             'Bearer kodus_my_key',
             undefined,
@@ -167,7 +167,7 @@ describe('CliReviewController.ingestSessionEvent', () => {
             timestamp: '2025-06-01T10:00:00.000Z',
         };
 
-        const result = await controller.ingestSessionEvent(body, 'kodus_key', undefined, undefined);
+        const result = await controller.ingestSessionEvent({ body }, 'kodus_key', undefined, undefined);
         expect(result).toEqual({ accepted: true, uuid: 'evt-1' });
     });
 });

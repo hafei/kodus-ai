@@ -12,6 +12,7 @@ import {
     TEAM_SERVICE_TOKEN,
 } from '@libs/organization/domain/team/contracts/team.service.contract';
 import {
+    BadRequestException,
     Body,
     Controller,
     ForbiddenException,
@@ -22,11 +23,11 @@ import {
     Inject,
     Post,
     Query,
+    Req,
     Res,
     UnauthorizedException,
-    UsePipes,
-    ValidationPipe,
 } from '@nestjs/common';
+import { validate } from 'class-validator';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { JWT } from '@libs/core/infrastructure/config/types/jwt/jwt';
@@ -800,13 +801,8 @@ export class CliReviewController {
         description: 'Invalid or missing authentication',
         type: ApiErrorDto,
     })
-    @UsePipes(new ValidationPipe({
-        transform: true,
-        whitelist: false,
-        forbidNonWhitelisted: false,
-    }))
     async ingestSessionEvent(
-        @Body() body: SessionEventRequestDto,
+        @Req() req: { body: Record<string, unknown> },
         @Headers('x-team-key') teamKey?: string,
         @Headers('authorization') authHeader?: string,
         @Query('teamId') queryTeamId?: string,
@@ -824,7 +820,16 @@ export class CliReviewController {
             );
         }
 
-        const { sessionId, type, branch, timestamp, ...rest } = body;
+        const body = req.body;
+        const dto = new SessionEventRequestDto();
+        Object.assign(dto, body);
+        const errors = await validate(dto);
+        if (errors.length > 0) {
+            const messages = errors.flatMap(e => Object.values(e.constraints || {}));
+            throw new BadRequestException(messages);
+        }
+
+        const { sessionId, type, branch, timestamp, ...rest } = body as any;
 
         return this.ingestSessionEventUseCase.execute({
             organizationAndTeamData: {
