@@ -36,6 +36,7 @@ import {
     AUTH_SERVICE_TOKEN,
     IAuthService,
 } from '@libs/identity/domain/auth/contracts/auth.service.contracts';
+import { TriggerBusinessValidationUseCase } from '@libs/platform/application/use-cases/codeManagement/trigger-business-validation.use-case';
 import {
     ApiBadRequestResponse,
     ApiCreatedResponse,
@@ -54,6 +55,7 @@ import { Public } from '@libs/identity/infrastructure/adapters/services/auth/pub
 import { ApiStandardResponses } from '../docs/api-standard-responses.decorator';
 import { ApiErrorDto } from '../dtos/api-error.dto';
 import {
+    CliBusinessValidationRequestDto,
     CliReviewRequestDto,
     TrialCliReviewRequestDto,
 } from '../dtos/cli-review.dto';
@@ -61,6 +63,7 @@ import { CliSessionCaptureRequestDto } from '../dtos/cli-session-capture.dto';
 import { CliSessionCaptureResponseDto } from '../dtos/cli-session-capture.response.dto';
 import { SessionEventRequestDto } from '../dtos/session-event.dto';
 import {
+    CliBusinessValidationResponseDto,
     CliReviewRateLimitErrorDto,
     CliReviewResponseDto,
     CliValidateKeyResponseDto,
@@ -92,6 +95,7 @@ export class CliReviewController {
         private readonly authService: IAuthService,
         @Inject(CLI_DEVICE_SERVICE_TOKEN)
         private readonly cliDeviceService: ICliDeviceService,
+        private readonly triggerBusinessValidationUseCase: TriggerBusinessValidationUseCase,
         private readonly jwtService: JwtService,
         private readonly configService: ConfigService,
     ) {
@@ -443,6 +447,82 @@ export class CliReviewController {
         return buildInvalidPayload(
             'Authentication required. Provide a team API key via X-Team-Key header, or a JWT via Authorization: Bearer header.',
         );
+    }
+
+    @Post('business-validation')
+    @ApiOperation({
+        summary: 'Trigger business validation',
+        description:
+            'Executes business rules validation directly through the business validation provider using pull request context or local diff context.',
+    })
+    @ApiHeader({
+        name: 'x-team-key',
+        required: false,
+        description: 'Team CLI key (alternative to Authorization: Bearer)',
+    })
+    @ApiCreatedResponse({ type: CliBusinessValidationResponseDto })
+    @ApiBadRequestResponse({
+        description: 'Invalid input or PR/repository not found',
+        type: ApiErrorDto,
+    })
+    @ApiUnauthorizedResponse({
+        description: 'Invalid or missing authentication',
+        type: ApiErrorDto,
+    })
+    @ApiTooManyRequestsResponse({
+        description: 'Rate limit exceeded',
+        type: CliReviewRateLimitErrorDto,
+    })
+    async businessValidation(
+        @Body() body: CliBusinessValidationRequestDto,
+        @Headers('x-team-key') teamKey?: string,
+        @Headers('authorization') authHeader?: string,
+        @Query('teamId') queryTeamId?: string,
+    ) {
+        const auth = await this.validateKeyInternal(
+            teamKey,
+            authHeader,
+            queryTeamId,
+        );
+
+        if (!auth.valid || !auth.organizationId || !auth.teamId) {
+            throw new UnauthorizedException(
+                auth.error ||
+                    'Authentication required. Provide a team API key via X-Team-Key header, or a JWT via Authorization: Bearer header.',
+            );
+        }
+
+        const rateLimitResult =
+            await this.authenticatedRateLimiter.checkRateLimit(auth.teamId);
+
+        if (!rateLimitResult.allowed) {
+            throw new HttpException(
+                {
+                    message:
+                        'Rate limit exceeded for this team. Please try again later.',
+                    remaining: rateLimitResult.remaining,
+                    resetAt: rateLimitResult.resetAt?.toISOString(),
+                    limit: 1000,
+                },
+                HttpStatus.TOO_MANY_REQUESTS,
+            );
+        }
+
+        return this.triggerBusinessValidationUseCase.execute({
+            organizationAndTeamData: {
+                organizationId: auth.organizationId,
+                teamId: auth.teamId,
+            },
+            input: {
+                prUrl: body.prUrl,
+                prNumber: body.prNumber,
+                repositoryId: body.repositoryId,
+                repository: body.repository,
+                taskUrl: body.taskUrl,
+                taskId: body.taskId,
+                diff: body.diff,
+            },
+        });
     }
 
     /**

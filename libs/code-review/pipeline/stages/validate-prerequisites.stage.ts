@@ -93,8 +93,7 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
                 draft.pipelineMetadata = {};
             }
 
-            draft.pipelineMetadata.showStatusFeedback =
-                showStatusFeedback;
+            draft.pipelineMetadata.showStatusFeedback = showStatusFeedback;
 
             if (!showStatusFeedback) {
                 draft.pipelineMetadata.notificationHandled = true;
@@ -330,10 +329,7 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
     private async isShowStatusFeedbackEnabled(
         context: CodeReviewPipelineContext,
     ): Promise<boolean> {
-        if (
-            typeof context.codeReviewConfig?.showStatusFeedback ===
-            'boolean'
-        ) {
+        if (typeof context.codeReviewConfig?.showStatusFeedback === 'boolean') {
             return context.codeReviewConfig.showStatusFeedback;
         }
 
@@ -582,7 +578,10 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
             };
         }
 
-        if (pullRequest.state === 'closed' || pullRequest.state === 'merged') {
+        if (
+            (pullRequest.state === 'closed' || pullRequest.state === 'merged') &&
+            context.origin !== 'command'
+        ) {
             return {
                 canProceed: false,
                 details: {

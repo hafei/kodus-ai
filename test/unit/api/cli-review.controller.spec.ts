@@ -16,6 +16,7 @@ import { TEAM_CLI_KEY_SERVICE_TOKEN } from '@libs/organization/domain/team-cli-k
 import { TEAM_SERVICE_TOKEN } from '@libs/organization/domain/team/contracts/team.service.contract';
 import { AUTH_SERVICE_TOKEN } from '@libs/identity/domain/auth/contracts/auth.service.contracts';
 import { CLI_DEVICE_SERVICE_TOKEN } from '@libs/organization/domain/cli-device/contracts/cli-device.service.contract';
+import { TriggerBusinessValidationUseCase } from '@libs/platform/application/use-cases/codeManagement/trigger-business-validation.use-case';
 import { TeamEntity } from '@libs/organization/domain/team/entities/team.entity';
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
 import { CliReviewRequestDto } from '@/core/infrastructure/http/dtos/cli-review.dto';
@@ -135,6 +136,9 @@ const mockExecuteCliReview = {
 const mockSubmitCliSessionCapture = {
     execute: jest.fn().mockResolvedValue({ id: 'cap_abc123', accepted: true }),
 };
+const mockTriggerBusinessValidation = {
+    execute: jest.fn(),
+};
 const mockCliDeviceService = {
     validateOrRegisterDevice: jest.fn().mockResolvedValue({}),
 };
@@ -157,6 +161,10 @@ describe('CliReviewController', () => {
                 {
                     provide: SubmitCliSessionCaptureUseCase,
                     useValue: mockSubmitCliSessionCapture,
+                },
+                {
+                    provide: TriggerBusinessValidationUseCase,
+                    useValue: mockTriggerBusinessValidation,
                 },
                 {
                     provide: AuthenticatedRateLimiterService,
@@ -483,12 +491,7 @@ describe('CliReviewController', () => {
             });
 
             await expect(
-                controller.review(
-                    MINIMAL_BODY,
-                    undefined,
-                    BEARER_JWT,
-                    TEAM_ID,
-                ),
+                controller.review(MINIMAL_BODY, undefined, BEARER_JWT, TEAM_ID),
             ).rejects.toThrow(HttpException);
 
             try {
@@ -618,9 +621,11 @@ describe('CliReviewController', () => {
                     TEAM_KEY_DATA,
                 );
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(TEAM_KEY, undefined, undefined);
+                const result = await (controller as any).validateKeyInternal(
+                    TEAM_KEY,
+                    undefined,
+                    undefined,
+                );
 
                 expect(result.valid).toBe(true);
                 expect(result.teamId).toBe(TEAM_ID);
@@ -634,9 +639,11 @@ describe('CliReviewController', () => {
                     TEAM_KEY_DATA,
                 );
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_TEAM_KEY, undefined);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_TEAM_KEY,
+                    undefined,
+                );
 
                 expect(result.valid).toBe(true);
                 expect(mockTeamCliKeyService.validateKey).toHaveBeenCalledWith(
@@ -647,9 +654,11 @@ describe('CliReviewController', () => {
             it('returns valid=false when team key is invalid', async () => {
                 mockTeamCliKeyService.validateKey.mockResolvedValue(null);
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal('kodus_invalid', undefined, undefined);
+                const result = await (controller as any).validateKeyInternal(
+                    'kodus_invalid',
+                    undefined,
+                    undefined,
+                );
 
                 expect(result.valid).toBe(false);
                 expect(result.error).toBeDefined();
@@ -661,9 +670,11 @@ describe('CliReviewController', () => {
                     organization: { uuid: ORG_ID },
                 });
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(TEAM_KEY, undefined, undefined);
+                const result = await (controller as any).validateKeyInternal(
+                    TEAM_KEY,
+                    undefined,
+                    undefined,
+                );
 
                 expect(result.valid).toBe(false);
             });
@@ -673,9 +684,11 @@ describe('CliReviewController', () => {
             it('returns valid=true with correct teamId resolved via findById', async () => {
                 mockTeamService.findById.mockResolvedValue(makeTeamEntity());
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, TEAM_ID);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    TEAM_ID,
+                );
 
                 expect(result.valid).toBe(true);
                 expect(result.teamId).toBe(TEAM_ID);
@@ -688,9 +701,11 @@ describe('CliReviewController', () => {
                     makeTeamEntity(),
                 );
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, ORG_ID);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    ORG_ID,
+                );
 
                 expect(result.valid).toBe(true);
                 expect(result.teamId).toBe(TEAM_ID);
@@ -699,21 +714,27 @@ describe('CliReviewController', () => {
             it('returns valid=false when explicit teamId is not found and differs from orgId', async () => {
                 mockTeamService.findById.mockResolvedValue(null);
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, 'stale-team-uuid');
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    'stale-team-uuid',
+                );
 
                 expect(result.valid).toBe(false);
                 expect(result.error).toContain('Team not found');
-                expect(mockTeamService.findFirstCreatedTeam).not.toHaveBeenCalled();
+                expect(
+                    mockTeamService.findFirstCreatedTeam,
+                ).not.toHaveBeenCalled();
             });
 
             it('returns valid=false when no teamId provided and no team exists for org', async () => {
                 mockTeamService.findFirstCreatedTeam.mockResolvedValue(null);
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, undefined);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    undefined,
+                );
 
                 expect(result.valid).toBe(false);
             });
@@ -723,9 +744,11 @@ describe('CliReviewController', () => {
                     throw new Error('jwt expired');
                 });
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, TEAM_ID);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    TEAM_ID,
+                );
 
                 expect(result.valid).toBe(false);
                 expect(result.error).toMatch(/invalid|expired/i);
@@ -736,9 +759,11 @@ describe('CliReviewController', () => {
                     makeTeamEntity({ orgUuid: 'other-org-uuid' }),
                 );
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, TEAM_ID);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    TEAM_ID,
+                );
 
                 expect(result.valid).toBe(false);
             });
@@ -750,9 +775,11 @@ describe('CliReviewController', () => {
                     status: STATUS.REMOVED,
                 });
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, TEAM_ID);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    TEAM_ID,
+                );
 
                 expect(result.valid).toBe(false);
             });
@@ -760,9 +787,11 @@ describe('CliReviewController', () => {
             it('includes user email in response', async () => {
                 mockTeamService.findById.mockResolvedValue(makeTeamEntity());
 
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, BEARER_JWT, TEAM_ID);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    BEARER_JWT,
+                    TEAM_ID,
+                );
 
                 expect(result.email).toBe(USER_EMAIL);
                 expect(result.user.email).toBe(USER_EMAIL);
@@ -771,9 +800,11 @@ describe('CliReviewController', () => {
 
         describe('No auth', () => {
             it('returns valid=false when no auth is provided', async () => {
-                const result = await (
-                    controller as any
-                ).validateKeyInternal(undefined, undefined, undefined);
+                const result = await (controller as any).validateKeyInternal(
+                    undefined,
+                    undefined,
+                    undefined,
+                );
 
                 expect(result.valid).toBe(false);
                 expect(result.error).toMatch(/authentication required/i);
@@ -1291,9 +1322,9 @@ describe('CliReviewController', () => {
                 userEmail: 'hacker@evil.com',
             };
 
-            await expect(
-                controller.review(body, TEAM_KEY),
-            ).rejects.toThrow(ForbiddenException);
+            await expect(controller.review(body, TEAM_KEY)).rejects.toThrow(
+                ForbiddenException,
+            );
         });
 
         it('allows any email when allowedDomains is empty', async () => {
@@ -1429,9 +1460,9 @@ describe('CliReviewController', () => {
                 resetAt: new Date('2026-01-01T00:00:00Z'),
             });
 
-            await expect(
-                controller.trialReview(TRIAL_BODY),
-            ).rejects.toThrow(HttpException);
+            await expect(controller.trialReview(TRIAL_BODY)).rejects.toThrow(
+                HttpException,
+            );
 
             try {
                 await controller.trialReview(TRIAL_BODY);
@@ -1512,9 +1543,9 @@ describe('CliReviewController', () => {
         });
 
         it('throws 400 when fingerprint is missing', async () => {
-            await expect(
-                controller.trialStatus(undefined),
-            ).rejects.toThrow(HttpException);
+            await expect(controller.trialStatus(undefined)).rejects.toThrow(
+                HttpException,
+            );
 
             try {
                 await controller.trialStatus(undefined);

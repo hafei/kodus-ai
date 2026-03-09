@@ -44,17 +44,18 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         controller = new CliReviewController(
-            {} as any,
-            ingestUseCase as any,
-            {} as any,
-            {} as any,
-            authenticatedRateLimiter as any,
-            teamCliKeyService as any,
-            {} as any,
-            {} as any,
-            {} as any,
-            {} as any,
-            { get: () => ({ secret: 'test' }) } as any,
+            {} as any,                          // executeCliReviewUseCase
+            ingestUseCase as any,               // ingestSessionEventUseCase
+            {} as any,                          // submitCliSessionCaptureUseCase
+            {} as any,                          // trialRateLimiter
+            authenticatedRateLimiter as any,    // authenticatedRateLimiter
+            teamCliKeyService as any,           // teamCliKeyService
+            {} as any,                          // teamService
+            {} as any,                          // authService
+            {} as any,                          // cliDeviceService
+            {} as any,                          // triggerBusinessValidationUseCase
+            {} as any,                          // jwtService
+            { get: () => ({ secret: 'test' }) } as any, // configService
         );
     });
 
