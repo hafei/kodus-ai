@@ -137,6 +137,18 @@ export class CreateOrUpdateOrganizationParametersUseCase implements IUseCase {
                 organizationAndTeamData,
             );
 
+        this.eventEmitter.emit(AuditLogEvents.ORG_SETTINGS, {
+            organizationAndTeamData,
+            userInfo: {
+                userId: this.request.user?.uuid,
+                userEmail: this.request.user?.email,
+            },
+            actionType: ActionType.EDIT,
+            settingKey: organizationParametersKey,
+            previousValue: existingConfig ?? null,
+            currentValue: mergedConfigValue,
+        });
+
         return !!result;
     }
 

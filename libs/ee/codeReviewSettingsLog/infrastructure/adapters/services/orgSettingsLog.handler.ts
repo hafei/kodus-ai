@@ -61,6 +61,12 @@ export class OrgSettingsLogHandler {
                     currentValue,
                     userInfo.userEmail,
                 );
+            case 'byok_config':
+                return this.generateByokChanges(
+                    previousValue,
+                    currentValue,
+                    userInfo.userEmail,
+                );
             default:
                 return [];
         }
@@ -201,6 +207,104 @@ export class OrgSettingsLogHandler {
         }
 
         return changes;
+    }
+
+    private generateByokChanges(
+        previous: any,
+        current: any,
+        userEmail: string,
+    ): ChangedDataToExport[] {
+        const changes: ChangedDataToExport[] = [];
+        const slots: Array<{ key: string; label: string }> = [
+            { key: 'main', label: 'Main' },
+            { key: 'fallback', label: 'Fallback' },
+        ];
+
+        const loggableFields: Array<{ key: string; label: string }> = [
+            { key: 'provider', label: 'Provider' },
+            { key: 'model', label: 'Model' },
+            { key: 'baseURL', label: 'Base URL' },
+            { key: 'disableReasoning', label: 'Disable Reasoning' },
+            { key: 'temperature', label: 'Temperature' },
+            { key: 'maxInputTokens', label: 'Max Input Tokens' },
+            { key: 'maxConcurrentRequests', label: 'Max Concurrent Requests' },
+            { key: 'maxOutputTokens', label: 'Max Output Tokens' },
+        ];
+
+        for (const slot of slots) {
+            const prevSlot = previous?.[slot.key];
+            const currSlot = current?.[slot.key];
+
+            // Slot added
+            if (!prevSlot && currSlot) {
+                changes.push({
+                    actionDescription: `BYOK ${slot.label} Configuration Added`,
+                    previousValue: null,
+                    currentValue: this.sanitizeByokSlot(currSlot),
+                    description: `User ${userEmail} added BYOK ${slot.label} configuration (provider: ${currSlot.provider ?? 'N/A'}, model: ${currSlot.model ?? 'N/A'})`,
+                });
+                continue;
+            }
+
+            // Slot removed
+            if (prevSlot && !currSlot) {
+                changes.push({
+                    actionDescription: `BYOK ${slot.label} Configuration Removed`,
+                    previousValue: this.sanitizeByokSlot(prevSlot),
+                    currentValue: null,
+                    description: `User ${userEmail} removed BYOK ${slot.label} configuration`,
+                });
+                continue;
+            }
+
+            // Both exist — compare individual fields
+            if (prevSlot && currSlot) {
+                for (const field of loggableFields) {
+                    const prevVal = prevSlot[field.key];
+                    const currVal = currSlot[field.key];
+
+                    if (prevVal !== currVal) {
+                        changes.push({
+                            actionDescription: `BYOK ${slot.label} ${field.label} Updated`,
+                            previousValue: {
+                                [field.key]: prevVal ?? 'not set',
+                            },
+                            currentValue: {
+                                [field.key]: currVal ?? 'not set',
+                            },
+                            description: `User ${userEmail} changed ${field.label} in BYOK ${slot.label} from ${this.formatByokValue(prevVal)} to ${this.formatByokValue(currVal)}`,
+                        });
+                    }
+                }
+
+                // Detect API key change (log that it changed, never the value)
+                if (
+                    currSlot.apiKey &&
+                    prevSlot.apiKey &&
+                    currSlot.apiKey !== prevSlot.apiKey
+                ) {
+                    changes.push({
+                        actionDescription: `BYOK ${slot.label} API Key Updated`,
+                        previousValue: { apiKey: '***' },
+                        currentValue: { apiKey: '***' },
+                        description: `User ${userEmail} updated the API Key in BYOK ${slot.label} configuration`,
+                    });
+                }
+            }
+        }
+
+        return changes;
+    }
+
+    private sanitizeByokSlot(slot: any): Record<string, any> {
+        if (!slot || typeof slot !== 'object') return {};
+        const { apiKey, ...rest } = slot;
+        return { ...rest, apiKey: apiKey ? '***' : undefined };
+    }
+
+    private formatByokValue(value: any): string {
+        if (value === undefined || value === null) return 'not set';
+        return String(value);
     }
 
     private formatTimezone(tz: string): string {
