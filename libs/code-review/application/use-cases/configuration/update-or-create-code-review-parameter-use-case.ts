@@ -14,10 +14,8 @@ import {
     IIntegrationConfigService,
     INTEGRATION_CONFIG_SERVICE_TOKEN,
 } from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
 import { AuthorizationService } from '@libs/identity/infrastructure/adapters/services/permissions/authorization.service';
 import {
@@ -73,8 +71,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         @Inject(INTEGRATION_CONFIG_SERVICE_TOKEN)
         private readonly integrationConfigService: IIntegrationConfigService,
 
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
 
         @Inject(REQUEST)
         private readonly request: UserRequest,
@@ -293,16 +290,19 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         let level: ConfigLevel;
         let repository: RepositoryCodeReviewConfig | undefined;
         let directory: DirectoryCodeReviewConfig | undefined;
+        let isCreation = false;
 
         if (directoryId && repositoryId) {
             level = ConfigLevel.DIRECTORY;
             repository = resolver.findRepository(repositoryId);
             directory = resolver.findDirectory(repository, directoryId);
             oldConfig = directory.configs ?? {};
+            isCreation = !directory.isSelected;
         } else if (repositoryId) {
             level = ConfigLevel.REPOSITORY;
             repository = resolver.findRepository(repositoryId);
             oldConfig = repository.configs ?? {};
+            isCreation = !repository.isSelected;
         } else {
             level = ConfigLevel.GLOBAL;
             oldConfig = codeReviewConfigs.configs ?? {};
@@ -344,11 +344,11 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         await this.logConfigUpdate({
             organizationAndTeamData,
             oldConfig,
-            newConfig: newConfigValue,
+            newConfig: newDelta,
             level,
-            sourceFunctionName: `handleConfigUpdate[${level}]`,
             repository,
             directory,
+            isCreation,
         });
 
         return true;
@@ -628,65 +628,31 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         return 'code-review';
     }
 
-    private async logConfigUpdate(options: {
+    private logConfigUpdate(options: {
         organizationAndTeamData: OrganizationAndTeamData;
         oldConfig: CreateOrUpdateCodeReviewParameterDto['configValue'];
         newConfig: CreateOrUpdateCodeReviewParameterDto['configValue'];
         level: ConfigLevel;
-        sourceFunctionName: string;
         repository?: RepositoryCodeReviewConfig;
         directory?: DirectoryCodeReviewConfig;
+        isCreation?: boolean;
     }) {
-        const {
+        const { organizationAndTeamData, oldConfig, newConfig, level, repository, directory, isCreation } = options;
+
+        this.eventEmitter.emit(AuditLogEvents.CODE_REVIEW_CONFIG, {
             organizationAndTeamData,
+            userInfo: {
+                userId: this.request.user.uuid,
+                userEmail: this.request.user.email,
+            },
             oldConfig,
             newConfig,
-            level,
-            sourceFunctionName,
-            repository,
-            directory,
-        } = options;
-
-        try {
-            const logPayload: any = {
-                organizationAndTeamData,
-                userInfo: {
-                    userId: this.request.user.uuid,
-                    userEmail: this.request.user.email,
-                },
-                oldConfig,
-                newConfig,
-                actionType: ActionType.EDIT,
-                configLevel: level,
-            };
-
-            if (repository) {
-                logPayload.repository = {
-                    id: repository.id,
-                    name: repository.name,
-                };
-            }
-            if (directory) {
-                logPayload.directory = {
-                    id: directory.id,
-                    path: directory.path,
-                };
-            }
-
-            await this.codeReviewSettingsLogService.registerCodeReviewConfigLog(
-                logPayload,
-            );
-        } catch (error) {
-            this.logger.error({
-                message: `Error saving code review settings log for ${level.toLowerCase()} level`,
-                error: error,
-                context: UpdateOrCreateCodeReviewParameterUseCase.name,
-                metadata: {
-                    organizationAndTeamData: organizationAndTeamData,
-                    functionName: sourceFunctionName,
-                },
-            });
-        }
+            actionType: isCreation ? ActionType.CREATE : ActionType.EDIT,
+            configLevel: level,
+            isCreation,
+            ...(repository && { repository: { id: repository.id, name: repository.name } }),
+            ...(directory && { directory: { id: directory.id, path: directory.path } }),
+        });
     }
 
     private handleError(

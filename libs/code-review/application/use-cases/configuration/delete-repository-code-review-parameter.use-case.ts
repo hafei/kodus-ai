@@ -8,10 +8,8 @@ import {
     IParametersService,
     PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 import { DeleteByRepositoryOrDirectoryPullRequestMessagesUseCase } from '@libs/code-review/application/use-cases/pullRequestMessages/delete-by-repository-or-directory.use-case';
 import {
     IKodyRulesService,
@@ -38,8 +36,7 @@ export class DeleteRepositoryCodeReviewParameterUseCase {
 
         private readonly createOrUpdateParametersUseCase: CreateOrUpdateParametersUseCase,
 
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
 
         private readonly deletePullRequestMessagesUseCase: DeleteByRepositoryOrDirectoryPullRequestMessagesUseCase,
 
@@ -229,17 +226,15 @@ export class DeleteRepositoryCodeReviewParameterUseCase {
             KodyRulesStatus.DELETED,
         );
 
-        await this.codeReviewSettingsLogService.registerRepositoryConfigurationRemoval(
-            {
-                organizationAndTeamData: orgData,
-                userInfo: {
-                    userId: this.request.user.uuid,
-                    userEmail: this.request.user.email,
-                },
-                repository,
-                actionType: ActionType.DELETE,
+        this.eventEmitter.emit(AuditLogEvents.REPOSITORY_CONFIG_REMOVAL, {
+            organizationAndTeamData: orgData,
+            userInfo: {
+                userId: this.request.user.uuid,
+                userEmail: this.request.user.email,
             },
-        );
+            repository,
+            actionType: ActionType.DELETE,
+        });
     }
 
     private async handleDirectorySideEffects(
@@ -260,17 +255,15 @@ export class DeleteRepositoryCodeReviewParameterUseCase {
             KodyRulesStatus.DELETED,
         );
 
-        await this.codeReviewSettingsLogService.registerDirectoryConfigurationRemoval(
-            {
-                organizationAndTeamData: orgData,
-                userInfo: {
-                    userId: this.request.user.uuid,
-                    userEmail: this.request.user.email,
-                },
-                repository,
-                directory,
-                actionType: ActionType.DELETE,
+        this.eventEmitter.emit(AuditLogEvents.DIRECTORY_CONFIG_REMOVAL, {
+            organizationAndTeamData: orgData,
+            userInfo: {
+                userId: this.request.user.uuid,
+                userEmail: this.request.user.email,
             },
-        );
+            repository,
+            directory,
+            actionType: ActionType.DELETE,
+        });
     }
 }

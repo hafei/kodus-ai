@@ -11,7 +11,6 @@ import { ForgejoModule } from './forgejo.module';
 
 import CodeManagementUseCases from '../application/use-cases/codeManagement';
 import { AgentsModule } from '@libs/agents/modules/agents.module';
-import { CodeReviewSettingsLogModule } from '@libs/ee/codeReviewSettingsLog/codeReviewSettingsLog.module';
 import { OrganizationParametersModule } from '@libs/organization/modules/organizationParameters.module';
 import { TeamModule } from '@libs/organization/modules/team.module';
 import { ParametersModule } from '@libs/organization/modules/parameters.module';
@@ -47,7 +46,6 @@ import { WorkflowModule } from '@libs/core/workflow/modules/workflow.module';
         AzureReposModule,
         ForgejoModule,
         forwardRef(() => AgentsModule),
-        forwardRef(() => CodeReviewSettingsLogModule),
         forwardRef(() => OrganizationParametersModule),
         forwardRef(() => TeamModule),
         forwardRef(() => ParametersModule),

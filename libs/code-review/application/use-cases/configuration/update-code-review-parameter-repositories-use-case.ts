@@ -11,10 +11,8 @@ import {
     IIntegrationConfigService,
     INTEGRATION_CONFIG_SERVICE_TOKEN,
 } from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { ParametersEntity } from '@libs/organization/domain/parameters/entities/parameters.entity';
 import { IntegrationConfigKey, ParametersKey } from '@libs/core/domain/enums';
@@ -51,8 +49,7 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
         @Inject(INTEGRATION_CONFIG_SERVICE_TOKEN)
         private readonly integrationConfigService: IIntegrationConfigService,
 
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
 
         @Inject(REQUEST)
         private readonly request: Request & {
@@ -138,11 +135,11 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                     ),
             );
 
-            try {
-                if (
-                    addedRepositories.length > 0 ||
-                    removedRepositories.length > 0
-                ) {
+            if (
+                addedRepositories.length > 0 ||
+                removedRepositories.length > 0
+            ) {
+                try {
                     const actionType =
                         addedRepositories.length > 0 &&
                         removedRepositories.length > 0
@@ -151,7 +148,7 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                               ? ActionType.ADD
                               : ActionType.DELETE;
 
-                    this.codeReviewSettingsLogService.registerRepositoriesLog({
+                    this.eventEmitter.emit(AuditLogEvents.REPOSITORIES, {
                         organizationAndTeamData: {
                             ...body.organizationAndTeamData,
                             organizationId: this.request.user.organization.uuid,
@@ -165,16 +162,13 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                         removedRepositories,
                         configLevel: ConfigLevel.GLOBAL,
                     });
+                } catch (error) {
+                    this.logger.error({
+                        message: 'Error emitting audit log event for repository update',
+                        error: error,
+                        context: UpdateCodeReviewParameterRepositoriesUseCase.name,
+                    });
                 }
-            } catch (error) {
-                this.logger.error({
-                    message: 'Error saving code review settings log',
-                    error: error,
-                    context: UpdateCodeReviewParameterRepositoriesUseCase.name,
-                    metadata: {
-                        organizationAndTeamData: organizationAndTeamData,
-                    },
-                });
             }
 
             return result;
