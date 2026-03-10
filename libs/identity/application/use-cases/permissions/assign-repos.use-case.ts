@@ -119,11 +119,14 @@ export class AssignReposUseCase implements IUseCase {
                 repoNameMap.set(repo.id, repo.name);
             }
 
+            const previousRepoIdsSet = new Set(previousRepoIds);
+            const validRepoIdsSet = new Set(validRepoIds);
+
             const addedIds = validRepoIds.filter(
-                (id) => !previousRepoIds.includes(id),
+                (id) => !previousRepoIdsSet.has(id),
             );
             const removedIds = previousRepoIds.filter(
-                (id) => !validRepoIds.includes(id),
+                (id) => !validRepoIdsSet.has(id),
             );
 
             if (addedIds.length > 0 || removedIds.length > 0) {

@@ -278,16 +278,22 @@ export class OrgSettingsLogHandler {
                 }
 
                 // Detect API key change (log that it changed, never the value)
-                if (
-                    currSlot.apiKey &&
-                    prevSlot.apiKey &&
-                    currSlot.apiKey !== prevSlot.apiKey
-                ) {
+                if (prevSlot.apiKey !== currSlot.apiKey) {
+                    const prevKeyExists = !!prevSlot.apiKey;
+                    const currKeyExists = !!currSlot.apiKey;
+                    const action = currKeyExists
+                        ? prevKeyExists
+                            ? 'updated'
+                            : 'added'
+                        : 'removed';
+                    const actionVerb =
+                        action.charAt(0).toUpperCase() + action.slice(1);
+
                     changes.push({
-                        actionDescription: `BYOK ${slot.label} API Key Updated`,
-                        previousValue: { apiKey: '***' },
-                        currentValue: { apiKey: '***' },
-                        description: `User ${userEmail} updated the API Key in BYOK ${slot.label} configuration`,
+                        actionDescription: `BYOK ${slot.label} API Key ${actionVerb}`,
+                        previousValue: { apiKey: prevKeyExists ? '***' : 'not set' },
+                        currentValue: { apiKey: currKeyExists ? '***' : 'not set' },
+                        description: `User ${userEmail} ${action} the API Key in BYOK ${slot.label} configuration`,
                     });
                 }
             }

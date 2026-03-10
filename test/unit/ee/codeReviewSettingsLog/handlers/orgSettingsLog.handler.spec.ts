@@ -261,7 +261,7 @@ describe('OrgSettingsLogHandler', () => {
             );
         });
 
-        it('logs API key change as *** both sides', async () => {
+        it('logs API key update as *** both sides', async () => {
             await callHandler(
                 'byok_config',
                 { main: { apiKey: 'old-key' } },
@@ -273,8 +273,49 @@ describe('OrgSettingsLogHandler', () => {
                 d.actionDescription.includes('API Key'),
             );
             expect(apiKeyEntry).toBeDefined();
+            expect(apiKeyEntry.actionDescription).toBe(
+                'BYOK Main API Key Updated',
+            );
             expect(apiKeyEntry.previousValue.apiKey).toBe('***');
             expect(apiKeyEntry.currentValue.apiKey).toBe('***');
+        });
+
+        it('logs API key added', async () => {
+            await callHandler(
+                'byok_config',
+                { main: {} },
+                { main: { apiKey: 'new-key' } },
+            );
+
+            const data = extractChangedData(mockUnified.saveLogEntry);
+            const apiKeyEntry = data.find((d) =>
+                d.actionDescription.includes('API Key'),
+            );
+            expect(apiKeyEntry).toBeDefined();
+            expect(apiKeyEntry.actionDescription).toBe(
+                'BYOK Main API Key Added',
+            );
+            expect(apiKeyEntry.previousValue.apiKey).toBe('not set');
+            expect(apiKeyEntry.currentValue.apiKey).toBe('***');
+        });
+
+        it('logs API key removed', async () => {
+            await callHandler(
+                'byok_config',
+                { main: { apiKey: 'old-key' } },
+                { main: {} },
+            );
+
+            const data = extractChangedData(mockUnified.saveLogEntry);
+            const apiKeyEntry = data.find((d) =>
+                d.actionDescription.includes('API Key'),
+            );
+            expect(apiKeyEntry).toBeDefined();
+            expect(apiKeyEntry.actionDescription).toBe(
+                'BYOK Main API Key Removed',
+            );
+            expect(apiKeyEntry.previousValue.apiKey).toBe('***');
+            expect(apiKeyEntry.currentValue.apiKey).toBe('not set');
         });
 
         it('no changes → not called', async () => {

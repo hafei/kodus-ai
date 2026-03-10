@@ -40,26 +40,34 @@ export class CreateOrUpdateTeamMembersUseCase implements IUseCase {
                 });
 
             if (result?.results?.length > 0) {
-                const logParams: UserInviteLogParams = {
-                    organizationAndTeamData: {
-                        organizationId: this.request.user.organization.uuid,
-                        teamId,
-                    },
-                    userInfo: {
-                        userId: this.request.user.uuid,
-                        userEmail: this.request.user.email,
-                    },
-                    actionType: ActionType.ADD,
-                    invitedUsers: result.results.map((r) => ({
-                        email: r.email,
-                        status: r.status,
-                    })),
-                };
+                try {
+                    const logParams: UserInviteLogParams = {
+                        organizationAndTeamData: {
+                            organizationId: this.request.user.organization.uuid,
+                            teamId,
+                        },
+                        userInfo: {
+                            userId: this.request.user.uuid,
+                            userEmail: this.request.user.email,
+                        },
+                        actionType: ActionType.ADD,
+                        invitedUsers: result.results.map((r) => ({
+                            email: r.email,
+                            status: r.status,
+                        })),
+                    };
 
-                this.eventEmitter.emit(
-                    AuditLogEvents.USER_INVITE,
-                    logParams,
-                );
+                    this.eventEmitter.emit(
+                        AuditLogEvents.USER_INVITE,
+                        logParams,
+                    );
+                } catch (logError) {
+                    this.logger.warn({
+                        message: 'Failed to emit user invite audit log event',
+                        error: logError,
+                        context: CreateOrUpdateTeamMembersUseCase.name,
+                    });
+                }
             }
 
             return result;

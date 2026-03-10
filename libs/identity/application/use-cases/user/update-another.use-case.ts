@@ -119,7 +119,7 @@ export class UpdateAnotherUserUseCase implements IUseCase {
                 const logParams: UserRoleChangeLogParams = {
                     organizationAndTeamData: {
                         organizationId,
-                        teamId: team.uuid,
+                        teamId: teamMember.team.uuid,
                     },
                     userInfo: {
                         userId,

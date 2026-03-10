@@ -139,28 +139,36 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                 addedRepositories.length > 0 ||
                 removedRepositories.length > 0
             ) {
-                const actionType =
-                    addedRepositories.length > 0 &&
-                    removedRepositories.length > 0
-                        ? ActionType.EDIT
-                        : addedRepositories.length > 0
-                          ? ActionType.ADD
-                          : ActionType.DELETE;
+                try {
+                    const actionType =
+                        addedRepositories.length > 0 &&
+                        removedRepositories.length > 0
+                            ? ActionType.EDIT
+                            : addedRepositories.length > 0
+                              ? ActionType.ADD
+                              : ActionType.DELETE;
 
-                this.eventEmitter.emit(AuditLogEvents.REPOSITORIES, {
-                    organizationAndTeamData: {
-                        ...body.organizationAndTeamData,
-                        organizationId: this.request.user.organization.uuid,
-                    },
-                    userInfo: {
-                        userId: this.request.user.uuid,
-                        userEmail: this.request.user.email,
-                    },
-                    actionType: actionType,
-                    addedRepositories,
-                    removedRepositories,
-                    configLevel: ConfigLevel.GLOBAL,
-                });
+                    this.eventEmitter.emit(AuditLogEvents.REPOSITORIES, {
+                        organizationAndTeamData: {
+                            ...body.organizationAndTeamData,
+                            organizationId: this.request.user.organization.uuid,
+                        },
+                        userInfo: {
+                            userId: this.request.user.uuid,
+                            userEmail: this.request.user.email,
+                        },
+                        actionType: actionType,
+                        addedRepositories,
+                        removedRepositories,
+                        configLevel: ConfigLevel.GLOBAL,
+                    });
+                } catch (error) {
+                    this.logger.error({
+                        message: 'Error emitting audit log event for repository update',
+                        error: error,
+                        context: UpdateCodeReviewParameterRepositoriesUseCase.name,
+                    });
+                }
             }
 
             return result;
