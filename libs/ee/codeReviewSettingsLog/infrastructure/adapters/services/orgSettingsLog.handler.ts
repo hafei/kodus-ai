@@ -55,6 +55,12 @@ export class OrgSettingsLogHandler {
                     currentValue,
                     userInfo.userEmail,
                 );
+            case 'cockpit_metrics_visibility':
+                return this.generateCockpitMetricsChanges(
+                    previousValue,
+                    currentValue,
+                    userInfo.userEmail,
+                );
             default:
                 return [];
         }
@@ -135,6 +141,66 @@ export class OrgSettingsLogHandler {
                 description: `User ${userEmail} changed timezone from ${this.formatTimezone(prevTimezone)} to ${this.formatTimezone(currTimezone)}`,
             },
         ];
+    }
+
+    private generateCockpitMetricsChanges(
+        previous: any,
+        current: any,
+        userEmail: string,
+    ): ChangedDataToExport[] {
+        const changes: ChangedDataToExport[] = [];
+
+        const categories: Array<{ key: string; label: string }> = [
+            { key: 'summary', label: 'Summary Metrics' },
+            { key: 'details', label: 'Details Metrics' },
+        ];
+
+        const metricLabels: Record<string, Record<string, string>> = {
+            summary: {
+                deployFrequency: 'Deploy Frequency',
+                prCycleTime: 'PR Cycle Time',
+                kodySuggestions: 'Kody Suggestions',
+                bugRatio: 'Bug Ratio',
+                prSize: 'PR Size',
+            },
+            details: {
+                leadTimeBreakdown: 'Lead Time Breakdown',
+                prCycleTime: 'PR Cycle Time Chart',
+                prsOpenedVsClosed: 'PRs Opened vs Closed',
+                prsMergedByDeveloper: 'PRs Merged by Developer',
+                teamActivity: 'Team Activity',
+            },
+        };
+
+        for (const category of categories) {
+            const prevCategory = previous?.[category.key] ?? {};
+            const currCategory = current?.[category.key] ?? {};
+
+            const allKeys = new Set([
+                ...Object.keys(prevCategory),
+                ...Object.keys(currCategory),
+            ]);
+
+            for (const metric of allKeys) {
+                const prevValue = prevCategory[metric] ?? true;
+                const currValue = currCategory[metric] ?? true;
+
+                if (prevValue !== currValue) {
+                    const label =
+                        metricLabels[category.key]?.[metric] ?? metric;
+                    const action = currValue ? 'enabled' : 'disabled';
+
+                    changes.push({
+                        actionDescription: `Cockpit Metric ${action === 'enabled' ? 'Enabled' : 'Disabled'}`,
+                        previousValue: { [metric]: prevValue },
+                        currentValue: { [metric]: currValue },
+                        description: `User ${userEmail} ${action} ${label} in ${category.label}`,
+                    });
+                }
+            }
+        }
+
+        return changes;
     }
 
     private formatTimezone(tz: string): string {

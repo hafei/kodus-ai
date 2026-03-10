@@ -19,6 +19,7 @@ import { ActionType } from '@libs/core/infrastructure/config/types/general/codeR
 const AUDITABLE_KEYS = new Set([
     OrganizationParametersKey.AUTO_JOIN_CONFIG,
     OrganizationParametersKey.TIMEZONE_CONFIG,
+    OrganizationParametersKey.COCKPIT_METRICS_VISIBILITY,
 ]);
 
 @Injectable()
