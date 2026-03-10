@@ -88,7 +88,15 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
     ) {}
 
     async execute(
-        body: CreateOrUpdateCodeReviewParameterDto,
+        body: CreateOrUpdateCodeReviewParameterDto & {
+            actor?: {
+                source?: 'cli' | 'web';
+                organizationId?: string;
+                userId?: string;
+                userEmail?: string;
+            };
+            skipAuthorization?: boolean;
+        },
     ): Promise<ParametersEntity<ParametersKey.CODE_REVIEW_CONFIG> | boolean> {
         try {
             const { organizationAndTeamData, configValue, repositoryId } = body;
@@ -101,15 +109,18 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
 
             if (!organizationAndTeamData.organizationId) {
                 organizationAndTeamData.organizationId =
-                    this.request.user.organization.uuid;
+                    body.actor?.organizationId ??
+                    this.request?.user?.organization?.uuid;
             }
 
-            await this.authorizationService.ensure({
-                user: this.request.user,
-                action: Action.Create,
-                resource: ResourceType.CodeReviewSettings,
-                repoIds: [repositoryId],
-            });
+            if (!body.skipAuthorization) {
+                await this.authorizationService.ensure({
+                    user: this.request.user,
+                    action: Action.Create,
+                    resource: ResourceType.CodeReviewSettings,
+                    repoIds: [repositoryId],
+                });
+            }
 
             const codeReviewConfigs = await this.getCodeReviewConfigs(
                 organizationAndTeamData,
@@ -184,6 +195,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                 organizationAndTeamData,
                 codeReviewConfigs,
                 configValue,
+                body.actor,
                 repositoryId,
                 directoryId,
             );
@@ -279,6 +291,12 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         organizationAndTeamData: OrganizationAndTeamData,
         codeReviewConfigs: CodeReviewParameter,
         newConfigValue: CreateOrUpdateCodeReviewParameterDto['configValue'],
+        actor?: {
+            source?: 'cli' | 'web';
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        },
         repositoryId?: string,
         directoryId?: string,
     ) {
@@ -342,6 +360,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         );
 
         await this.logConfigUpdate({
+            actor,
             organizationAndTeamData,
             oldConfig,
             newConfig: newConfigValue,
@@ -629,6 +648,12 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
     }
 
     private async logConfigUpdate(options: {
+        actor?: {
+            source?: 'cli' | 'web';
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        };
         organizationAndTeamData: OrganizationAndTeamData;
         oldConfig: CreateOrUpdateCodeReviewParameterDto['configValue'];
         newConfig: CreateOrUpdateCodeReviewParameterDto['configValue'];
@@ -648,11 +673,23 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         } = options;
 
         try {
+            const actor = (options as any).actor ?? {
+                source: 'web',
+                organizationId: this.request?.user?.organization?.uuid,
+                userId: this.request?.user?.uuid,
+                userEmail: this.request?.user?.email,
+            };
+            const hasActor = Boolean(actor.userId && actor.userEmail);
+
+            if (!hasActor) {
+                return;
+            }
+
             const logPayload: any = {
                 organizationAndTeamData,
                 userInfo: {
-                    userId: this.request.user.uuid,
-                    userEmail: this.request.user.email,
+                    userId: actor.userId,
+                    userEmail: actor.userEmail,
                 },
                 oldConfig,
                 newConfig,

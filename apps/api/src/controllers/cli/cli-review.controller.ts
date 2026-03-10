@@ -52,23 +52,23 @@ import {
     ICliDeviceService,
 } from '@libs/organization/domain/cli-device/contracts/cli-device.service.contract';
 import { Public } from '@libs/identity/infrastructure/adapters/services/auth/public.decorator';
-import { ApiStandardResponses } from '../docs/api-standard-responses.decorator';
-import { ApiErrorDto } from '../dtos/api-error.dto';
+import { ApiStandardResponses } from '../../docs/api-standard-responses.decorator';
+import { ApiErrorDto } from '../../dtos/api-error.dto';
 import {
     CliBusinessValidationRequestDto,
     CliReviewRequestDto,
     TrialCliReviewRequestDto,
-} from '../dtos/cli-review.dto';
-import { CliSessionCaptureRequestDto } from '../dtos/cli-session-capture.dto';
-import { CliSessionCaptureResponseDto } from '../dtos/cli-session-capture.response.dto';
-import { SessionEventRequestDto } from '../dtos/session-event.dto';
+} from '../../dtos/cli-review.dto';
+import { CliSessionCaptureRequestDto } from '../../dtos/cli-session-capture.dto';
+import { CliSessionCaptureResponseDto } from '../../dtos/cli-session-capture.response.dto';
+import { SessionEventRequestDto } from '../../dtos/session-event.dto';
 import {
     CliBusinessValidationResponseDto,
     CliReviewRateLimitErrorDto,
     CliReviewResponseDto,
     CliValidateKeyResponseDto,
     TrialCliReviewResponseDto,
-} from '../dtos/cli-review.response.dto';
+} from '../../dtos/cli-review.response.dto';
 
 /**
  * Controller for CLI code review endpoints

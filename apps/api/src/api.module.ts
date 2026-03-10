@@ -46,7 +46,8 @@ import { LoggerWrapperService } from '@libs/core/log/loggerWrapper.service';
 import { SSOModule } from '@libs/ee/sso/sso.module';
 import { AgentController } from './controllers/agent.controller';
 import { AuthController } from './controllers/auth.controller';
-import { CliReviewController } from './controllers/cli-review.controller';
+import { CliConfigController } from './controllers/cli/cli-config.controller';
+import { CliReviewController } from './controllers/cli/cli-review.controller';
 import { CodeBaseController } from './controllers/codeBase.controller';
 import { CodeManagementController } from './controllers/codeManagement.controller';
 import { CodeReviewSettingLogController } from './controllers/codeReviewSettingLog.controller';
@@ -148,6 +149,7 @@ import { CronModule } from './cron/cron.module';
         PullRequestController,
         UsersController,
         CliReviewController,
+        CliConfigController,
         SSOConfigController,
         LicenseController,
         MetricsController,

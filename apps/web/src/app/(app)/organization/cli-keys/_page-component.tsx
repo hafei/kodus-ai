@@ -22,6 +22,7 @@ import {
 import { FormControl } from "@components/ui/form-control";
 import { Input } from "@components/ui/input";
 import { Page } from "@components/ui/page";
+import { Switch } from "@components/ui/switch";
 import {
     Table,
     TableBody,
@@ -36,8 +37,12 @@ import {
     createCLIKey,
     listCLIKeys,
     revokeCLIKey,
+    updateCLIKeyConfig,
 } from "@services/cliKeys/fetch";
-import type { CLIKey } from "@services/cliKeys/types";
+import {
+    CLI_KEY_CAPABILITIES,
+    type CLIKey,
+} from "@services/cliKeys/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 import { format, formatDistanceToNow } from "date-fns";
@@ -45,6 +50,7 @@ import {
     CopyIcon,
     KeyRoundIcon,
     RefreshCcwIcon,
+    Settings2Icon,
     TerminalIcon,
     Trash2Icon,
 } from "lucide-react";
@@ -68,8 +74,11 @@ export const CliKeysPage = ({
     const [newKeyName, setNewKeyName] = useState("");
     const [isCreating, setIsCreating] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [updatingKeyId, setUpdatingKeyId] = useState<string | null>(null);
     const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
     const [keyToRevoke, setKeyToRevoke] = useState<CLIKey | null>(null);
+    const [keyToConfigure, setKeyToConfigure] = useState<CLIKey | null>(null);
+    const [configDraft, setConfigDraft] = useState(false);
     const [createdKey, setCreatedKey] = useState<string | null>(null);
     const [createdMessage, setCreatedMessage] = useState<string | undefined>();
     const [showKeyModal, setShowKeyModal] = useState(false);
@@ -132,6 +141,62 @@ export const CliKeysPage = ({
         } finally {
             setIsCreating(false);
         }
+    };
+
+    const handleToggleRepositoryConfig = async (
+        cliKey: CLIKey,
+        checked: boolean,
+    ) => {
+        setUpdatingKeyId(cliKey.uuid);
+        try {
+            const updatedKey = await updateCLIKeyConfig({
+                teamId,
+                keyId: cliKey.uuid,
+                config: {
+                    capabilities: checked
+                        ? [CLI_KEY_CAPABILITIES.CONFIG_REPO_MANAGE]
+                        : [],
+                },
+            });
+
+            if (!updatedKey) {
+                throw new Error("The CLI key config could not be updated");
+            }
+
+            setKeys((currentKeys) =>
+                currentKeys.map((currentKey) =>
+                    currentKey.uuid === cliKey.uuid ? updatedKey : currentKey,
+                ),
+            );
+
+            toast({
+                variant: "success",
+                title: checked
+                    ? "Repository config enabled"
+                    : "Repository config disabled",
+            });
+        } catch (error: any) {
+            toast({
+                variant: "danger",
+                title: "Failed to update CLI key config",
+                description: error?.message ?? "Try again in a moment.",
+            });
+            console.error(error);
+        } finally {
+            setUpdatingKeyId(null);
+        }
+    };
+
+    const openConfigModal = (cliKey: CLIKey) => {
+        setKeyToConfigure(cliKey);
+        setConfigDraft(thisKeyHasRepoManageCapability(cliKey));
+    };
+
+    const handleSaveKeyConfig = async () => {
+        if (!keyToConfigure) return;
+
+        await handleToggleRepositoryConfig(keyToConfigure, configDraft);
+        setKeyToConfigure(null);
     };
 
     const handleConfirmRevoke = async () => {
@@ -206,6 +271,11 @@ export const CliKeysPage = ({
         if (!value) return "Never used";
         return formatDistanceToNow(new Date(value), { addSuffix: true });
     };
+
+    const thisKeyHasRepoManageCapability = (cliKey: CLIKey) =>
+        cliKey.config?.capabilities?.includes(
+            CLI_KEY_CAPABILITIES.CONFIG_REPO_MANAGE,
+        ) ?? false;
 
     return (
         <Page.Root>
@@ -366,6 +436,23 @@ export const CliKeysPage = ({
                                                     <div className="flex items-center justify-end gap-2">
                                                         <Button
                                                             size="sm"
+                                                            variant="helper"
+                                                            leftIcon={
+                                                                <Settings2Icon />
+                                                            }
+                                                            onClick={() =>
+                                                                openConfigModal(
+                                                                    cliKey,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                !canManage ||
+                                                                !cliKey.active
+                                                            }>
+                                                            Configure
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
                                                             variant="error"
                                                             leftIcon={
                                                                 <Trash2Icon />
@@ -462,6 +549,75 @@ export const CliKeysPage = ({
                             variant="primary-dark"
                             onClick={() => setShowKeyModal(false)}>
                             Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={!!keyToConfigure}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setKeyToConfigure(null);
+                    }
+                }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="text-balance">
+                            Configure CLI key
+                        </DialogTitle>
+                        <DialogDescription className="text-pretty">
+                            Adjust what this key can do. New options can be
+                            added here later without changing the main screen.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {keyToConfigure && (
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-card-lv2 border-card-lv1 rounded-xl border p-4">
+                                <div className="mb-1 text-sm font-semibold">
+                                    {keyToConfigure.name}
+                                </div>
+                                <div className="text-text-secondary text-sm">
+                                    Update the permissions available for this
+                                    CLI key.
+                                </div>
+                            </div>
+
+                            <div className="bg-card-lv2 border-card-lv1 flex items-start justify-between gap-4 rounded-xl border p-4">
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-sm font-semibold">
+                                        Allow repository configuration via CLI
+                                    </span>
+                                    <span className="text-text-secondary text-sm">
+                                        Enables commands like{" "}
+                                        <code>kodus config repo ...</code> for
+                                        this key.
+                                    </span>
+                                </div>
+
+                                <Switch
+                                    checked={configDraft}
+                                    onCheckedChange={setConfigDraft}
+                                    disabled={updatingKeyId === keyToConfigure.uuid}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button
+                            size="md"
+                            variant="helper"
+                            onClick={() => setKeyToConfigure(null)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            size="md"
+                            variant="primary"
+                            loading={updatingKeyId === keyToConfigure?.uuid}
+                            onClick={handleSaveKeyConfig}>
+                            Save changes
                         </Button>
                     </DialogFooter>
                 </DialogContent>

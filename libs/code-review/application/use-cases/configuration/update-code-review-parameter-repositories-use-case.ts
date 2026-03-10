@@ -66,6 +66,11 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
 
     async execute(body: {
         organizationAndTeamData: OrganizationAndTeamData;
+        actor?: {
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        };
     }): Promise<ParametersEntity<ParametersKey.CODE_REVIEW_CONFIG> | boolean> {
         try {
             const { organizationAndTeamData } = body;
@@ -88,6 +93,9 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                 return {
                     id: repository.id,
                     name: repository.name,
+                    isSelected: true,
+                    configs: {},
+                    directories: [],
                 };
             });
 
@@ -139,9 +147,19 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
             );
 
             try {
+                const actor = body.actor ?? {
+                    organizationId: this.request?.user?.organization?.uuid,
+                    userId: this.request?.user?.uuid,
+                    userEmail: this.request?.user?.email,
+                };
+                const hasActor = Boolean(
+                    actor.organizationId && actor.userId && actor.userEmail,
+                );
+
                 if (
-                    addedRepositories.length > 0 ||
-                    removedRepositories.length > 0
+                    hasActor &&
+                    (addedRepositories.length > 0 ||
+                        removedRepositories.length > 0)
                 ) {
                     const actionType =
                         addedRepositories.length > 0 &&
@@ -154,11 +172,11 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                     this.codeReviewSettingsLogService.registerRepositoriesLog({
                         organizationAndTeamData: {
                             ...body.organizationAndTeamData,
-                            organizationId: this.request.user.organization.uuid,
+                            organizationId: actor.organizationId,
                         },
                         userInfo: {
-                            userId: this.request.user.uuid,
-                            userEmail: this.request.user.email,
+                            userId: actor.userId,
+                            userEmail: actor.userEmail,
                         },
                         actionType: actionType,
                         addedRepositories,
