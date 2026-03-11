@@ -16,6 +16,7 @@ import {
 import { ContextAugmentationsMap } from '@libs/ai-engine/infrastructure/adapters/services/context/interfaces/code-review-context-pack.interface';
 import { LLMResponseProcessor } from '@libs/ai-engine/infrastructure/adapters/services/llmResponseProcessor.transform';
 import { IAIAnalysisService } from '@libs/code-review/domain/contracts/AIAnalysisService.contract';
+import { CreateSandboxParams } from '@libs/code-review/domain/contracts/sandbox.provider';
 import {
     CrossFileContextSnippet,
     RemoteCommands,
@@ -577,6 +578,7 @@ export class LLMAnalysisService implements IAIAnalysisService {
         memories?: Array<Partial<IKodyRule>>,
         externalReferences?: unknown[],
         externalReferenceErrors?: unknown[] | string,
+        sandboxCloneParams?: CreateSandboxParams,
         documentationContext?: DocumentationContextItem[],
     ): Promise<ISafeguardResponse> {
         suggestions?.forEach((suggestion) => {
@@ -607,6 +609,7 @@ export class LLMAnalysisService implements IAIAnalysisService {
                 memories,
                 externalReferences,
                 externalReferenceErrors,
+                sandboxCloneParams,
                 documentationContext,
             });
         } catch (error) {

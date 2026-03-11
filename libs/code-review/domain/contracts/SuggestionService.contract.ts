@@ -1,11 +1,15 @@
 import { BYOKConfig } from '@kodus/kodus-common/llm';
+import { CreateSandboxParams } from '@libs/code-review/domain/contracts/sandbox.provider';
 import {
     CrossFileContextSnippet,
     RemoteCommands,
 } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
-import { DocumentationContextItem, Repository } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import {
+    DocumentationContextItem,
+    Repository,
+} from '@libs/core/infrastructure/config/types/general/codeReview.type';
 
 import {
     CodeReviewConfig,
@@ -82,6 +86,7 @@ export interface ISuggestionService {
         memories?: Array<Partial<IKodyRule>>,
         externalReferences?: unknown[],
         externalReferenceErrors?: unknown[] | string,
+        sandboxCloneParams?: CreateSandboxParams,
         documentationContext?: DocumentationContextItem[],
     ): Promise<any>;
 

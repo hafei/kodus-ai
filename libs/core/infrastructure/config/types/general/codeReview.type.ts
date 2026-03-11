@@ -11,6 +11,7 @@ import z from 'zod';
 import type { ContextAugmentationsMap } from '@libs/ai-engine/infrastructure/adapters/services/context/interfaces/code-review-context-pack.interface';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
+import { CreateSandboxParams } from '@libs/code-review/domain/contracts/sandbox.provider';
 import {
     CrossFileContextSnippet,
     RemoteCommands,
@@ -141,6 +142,8 @@ export type AnalysisContext<TPullRequest = any> = {
     documentationContext?: DocumentationContextItem[];
     /** Remote commands for safeguard agent verification (from E2B sandbox) */
     remoteCommands?: RemoteCommands;
+    /** Parameters used to create the sandbox — kept for renewal if it expires */
+    sandboxCloneParams?: CreateSandboxParams;
 };
 
 export type DocumentationContextItem = {

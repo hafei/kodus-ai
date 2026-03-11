@@ -11,10 +11,8 @@ import {
     IIntegrationConfigService,
     INTEGRATION_CONFIG_SERVICE_TOKEN,
 } from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { ParametersEntity } from '@libs/organization/domain/parameters/entities/parameters.entity';
 import { IntegrationConfigKey, ParametersKey } from '@libs/core/domain/enums';
@@ -51,8 +49,7 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
         @Inject(INTEGRATION_CONFIG_SERVICE_TOKEN)
         private readonly integrationConfigService: IIntegrationConfigService,
 
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
 
         @Inject(REQUEST)
         private readonly request: Request & {
@@ -66,6 +63,12 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
 
     async execute(body: {
         organizationAndTeamData: OrganizationAndTeamData;
+        actor?: {
+            source?: 'cli' | 'web';
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        };
     }): Promise<ParametersEntity<ParametersKey.CODE_REVIEW_CONFIG> | boolean> {
         try {
             const { organizationAndTeamData } = body;
@@ -88,6 +91,9 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                 return {
                     id: repository.id,
                     name: repository.name,
+                    isSelected: true,
+                    configs: {},
+                    directories: [],
                 };
             });
 
@@ -139,10 +145,12 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
             );
 
             try {
-                if (
+                const actor = this.resolveActor(body.actor);
+                const hasChanges =
                     addedRepositories.length > 0 ||
-                    removedRepositories.length > 0
-                ) {
+                    removedRepositories.length > 0;
+
+                if (actor && hasChanges) {
                     const actionType =
                         addedRepositories.length > 0 &&
                         removedRepositories.length > 0
@@ -151,16 +159,16 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                               ? ActionType.ADD
                               : ActionType.DELETE;
 
-                    this.codeReviewSettingsLogService.registerRepositoriesLog({
+                    this.eventEmitter.emit(AuditLogEvents.REPOSITORIES, {
                         organizationAndTeamData: {
                             ...body.organizationAndTeamData,
-                            organizationId: this.request.user.organization.uuid,
+                            organizationId: actor.organizationId,
                         },
                         userInfo: {
-                            userId: this.request.user.uuid,
-                            userEmail: this.request.user.email,
+                            userId: actor.userId,
+                            userEmail: actor.userEmail,
                         },
-                        actionType: actionType,
+                        actionType,
                         addedRepositories,
                         removedRepositories,
                         configLevel: ConfigLevel.GLOBAL,
@@ -168,12 +176,9 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                 }
             } catch (error) {
                 this.logger.error({
-                    message: 'Error saving code review settings log',
+                    message: 'Error emitting audit log event for repository update',
                     error: error,
                     context: UpdateCodeReviewParameterRepositoriesUseCase.name,
-                    metadata: {
-                        organizationAndTeamData: organizationAndTeamData,
-                    },
                 });
             }
 
@@ -191,5 +196,43 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
             });
             throw new Error('Error creating or updating parameters');
         }
+    }
+
+    private resolveActor(actor?: {
+        source?: 'cli' | 'web';
+        organizationId?: string;
+        userId?: string;
+        userEmail?: string;
+    }) {
+        if (actor?.source === 'cli') {
+            const organizationId =
+                actor.organizationId ?? this.request?.user?.organization?.uuid;
+
+            if (!organizationId) {
+                return null;
+            }
+
+            return {
+                organizationId,
+                userId: actor.userId ?? 'cli-key',
+                userEmail: actor.userEmail ?? 'CLI key',
+            };
+        }
+
+        const resolvedActor = actor ?? {
+            organizationId: this.request?.user?.organization?.uuid,
+            userId: this.request?.user?.uuid,
+            userEmail: this.request?.user?.email,
+        };
+
+        if (
+            !resolvedActor.organizationId ||
+            !resolvedActor.userId ||
+            !resolvedActor.userEmail
+        ) {
+            return null;
+        }
+
+        return resolvedActor;
     }
 }

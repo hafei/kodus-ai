@@ -175,7 +175,7 @@ export class ClassifyCliSessionCaptureUseCase {
             toolUses: capture.signals?.toolUses || [],
         };
 
-        const { result } = await promptRunner
+        const result = await promptRunner
             .builder()
             .setParser(ParserType.ZOD, LLMDecisionExtractionSchema)
             .setLLMJsonMode(true)

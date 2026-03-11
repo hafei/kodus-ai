@@ -174,6 +174,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
             const sandbox = await this.sandboxProvider.createSandboxWithRepo({
                 cloneUrl: cloneInfo.url,
                 authToken: cloneInfo.authToken,
+                authUsername: cloneInfo.authUsername,
                 branch: cloneInfo.branch,
                 prNumber: cloneInfo.prNumber,
                 platform: cloneInfo.platform,
@@ -219,6 +220,15 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                     remoteCommands: sandbox.remoteCommands,
                     cleanup: sandbox.cleanup,
                 };
+                // Save clone params so safeguard can renew sandbox if it expires
+                draft.sandboxCloneParams = {
+                    cloneUrl: cloneInfo.url,
+                    authToken: cloneInfo.authToken,
+                    authUsername: cloneInfo.authUsername,
+                    branch: cloneInfo.branch,
+                    prNumber: cloneInfo.prNumber,
+                    platform: cloneInfo.platform,
+                };
             });
         } catch (error) {
             // Non-fatal: log error and return context unchanged
@@ -258,6 +268,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
     ): Promise<{
         url: string;
         authToken: string;
+        authUsername?: string;
         branch: string;
         prNumber?: number;
         platform: PlatformType;
@@ -275,6 +286,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
             return {
                 url: cloneParams.url,
                 authToken: cloneParams.auth?.token || '',
+                authUsername: cloneParams.auth?.username,
                 branch: context.branch,
                 prNumber: context.pullRequest.number,
                 platform: context.platformType,
@@ -299,6 +311,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
 
         // Try to get clone params (HTTPS URL + auth token) from team's platform integration
         let authToken = '';
+        let authUsername: string | undefined;
         let cloneUrl = gitContext.remote;
         try {
             const cloneParams = await this.codeManagementService.getCloneParams(
@@ -314,6 +327,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                 platform,
             );
             authToken = cloneParams.auth?.token || '';
+            authUsername = cloneParams.auth?.username;
             // Use the HTTPS URL from the platform service (E2B sandbox requires HTTPS for token auth)
             if (cloneParams.url) {
                 cloneUrl = cloneParams.url;
@@ -346,6 +360,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
         return {
             url: cloneUrl,
             authToken,
+            authUsername,
             branch,
             prNumber: undefined,
             platform,

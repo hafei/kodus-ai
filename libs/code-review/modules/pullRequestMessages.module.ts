@@ -9,7 +9,6 @@ import { IntegrationConfigCoreModule } from '@libs/integrations/modules/config-c
 import { IntegrationCoreModule } from '@libs/integrations/modules/integrations-core.module';
 import { ParametersModule } from '@libs/organization/modules/parameters.module';
 import { PULL_REQUEST_MESSAGES_SERVICE_TOKEN } from '../domain/pullRequestMessages/contracts/pullRequestMessages.service.contract';
-import { CodeReviewSettingsLogModule } from '@libs/ee/codeReviewSettingsLog/codeReviewSettingsLog.module';
 import { PullRequestMessagesModelInstance } from '../infrastructure/adapters/repositories/schemas/mongoose/pullRequestMessages.model';
 import { CreateOrUpdatePullRequestMessagesUseCase } from '../application/use-cases/pullRequestMessages/create-or-update-pull-request-messages.use-case';
 import { FindByRepositoryOrDirectoryIdPullRequestMessagesUseCase } from '../application/use-cases/pullRequestMessages/find-by-repo-or-directory.use-case';
@@ -18,7 +17,6 @@ import { PermissionsModule } from '@libs/identity/modules/permissions.module';
 @Module({
     imports: [
         MongooseModule.forFeature([PullRequestMessagesModelInstance]),
-        forwardRef(() => CodeReviewSettingsLogModule),
         forwardRef(() => IntegrationCoreModule),
         forwardRef(() => IntegrationConfigCoreModule),
         forwardRef(() => ParametersModule),

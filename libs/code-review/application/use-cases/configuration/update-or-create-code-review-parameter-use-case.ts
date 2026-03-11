@@ -14,10 +14,8 @@ import {
     IIntegrationConfigService,
     INTEGRATION_CONFIG_SERVICE_TOKEN,
 } from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
-import {
-    CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN,
-    ICodeReviewSettingsLogService,
-} from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditLogEvents } from '@libs/ee/codeReviewSettingsLog/events/audit-log.events';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
 import { AuthorizationService } from '@libs/identity/infrastructure/adapters/services/permissions/authorization.service';
 import {
@@ -73,8 +71,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         @Inject(INTEGRATION_CONFIG_SERVICE_TOKEN)
         private readonly integrationConfigService: IIntegrationConfigService,
 
-        @Inject(CODE_REVIEW_SETTINGS_LOG_SERVICE_TOKEN)
-        private readonly codeReviewSettingsLogService: ICodeReviewSettingsLogService,
+        private readonly eventEmitter: EventEmitter2,
 
         @Inject(REQUEST)
         private readonly request: UserRequest,
@@ -88,7 +85,15 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
     ) {}
 
     async execute(
-        body: CreateOrUpdateCodeReviewParameterDto,
+        body: CreateOrUpdateCodeReviewParameterDto & {
+            actor?: {
+                source?: 'cli' | 'web';
+                organizationId?: string;
+                userId?: string;
+                userEmail?: string;
+            };
+            skipAuthorization?: boolean;
+        },
     ): Promise<ParametersEntity<ParametersKey.CODE_REVIEW_CONFIG> | boolean> {
         try {
             const { organizationAndTeamData, configValue, repositoryId } = body;
@@ -101,15 +106,18 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
 
             if (!organizationAndTeamData.organizationId) {
                 organizationAndTeamData.organizationId =
-                    this.request.user.organization.uuid;
+                    body.actor?.organizationId ??
+                    this.request?.user?.organization?.uuid;
             }
 
-            await this.authorizationService.ensure({
-                user: this.request.user,
-                action: Action.Create,
-                resource: ResourceType.CodeReviewSettings,
-                repoIds: [repositoryId],
-            });
+            if (!body.skipAuthorization) {
+                await this.authorizationService.ensure({
+                    user: this.request?.user,
+                    action: Action.Create,
+                    resource: ResourceType.CodeReviewSettings,
+                    repoIds: [repositoryId],
+                });
+            }
 
             const codeReviewConfigs = await this.getCodeReviewConfigs(
                 organizationAndTeamData,
@@ -184,6 +192,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                 organizationAndTeamData,
                 codeReviewConfigs,
                 configValue,
+                body.actor,
                 repositoryId,
                 directoryId,
             );
@@ -279,6 +288,12 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         organizationAndTeamData: OrganizationAndTeamData,
         codeReviewConfigs: CodeReviewParameter,
         newConfigValue: CreateOrUpdateCodeReviewParameterDto['configValue'],
+        actor?: {
+            source?: 'cli' | 'web';
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        },
         repositoryId?: string,
         directoryId?: string,
     ) {
@@ -293,16 +308,19 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         let level: ConfigLevel;
         let repository: RepositoryCodeReviewConfig | undefined;
         let directory: DirectoryCodeReviewConfig | undefined;
+        let isCreation = false;
 
         if (directoryId && repositoryId) {
             level = ConfigLevel.DIRECTORY;
             repository = resolver.findRepository(repositoryId);
             directory = resolver.findDirectory(repository, directoryId);
             oldConfig = directory.configs ?? {};
+            isCreation = !directory.isSelected;
         } else if (repositoryId) {
             level = ConfigLevel.REPOSITORY;
             repository = resolver.findRepository(repositoryId);
             oldConfig = repository.configs ?? {};
+            isCreation = !repository.isSelected;
         } else {
             level = ConfigLevel.GLOBAL;
             oldConfig = codeReviewConfigs.configs ?? {};
@@ -342,13 +360,14 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         );
 
         await this.logConfigUpdate({
+            actor,
             organizationAndTeamData,
             oldConfig,
-            newConfig: newConfigValue,
+            newConfig: newDelta,
             level,
-            sourceFunctionName: `handleConfigUpdate[${level}]`,
             repository,
             directory,
+            isCreation,
         });
 
         return true;
@@ -629,53 +648,59 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
     }
 
     private async logConfigUpdate(options: {
+        actor?: {
+            source?: 'cli' | 'web';
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        };
         organizationAndTeamData: OrganizationAndTeamData;
         oldConfig: CreateOrUpdateCodeReviewParameterDto['configValue'];
         newConfig: CreateOrUpdateCodeReviewParameterDto['configValue'];
         level: ConfigLevel;
-        sourceFunctionName: string;
         repository?: RepositoryCodeReviewConfig;
         directory?: DirectoryCodeReviewConfig;
+        isCreation?: boolean;
     }) {
         const {
             organizationAndTeamData,
             oldConfig,
             newConfig,
             level,
-            sourceFunctionName,
             repository,
             directory,
+            isCreation,
         } = options;
 
         try {
-            const logPayload: any = {
-                organizationAndTeamData,
+            const actor = options.actor ?? {
+                source: 'web',
+                organizationId: this.request?.user?.organization?.uuid,
+                userId: this.request?.user?.uuid,
+                userEmail: this.request?.user?.email,
+            };
+
+            if (!actor.organizationId || !actor.userId || !actor.userEmail) {
+                return;
+            }
+
+            this.eventEmitter.emit(AuditLogEvents.CODE_REVIEW_CONFIG, {
+                organizationAndTeamData: {
+                    ...organizationAndTeamData,
+                    organizationId: actor.organizationId,
+                },
                 userInfo: {
-                    userId: this.request.user.uuid,
-                    userEmail: this.request.user.email,
+                    userId: actor.userId,
+                    userEmail: actor.userEmail,
                 },
                 oldConfig,
                 newConfig,
                 actionType: ActionType.EDIT,
                 configLevel: level,
-            };
-
-            if (repository) {
-                logPayload.repository = {
-                    id: repository.id,
-                    name: repository.name,
-                };
-            }
-            if (directory) {
-                logPayload.directory = {
-                    id: directory.id,
-                    path: directory.path,
-                };
-            }
-
-            await this.codeReviewSettingsLogService.registerCodeReviewConfigLog(
-                logPayload,
-            );
+                repository,
+                directory,
+                isCreation,
+            });
         } catch (error) {
             this.logger.error({
                 message: `Error saving code review settings log for ${level.toLowerCase()} level`,
@@ -683,7 +708,6 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                 context: UpdateOrCreateCodeReviewParameterUseCase.name,
                 metadata: {
                     organizationAndTeamData: organizationAndTeamData,
-                    functionName: sourceFunctionName,
                 },
             });
         }

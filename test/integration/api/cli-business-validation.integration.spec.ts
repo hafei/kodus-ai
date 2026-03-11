@@ -14,7 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { CliReviewController } from '@/core/infrastructure/http/controllers/cli-review.controller';
+import { CliReviewController } from '@/core/infrastructure/http/controllers/cli/cli-review.controller';
 import { ExecuteCliReviewUseCase } from '@libs/cli-review/application/use-cases/execute-cli-review.use-case';
 import { SubmitCliSessionCaptureUseCase } from '@libs/cli-review/application/use-cases/submit-cli-session-capture.use-case';
 import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
@@ -34,6 +34,7 @@ import { BusinessRulesValidationAgentProvider } from '@libs/agents/infrastructur
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { TriggerBusinessValidationUseCase } from '@libs/platform/application/use-cases/codeManagement/trigger-business-validation.use-case';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
+import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
 
 describe('CLI business-validation integration', () => {
     let controller: CliReviewController;
@@ -66,6 +67,10 @@ describe('CLI business-validation integration', () => {
                 },
                 {
                     provide: SubmitCliSessionCaptureUseCase,
+                    useValue: { execute: jest.fn() },
+                },
+                {
+                    provide: IngestSessionEventUseCase,
                     useValue: { execute: jest.fn() },
                 },
                 {

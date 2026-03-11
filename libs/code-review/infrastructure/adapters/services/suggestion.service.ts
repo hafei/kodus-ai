@@ -7,6 +7,7 @@ import {
     COMMENT_MANAGER_SERVICE_TOKEN,
     ICommentManagerService,
 } from '@libs/code-review/domain/contracts/CommentManagerService.contract';
+import { CreateSandboxParams } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { ISuggestionService } from '@libs/code-review/domain/contracts/SuggestionService.contract';
 import {
     CrossFileContextSnippet,
@@ -245,6 +246,7 @@ export class SuggestionService implements ISuggestionService {
         memories?: Array<Partial<IKodyRule>>,
         externalReferences?: unknown[],
         externalReferenceErrors?: unknown[] | string,
+        sandboxCloneParams?: CreateSandboxParams,
         documentationContext?: DocumentationContextItem[],
     ) {
         if (!suggestions?.length) {
@@ -266,6 +268,7 @@ export class SuggestionService implements ISuggestionService {
             memories,
             externalReferences,
             externalReferenceErrors,
+            sandboxCloneParams,
             documentationContext,
         );
     }
