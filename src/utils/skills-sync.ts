@@ -470,8 +470,9 @@ export async function syncSkillsToTargets(
 
         const targetResult = createSyncedTargetResult(target);
         const previouslyManagedSkillNames = await readManagedSkillNames(target);
+        const currentSkillNamesSet = new Set(currentSkillNames);
         const staleManagedSkillNames = previouslyManagedSkillNames.filter(
-            (skillName) => !currentSkillNames.includes(skillName),
+            (skillName) => !currentSkillNamesSet.has(skillName),
         );
 
         if (mode === 'uninstall') {
