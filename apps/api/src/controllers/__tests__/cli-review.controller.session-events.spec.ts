@@ -21,7 +21,7 @@ jest.mock(
 );
 
 import { UnauthorizedException } from '@nestjs/common';
-import { CliReviewController } from '../cli-review.controller';
+import { CliReviewController } from '../cli/cli-review.controller';
 
 describe('CliReviewController.ingestSessionEvent', () => {
     let controller: CliReviewController;

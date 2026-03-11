@@ -63,6 +63,12 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
 
     async execute(body: {
         organizationAndTeamData: OrganizationAndTeamData;
+        actor?: {
+            source?: 'cli' | 'web';
+            organizationId?: string;
+            userId?: string;
+            userEmail?: string;
+        };
     }): Promise<ParametersEntity<ParametersKey.CODE_REVIEW_CONFIG> | boolean> {
         try {
             const { organizationAndTeamData } = body;
@@ -85,6 +91,9 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                 return {
                     id: repository.id,
                     name: repository.name,
+                    isSelected: true,
+                    configs: {},
+                    directories: [],
                 };
             });
 
@@ -135,11 +144,13 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                     ),
             );
 
-            if (
-                addedRepositories.length > 0 ||
-                removedRepositories.length > 0
-            ) {
-                try {
+            try {
+                const actor = this.resolveActor(body.actor);
+                const hasChanges =
+                    addedRepositories.length > 0 ||
+                    removedRepositories.length > 0;
+
+                if (actor && hasChanges) {
                     const actionType =
                         addedRepositories.length > 0 &&
                         removedRepositories.length > 0
@@ -151,24 +162,24 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                     this.eventEmitter.emit(AuditLogEvents.REPOSITORIES, {
                         organizationAndTeamData: {
                             ...body.organizationAndTeamData,
-                            organizationId: this.request.user.organization.uuid,
+                            organizationId: actor.organizationId,
                         },
                         userInfo: {
-                            userId: this.request.user.uuid,
-                            userEmail: this.request.user.email,
+                            userId: actor.userId,
+                            userEmail: actor.userEmail,
                         },
-                        actionType: actionType,
+                        actionType,
                         addedRepositories,
                         removedRepositories,
                         configLevel: ConfigLevel.GLOBAL,
                     });
-                } catch (error) {
-                    this.logger.error({
-                        message: 'Error emitting audit log event for repository update',
-                        error: error,
-                        context: UpdateCodeReviewParameterRepositoriesUseCase.name,
-                    });
                 }
+            } catch (error) {
+                this.logger.error({
+                    message: 'Error emitting audit log event for repository update',
+                    error: error,
+                    context: UpdateCodeReviewParameterRepositoriesUseCase.name,
+                });
             }
 
             return result;
@@ -185,5 +196,43 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
             });
             throw new Error('Error creating or updating parameters');
         }
+    }
+
+    private resolveActor(actor?: {
+        source?: 'cli' | 'web';
+        organizationId?: string;
+        userId?: string;
+        userEmail?: string;
+    }) {
+        if (actor?.source === 'cli') {
+            const organizationId =
+                actor.organizationId ?? this.request?.user?.organization?.uuid;
+
+            if (!organizationId) {
+                return null;
+            }
+
+            return {
+                organizationId,
+                userId: actor.userId ?? 'cli-key',
+                userEmail: actor.userEmail ?? 'CLI key',
+            };
+        }
+
+        const resolvedActor = actor ?? {
+            organizationId: this.request?.user?.organization?.uuid,
+            userId: this.request?.user?.uuid,
+            userEmail: this.request?.user?.email,
+        };
+
+        if (
+            !resolvedActor.organizationId ||
+            !resolvedActor.userId ||
+            !resolvedActor.userEmail
+        ) {
+            return null;
+        }
+
+        return resolvedActor;
     }
 }
