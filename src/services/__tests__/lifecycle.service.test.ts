@@ -47,6 +47,8 @@ vi.mock('../session-local.service.js', () => ({
     saveLocal: vi.fn().mockResolvedValue(undefined),
     loadLocal: vi.fn().mockResolvedValue(null),
     removeLocal: vi.fn().mockResolvedValue(undefined),
+    markTurnCompleted: vi.fn().mockResolvedValue(undefined),
+    listStaleSessions: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../api/index.js', () => ({
@@ -268,5 +270,117 @@ describe('LifecycleService.dispatch', () => {
         );
 
         expect(sendEventMock).not.toHaveBeenCalled();
+    });
+
+    it('skips duplicate turn_end when turn is already completed', async () => {
+        const { loadLocal } = await import('../session-local.service.js');
+        const { hookLogger } = await import('../hook-logger.service.js');
+
+        // Simulate a turn that was already completed
+        vi.mocked(loadLocal).mockResolvedValueOnce({
+            turnId: '12345',
+            transcriptPath: '/tmp/transcript.jsonl',
+            transcriptOffset: 0,
+            turnCompleted: true,
+        });
+
+        await lifecycleService.dispatch(
+            '/tmp/repo',
+            'claude-code',
+            makeEvent({ type: 'TurnEnd' }),
+        );
+
+        // Should log dedup skip
+        expect(hookLogger.info).toHaveBeenCalledWith(
+            'turn-end-dedup-skipped',
+            'lifecycle',
+            expect.objectContaining({
+                turn_id: '12345',
+            }),
+        );
+
+        // Should NOT send any event
+        expect(sendEventMock).not.toHaveBeenCalled();
+    });
+
+    it('marks turn as completed after sending turn_end', async () => {
+        const { loadLocal, markTurnCompleted } = await import(
+            '../session-local.service.js'
+        );
+
+        vi.mocked(loadLocal).mockResolvedValueOnce({
+            turnId: '12345',
+            transcriptPath: '',
+            transcriptOffset: 0,
+        });
+
+        await lifecycleService.dispatch(
+            '/tmp/repo',
+            'claude-code',
+            makeEvent({ type: 'TurnEnd' }),
+        );
+
+        expect(sendEventMock).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'turn_end', turnId: '12345' }),
+            '/tmp/repo',
+        );
+        expect(markTurnCompleted).toHaveBeenCalledWith('/tmp/repo', 'sess-1');
+    });
+
+    it('sends synthetic session_end for stale sessions on session_start', async () => {
+        const { listStaleSessions, removeLocal } = await import(
+            '../session-local.service.js'
+        );
+        const { hookLogger } = await import('../hook-logger.service.js');
+
+        vi.mocked(listStaleSessions).mockResolvedValueOnce([
+            { sessionId: 'stale-sess-1', ageMs: 60 * 60 * 1000 },
+            { sessionId: 'stale-sess-2', ageMs: 45 * 60 * 1000 },
+        ]);
+
+        await lifecycleService.dispatch(
+            '/tmp/repo',
+            'claude-code',
+            makeEvent({ type: 'SessionStart' }),
+        );
+
+        // Should log cleanup for each stale session
+        expect(hookLogger.info).toHaveBeenCalledWith(
+            'stale-session-cleanup',
+            'lifecycle',
+            expect.objectContaining({ stale_session_id: 'stale-sess-1' }),
+        );
+        expect(hookLogger.info).toHaveBeenCalledWith(
+            'stale-session-cleanup',
+            'lifecycle',
+            expect.objectContaining({ stale_session_id: 'stale-sess-2' }),
+        );
+
+        // Should send session_end for stale sessions + session_start for current
+        expect(sendEventMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'session_end',
+                sessionId: 'stale-sess-1',
+            }),
+            '/tmp/repo',
+        );
+        expect(sendEventMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'session_end',
+                sessionId: 'stale-sess-2',
+            }),
+            '/tmp/repo',
+        );
+        expect(sendEventMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'session_start',
+                sessionId: 'sess-1',
+            }),
+            '/tmp/repo',
+        );
+
+        // Should remove stale local state files
+        expect(removeLocal).toHaveBeenCalledWith('/tmp/repo', 'stale-sess-1');
+        expect(removeLocal).toHaveBeenCalledWith('/tmp/repo', 'stale-sess-2');
     });
 });
