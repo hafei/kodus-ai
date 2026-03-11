@@ -2,12 +2,17 @@ import { DocumentationSearchExaService } from '@/code-review/infrastructure/adap
 import { SafeguardPipelineService } from '@/code-review/infrastructure/adapters/services/safeguardPipeline.service';
 import { ObservabilityService } from '@/core/log/observability.service';
 import { PromptRunnerService } from '@kodus/kodus-common/llm';
+import { ISandboxProvider } from '@libs/code-review/domain/contracts/sandbox.provider';
 
 describe('SafeguardPipelineService', () => {
     let service: SafeguardPipelineService;
 
     const mockPromptRunnerService = {} as PromptRunnerService;
     const mockObservabilityService = {} as ObservabilityService;
+    const mockSandboxProvider = {
+        isAvailable: jest.fn(),
+        createSandboxWithRepo: jest.fn(),
+    } as unknown as ISandboxProvider;
 
     const mockDocumentationSearchExaService = {
         searchByFilePlan: jest.fn(),
@@ -17,6 +22,7 @@ describe('SafeguardPipelineService', () => {
         service = new SafeguardPipelineService(
             mockPromptRunnerService,
             mockObservabilityService,
+            mockSandboxProvider,
             mockDocumentationSearchExaService,
         );
 
@@ -55,7 +61,8 @@ describe('SafeguardPipelineService', () => {
                             title: 'Mongoose Indexes',
                             url: 'https://mongoosejs.com/docs/guide.html#indexes',
                             query: 'ttl index expiresAt',
-                            snippet: 'Define TTL indexes with expireAfterSeconds.',
+                            snippet:
+                                'Define TTL indexes with expireAfterSeconds.',
                             source: 'exa-search',
                         },
                     ],
