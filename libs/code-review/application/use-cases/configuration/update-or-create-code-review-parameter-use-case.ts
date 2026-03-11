@@ -112,7 +112,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
 
             if (!body.skipAuthorization) {
                 await this.authorizationService.ensure({
-                    user: this.request.user,
+                    user: this.request?.user,
                     action: Action.Create,
                     resource: ResourceType.CodeReviewSettings,
                     repoIds: [repositoryId],

@@ -157,10 +157,15 @@ export class TeamCliKeyService implements ITeamCliKeyService {
         filter: Partial<ITeamCliKey>,
         data: Partial<ITeamCliKey>,
     ): Promise<TeamCliKeyEntity | undefined> {
-        return this.teamCliKeyRepository.update(filter, {
+        const normalizedData: Partial<ITeamCliKey> = {
             ...data,
-            config: data.config ? this.normalizeConfig(data.config) : data.config,
-        });
+        };
+
+        if (data.config !== undefined) {
+            normalizedData.config = this.normalizeConfig(data.config);
+        }
+
+        return this.teamCliKeyRepository.update(filter, normalizedData);
     }
 
     delete(uuid: string): Promise<void> {

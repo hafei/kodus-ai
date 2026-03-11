@@ -84,4 +84,75 @@ describe('UpdateOrCreateCodeReviewParameterUseCase', () => {
         );
         expect(result).toBe(true);
     });
+
+    it('does not crash when authorization runs without an HTTP request object', async () => {
+        const createOrUpdateParametersUseCase = {
+            execute: jest.fn().mockResolvedValue(true),
+        };
+
+        const authorizationService = {
+            ensure: jest.fn().mockResolvedValue(undefined),
+        };
+
+        const useCase = new UpdateOrCreateCodeReviewParameterUseCase(
+            {
+                findByKey: jest.fn().mockResolvedValue({
+                    configValue: {
+                        id: 'global',
+                        name: 'Global',
+                        isSelected: true,
+                        configs: {},
+                        repositories: [
+                            {
+                                id: 'repo-1',
+                                name: 'alpha',
+                                isSelected: false,
+                                configs: {},
+                                directories: [],
+                            },
+                        ],
+                    },
+                }),
+            } as any,
+            createOrUpdateParametersUseCase as any,
+            {
+                findIntegrationConfigFormatted: jest.fn().mockResolvedValue([
+                    {
+                        id: 'repo-1',
+                        name: 'alpha',
+                        directories: [],
+                    },
+                ]),
+            } as any,
+            {
+                emit: jest.fn(),
+            } as any,
+            undefined as any,
+            authorizationService as any,
+            {
+                detectAndSaveReferences: jest.fn(),
+            } as any,
+            {
+                buildConfigKey: jest.fn().mockReturnValue('config-key'),
+            } as any,
+        );
+
+        await expect(
+            useCase.execute({
+                configValue: {},
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+                repositoryId: 'repo-1',
+            } as any),
+        ).resolves.toBe(true);
+
+        expect(authorizationService.ensure).toHaveBeenCalledWith({
+            user: undefined,
+            action: 'create',
+            resource: 'code_review_settings',
+            repoIds: ['repo-1'],
+        });
+    });
 });

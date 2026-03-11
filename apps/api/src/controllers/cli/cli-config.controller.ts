@@ -171,6 +171,10 @@ export class CliConfigController {
 
         if (addedRepositoryIds.length === 0) {
             await this.updateCodeReviewParameterRepositoriesUseCase.execute({
+                actor: {
+                    organizationId: context.organizationId,
+                    source: 'cli',
+                },
                 organizationAndTeamData: context,
             });
             await this.ensureRepositorySettings(repositoryIds, context);
@@ -204,6 +208,10 @@ export class CliConfigController {
         });
 
         await this.updateCodeReviewParameterRepositoriesUseCase.execute({
+            actor: {
+                organizationId: context.organizationId,
+                source: 'cli',
+            },
             organizationAndTeamData: context,
         });
         await this.ensureRepositorySettings(repositoryIds, context);

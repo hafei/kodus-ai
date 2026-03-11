@@ -45,7 +45,8 @@ export class CreateRepositoriesUseCase implements IUseCase {
         try {
             const teamId = params?.teamId;
             const organizationId =
-                params?.organizationId ?? this.request.user?.organization?.uuid;
+                params?.organizationId ??
+                this.request?.user?.organization?.uuid;
 
             const team = await this.teamService.findById(teamId);
 

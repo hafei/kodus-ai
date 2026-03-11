@@ -56,4 +56,37 @@ describe('TeamCliKeyService', () => {
         );
     });
 
+    it('preserves the existing config when a partial update does not provide config', async () => {
+        repository.update.mockResolvedValue(
+            TeamCliKeyEntity.create({
+                uuid: 'key-1',
+                name: 'Updated Key',
+                keyHash: 'hashed-secret',
+                active: true,
+                config: {
+                    capabilities: ['config:repo:manage'],
+                },
+                team: { uuid: 'team-1' },
+                createdBy: { uuid: 'user-1' },
+            }),
+        );
+
+        await service.update(
+            { uuid: 'key-1' },
+            {
+                name: 'Updated Key',
+            },
+        );
+
+        const [, updatePayload] = repository.update.mock.calls[0];
+
+        expect(repository.update).toHaveBeenCalledWith(
+            { uuid: 'key-1' },
+            expect.objectContaining({
+                name: 'Updated Key',
+            }),
+        );
+        expect(updatePayload).not.toHaveProperty('config');
+    });
+
 });

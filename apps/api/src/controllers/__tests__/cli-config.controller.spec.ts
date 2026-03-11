@@ -164,6 +164,10 @@ describe('CliConfigController', () => {
         expect(
             updateCodeReviewParameterRepositoriesUseCase.execute,
         ).toHaveBeenCalledWith({
+            actor: {
+                organizationId: 'org-1',
+                source: 'cli',
+            },
             organizationAndTeamData: {
                 organizationId: 'org-1',
                 teamId: 'team-1',
@@ -264,6 +268,10 @@ describe('CliConfigController', () => {
         expect(
             updateCodeReviewParameterRepositoriesUseCase.execute,
         ).toHaveBeenCalledWith({
+            actor: {
+                organizationId: 'org-1',
+                source: 'cli',
+            },
             organizationAndTeamData: {
                 organizationId: 'org-1',
                 teamId: 'team-1',

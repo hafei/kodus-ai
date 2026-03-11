@@ -64,6 +64,7 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
     async execute(body: {
         organizationAndTeamData: OrganizationAndTeamData;
         actor?: {
+            source?: 'cli' | 'web';
             organizationId?: string;
             userId?: string;
             userEmail?: string;
@@ -198,10 +199,26 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
     }
 
     private resolveActor(actor?: {
+        source?: 'cli' | 'web';
         organizationId?: string;
         userId?: string;
         userEmail?: string;
     }) {
+        if (actor?.source === 'cli') {
+            const organizationId =
+                actor.organizationId ?? this.request?.user?.organization?.uuid;
+
+            if (!organizationId) {
+                return null;
+            }
+
+            return {
+                organizationId,
+                userId: actor.userId ?? 'cli-key',
+                userEmail: actor.userEmail ?? 'CLI key',
+            };
+        }
+
         const resolvedActor = actor ?? {
             organizationId: this.request?.user?.organization?.uuid,
             userId: this.request?.user?.uuid,
