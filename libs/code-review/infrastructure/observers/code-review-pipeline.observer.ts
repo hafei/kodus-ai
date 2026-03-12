@@ -187,7 +187,7 @@ export class CodeReviewPipelineObserver implements IPipelineObserver {
             }> = [];
 
             context.fileMetadata.forEach((meta: any, filename: string) => {
-                if (meta.durationMs != null) {
+                if (meta?.durationMs != null) {
                     fileTimings.push({
                         file: filename,
                         durationMs: meta.durationMs,

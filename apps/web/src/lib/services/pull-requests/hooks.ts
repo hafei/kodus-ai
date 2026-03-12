@@ -106,8 +106,16 @@ export const useInfinitePullRequestExecutions = (
             return allPages.length + 1;
         },
         retry: false,
-        refetchInterval: 30_000,
     });
+
+    // Poll only the first page every 30s (avoids refetching all loaded pages)
+    const { refetch } = query;
+    useEffect(() => {
+        const id = setInterval(() => {
+            refetch({ refetchPage: (_page, index) => index === 0 });
+        }, 30_000);
+        return () => clearInterval(id);
+    }, [refetch]);
 
     const items = useMemo(() => {
         const pages = infiniteData?.pages ?? [];
