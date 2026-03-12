@@ -67,7 +67,7 @@ export class GenerateIssuesFromPrClosedUseCase implements IUseCase {
 
         if (!prData.context.organizationAndTeamData) {
             this.logger.warn({
-                message: `Skipping issue generation: organizationAndTeamData not found for repository ${prData.context.repository.name}`,
+                message: `Skipping issue generation: organizationAndTeamData not found for repository ${prData.context.repository?.name}`,
                 context: GenerateIssuesFromPrClosedUseCase.name,
                 metadata: {
                     prNumber: prData.context.pullRequest?.number,
