@@ -41,6 +41,15 @@ export class GenerateIssuesFromPrClosedUseCase implements IUseCase {
     ) {}
 
     async execute(params: any): Promise<void> {
+        this.logger.log({
+            message: 'Starting issue generation from closed PR',
+            context: GenerateIssuesFromPrClosedUseCase.name,
+            metadata: {
+                platformType: params?.platformType,
+                event: params?.event,
+            },
+        });
+
         const normalizedPayload = await this.normalizePayload(params);
 
         if (!normalizedPayload) {
