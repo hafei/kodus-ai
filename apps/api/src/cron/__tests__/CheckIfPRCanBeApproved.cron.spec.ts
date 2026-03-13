@@ -175,6 +175,7 @@ describe('CheckIfPRCanBeApprovedCronProvider', () => {
             deps.pullRequestService.findPullRequestsWithDeliveredSuggestions,
         ).not.toHaveBeenCalled();
         expect(shouldApproveSpy).not.toHaveBeenCalled();
+        expect(deps.lock.release).toHaveBeenCalledTimes(1);
     });
 
     it('does not suppress successful execution when PR number matches but repository differs', async () => {

@@ -464,8 +464,7 @@ export class AutomationExecutionRepository implements IAutomationExecutionReposi
                 .subQuery()
                 .select('1')
                 .from(AutomationExecutionModel, 'in_progress')
-                .where('in_progress.createdAt BETWEEN :startDate AND :endDate')
-                .andWhere('in_progress.team_automation_id = :teamAutomationId')
+                .where('in_progress.team_automation_id = :teamAutomationId')
                 .andWhere('in_progress.status = :inProgressStatus')
                 .andWhere(
                     `${inProgressRepositoryExpr} = ${successRepositoryExpr}`,

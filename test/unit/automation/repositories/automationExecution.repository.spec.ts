@@ -102,7 +102,7 @@ describe('AutomationExecutionRepository', () => {
     });
 
     it('returns eligible pull request refs excluding in-progress pairs using DB query', async () => {
-        const { repository, queryBuilder } = makeRepository();
+        const { repository, queryBuilder, subQueryBuilder } = makeRepository();
 
         queryBuilder.getRawMany.mockResolvedValue([
             { repositoryId: 'repo-a', pullRequestNumber: '12' },
@@ -119,6 +119,14 @@ describe('AutomationExecutionRepository', () => {
             );
 
         expect(queryBuilder.subQuery).toHaveBeenCalled();
+        expect(subQueryBuilder.where).toHaveBeenCalledWith(
+            'in_progress.team_automation_id = :teamAutomationId',
+        );
+        expect(subQueryBuilder.where).not.toHaveBeenCalledWith(
+            expect.stringContaining(
+                'createdAt BETWEEN :startDate AND :endDate',
+            ),
+        );
         expect(queryBuilder.andWhere).toHaveBeenCalledWith(
             expect.stringContaining('NOT EXISTS'),
         );
