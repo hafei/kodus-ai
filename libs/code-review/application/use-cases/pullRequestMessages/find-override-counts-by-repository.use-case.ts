@@ -201,31 +201,68 @@ export class FindOverrideCountsByRepositoryPullRequestMessagesUseCase {
                 continue;
             }
 
+            const isParentNodeLeaf = this.isFormattedConfigProperty(parentNode);
+            const isParentNodeBranch =
+                !!parentNode &&
+                typeof parentNode === 'object' &&
+                !isParentNodeLeaf;
+
+            if (typeof childValue === 'object' && !Array.isArray(childValue)) {
+                if (isParentNodeBranch) {
+                    formattedChild[key] = this.formatLevel(
+                        parentNode,
+                        childValue as DeepPartial<CustomMessagesConfig>,
+                        childLevel,
+                    );
+                } else {
+                    formattedChild[key] = this.formatObjectAtLevel(
+                        childValue,
+                        childLevel,
+                    );
+                }
+                continue;
+            }
+
+            formattedChild[key] = {
+                value: childValue,
+                level: childLevel,
+                overriddenValue: isParentNodeLeaf
+                    ? (parentNode as IFormattedConfigProperty<any>).value
+                    : undefined,
+                overriddenLevel: isParentNodeLeaf
+                    ? (parentNode as IFormattedConfigProperty<any>).level
+                    : undefined,
+            };
+        }
+
+        return formattedChild;
+    }
+
+    private formatObjectAtLevel(
+        config: object,
+        level: FormattedConfigLevel,
+    ): FormattedCustomMessagesConfig {
+        const formatted = {};
+
+        for (const key in config) {
+            if (!Object.prototype.hasOwnProperty.call(config, key)) continue;
+
+            const value = config[key];
             if (
-                typeof childValue === 'object' &&
-                !Array.isArray(childValue) &&
-                parentNode
+                typeof value === 'object' &&
+                value !== null &&
+                !Array.isArray(value)
             ) {
-                formattedChild[key] = this.formatLevel(
-                    parentNode,
-                    childValue as DeepPartial<CustomMessagesConfig>,
-                    childLevel,
-                );
-            } else if (parentNode) {
-                formattedChild[key] = {
-                    value: childValue,
-                    level: childLevel,
-                    overriddenValue: (
-                        parentNode as IFormattedConfigProperty<any>
-                    )?.value,
-                    overriddenLevel: (
-                        parentNode as IFormattedConfigProperty<any>
-                    )?.level,
+                formatted[key] = this.formatObjectAtLevel(value, level);
+            } else {
+                formatted[key] = {
+                    value,
+                    level,
                 };
             }
         }
 
-        return formattedChild;
+        return formatted as FormattedCustomMessagesConfig;
     }
 
     private isFormattedConfigProperty(
