@@ -264,66 +264,29 @@ export class CheckIfPRCanBeApprovedCronProvider {
                         return;
                     }
 
-                    const automationExecutions =
-                        await this.automationExecutionService.findByPeriodAndTeamAutomationId(
+                    const eligiblePullRequestRefs =
+                        await this.automationExecutionService.findEligiblePullRequestRefsForApprovalByPeriodAndTeamAutomationId(
                             sevenDaysAgo,
                             now,
                             teamAutomation.uuid,
-                            [
-                                AutomationStatus.SUCCESS,
-                                AutomationStatus.IN_PROGRESS,
-                            ],
                         );
 
-                    const inProgressPRs = new Set(
-                        automationExecutions
-                            ?.filter(
-                                (execution) =>
-                                    execution?.status ===
-                                    AutomationStatus.IN_PROGRESS,
-                            )
-                            .map(
-                                (execution) =>
-                                    execution?.dataExecution?.pullRequestNumber,
-                            )
-                            .filter(
-                                (prNumber): prNumber is number =>
-                                    typeof prNumber === 'number',
-                            ),
+                    const eligiblePullRequestKeys = new Set(
+                        eligiblePullRequestRefs.map(
+                            (ref) =>
+                                `${ref.repositoryId}:${ref.pullRequestNumber}`,
+                        ),
                     );
 
                     const automationExecutionsPRs = [
                         ...new Set(
-                            automationExecutions
-                                ?.filter(
-                                    (execution) =>
-                                        execution?.status ===
-                                        AutomationStatus.SUCCESS,
-                                )
-                                .map(
-                                    (execution) =>
-                                        execution?.dataExecution
-                                            ?.pullRequestNumber,
-                                )
-                                .filter(
-                                    (prNumber): prNumber is number =>
-                                        typeof prNumber === 'number' &&
-                                        !inProgressPRs.has(prNumber),
+                            eligiblePullRequestRefs
+                                .map((ref) => ref.pullRequestNumber)
+                                .filter((prNumber): prNumber is number =>
+                                    Number.isInteger(prNumber),
                                 ),
                         ),
                     ];
-
-                    if (inProgressPRs.size > 0) {
-                        this.logger.log({
-                            message:
-                                'Skipping approval checks for PRs with in-progress reviews',
-                            context: CheckIfPRCanBeApprovedCronProvider.name,
-                            metadata: {
-                                organizationAndTeamData,
-                                inProgressPRsCount: inProgressPRs.size,
-                            },
-                        });
-                    }
 
                     if (!automationExecutionsPRs?.length) {
                         return;
@@ -352,9 +315,20 @@ export class CheckIfPRCanBeApprovedCronProvider {
                         return;
                     }
 
+                    const eligibleOpenPullRequests = openPullRequests.filter(
+                        (pr) =>
+                            eligiblePullRequestKeys.has(
+                                `${pr?.repository?.id}:${pr?.number}`,
+                            ),
+                    );
+
+                    if (!eligibleOpenPullRequests.length) {
+                        return;
+                    }
+
                     // Process PRs in parallel with proper error handling
                     await Promise.allSettled(
-                        openPullRequests.map(async (pr) => {
+                        eligibleOpenPullRequests.map(async (pr) => {
                             const repository = pr?.repository;
 
                             const codeReviewConfigFromRepo =

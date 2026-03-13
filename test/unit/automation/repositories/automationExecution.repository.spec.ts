@@ -3,10 +3,25 @@ import { AutomationExecutionRepository } from '@libs/automation/infrastructure/a
 
 describe('AutomationExecutionRepository', () => {
     const makeRepository = () => {
-        const queryBuilder = {
+        const subQueryBuilder = {
+            select: jest.fn().mockReturnThis(),
+            from: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
             andWhere: jest.fn().mockReturnThis(),
+            getQuery: jest.fn().mockReturnValue('(SELECT 1)'),
+        };
+
+        const queryBuilder = {
+            subQuery: jest.fn().mockReturnValue(subQueryBuilder),
+            select: jest.fn().mockReturnThis(),
+            addSelect: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            groupBy: jest.fn().mockReturnThis(),
+            addGroupBy: jest.fn().mockReturnThis(),
+            setParameters: jest.fn().mockReturnThis(),
             getMany: jest.fn().mockResolvedValue([]),
+            getRawMany: jest.fn().mockResolvedValue([]),
         };
 
         const typeormRepository = {
@@ -16,7 +31,12 @@ describe('AutomationExecutionRepository', () => {
 
         const repository = new AutomationExecutionRepository(typeormRepository);
 
-        return { repository, typeormRepository, queryBuilder };
+        return {
+            repository,
+            typeormRepository,
+            queryBuilder,
+            subQueryBuilder,
+        };
     };
 
     it('uses IN clause when status is an array in findByPeriodAndTeamAutomationId', async () => {
@@ -79,5 +99,40 @@ describe('AutomationExecutionRepository', () => {
                 ]),
             }),
         );
+    });
+
+    it('returns eligible pull request refs excluding in-progress pairs using DB query', async () => {
+        const { repository, queryBuilder } = makeRepository();
+
+        queryBuilder.getRawMany.mockResolvedValue([
+            { repositoryId: 'repo-a', pullRequestNumber: '12' },
+            { repositoryId: 'repo-b', pullRequestNumber: 34 },
+            { repositoryId: '', pullRequestNumber: '56' },
+            { repositoryId: 'repo-c', pullRequestNumber: 'NaN' },
+        ]);
+
+        const result =
+            await repository.findEligiblePullRequestRefsForApprovalByPeriodAndTeamAutomationId(
+                new Date('2026-03-01T00:00:00.000Z'),
+                new Date('2026-03-08T00:00:00.000Z'),
+                'team-automation-1',
+            );
+
+        expect(queryBuilder.subQuery).toHaveBeenCalled();
+        expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+            expect.stringContaining('NOT EXISTS'),
+        );
+        expect(queryBuilder.setParameters).toHaveBeenCalledWith(
+            expect.objectContaining({
+                teamAutomationId: 'team-automation-1',
+                successStatus: AutomationStatus.SUCCESS,
+                inProgressStatus: AutomationStatus.IN_PROGRESS,
+            }),
+        );
+
+        expect(result).toEqual([
+            { repositoryId: 'repo-a', pullRequestNumber: 12 },
+            { repositoryId: 'repo-b', pullRequestNumber: 34 },
+        ]);
     });
 });
