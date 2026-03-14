@@ -21,7 +21,7 @@ import {
 import { SUPPORTED_REPO_PATTERN_FIELDS } from '../../utils/repo-settings-patterns.js';
 
 export const REPOSITORY_CONFIG_DESCRIPTION =
-    "Inspect and update the current repository settings in Kodus. Team-key auth is required for add/list/show/setup/set. Use 'kodus config -r [repository]' as a shortcut for 'kodus config remote add [repository]'.";
+    "Inspect and update the current repository settings in Kodus. Team-key auth is required for repository config commands. Use 'kodus config -r [repository]' as a shortcut for 'kodus config remote add [repository]'.";
 
 type RepositoryConfigHandlers = {
     action: (

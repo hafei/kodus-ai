@@ -1137,7 +1137,9 @@ describe('config repo command', () => {
             'Inspect and update the current repository settings in Kodus.',
         );
         expect(remoteHelp).toContain('Team-key auth is');
-        expect(remoteHelp).toContain('required for add/list/show/setup/set');
+        expect(remoteHelp).toContain(
+            'required for repository config commands',
+        );
         expect(remoteHelp).toContain('shortcut for');
         expect(remoteHelp).toContain("'kodus config remote");
         expect(remoteHelp).toContain('add [options] [repository]');

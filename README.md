@@ -556,7 +556,7 @@ When a repository is added from an interactive terminal, Kodus offers a guided s
 
 - automated review
 - auto approve
-- request changes severity
+- minimum severity level
 - ignored file patterns
 - base branch patterns
 - ignored title patterns
