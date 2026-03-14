@@ -74,7 +74,7 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
         try {
             // Validação centralizada de permissões
             const userGitId = params.pullRequest?.user?.id?.toString();
-            
+
             const validationResult =
                 await this.permissionValidationService.validateExecutionPermissions(
                     params.organizationAndTeamData,

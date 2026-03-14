@@ -89,8 +89,6 @@ export const PULL_REQUEST_API = {
         searchParams.append("teamId", params.teamId);
         if (params.repositoryName)
             searchParams.append("repositoryName", params.repositoryName);
-        return pathToApiUrl(
-            `/pull-requests/files?${searchParams.toString()}`,
-        );
+        return pathToApiUrl(`/pull-requests/files?${searchParams.toString()}`);
     },
 } as const;

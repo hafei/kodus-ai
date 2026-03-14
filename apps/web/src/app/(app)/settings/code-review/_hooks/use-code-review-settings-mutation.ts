@@ -1,11 +1,13 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { PARAMETERS_PATHS } from "@services/parameters";
 import { createOrUpdateCodeReviewParameter } from "@services/parameters/fetch";
-import {
-    PARAMETERS_PATHS,
-} from "@services/parameters";
 import { ParametersConfigKey } from "@services/parameters/types";
+import { useQueryClient } from "@tanstack/react-query";
+import type { UseFormReturn } from "react-hook-form";
+import { unformatConfig } from "src/core/utils/helpers";
+import { generateQueryKey } from "src/core/utils/reactQuery";
+
 import {
     CodeReviewFormType,
     type CodeReviewGlobalConfig,
@@ -13,9 +15,6 @@ import {
     type FormattedGlobalCodeReviewConfig,
 } from "../_types";
 import { mergeFormattedCodeReviewConfigForScope } from "../_utils/settings-shell";
-import { generateQueryKey } from "src/core/utils/reactQuery";
-import { unformatConfig } from "src/core/utils/helpers";
-import type { UseFormReturn } from "react-hook-form";
 
 type SavePreparationResult = {
     savedFormData: CodeReviewFormType;
@@ -48,9 +47,7 @@ export const useCodeReviewSettingsMutation = (params: {
     const queryClient = useQueryClient();
     const { teamId, repositoryId, directoryId, form } = params;
 
-    const syncFormattedConfigSnapshot = (
-        savedFormData: CodeReviewFormType,
-    ) => {
+    const syncFormattedConfigSnapshot = (savedFormData: CodeReviewFormType) => {
         const { language: _language, ...formattedConfig } = savedFormData;
         const formattedQueryKey = generateQueryKey(
             PARAMETERS_PATHS.GET_CODE_REVIEW_PARAMETER,

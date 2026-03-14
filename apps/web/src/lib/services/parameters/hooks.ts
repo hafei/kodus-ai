@@ -6,8 +6,11 @@ import type {
     FormattedGlobalCodeReviewConfig,
 } from "src/app/(app)/settings/code-review/_types";
 import { axiosAuthorized } from "src/core/utils/axios";
-import { generateQueryKey } from "src/core/utils/reactQuery";
-import { useFetch, useSuspenseFetch } from "src/core/utils/reactQuery";
+import {
+    generateQueryKey,
+    useFetch,
+    useSuspenseFetch,
+} from "src/core/utils/reactQuery";
 
 import { PARAMETERS_PATHS } from ".";
 import { ParametersConfigKey, PlatformConfigValue } from "./types";
@@ -106,7 +109,9 @@ export const useSuspenseGetFormattedCodeReviewParameter = (teamId: string) => {
 
 export const useCodeReviewSettingsShell = (
     teamId: string,
-    config?: Parameters<typeof useFetch<FormattedCodeReviewParameterResponse>>[3],
+    config?: Parameters<
+        typeof useFetch<FormattedCodeReviewParameterResponse>
+    >[3],
 ) => {
     return useFetch<FormattedCodeReviewParameterResponse>(
         PARAMETERS_PATHS.GET_CODE_REVIEW_PARAMETER,

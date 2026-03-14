@@ -76,8 +76,8 @@ const GithubStarsContent = () => {
                     {data.data.stargazers_count}
                 </Button>
             </Link>
-            </div>
-        );
+        </div>
+    );
 };
 
 export const GithubStars = () => {

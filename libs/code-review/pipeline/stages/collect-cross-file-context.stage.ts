@@ -334,9 +334,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
 
         // Ensure we always use HTTPS (E2B sandbox uses http.extraHeader which only works over HTTPS)
         if (cloneUrl.startsWith('git@')) {
-            const sshMatch = cloneUrl.match(
-                /git@([^:]+):(.+?)(?:\.git)?$/,
-            );
+            const sshMatch = cloneUrl.match(/git@([^:]+):(.+?)(?:\.git)?$/);
             if (sshMatch) {
                 cloneUrl = `https://${sshMatch[1]}/${sshMatch[2]}`;
             } else {

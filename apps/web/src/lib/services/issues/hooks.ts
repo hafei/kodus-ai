@@ -1,7 +1,5 @@
-import {
-    ParametersConfigKey,
-} from "@services/parameters/types";
 import { useOptionalParameterQuery } from "@services/parameters/hooks";
+import { ParametersConfigKey } from "@services/parameters/types";
 import { pathToApiUrl } from "src/core/utils/helpers";
 import { useFetch, useSuspenseFetch } from "src/core/utils/reactQuery";
 import { useOrganizationContext } from "src/features/organization/_providers/organization-context";
@@ -50,13 +48,11 @@ export const useSuspenseIssuesCount = () =>
     });
 
 export const useIssueCreationConfig = (teamId: string | undefined) => {
-    return useOptionalParameterQuery<IssueCreationConfigResponse["configValue"]>(
-        ParametersConfigKey.ISSUE_CREATION_CONFIG,
-        teamId,
-        {
-            uuid: "",
-            configKey: ParametersConfigKey.ISSUE_CREATION_CONFIG,
-            configValue: true,
-        },
-    );
+    return useOptionalParameterQuery<
+        IssueCreationConfigResponse["configValue"]
+    >(ParametersConfigKey.ISSUE_CREATION_CONFIG, teamId, {
+        uuid: "",
+        configKey: ParametersConfigKey.ISSUE_CREATION_CONFIG,
+        configValue: true,
+    });
 };

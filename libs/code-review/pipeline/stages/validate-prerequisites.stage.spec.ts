@@ -3,12 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PlatformType } from '@libs/core/domain/enums';
 import { ParametersKey } from '@libs/core/domain/enums/parameters-key.enum';
 import { PARAMETERS_SERVICE_TOKEN } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
-import {
-    ORGANIZATION_PARAMETERS_SERVICE_TOKEN,
-} from '@libs/organization/domain/organizationParameters/contracts/organizationParameters.service.contract';
-import {
-    PULL_REQUESTS_SERVICE_TOKEN,
-} from '@libs/platformData/domain/pullRequests/contracts/pullRequests.service.contracts';
+import { ORGANIZATION_PARAMETERS_SERVICE_TOKEN } from '@libs/organization/domain/organizationParameters/contracts/organizationParameters.service.contract';
+import { PULL_REQUESTS_SERVICE_TOKEN } from '@libs/platformData/domain/pullRequests/contracts/pullRequests.service.contracts';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { AutoAssignLicenseUseCase } from '@libs/ee/license/use-cases/auto-assign-license.use-case';
 import {

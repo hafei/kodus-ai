@@ -21,8 +21,5 @@ export const FILE_REVIEW_CONTEXT_PREPARATION_PROVIDER: Provider = {
         // Always use EE implementation — self-hosted uses BYOK keys for LLM calls
         return new FileReviewContextPreparation(aiAnalysisService);
     },
-    inject: [
-        CoreFileReviewContextPreparation,
-        LLM_ANALYSIS_SERVICE_TOKEN,
-    ],
+    inject: [CoreFileReviewContextPreparation, LLM_ANALYSIS_SERVICE_TOKEN],
 };

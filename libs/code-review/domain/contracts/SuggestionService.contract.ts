@@ -287,7 +287,9 @@ export interface ISuggestionService {
      * Filters persisted review suggestions to only those whose provider comments
      * are still active in the current review iteration.
      */
-    filterActiveReviewSuggestions<T extends { comment?: { id?: number | string } }>(params: {
+    filterActiveReviewSuggestions<
+        T extends { comment?: { id?: number | string } },
+    >(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         repository: Partial<Repository>;
         prNumber: number;

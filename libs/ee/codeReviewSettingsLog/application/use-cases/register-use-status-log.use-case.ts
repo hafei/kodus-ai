@@ -9,9 +9,7 @@ import { UserStatusDto } from '@libs/ee/codeReviewSettingsLog/dtos/user-status-c
 
 @Injectable()
 export class RegisterUserStatusLogUseCase implements IUseCase {
-    constructor(
-        private readonly eventEmitter: EventEmitter2,
-    ) {}
+    constructor(private readonly eventEmitter: EventEmitter2) {}
 
     public async execute(userStatusDto: UserStatusDto): Promise<void> {
         const organizationId = userStatusDto.organizationId;

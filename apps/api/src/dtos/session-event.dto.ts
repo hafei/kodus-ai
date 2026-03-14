@@ -1,9 +1,4 @@
-import {
-    IsDateString,
-    IsIn,
-    IsString,
-    MaxLength,
-} from 'class-validator';
+import { IsDateString, IsIn, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SESSION_EVENT_TYPES } from '@libs/cli-review/infrastructure/repositories/schemas/session-event.model';
 

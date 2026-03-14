@@ -22,9 +22,7 @@ jest.mock('@libs/ee/configs/environment', () => ({
     },
 }));
 
-function createMockLicenseService(
-    validationResult: any = { valid: false },
-) {
+function createMockLicenseService(validationResult: any = { valid: false }) {
     return {
         validateOrganizationLicense: jest
             .fn()

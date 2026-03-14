@@ -1,9 +1,9 @@
-import {
-    FormattedConfigLevel,
-    type IFormattedConfigProperty,
-} from "../_types";
+import { FormattedConfigLevel, type IFormattedConfigProperty } from "../_types";
 
-export const isOverrideValueChanged = (currentValue: unknown, parentValue: unknown) => {
+export const isOverrideValueChanged = (
+    currentValue: unknown,
+    parentValue: unknown,
+) => {
     if (Array.isArray(currentValue) && Array.isArray(parentValue)) {
         return JSON.stringify(currentValue) !== JSON.stringify(parentValue);
     }

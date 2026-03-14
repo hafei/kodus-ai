@@ -116,6 +116,7 @@
         "@typescript-eslint/**/minimatch": "^10.2.1",
         "qs": ">=6.14.2",
         "markdown-it": "^14.1.1",
-        "minimatch": "^10.2.4"
+        "minimatch": "^10.2.4",
+        "@eslint/eslintrc/minimatch": "^3.1.3"
     }
 }

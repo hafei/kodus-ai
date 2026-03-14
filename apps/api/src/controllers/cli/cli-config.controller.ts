@@ -103,10 +103,9 @@ export class CliConfigController {
         const context = this.toOrganizationAndTeamData(authContext);
 
         return (
-            (await this.integrationConfigService.findIntegrationConfigFormatted<Repositories[]>(
-                IntegrationConfigKey.REPOSITORIES,
-                context,
-            )) ?? []
+            (await this.integrationConfigService.findIntegrationConfigFormatted<
+                Repositories[]
+            >(IntegrationConfigKey.REPOSITORIES, context)) ?? []
         );
     }
 
@@ -137,15 +136,16 @@ export class CliConfigController {
 
         await this.ensureCodeManagementIntegration(context);
 
-        const [availableRepositories, selectedRepositories] = await Promise.all([
-            this.codeManagementService.getRepositories({
-                organizationAndTeamData: context,
-            }),
-            this.integrationConfigService.findIntegrationConfigFormatted<Repositories[]>(
-                IntegrationConfigKey.REPOSITORIES,
-                context,
-            ),
-        ]);
+        const [availableRepositories, selectedRepositories] = await Promise.all(
+            [
+                this.codeManagementService.getRepositories({
+                    organizationAndTeamData: context,
+                }),
+                this.integrationConfigService.findIntegrationConfigFormatted<
+                    Repositories[]
+                >(IntegrationConfigKey.REPOSITORIES, context),
+            ],
+        );
 
         const availableById = new Map(
             (availableRepositories ?? []).map((repository) => [
@@ -165,7 +165,9 @@ export class CliConfigController {
         }
 
         const selectedRepositoryIds = new Set(
-            (selectedRepositories ?? []).map((repository) => String(repository.id)),
+            (selectedRepositories ?? []).map((repository) =>
+                String(repository.id),
+            ),
         );
 
         const addedRepositoryIds = repositoryIds.filter(
@@ -200,7 +202,9 @@ export class CliConfigController {
         ]);
 
         const mergedRepositories = (availableRepositories ?? [])
-            .filter((repository) => mergedRepositoryIds.has(String(repository.id)))
+            .filter((repository) =>
+                mergedRepositoryIds.has(String(repository.id)),
+            )
             .map((repository) => ({
                 ...repository,
                 selected: true,
@@ -304,7 +308,8 @@ export class CliConfigController {
             throw new UnauthorizedException('Team API key required');
         }
 
-        const teamData = await this.teamCliKeyService.validateKey(resolvedTeamKey);
+        const teamData =
+            await this.teamCliKeyService.validateKey(resolvedTeamKey);
 
         if (!teamData?.team?.uuid || !teamData?.organization?.uuid) {
             throw new UnauthorizedException('Invalid or revoked team API key');

@@ -36,7 +36,9 @@ describe('SessionEventRequestDto', () => {
     });
 
     it('rejects invalid event type', async () => {
-        const errors = await validate(toDto({ ...validPayload, type: 'invalid_type' }));
+        const errors = await validate(
+            toDto({ ...validPayload, type: 'invalid_type' }),
+        );
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0].property).toBe('type');
     });
@@ -70,31 +72,39 @@ describe('SessionEventRequestDto', () => {
     });
 
     it('rejects invalid timestamp format', async () => {
-        const errors = await validate(toDto({ ...validPayload, timestamp: 'not-a-date' }));
+        const errors = await validate(
+            toDto({ ...validPayload, timestamp: 'not-a-date' }),
+        );
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0].property).toBe('timestamp');
     });
 
     it('rejects sessionId longer than 120 chars', async () => {
-        const errors = await validate(toDto({
-            ...validPayload,
-            sessionId: 'x'.repeat(121),
-        }));
+        const errors = await validate(
+            toDto({
+                ...validPayload,
+                sessionId: 'x'.repeat(121),
+            }),
+        );
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0].property).toBe('sessionId');
     });
 
     it('rejects branch longer than 250 chars', async () => {
-        const errors = await validate(toDto({
-            ...validPayload,
-            branch: 'x'.repeat(251),
-        }));
+        const errors = await validate(
+            toDto({
+                ...validPayload,
+                branch: 'x'.repeat(251),
+            }),
+        );
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0].property).toBe('branch');
     });
 
     it('rejects non-string sessionId', async () => {
-        const errors = await validate(toDto({ ...validPayload, sessionId: 12345 }));
+        const errors = await validate(
+            toDto({ ...validPayload, sessionId: 12345 }),
+        );
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0].property).toBe('sessionId');
     });

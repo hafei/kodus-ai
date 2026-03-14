@@ -2,16 +2,16 @@ import {
     hasUnsavedChanges,
     registerNavigationGuard,
     triggerNavigationBlock,
-} from "../../../apps/web/src/core/utils/navigation-guard";
+} from '../../../apps/web/src/core/utils/navigation-guard';
 
-describe("core navigation guard", () => {
+describe('core navigation guard', () => {
     afterEach(() => {
         // Clear all registered guards between tests.
-        const cleanA = registerNavigationGuard("cleanup-a", {
+        const cleanA = registerNavigationGuard('cleanup-a', {
             isDirty: () => false,
             onBlock: () => undefined,
         });
-        const cleanB = registerNavigationGuard("cleanup-b", {
+        const cleanB = registerNavigationGuard('cleanup-b', {
             isDirty: () => false,
             onBlock: () => undefined,
         });
@@ -20,8 +20,8 @@ describe("core navigation guard", () => {
         cleanB();
     });
 
-    it("reports unsaved changes when any registered guard is dirty", () => {
-        const cleanup = registerNavigationGuard("dirty-form", {
+    it('reports unsaved changes when any registered guard is dirty', () => {
+        const cleanup = registerNavigationGuard('dirty-form', {
             isDirty: () => true,
             onBlock: () => undefined,
         });
@@ -32,15 +32,15 @@ describe("core navigation guard", () => {
         expect(hasUnsavedChanges()).toBe(false);
     });
 
-    it("triggers only the first dirty guard", () => {
+    it('triggers only the first dirty guard', () => {
         const firstOnBlock = jest.fn();
         const secondOnBlock = jest.fn();
 
-        const cleanupFirst = registerNavigationGuard("first", {
+        const cleanupFirst = registerNavigationGuard('first', {
             isDirty: () => true,
             onBlock: firstOnBlock,
         });
-        const cleanupSecond = registerNavigationGuard("second", {
+        const cleanupSecond = registerNavigationGuard('second', {
             isDirty: () => true,
             onBlock: secondOnBlock,
         });
@@ -54,15 +54,15 @@ describe("core navigation guard", () => {
         cleanupSecond();
     });
 
-    it("ignores clean guards when triggering a block", () => {
+    it('ignores clean guards when triggering a block', () => {
         const cleanOnBlock = jest.fn();
         const dirtyOnBlock = jest.fn();
 
-        const cleanupClean = registerNavigationGuard("clean", {
+        const cleanupClean = registerNavigationGuard('clean', {
             isDirty: () => false,
             onBlock: cleanOnBlock,
         });
-        const cleanupDirty = registerNavigationGuard("dirty", {
+        const cleanupDirty = registerNavigationGuard('dirty', {
             isDirty: () => true,
             onBlock: dirtyOnBlock,
         });

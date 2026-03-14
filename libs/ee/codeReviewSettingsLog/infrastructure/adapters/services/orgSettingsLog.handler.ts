@@ -100,9 +100,7 @@ export class OrgSettingsLogHandler {
         }
 
         if (domainsChanged && currDomains.length > 0) {
-            parts.push(
-                `with domains: ${currDomains.join(', ')}`,
-            );
+            parts.push(`with domains: ${currDomains.join(', ')}`);
         }
 
         const action = enabledChanged
@@ -291,8 +289,12 @@ export class OrgSettingsLogHandler {
 
                     changes.push({
                         actionDescription: `BYOK ${slot.label} API Key ${actionVerb}`,
-                        previousValue: { apiKey: prevKeyExists ? '***' : 'not set' },
-                        currentValue: { apiKey: currKeyExists ? '***' : 'not set' },
+                        previousValue: {
+                            apiKey: prevKeyExists ? '***' : 'not set',
+                        },
+                        currentValue: {
+                            apiKey: currKeyExists ? '***' : 'not set',
+                        },
                         description: `User ${userEmail} ${action} the API Key in BYOK ${slot.label} configuration`,
                     });
                 }

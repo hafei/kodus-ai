@@ -1,13 +1,13 @@
 import { authorizedFetch } from "@services/fetch";
-import type { LiteralUnion } from "src/core/types";
-import { axiosAuthorized } from "src/core/utils/axios";
-import { codeReviewConfigRemovePropertiesNotInType } from "src/core/utils/helpers";
-
 import type { CustomMessageConfig } from "@services/pull-request-messages/types";
 import type {
     CodeReviewGlobalConfig,
     FormattedGlobalCodeReviewConfig,
 } from "src/app/(app)/settings/code-review/_types";
+import type { LiteralUnion } from "src/core/types";
+import { axiosAuthorized } from "src/core/utils/axios";
+import { codeReviewConfigRemovePropertiesNotInType } from "src/core/utils/helpers";
+
 import { PARAMETERS_PATHS } from ".";
 import { ParametersConfigKey, type PlatformConfigValue } from "./types";
 

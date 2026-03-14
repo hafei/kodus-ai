@@ -1,4 +1,5 @@
 import type { Team } from "@services/teams/types";
+
 import { TEAM_STATUS } from "../../../../core/types";
 
 export const resolveInitialSettingsTeamId = (

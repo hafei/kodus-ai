@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateSessionEvents1772560489322 implements MigrationInterface {
-    name = 'CreateSessionEvents1772560489322'
+    name = 'CreateSessionEvents1772560489322';
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`
@@ -50,5 +50,4 @@ export class CreateSessionEvents1772560489322 implements MigrationInterface {
             DROP TABLE "session_events"
         `);
     }
-
 }

@@ -10,18 +10,18 @@ import { FormProvider, useForm } from "react-hook-form";
 import { useUnsavedChangesGuard } from "src/core/hooks/use-unsaved-changes-guard";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 
+import { type CodeReviewFormType } from "../_types";
+import {
+    buildCodeReviewSettingsHydrationKey,
+    buildCodeReviewSettingsScopeKey,
+    shouldHydrateCodeReviewForm,
+} from "../_utils/settings-shell";
 import {
     useCodeReviewConfig,
     useDefaultCodeReviewConfig,
 } from "../../_components/context";
 import { useCodeReviewRouteParams } from "../../_hooks";
 import { normalizePromptFormValues } from "./custom-prompts/_utils/custom-prompts-state";
-import {
-    buildCodeReviewSettingsScopeKey,
-    buildCodeReviewSettingsHydrationKey,
-    shouldHydrateCodeReviewForm,
-} from "../_utils/settings-shell";
-import { type CodeReviewFormType } from "../_types";
 
 export default function Layout(props: React.PropsWithChildren) {
     const { teamId } = useSelectedTeamId();
@@ -45,8 +45,7 @@ export default function Layout(props: React.PropsWithChildren) {
         repositoryId,
         directoryId,
     );
-    const language =
-        parameters.data?.configValue ?? LanguageValue.ENGLISH;
+    const language = parameters.data?.configValue ?? LanguageValue.ENGLISH;
     const initialFormValues = useMemo(
         () =>
             normalizePromptFormValues(
@@ -95,11 +94,7 @@ export default function Layout(props: React.PropsWithChildren) {
 
         form.reset(initialFormValues);
         hydratedStateKeyRef.current = hydrationKey;
-    }, [
-        form,
-        hydrationKey,
-        initialFormValues,
-    ]);
+    }, [form, hydrationKey, initialFormValues]);
 
     const sharedFormIsDirty = useCallback(() => {
         const check = (
@@ -183,7 +178,11 @@ export default function Layout(props: React.PropsWithChildren) {
             let fieldElement: Element | null = null;
             const segments = dirtyKey.split(".");
 
-            for (let index = segments.length; index > 0 && !fieldElement; index--) {
+            for (
+                let index = segments.length;
+                index > 0 && !fieldElement;
+                index--
+            ) {
                 const prefix = segments.slice(0, index).join(".");
                 fieldElement = document.querySelector(
                     `[data-field-name="${prefix}"]`,

@@ -856,7 +856,11 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 context,
             );
 
-            return { ...finalResult, filename: file.filename, durationMs: Date.now() - startMs };
+            return {
+                ...finalResult,
+                filename: file.filename,
+                durationMs: Date.now() - startMs,
+            };
         } catch (error) {
             this.logger.error({
                 message: `Error analyzing file ${file.filename}`,
@@ -873,7 +877,9 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
 
             const errorMessage =
                 error instanceof Error ? error.message : String(error);
-            const isTimeout = /timeout|timed out|ETIMEDOUT|abort/i.test(errorMessage);
+            const isTimeout = /timeout|timed out|ETIMEDOUT|abort/i.test(
+                errorMessage,
+            );
             const enrichedError = new Error(
                 isTimeout
                     ? `File analysis timed out after ${Math.round((Date.now() - startMs) / 1000)}s`

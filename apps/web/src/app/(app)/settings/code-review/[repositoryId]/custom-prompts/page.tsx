@@ -11,31 +11,27 @@ import {
 import { Page } from "@components/ui/page";
 import { Spinner } from "@components/ui/spinner";
 import { toast } from "@components/ui/toaster/use-toast";
-import {
-    KodyLearningStatus,
-} from "@services/parameters/types";
+import { KodyLearningStatus } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 import { SaveIcon } from "lucide-react";
 import { Path, useFormContext } from "react-hook-form";
-import { useUnsavedChangesGuard } from "src/core/hooks/use-unsaved-changes-guard";
 import { useMCPMentions } from "src/core/hooks/use-mcp-mentions";
+import { useUnsavedChangesGuard } from "src/core/hooks/use-unsaved-changes-guard";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 
-import { useCodeReviewSettingsMutation } from "../../_hooks/use-code-review-settings-mutation";
 import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import GeneratingConfig from "../../_components/generating-config";
 import { CodeReviewSaveButton } from "../../_components/save-button";
+import { useCodeReviewSettingsMutation } from "../../_hooks/use-code-review-settings-mutation";
 import { type CodeReviewFormType } from "../../_types";
-import {
-    getValueAtPath,
-} from "./_utils/custom-prompts-state";
-import { PromptEditorField } from "./_components/prompt-editor-field";
 import {
     useDefaultCodeReviewConfig,
     usePlatformConfig,
 } from "../../../_components/context";
 import { useCodeReviewRouteParams } from "../../../_hooks";
+import { PromptEditorField } from "./_components/prompt-editor-field";
+import { getValueAtPath } from "./_utils/custom-prompts-state";
 
 type PromptFieldConfig = {
     name: Path<CodeReviewFormType>;
@@ -58,9 +54,7 @@ type PromptSectionConfig = {
     fields: PromptFieldConfig[];
 };
 
-function buildPromptSections(
-    defaults: PromptDefaults,
-): PromptSectionConfig[] {
+function buildPromptSections(defaults: PromptDefaults): PromptSectionConfig[] {
     return [
         {
             fieldName: "v2PromptOverrides.generation",
@@ -91,8 +85,7 @@ function buildPromptSections(
                     label: "Bug",
                     helperText: "Prompt for Bugs (max 2000).",
                     placeholder: "Type the prompt for Bugs",
-                    defaultValue:
-                        defaults.categories?.descriptions?.bug ?? "",
+                    defaultValue: defaults.categories?.descriptions?.bug ?? "",
                 },
                 {
                     name: "v2PromptOverrides.categories.descriptions.performance.value",
@@ -232,13 +225,19 @@ function CustomPromptsContent() {
     });
 
     const scrollToDirtyPrompt = useCallback(() => {
-        const dirtyField = promptFields.find((field) => dirtyPromptFields[field]);
+        const dirtyField = promptFields.find(
+            (field) => dirtyPromptFields[field],
+        );
 
         if (dirtyField) {
             let fieldElement: Element | null = null;
             const segments = dirtyField.split(".");
 
-            for (let index = segments.length; index > 0 && !fieldElement; index--) {
+            for (
+                let index = segments.length;
+                index > 0 && !fieldElement;
+                index--
+            ) {
                 fieldElement = document.querySelector(
                     `[data-field-name="${segments.slice(0, index).join(".")}"]`,
                 );
@@ -322,10 +321,14 @@ function CustomPromptsContent() {
 
             <Page.Content className="gap-8">
                 {promptSections.map((section) => (
-                    <Card key={section.fieldName} data-field-name={section.fieldName}>
+                    <Card
+                        key={section.fieldName}
+                        data-field-name={section.fieldName}>
                         <CardHeader>
                             <CardTitle>{section.title}</CardTitle>
-                            <CardDescription>{section.description}</CardDescription>
+                            <CardDescription>
+                                {section.description}
+                            </CardDescription>
                         </CardHeader>
 
                         <CardContent>

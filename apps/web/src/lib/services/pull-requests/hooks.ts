@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 import {
     useInfiniteQuery,
     useQuery,
     useQueryClient,
     type InfiniteData,
 } from "@tanstack/react-query";
-import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { axiosAuthorized } from "src/core/utils/axios";
 import { getJWTToken } from "src/core/utils/session";
 
@@ -153,12 +153,7 @@ export const usePullRequestSuggestions = (
     filters?: { severity?: string; category?: string },
 ) => {
     return useQuery({
-        queryKey: [
-            "pull-request-suggestions",
-            repositoryId,
-            prNumber,
-            filters,
-        ],
+        queryKey: ["pull-request-suggestions", repositoryId, prNumber, filters],
         queryFn: () =>
             axiosAuthorized.fetcher<PullRequestSuggestionsResponse>(
                 PULL_REQUEST_API.GET_SUGGESTIONS({

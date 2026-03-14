@@ -21,10 +21,11 @@ import {
     SlidersHorizontalIcon,
 } from "lucide-react";
 import { ErrorBoundary } from "react-error-boundary";
+import { UserNav } from "src/core/layout/navbar/_components/user-nav";
 import { cn } from "src/core/utils/components";
 import { SubscriptionBadge } from "src/features/ee/subscription/_components/subscription-badge";
 import { useSubscriptionContext } from "src/features/ee/subscription/_providers/subscription-context";
-import { UserNav } from "src/core/layout/navbar/_components/user-nav";
+
 import { GithubStars } from "./_components/github-stars";
 import { IssuesCount } from "./_components/issues-count";
 import { PendingRulesNotification } from "./_components/pending-rules-notification";
@@ -67,7 +68,8 @@ export const NavMenu = () => {
                 visible:
                     subscription.license.valid &&
                     subscription.license.subscriptionStatus !== "self-hosted" &&
-                    subscription.license.subscriptionStatus !== "licensed-self-hosted",
+                    subscription.license.subscriptionStatus !==
+                        "licensed-self-hosted",
                 icon: <GaugeIcon className="size-6" />,
             },
 

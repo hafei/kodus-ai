@@ -71,7 +71,10 @@ function resolveTaskMetadata(ctx: BusinessRulesContext): {
 } {
     const normalized = ctx.taskContextNormalized;
     const linksFromText = extractLinksFromText(ctx.taskContext);
-    const links = uniqueNonEmpty([...(normalized?.links ?? []), ...linksFromText]);
+    const links = uniqueNonEmpty([
+        ...(normalized?.links ?? []),
+        ...linksFromText,
+    ]);
 
     return {
         id: normalized?.id ?? extractTaskIdFromText(ctx.taskContext),
@@ -168,7 +171,9 @@ function extractTaskIdFromText(text: string | undefined): string | undefined {
     return issueKey?.[1];
 }
 
-function extractTaskTitleFromText(text: string | undefined): string | undefined {
+function extractTaskTitleFromText(
+    text: string | undefined,
+): string | undefined {
     if (!text) {
         return undefined;
     }

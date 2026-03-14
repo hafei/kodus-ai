@@ -234,20 +234,14 @@ export class ClassifySessionUseCase {
                     aggregated.filesModified.push(...turnFilesModified);
 
                     if (Array.isArray(p.filesRead)) {
-                        aggregated.filesRead.push(
-                            ...(p.filesRead as string[]),
-                        );
+                        aggregated.filesRead.push(...(p.filesRead as string[]));
                     }
                     if (Array.isArray(p.commands)) {
-                        aggregated.commands.push(
-                            ...(p.commands as string[]),
-                        );
+                        aggregated.commands.push(...(p.commands as string[]));
                     }
 
                     // Pair with turn_start
-                    const pair = turnId
-                        ? pendingTurns.get(turnId)
-                        : undefined;
+                    const pair = turnId ? pendingTurns.get(turnId) : undefined;
                     if (pair) {
                         pair.response = response;
                         pair.toolCalls = turnToolCalls;
@@ -452,7 +446,9 @@ export class ClassifySessionUseCase {
             return 'architectural_decision';
         }
 
-        if (/(convention|style|naming|format|lint|folder structure)/.test(value)) {
+        if (
+            /(convention|style|naming|format|lint|folder structure)/.test(value)
+        ) {
             return 'convention';
         }
 

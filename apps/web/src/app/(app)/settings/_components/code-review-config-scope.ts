@@ -25,12 +25,16 @@ export const resolveCodeReviewConfigForScope = (
         };
     }
 
-    const repository = config.repositories.find((item) => item.id === repositoryId);
+    const repository = config.repositories.find(
+        (item) => item.id === repositoryId,
+    );
     if (!repository) {
         return undefined;
     }
 
-    const directory = repository.directories?.find((item) => item.id === directoryId);
+    const directory = repository.directories?.find(
+        (item) => item.id === directoryId,
+    );
 
     if (!directory) {
         const { configs, ...rest } = repository;

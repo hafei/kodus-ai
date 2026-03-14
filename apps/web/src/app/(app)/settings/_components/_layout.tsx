@@ -12,7 +12,6 @@ import {
 } from "@components/ui/collapsible";
 import { Link } from "@components/ui/link";
 import { Page } from "@components/ui/page";
-import { Skeleton } from "@components/ui/skeleton";
 import {
     Sidebar,
     SidebarContent,
@@ -23,8 +22,8 @@ import {
     SidebarMenuSub,
     SidebarMenuSubItem,
 } from "@components/ui/sidebar";
+import { Skeleton } from "@components/ui/skeleton";
 import { useMCPAvailability } from "@services/mcp-manager/hooks";
-import type { CustomMessageConfig } from "@services/pull-request-messages/types";
 import {
     useCodeReviewSettingsShell,
     useSuspenseGetDefaultCodeReviewParameter,
@@ -36,17 +35,19 @@ import {
 } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
+import type { CustomMessageConfig } from "@services/pull-request-messages/types";
 import { FEATURE_FLAGS } from "src/core/config/feature-flags";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { safeArray } from "src/core/utils/safe-array";
 
 import { useCodeReviewRouteParams } from "../_hooks";
-import { countConfigOverrides } from "../_utils/count-overrides";
-import type {
-    CodeReviewGlobalConfig,
-    FormattedGlobalCodeReviewConfig,
+import { countConfigOverridesForRoutes } from "../_utils/count-overrides";
+import {
+    FormattedConfigLevel,
+    type CodeReviewGlobalConfig,
+    type FormattedGlobalCodeReviewConfig,
 } from "../code-review/_types";
-import { FormattedConfigLevel } from "../code-review/_types";
+import { resolveCodeReviewConfigForScope } from "./code-review-config-scope";
 import {
     AutomationCodeReviewConfigProvider,
     DefaultCodeReviewConfigProvider,
@@ -54,8 +55,11 @@ import {
     ScopedCodeReviewConfigProvider,
     useFeatureFlags,
 } from "./context";
-import { resolveCodeReviewConfigForScope } from "./code-review-config-scope";
 import { PerRepository } from "./per-repository/repository";
+import {
+    RouteButtonWithOverrideCount,
+    useCustomMessagesOverrideCount,
+} from "./route-button-with-override-count";
 
 const routes = [
     { label: "General", href: "general" },
@@ -172,12 +176,20 @@ function SettingsLayoutShell({
     const pathname = usePathname();
     const { repositoryId, pageName, directoryId } = useCodeReviewRouteParams();
     const featureFlags = useFeatureFlags();
-    const globalOverrideCount = configValue
-        ? countConfigOverrides(
+    const globalConfigOverrideCount = configValue
+        ? countConfigOverridesForRoutes(
               configValue.configs,
+              routes.map((r) => r.href),
               FormattedConfigLevel.GLOBAL,
           )
         : 0;
+    const globalCustomMessagesOverrideCount = useCustomMessagesOverrideCount({
+        scopeRepositoryId: "global",
+        level: FormattedConfigLevel.GLOBAL,
+        enabled: Boolean(configValue),
+    });
+    const globalOverrideCount =
+        globalConfigOverrideCount + globalCustomMessagesOverrideCount;
 
     const canReadGitSettings = usePermission(
         Action.Read,
@@ -351,22 +363,27 @@ function SettingsLayoutShell({
                                                             return (
                                                                 <SidebarMenuSubItem
                                                                     key={label}>
-                                                                    <Link
-                                                                        className="w-full"
-                                                                        href={`/settings/code-review/global/${href}`}>
-                                                                        <Button
-                                                                            decorative
-                                                                            size="sm"
-                                                                            variant="cancel"
-                                                                            active={
-                                                                                active
-                                                                            }
-                                                                            className="min-h-auto w-full justify-start px-0 py-2">
-                                                                            {
-                                                                                label
-                                                                            }
-                                                                        </Button>
-                                                                    </Link>
+                                                                    <RouteButtonWithOverrideCount
+                                                                        label={
+                                                                            label
+                                                                        }
+                                                                        href={
+                                                                            href
+                                                                        }
+                                                                        to={`/settings/code-review/global/${href}`}
+                                                                        active={
+                                                                            active
+                                                                        }
+                                                                        level={
+                                                                            FormattedConfigLevel.GLOBAL
+                                                                        }
+                                                                        config={
+                                                                            configValue.configs
+                                                                        }
+                                                                        customMessagesOverrideCount={
+                                                                            globalCustomMessagesOverrideCount
+                                                                        }
+                                                                    />
                                                                 </SidebarMenuSubItem>
                                                             );
                                                         },
@@ -399,8 +416,10 @@ function SettingsLayoutShell({
             <Page.WithSidebar>
                 {configValue ? (
                     <DefaultCodeReviewConfigProvider config={defaultConfig}>
-                        <AutomationCodeReviewConfigProvider config={configValue}>
-                            <ScopedCodeReviewConfigProvider config={scopedConfig}>
+                        <AutomationCodeReviewConfigProvider
+                            config={configValue}>
+                            <ScopedCodeReviewConfigProvider
+                                config={scopedConfig}>
                                 <PlatformConfigProvider
                                     config={platformConfig.configValue}>
                                     {children}

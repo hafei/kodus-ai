@@ -1,8 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GetPullRequestSuggestionsUseCase } from '@/code-review/application/use-cases/pullRequests/get-pull-request-suggestions.use-case';
-import {
-    SUGGESTION_SERVICE_TOKEN,
-} from '@/code-review/domain/contracts/SuggestionService.contract';
+import { SUGGESTION_SERVICE_TOKEN } from '@/code-review/domain/contracts/SuggestionService.contract';
 import { DeliveryStatus } from '@/platformData/domain/pullRequests/enums/deliveryStatus.enum';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 

@@ -176,7 +176,8 @@ export class UpdateCodeReviewParameterRepositoriesUseCase {
                 }
             } catch (error) {
                 this.logger.error({
-                    message: 'Error emitting audit log event for repository update',
+                    message:
+                        'Error emitting audit log event for repository update',
                     error: error,
                     context: UpdateCodeReviewParameterRepositoriesUseCase.name,
                 });

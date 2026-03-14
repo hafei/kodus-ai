@@ -17,10 +17,7 @@ import { AppRightSidebar } from "./right-sidebar";
 
 export default async function Layout({ children }: React.PropsWithChildren) {
     // Phase 1: auth + teams in parallel (both needed for redirect checks)
-    const [session, teams] = await Promise.all([
-        auth(),
-        getTeamsCached(),
-    ]);
+    const [session, teams] = await Promise.all([auth(), getTeamsCached()]);
 
     if (!session) {
         redirect("/sign-out");
@@ -87,10 +84,8 @@ export default async function Layout({ children }: React.PropsWithChildren) {
     const isTrial = organizationLicense?.subscriptionStatus === "trial";
 
     const canManageCodeReview = !!(
-        (
-            permissions as Record<string, Record<string, boolean>> | undefined
-        )?.[ResourceType.CodeReviewSettings]?.[Action.Manage]
-    );
+        permissions as Record<string, Record<string, boolean>> | undefined
+    )?.[ResourceType.CodeReviewSettings]?.[Action.Manage];
 
     return (
         <Providers

@@ -18,8 +18,8 @@ import {
     PanelRightCloseIcon,
     PanelRightOpenIcon,
 } from "lucide-react";
-import { cn } from "src/core/utils/components";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
+import { cn } from "src/core/utils/components";
 
 import { DiffViewer } from "./diff-viewer";
 import { FileTree } from "./file-tree";
@@ -88,7 +88,7 @@ export function ReviewPageClient({
             <div className="flex h-full items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
                     <Spinner className="size-6" />
-                    <p className="text-sm text-text-tertiary">
+                    <p className="text-text-tertiary text-sm">
                         Loading suggestions...
                     </p>
                 </div>
@@ -103,7 +103,7 @@ export function ReviewPageClient({
                     <p className="text-sm text-red-500">
                         Failed to load review data.
                     </p>
-                    <p className="mt-1 text-xs text-text-tertiary">
+                    <p className="text-text-tertiary mt-1 text-xs">
                         {suggestionsError.message}
                     </p>
                 </div>
@@ -201,32 +201,28 @@ function ReviewLayout({
     return (
         <div className="flex h-full flex-col overflow-hidden">
             {/* Top bar */}
-            <div className="border-card-lv2 flex items-center gap-4 border-b bg-card-lv1 px-4 py-2.5">
+            <div className="border-card-lv2 bg-card-lv1 flex items-center gap-4 border-b px-4 py-2.5">
                 <NextLink
                     href="/pull-requests"
-                    className="rounded p-1 text-text-tertiary transition-colors hover:bg-card-lv3 hover:text-text-primary">
+                    className="text-text-tertiary hover:bg-card-lv3 hover:text-text-primary rounded p-1 transition-colors">
                     <ArrowLeftIcon className="size-4" />
                 </NextLink>
 
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <h1 className="truncate text-sm font-medium text-text-primary">
+                    <h1 className="text-text-primary truncate text-sm font-medium">
                         {prTitle ?? `PR #${prNumber}`}
                     </h1>
-                    <span className="shrink-0 text-xs text-text-tertiary">
+                    <span className="text-text-tertiary shrink-0 text-xs">
                         #{prNumber}
                     </span>
                 </div>
 
                 {(baseBranch || headBranch) && (
-                    <div className="hidden items-center gap-1.5 text-xs text-text-tertiary md:flex">
+                    <div className="text-text-tertiary hidden items-center gap-1.5 text-xs md:flex">
                         <GitBranchIcon className="size-3" />
-                        <span className="font-mono">
-                            {headBranch ?? "?"}
-                        </span>
+                        <span className="font-mono">{headBranch ?? "?"}</span>
                         <span className="text-text-tertiary/50">→</span>
-                        <span className="font-mono">
-                            {baseBranch ?? "?"}
-                        </span>
+                        <span className="font-mono">{baseBranch ?? "?"}</span>
                     </div>
                 )}
 
@@ -267,7 +263,7 @@ function ReviewLayout({
                             href={prUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded p-1.5 text-text-tertiary transition-colors hover:text-text-primary"
+                            className="text-text-tertiary hover:text-text-primary rounded p-1.5 transition-colors"
                             title="Open in provider">
                             <ExternalLinkIcon className="size-4" />
                         </a>
@@ -280,7 +276,7 @@ function ReviewLayout({
                 {/* File tree sidebar */}
                 {state.sidebarOpen && (
                     <>
-                        <div className="w-64 shrink-0 overflow-hidden border-r border-card-lv2 bg-card-lv1">
+                        <div className="border-card-lv2 bg-card-lv1 w-64 shrink-0 overflow-hidden border-r">
                             <FileTree />
                         </div>
                     </>
@@ -298,7 +294,7 @@ function ReviewLayout({
                 {/* Summary panel */}
                 {state.summaryPanelOpen && (
                     <>
-                        <div className="w-80 shrink-0 overflow-hidden border-l border-card-lv2 bg-card-lv1">
+                        <div className="border-card-lv2 bg-card-lv1 w-80 shrink-0 overflow-hidden border-l">
                             <SummaryPanel
                                 fileSuggestions={fileSuggestions}
                                 prLevelSuggestions={prLevelSuggestions}
@@ -312,7 +308,7 @@ function ReviewLayout({
             </div>
 
             {/* Keyboard shortcuts hint */}
-            <div className="border-card-lv2 flex items-center gap-4 border-t bg-card-lv1 px-4 py-1.5">
+            <div className="border-card-lv2 bg-card-lv1 flex items-center gap-4 border-t px-4 py-1.5">
                 <ShortcutHint keys={["j", "k"]} label="navigate files" />
                 <ShortcutHint keys={["b"]} label="toggle sidebar" />
                 <ShortcutHint keys={["i"]} label="toggle summary" />
@@ -321,20 +317,14 @@ function ReviewLayout({
     );
 }
 
-function ShortcutHint({
-    keys,
-    label,
-}: {
-    keys: string[];
-    label: string;
-}) {
+function ShortcutHint({ keys, label }: { keys: string[]; label: string }) {
     return (
-        <div className="flex items-center gap-1.5 text-[10px] text-text-tertiary">
+        <div className="text-text-tertiary flex items-center gap-1.5 text-[10px]">
             <div className="flex gap-0.5">
                 {keys.map((key) => (
                     <kbd
                         key={key}
-                        className="rounded border border-card-lv3 bg-card-lv2 px-1.5 py-0.5 font-mono text-[10px]">
+                        className="border-card-lv3 bg-card-lv2 rounded border px-1.5 py-0.5 font-mono text-[10px]">
                         {key}
                     </kbd>
                 ))}

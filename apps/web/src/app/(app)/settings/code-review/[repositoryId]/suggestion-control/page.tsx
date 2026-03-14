@@ -5,17 +5,15 @@ import { Button } from "@components/ui/button";
 import { Heading } from "@components/ui/heading";
 import { Page } from "@components/ui/page";
 import { toast } from "@components/ui/toaster/use-toast";
-import {
-    KodyLearningStatus,
-} from "@services/parameters/types";
+import { KodyLearningStatus } from "@services/parameters/types";
 import { RotateCcwIcon, Save } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 
-import { useCodeReviewSettingsMutation } from "../../_hooks/use-code-review-settings-mutation";
 import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import GeneratingConfig from "../../_components/generating-config";
 import { CodeReviewSaveButton } from "../../_components/save-button";
+import { useCodeReviewSettingsMutation } from "../../_hooks/use-code-review-settings-mutation";
 import {
     LimitationType,
     type AutomationCodeReviewConfigPageProps,

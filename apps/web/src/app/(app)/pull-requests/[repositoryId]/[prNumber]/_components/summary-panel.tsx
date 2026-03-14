@@ -44,13 +44,12 @@ export function SummaryPanel({
         return counts;
     }, [fileSuggestions]);
 
-    const totalSuggestions =
-        fileSuggestions.length + prLevelSuggestions.length;
+    const totalSuggestions = fileSuggestions.length + prLevelSuggestions.length;
 
     return (
         <div className="flex h-full flex-col">
             <div className="border-card-lv2 border-b px-4 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                <h3 className="text-text-tertiary text-xs font-semibold tracking-wider uppercase">
                     Summary
                 </h3>
             </div>
@@ -60,11 +59,11 @@ export function SummaryPanel({
                 <div className="border-card-lv2 space-y-4 border-b p-4">
                     {prTitle && (
                         <div>
-                            <p className="text-sm font-medium text-text-primary leading-snug">
+                            <p className="text-text-primary text-sm leading-snug font-medium">
                                 {prTitle}
                             </p>
                             {repositoryName && (
-                                <p className="mt-1 text-xs text-text-tertiary">
+                                <p className="text-text-tertiary mt-1 text-xs">
                                     {repositoryName}
                                     {prNumber && ` #${prNumber}`}
                                 </p>
@@ -73,10 +72,10 @@ export function SummaryPanel({
                     )}
 
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold tabular-nums text-text-primary">
+                        <span className="text-text-primary text-2xl font-bold tabular-nums">
                             {totalSuggestions}
                         </span>
-                        <span className="text-sm text-text-tertiary">
+                        <span className="text-text-tertiary text-sm">
                             suggestion{totalSuggestions !== 1 ? "s" : ""}
                         </span>
                     </div>
@@ -84,15 +83,14 @@ export function SummaryPanel({
                     {/* Severity breakdown */}
                     {Object.keys(severityCounts).length > 0 && (
                         <div className="space-y-2">
-                            <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+                            <p className="text-text-tertiary text-xs font-medium tracking-wider uppercase">
                                 By Severity
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 {Object.entries(severityCounts)
                                     .sort(
                                         ([a], [b]) =>
-                                            severityOrder(a) -
-                                            severityOrder(b),
+                                            severityOrder(a) - severityOrder(b),
                                     )
                                     .map(([severity, count]) => (
                                         <button
@@ -111,13 +109,13 @@ export function SummaryPanel({
                                                 "flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-all",
                                                 state.severityFilter ===
                                                     severity
-                                                    ? "ring-2 ring-brand-purple/50"
+                                                    ? "ring-brand-purple/50 ring-2"
                                                     : "opacity-80 hover:opacity-100",
                                             )}>
                                             <IssueSeverityLevelBadge
                                                 severity={severity as any}
                                             />
-                                            <span className="font-medium tabular-nums text-text-secondary">
+                                            <span className="text-text-secondary font-medium tabular-nums">
                                                 {count}
                                             </span>
                                         </button>
@@ -129,7 +127,7 @@ export function SummaryPanel({
                     {/* Category breakdown */}
                     {Object.keys(categoryCounts).length > 0 && (
                         <div className="space-y-2">
-                            <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+                            <p className="text-text-tertiary text-xs font-medium tracking-wider uppercase">
                                 By Category
                             </p>
                             <div className="flex flex-wrap gap-2">
@@ -151,13 +149,13 @@ export function SummaryPanel({
                                                 "flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-all",
                                                 state.categoryFilter ===
                                                     category
-                                                    ? "ring-2 ring-brand-purple/50"
+                                                    ? "ring-brand-purple/50 ring-2"
                                                     : "opacity-80 hover:opacity-100",
                                             )}>
                                             <SuggestionCategoryBadge
                                                 category={category}
                                             />
-                                            <span className="font-medium tabular-nums text-text-secondary">
+                                            <span className="text-text-secondary font-medium tabular-nums">
                                                 {count}
                                             </span>
                                         </button>
@@ -179,7 +177,7 @@ export function SummaryPanel({
                                     category: null,
                                 });
                             }}
-                            className="text-xs text-brand-purple hover:underline">
+                            className="text-brand-purple text-xs hover:underline">
                             Clear filters
                         </button>
                     )}
@@ -188,7 +186,7 @@ export function SummaryPanel({
                 {/* PR-level suggestions */}
                 {prLevelSuggestions.length > 0 && (
                     <div className="p-4">
-                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                        <p className="text-text-tertiary mb-3 text-xs font-semibold tracking-wider uppercase">
                             PR-Level Suggestions
                         </p>
                         <div className="space-y-3">

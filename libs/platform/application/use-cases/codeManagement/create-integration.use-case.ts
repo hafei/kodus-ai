@@ -73,41 +73,44 @@ export class CreateIntegrationUseCase implements IUseCase {
                 });
             });
 
-        this.authIntegrationService.findOne({
-            organization: {
-                uuid: organizationAndTeamData.organizationId,
-            },
-            team: {
-                uuid: organizationAndTeamData.teamId,
-            },
-        }).then((authIntegration) => {
-            this.eventEmitter.emit(AuditLogEvents.INTEGRATION, {
-                organizationAndTeamData: {
-                    organizationId: organizationAndTeamData.organizationId,
-                    teamId: organizationAndTeamData.teamId,
+        this.authIntegrationService
+            .findOne({
+                organization: {
+                    uuid: organizationAndTeamData.organizationId,
                 },
-                userInfo: {
-                    userId: this.request.user?.uuid,
-                    userEmail: this.request.user?.email,
+                team: {
+                    uuid: organizationAndTeamData.teamId,
                 },
-                integration: {
-                    platform:
-                        params.integrationType?.toUpperCase() || 'UNKNOWN',
-                    integrationCategory: 'CODE_MANAGEMENT',
-                    authIntegration: authIntegration,
-                },
-                actionType: ActionType.CREATE,
+            })
+            .then((authIntegration) => {
+                this.eventEmitter.emit(AuditLogEvents.INTEGRATION, {
+                    organizationAndTeamData: {
+                        organizationId: organizationAndTeamData.organizationId,
+                        teamId: organizationAndTeamData.teamId,
+                    },
+                    userInfo: {
+                        userId: this.request.user?.uuid,
+                        userEmail: this.request.user?.email,
+                    },
+                    integration: {
+                        platform:
+                            params.integrationType?.toUpperCase() || 'UNKNOWN',
+                        integrationCategory: 'CODE_MANAGEMENT',
+                        authIntegration: authIntegration,
+                    },
+                    actionType: ActionType.CREATE,
+                });
+            })
+            .catch((error) => {
+                this.logger.error({
+                    message: 'Error fetching auth integration for audit log',
+                    error: error,
+                    context: CreateIntegrationUseCase.name,
+                    metadata: {
+                        organizationAndTeamData: organizationAndTeamData,
+                    },
+                });
             });
-        }).catch((error) => {
-            this.logger.error({
-                message: 'Error fetching auth integration for audit log',
-                error: error,
-                context: CreateIntegrationUseCase.name,
-                metadata: {
-                    organizationAndTeamData: organizationAndTeamData,
-                },
-            });
-        });
 
         return result;
     }

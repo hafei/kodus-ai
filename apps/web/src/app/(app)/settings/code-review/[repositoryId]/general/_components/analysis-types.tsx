@@ -11,12 +11,12 @@ import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { useFeatureFlags } from "src/app/(app)/settings/_components/context";
 import { useCurrentConfigLevel } from "src/app/(app)/settings/_hooks";
 
-import { OverrideIndicatorForm } from "../../../_components/override";
-import { type CodeReviewFormType } from "../../../_types";
 import {
     filterVisibleReviewLabels,
     mergeMissingReviewOptions,
 } from "../_utils/review-options-state";
+import { OverrideIndicatorForm } from "../../../_components/override";
+import { type CodeReviewFormType } from "../../../_types";
 
 interface CheckboxCardOption {
     value: string;
@@ -143,9 +143,7 @@ export const AnalysisTypes = () => {
                                                         </div>
 
                                                         <p className="text-text-secondary text-xs">
-                                                            {
-                                                                option.description
-                                                            }
+                                                            {option.description}
                                                         </p>
                                                     </div>
 

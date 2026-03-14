@@ -185,8 +185,7 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
                         applyShowStatusFeedbackMetadata(draft);
                         draft.statusInfo = {
                             status: AutomationStatus.SKIPPED,
-                            message:
-                                AutomationMessage.VALIDATION_FAILED,
+                            message: AutomationMessage.VALIDATION_FAILED,
                         };
                     });
                 }
@@ -647,7 +646,8 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
         }
 
         if (
-            (pullRequest.state === 'closed' || pullRequest.state === 'merged') &&
+            (pullRequest.state === 'closed' ||
+                pullRequest.state === 'merged') &&
             context.origin !== 'command'
         ) {
             return {

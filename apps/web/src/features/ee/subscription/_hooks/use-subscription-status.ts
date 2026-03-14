@@ -92,8 +92,12 @@ export const useSubscriptionStatus = (): SubscriptionStatus => {
             };
         }
 
-        if (subscription.license.subscriptionStatus === "licensed-self-hosted") {
-            const expiresAt = (subscription.license as any).expiresAt as string | undefined;
+        if (
+            subscription.license.subscriptionStatus === "licensed-self-hosted"
+        ) {
+            const expiresAt = (subscription.license as any).expiresAt as
+                | string
+                | undefined;
             const daysRemaining = expiresAt
                 ? differenceInDays(new Date(expiresAt), new Date())
                 : undefined;
@@ -101,8 +105,10 @@ export const useSubscriptionStatus = (): SubscriptionStatus => {
             return {
                 valid: true,
                 status: "licensed-self-hosted",
-                planType: (subscription.license as any).planType || "enterprise",
-                numberOfLicenses: (subscription.license as any).numberOfLicenses || 0,
+                planType:
+                    (subscription.license as any).planType || "enterprise",
+                numberOfLicenses:
+                    (subscription.license as any).numberOfLicenses || 0,
                 usersWithAssignedLicense: subscription.usersWithAssignedLicense,
                 expiresAt,
                 daysRemaining,

@@ -5270,10 +5270,9 @@ This is an experimental feature that generates committable changes. Review the d
                                     repo: repo.name,
                                 });
 
-                            const webhookUrl =
-                                this.configService.get<string>(
-                                    'API_GITHUB_CODE_MANAGEMENT_WEBHOOK',
-                                );
+                            const webhookUrl = this.configService.get<string>(
+                                'API_GITHUB_CODE_MANAGEMENT_WEBHOOK',
+                            );
 
                             const webhookToDelete = webhooks.find(
                                 (webhook) =>
@@ -5310,8 +5309,7 @@ This is an experimental feature that generates committable changes. Review the d
                     context: this.deleteWebhook.name,
                     error: error,
                     metadata: {
-                        organizationAndTeamData:
-                            params.organizationAndTeamData,
+                        organizationAndTeamData: params.organizationAndTeamData,
                     },
                 });
             }

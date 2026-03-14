@@ -333,10 +333,7 @@ function formatMemoriesSection(
 function formatDocumentationSection(
     documentationContext: CodeReviewPayload['documentationContext'],
 ): string | null {
-    if (
-        !Array.isArray(documentationContext) ||
-        !documentationContext.length
-    ) {
+    if (!Array.isArray(documentationContext) || !documentationContext.length) {
         return null;
     }
 

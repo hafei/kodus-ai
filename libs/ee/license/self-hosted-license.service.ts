@@ -146,7 +146,8 @@ export class SelfHostedLicenseService implements ILicenseService {
                 const globalCount = await this.getGlobalAssignedUsersCount();
                 if (globalCount >= maxSeats) {
                     this.logger.warn({
-                        message: 'Cannot assign license: global seat limit reached',
+                        message:
+                            'Cannot assign license: global seat limit reached',
                         context: SelfHostedLicenseService.name,
                         metadata: {
                             currentGlobal: globalCount,
@@ -188,10 +189,7 @@ export class SelfHostedLicenseService implements ILicenseService {
                 return true; // User wasn't assigned
             }
 
-            await this.saveAssignedUsers(
-                organizationAndTeamData,
-                filtered,
-            );
+            await this.saveAssignedUsers(organizationAndTeamData, filtered);
             return true;
         } catch (error) {
             this.logger.error({
@@ -207,12 +205,14 @@ export class SelfHostedLicenseService implements ILicenseService {
         organizationAndTeamData: OrganizationAndTeamData,
     ): Promise<string[]> {
         try {
-            const param =
-                await this.organizationParametersService.findByKey(
-                    OrganizationParametersKey.LICENSE_ASSIGNED_USERS,
-                    organizationAndTeamData,
-                );
-            if (param?.configValue?.users && Array.isArray(param.configValue.users)) {
+            const param = await this.organizationParametersService.findByKey(
+                OrganizationParametersKey.LICENSE_ASSIGNED_USERS,
+                organizationAndTeamData,
+            );
+            if (
+                param?.configValue?.users &&
+                Array.isArray(param.configValue.users)
+            ) {
                 return param.configValue.users;
             }
         } catch {
@@ -278,16 +278,16 @@ export class SelfHostedLicenseService implements ILicenseService {
     ): Promise<string | null> {
         // Try DB first
         try {
-            const param =
-                await this.organizationParametersService.findByKey(
-                    OrganizationParametersKey.LICENSE_KEY,
-                    organizationAndTeamData,
-                );
+            const param = await this.organizationParametersService.findByKey(
+                OrganizationParametersKey.LICENSE_KEY,
+                organizationAndTeamData,
+            );
 
             if (param?.configValue) {
-                const raw = typeof param.configValue === 'string'
-                    ? param.configValue
-                    : param.configValue.key;
+                const raw =
+                    typeof param.configValue === 'string'
+                        ? param.configValue
+                        : param.configValue.key;
                 return raw ? raw.replace(/\s+/g, '') : null;
             }
         } catch {
@@ -298,9 +298,7 @@ export class SelfHostedLicenseService implements ILicenseService {
         return process.env.KODUS_LICENSE_KEY || null;
     }
 
-    private verifyAndDecode(
-        token: string,
-    ): SelfHostedLicensePayload | null {
+    private verifyAndDecode(token: string): SelfHostedLicensePayload | null {
         try {
             const parts = token.split('.');
             if (parts.length !== 3) {
@@ -356,9 +354,6 @@ export class SelfHostedLicenseService implements ILicenseService {
         return base64url
             .replace(/-/g, '+')
             .replace(/_/g, '/')
-            .padEnd(
-                base64url.length + ((4 - (base64url.length % 4)) % 4),
-                '=',
-            );
+            .padEnd(base64url.length + ((4 - (base64url.length % 4)) % 4), '=');
     }
 }

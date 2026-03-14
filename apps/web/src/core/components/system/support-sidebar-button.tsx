@@ -61,14 +61,14 @@ export const SupportSidebarButton = () => {
                             </button>
                         </PopoverTrigger>
                     </TooltipTrigger>
-                        <TooltipContent side="left" sideOffset={10}>
-                            <div className="flex flex-col gap-1">
-                                <span className="font-semibold">Support</span>
-                                <span className="text-text-tertiary text-[11px]">
-                                    ⌘⌥H
-                                </span>
-                            </div>
-                        </TooltipContent>
+                    <TooltipContent side="left" sideOffset={10}>
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">Support</span>
+                            <span className="text-text-tertiary text-[11px]">
+                                ⌘⌥H
+                            </span>
+                        </div>
+                    </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
 

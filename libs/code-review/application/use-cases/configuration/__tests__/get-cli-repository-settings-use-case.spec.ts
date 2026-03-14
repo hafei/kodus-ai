@@ -61,7 +61,10 @@ describe('GetCliRepositorySettingsUseCase', () => {
                                         overriddenLevel: 'global',
                                     },
                                     ignorePaths: {
-                                        value: ['yarn.lock', 'package-lock.json'],
+                                        value: [
+                                            'yarn.lock',
+                                            'package-lock.json',
+                                        ],
                                         level: 'repository',
                                         overriddenLevel: 'global',
                                     },

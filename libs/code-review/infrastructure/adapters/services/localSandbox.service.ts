@@ -28,20 +28,29 @@ export class LocalSandboxService implements ISandboxProvider {
     constructor(private readonly configService: ConfigService) {}
 
     isAvailable(): boolean {
-        return (
-            this.configService.get<string>('SANDBOX_PROVIDER') === 'local'
-        );
+        return this.configService.get<string>('SANDBOX_PROVIDER') === 'local';
     }
 
     async createSandboxWithRepo(
         params: CreateSandboxParams,
     ): Promise<SandboxInstance> {
-        const { cloneUrl, authToken, authUsername, branch, prNumber, platform } = params;
+        const {
+            cloneUrl,
+            authToken,
+            authUsername,
+            branch,
+            prNumber,
+            platform,
+        } = params;
 
         const tempDir = await mkdtemp(join(tmpdir(), 'kodus-sandbox-'));
 
         try {
-            const authHeader = this.buildAuthHeader(platform, authToken, authUsername);
+            const authHeader = this.buildAuthHeader(
+                platform,
+                authToken,
+                authUsername,
+            );
             const refspec =
                 prNumber != null
                     ? this.getPrRefspec(platform, prNumber)
@@ -85,11 +94,9 @@ export class LocalSandboxService implements ISandboxProvider {
                 },
             );
 
-            await execFileAsync(
-                'git',
-                ['-C', tempDir, 'checkout', localRef],
-                { timeout: CLONE_TIMEOUT_MS },
-            );
+            await execFileAsync('git', ['-C', tempDir, 'checkout', localRef], {
+                timeout: CLONE_TIMEOUT_MS,
+            });
 
             const remoteCommands = this.buildRemoteCommands(tempDir);
 
@@ -220,31 +227,33 @@ export class LocalSandboxService implements ISandboxProvider {
         // Check if the target itself is a symlink before resolving
         const stat = await lstat(candidate);
         if (stat.isSymbolicLink()) {
-            throw new Error(
-                `Symlink detected, refusing to follow: ${path}`,
-            );
+            throw new Error(`Symlink detected, refusing to follow: ${path}`);
         }
 
         // Resolve to real path and verify it's still under repoDir
         const real = await realpath(candidate);
         const repoReal = await realpath(repoDir);
         if (!real.startsWith(repoReal + '/') && real !== repoReal) {
-            throw new Error(
-                `Path escapes repo boundary: ${path}`,
-            );
+            throw new Error(`Path escapes repo boundary: ${path}`);
         }
 
         return candidate;
     }
 
-    private buildAuthHeader(platform: PlatformType, token: string, username?: string): string {
+    private buildAuthHeader(
+        platform: PlatformType,
+        token: string,
+        username?: string,
+    ): string {
         switch (platform) {
             case PlatformType.GITHUB:
                 return `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
             case PlatformType.BITBUCKET:
                 // Bitbucket App Passwords require the actual username, not x-access-token
                 if (!username) {
-                    throw new Error('Bitbucket authentication requires a username, but it was not provided.');
+                    throw new Error(
+                        'Bitbucket authentication requires a username, but it was not provided.',
+                    );
                 }
                 return `Authorization: Basic ${Buffer.from(`${username}:${token}`).toString('base64')}`;
             case PlatformType.GITLAB:

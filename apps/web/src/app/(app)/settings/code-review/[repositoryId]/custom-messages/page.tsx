@@ -17,6 +17,7 @@ import { useUnsavedChangesGuard } from "src/core/hooks/use-unsaved-changes-guard
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { pathToApiUrl, unformatConfig } from "src/core/utils/helpers";
 
+import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import { CodeReviewSaveButton } from "../../_components/save-button";
 import {
     buildCustomMessagesEditorState,
@@ -24,7 +25,6 @@ import {
     hasCustomMessagesPendingChanges,
 } from "../../_utils/custom-messages-state";
 import { buildCodeReviewSettingsScopeKey } from "../../_utils/settings-shell";
-import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import { useCodeReviewRouteParams } from "../../../_hooks";
 import { HiddenComments } from "./_components/hidden-comments";
 import { LLMPromptToggle } from "./_components/llm-prompt";
@@ -289,7 +289,9 @@ function CustomMessagesContent() {
                         value="global-settings"
                         data-field-name="globalSettings">
                         <HiddenComments
-                            hideComments={editorState.globalSettings.hideComments}
+                            hideComments={
+                                editorState.globalSettings.hideComments
+                            }
                             initialState={
                                 initialState.globalSettings?.hideComments
                             }

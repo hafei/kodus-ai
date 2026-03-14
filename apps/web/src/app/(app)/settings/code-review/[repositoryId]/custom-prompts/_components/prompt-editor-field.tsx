@@ -4,22 +4,27 @@ import React, { useCallback, useMemo } from "react";
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { FormControl } from "@components/ui/form-control";
-import { RichTextEditorWithMentions } from "@components/ui/rich-text-editor-with-mentions";
-import type {
-    MentionGroup,
-    MentionGroupItem,
-} from "@components/ui/rich-text-editor-with-mentions";
 import { getTextStatsFromTiptapJSON } from "@components/ui/rich-text-editor";
-import { ControllerRenderProps, Path, useController, useFormContext } from "react-hook-form";
+import {
+    RichTextEditorWithMentions,
+    type MentionGroup,
+    type MentionGroupItem,
+} from "@components/ui/rich-text-editor-with-mentions";
+import {
+    ControllerRenderProps,
+    Path,
+    useController,
+    useFormContext,
+} from "react-hook-form";
 
-import { OverrideIndicatorForm } from "../../../_components/override";
-import { type CodeReviewFormType } from "../../../_types";
-import { ExternalReferencesDisplay } from "../../pr-summary/_components/external-references-display";
 import {
     getPromptFieldText,
     parsePromptFieldValue,
     serializePromptFieldValue,
 } from "../_utils/custom-prompts-state";
+import { OverrideIndicatorForm } from "../../../_components/override";
+import { type CodeReviewFormType } from "../../../_types";
+import { ExternalReferencesDisplay } from "../../pr-summary/_components/external-references-display";
 
 type PromptEditorFieldProps = {
     name: Path<CodeReviewFormType>;
@@ -78,7 +83,9 @@ function PromptEditorFieldComponent({
     );
     const isDefault = currentText === defaultText;
     const stats = useMemo(() => buildStats(parsedValue), [parsedValue]);
-    const externalReferences = form.getValues(fieldName as any)?.externalReferences;
+    const externalReferences = form.getValues(
+        fieldName as any,
+    )?.externalReferences;
 
     const handleChange = useCallback(
         (value: string | object) => {
@@ -134,14 +141,20 @@ function PromptEditorFieldComponent({
                         {stats.words > 0 && (
                             <>
                                 {" "}
-                                · <span className="font-medium">{stats.words}</span>{" "}
+                                ·{" "}
+                                <span className="font-medium">
+                                    {stats.words}
+                                </span>{" "}
                                 words
                             </>
                         )}
                         {stats.mentions > 0 && (
                             <>
                                 {" "}
-                                · <span className="font-medium">{stats.mentions}</span>{" "}
+                                ·{" "}
+                                <span className="font-medium">
+                                    {stats.mentions}
+                                </span>{" "}
                                 mentions
                             </>
                         )}

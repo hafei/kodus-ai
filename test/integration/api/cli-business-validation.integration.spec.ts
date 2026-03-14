@@ -9,7 +9,11 @@ jest.mock('@kodus/flow', () => ({
     createThreadId: jest.fn(() => 'vbl-thread-id'),
 }));
 
-import { BadRequestException, HttpException, UnauthorizedException } from '@nestjs/common';
+import {
+    BadRequestException,
+    HttpException,
+    UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -20,15 +24,9 @@ import { SubmitCliSessionCaptureUseCase } from '@libs/cli-review/application/use
 import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
 import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
 import { AUTH_SERVICE_TOKEN } from '@libs/identity/domain/auth/contracts/auth.service.contracts';
-import {
-    INTEGRATION_CONFIG_SERVICE_TOKEN,
-} from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
-import {
-    CLI_DEVICE_SERVICE_TOKEN,
-} from '@libs/organization/domain/cli-device/contracts/cli-device.service.contract';
-import {
-    TEAM_CLI_KEY_SERVICE_TOKEN,
-} from '@libs/organization/domain/team-cli-key/contracts/team-cli-key.service.contract';
+import { INTEGRATION_CONFIG_SERVICE_TOKEN } from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
+import { CLI_DEVICE_SERVICE_TOKEN } from '@libs/organization/domain/cli-device/contracts/cli-device.service.contract';
+import { TEAM_CLI_KEY_SERVICE_TOKEN } from '@libs/organization/domain/team-cli-key/contracts/team-cli-key.service.contract';
 import { TEAM_SERVICE_TOKEN } from '@libs/organization/domain/team/contracts/team.service.contract';
 import { BusinessRulesValidationAgentProvider } from '@libs/agents/infrastructure/services/kodus-flow/business-rules-validation/businessRulesValidationAgent';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
@@ -90,7 +88,10 @@ describe('CLI business-validation integration', () => {
                 },
                 {
                     provide: TEAM_SERVICE_TOKEN,
-                    useValue: { findById: jest.fn(), findFirstCreatedTeam: jest.fn() },
+                    useValue: {
+                        findById: jest.fn(),
+                        findFirstCreatedTeam: jest.fn(),
+                    },
                 },
                 {
                     provide: AUTH_SERVICE_TOKEN,
@@ -118,7 +119,11 @@ describe('CLI business-validation integration', () => {
                 },
                 {
                     provide: ConfigService,
-                    useValue: { get: jest.fn().mockReturnValue({ secret: 'test-secret' }) },
+                    useValue: {
+                        get: jest
+                            .fn()
+                            .mockReturnValue({ secret: 'test-secret' }),
+                    },
                 },
             ],
         }).compile();
@@ -131,12 +136,20 @@ describe('CLI business-validation integration', () => {
             team: { uuid: 'team-1', name: 'Platform Team' },
             organization: { uuid: 'org-1', name: 'Kodus' },
         });
-        mockRateLimiter.checkRateLimit.mockResolvedValue({ allowed: true, remaining: 999, resetAt: null });
-        mockCodeManagementService.getTypeIntegration.mockResolvedValue(PlatformType.GITHUB);
-        mockBusinessProvider.execute.mockResolvedValue('## Business Rules Validation\n\nLooks good.');
-        mockIntegrationConfigService.findIntegrationConfigFormatted.mockResolvedValue([
-            { id: 'repo-1', name: 'kodus-ai', organizationName: 'kodus-ai' },
-        ]);
+        mockRateLimiter.checkRateLimit.mockResolvedValue({
+            allowed: true,
+            remaining: 999,
+            resetAt: null,
+        });
+        mockCodeManagementService.getTypeIntegration.mockResolvedValue(
+            PlatformType.GITHUB,
+        );
+        mockBusinessProvider.execute.mockResolvedValue(
+            '## Business Rules Validation\n\nLooks good.',
+        );
+        mockIntegrationConfigService.findIntegrationConfigFormatted.mockResolvedValue(
+            [{ id: 'repo-1', name: 'kodus-ai', organizationName: 'kodus-ai' }],
+        );
     });
 
     it('executes provider flow when called with prUrl and taskId', async () => {
@@ -285,7 +298,9 @@ describe('CLI business-validation integration', () => {
             },
         });
         expect(providerPayload.prepareContext.pullRequest).toBeUndefined();
-        expect(mockCodeManagementService.getPullRequests).not.toHaveBeenCalled();
+        expect(
+            mockCodeManagementService.getPullRequests,
+        ).not.toHaveBeenCalled();
     });
 
     it('returns 401 when team key is invalid', async () => {
@@ -328,7 +343,9 @@ describe('CLI business-validation integration', () => {
             ),
         ).rejects.toBeInstanceOf(HttpException);
 
-        expect(mockCodeManagementService.getPullRequests).not.toHaveBeenCalled();
+        expect(
+            mockCodeManagementService.getPullRequests,
+        ).not.toHaveBeenCalled();
     });
 
     it('propagates use-case validation errors for invalid request body', async () => {

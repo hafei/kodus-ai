@@ -32,13 +32,15 @@ const setValueAtPath = (
 };
 
 export const getValueAtPath = (source: unknown, path: string) =>
-    path.split(".").reduce<unknown>(
-        (current, key) =>
-            typeof current === "object" && current !== null
-                ? (current as Record<string, unknown>)[key]
-                : undefined,
-        source,
-    );
+    path
+        .split(".")
+        .reduce<unknown>(
+            (current, key) =>
+                typeof current === "object" && current !== null
+                    ? (current as Record<string, unknown>)[key]
+                    : undefined,
+            source,
+        );
 
 export const PROMPT_FIELD_PATHS = [
     "v2PromptOverrides.generation.main.value",
@@ -80,9 +82,11 @@ export function serializePromptFieldValue(value: string | object): string {
 }
 
 export function getPromptFieldText(value: unknown): string {
-    return convertTiptapJSONToText(
-        value as string | object | null | undefined,
-    )?.trim() ?? "";
+    return (
+        convertTiptapJSONToText(
+            value as string | object | null | undefined,
+        )?.trim() ?? ""
+    );
 }
 
 export function buildPromptInitialTextMap(

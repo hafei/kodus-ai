@@ -54,7 +54,8 @@ export class GenerateIssuesFromPrClosedUseCase implements IUseCase {
 
         if (!normalizedPayload) {
             this.logger.warn({
-                message: 'Skipping issue generation: failed to normalize webhook payload',
+                message:
+                    'Skipping issue generation: failed to normalize webhook payload',
                 context: GenerateIssuesFromPrClosedUseCase.name,
                 metadata: {
                     platformType: params?.platformType,
@@ -191,7 +192,8 @@ export class GenerateIssuesFromPrClosedUseCase implements IUseCase {
             !pullRequest?.user
         ) {
             this.logger.warn({
-                message: 'Skipping issue generation: invalid or incomplete pull request data from webhook payload',
+                message:
+                    'Skipping issue generation: invalid or incomplete pull request data from webhook payload',
                 context: GenerateIssuesFromPrClosedUseCase.name,
                 metadata: {
                     platformType,
@@ -210,7 +212,8 @@ export class GenerateIssuesFromPrClosedUseCase implements IUseCase {
 
         if (!repository || !repository?.id || !repository?.name) {
             this.logger.warn({
-                message: 'Skipping issue generation: invalid or incomplete repository data from webhook payload',
+                message:
+                    'Skipping issue generation: invalid or incomplete repository data from webhook payload',
                 context: GenerateIssuesFromPrClosedUseCase.name,
                 metadata: {
                     platformType,

@@ -76,9 +76,7 @@ describe('CliConfigController', () => {
 
         codeManagementService = {
             getTypeIntegration: jest.fn().mockResolvedValue('github'),
-            getRepositories: jest
-                .fn()
-                .mockResolvedValue(availableRepositories),
+            getRepositories: jest.fn().mockResolvedValue(availableRepositories),
         } as any;
 
         integrationConfigService = {
@@ -166,11 +164,12 @@ describe('CliConfigController', () => {
         expect(teamCliKeyService.validateKey).toHaveBeenCalledWith(
             'kodus_bearer_key',
         );
-        expect(integrationConfigService.findIntegrationConfigFormatted)
-            .toHaveBeenCalledWith('repositories', {
-                organizationId: 'org-1',
-                teamId: 'team-1',
-            });
+        expect(
+            integrationConfigService.findIntegrationConfigFormatted,
+        ).toHaveBeenCalledWith('repositories', {
+            organizationId: 'org-1',
+            teamId: 'team-1',
+        });
         expect(result).toEqual(selectedRepositories);
     });
 
@@ -245,10 +244,7 @@ describe('CliConfigController', () => {
         teamCliKeyService.validateKey.mockResolvedValue(null);
 
         await expect(
-            controller.getAvailableRepositories(
-                'kodus_bad_key',
-                undefined,
-            ),
+            controller.getAvailableRepositories('kodus_bad_key', undefined),
         ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -336,10 +332,7 @@ describe('CliConfigController', () => {
         codeManagementService.getTypeIntegration.mockResolvedValue(null);
 
         await expect(
-            controller.getAvailableRepositories(
-                'kodus_test_key',
-                undefined,
-            ),
+            controller.getAvailableRepositories('kodus_test_key', undefined),
         ).rejects.toThrow(BadRequestException);
     });
 
@@ -388,21 +381,23 @@ describe('CliConfigController', () => {
             undefined,
         );
 
-        expect(updateCliRepositorySettingsUseCase.execute).toHaveBeenCalledWith({
-            repositoryId: 'repo-1',
-            organizationAndTeamData: {
-                organizationId: 'org-1',
-                teamId: 'team-1',
+        expect(updateCliRepositorySettingsUseCase.execute).toHaveBeenCalledWith(
+            {
+                repositoryId: 'repo-1',
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+                settings: {
+                    reviewEnabled: false,
+                    autoApproveEnabled: true,
+                    requestChangesMinSeverity: 'high',
+                    ignoredFilePatterns: ['dist/**'],
+                    baseBranchPatterns: ['main', 'release/*'],
+                    ignoredTitlePatterns: ['draft*'],
+                },
             },
-            settings: {
-                reviewEnabled: false,
-                autoApproveEnabled: true,
-                requestChangesMinSeverity: 'high',
-                ignoredFilePatterns: ['dist/**'],
-                baseBranchPatterns: ['main', 'release/*'],
-                ignoredTitlePatterns: ['draft*'],
-            },
-        });
+        );
         expect(result.autoApproveEnabled).toBe(true);
     });
 });

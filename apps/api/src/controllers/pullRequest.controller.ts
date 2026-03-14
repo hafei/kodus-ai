@@ -164,9 +164,7 @@ export class PullRequestController implements OnApplicationShutdown {
             this.eventEmitter,
             PR_EXECUTION_UPDATED_EVENT,
         ).pipe(
-            filter(
-                (event: any) => event?.organizationId === organizationId,
-            ),
+            filter((event: any) => event?.organizationId === organizationId),
             map((event: any) => ({
                 data: {
                     type: 'execution_updated',
@@ -538,7 +536,6 @@ export class PullRequestController implements OnApplicationShutdown {
             .catch(() => {}); // fire-and-forget
     }
 
-
     @Get('/files')
     @ApiBearerAuth('jwt')
     @UseGuards(PolicyGuard)
@@ -587,12 +584,11 @@ export class PullRequestController implements OnApplicationShutdown {
             repoName = repo.name;
         }
 
-        const files =
-            await this.codeManagementService.getFilesByPullRequestId({
-                organizationAndTeamData,
-                repository: { name: repoName, id: repositoryId },
-                prNumber: parseInt(prNumber, 10),
-            });
+        const files = await this.codeManagementService.getFilesByPullRequestId({
+            organizationAndTeamData,
+            repository: { name: repoName, id: repositoryId },
+            prNumber: parseInt(prNumber, 10),
+        });
 
         return {
             files: (files || []).map((f: any) => ({

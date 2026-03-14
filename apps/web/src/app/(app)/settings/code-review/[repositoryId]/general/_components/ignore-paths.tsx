@@ -59,8 +59,7 @@ export const IgnorePaths = () => {
             </FormControl.Input>
 
             <FormControl.Helper>
-                Glob pattern for file path. One per line. Example:
-                **/*.js
+                Glob pattern for file path. One per line. Example: **/*.js
             </FormControl.Helper>
         </FormControl.Root>
     );

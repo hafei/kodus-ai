@@ -2960,10 +2960,7 @@ export class BitbucketService implements Omit<
      * `contentType.includes(...)` without a null-check, which crashes when
      * the Bitbucket edge proxy returns a response with no Content-Type.
      */
-    private safeFetch(
-        url: string,
-        options: any,
-    ): Promise<any> {
+    private safeFetch(url: string, options: any): Promise<any> {
         return fetch(url, options).then((response) => {
             if (!response.headers.get('content-type')) {
                 const patchedHeaders = new Headers(response.headers);
@@ -3873,7 +3870,7 @@ export class BitbucketService implements Omit<
                         isResolved: comment.resolution ? true : false,
                         author: {
                             id: this.sanitizeUUID(comment?.user?.uuid) ?? '',
-                            username: comment?.user?.nickname as string ?? '',
+                            username: (comment?.user?.nickname as string) ?? '',
                             name: comment?.user?.display_name ?? '',
                         },
                     };
@@ -4249,13 +4246,11 @@ export class BitbucketService implements Omit<
             }
         } catch (error) {
             this.logger.error({
-                message:
-                    'Error authenticating for webhook deletion',
+                message: 'Error authenticating for webhook deletion',
                 context: BitbucketService.name,
                 error: error,
                 metadata: {
-                    organizationAndTeamData:
-                        params.organizationAndTeamData,
+                    organizationAndTeamData: params.organizationAndTeamData,
                 },
             });
         }

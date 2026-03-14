@@ -38,10 +38,7 @@ export const SubscriptionProvider = ({
     usersWithAssignedLicense: AwaitedReturnType<typeof getUsersWithLicense>;
 }) => {
     // Skip provider only for unlicensed self-hosted (uses context default)
-    if (
-        isSelfHosted &&
-        license.subscriptionStatus === "self-hosted"
-    ) {
+    if (isSelfHosted && license.subscriptionStatus === "self-hosted") {
         return children;
     }
 

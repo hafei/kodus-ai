@@ -39,12 +39,8 @@ export interface ICodeReviewSettingsLogService extends ICodeReviewSettingsLogRep
         params: PullRequestMessagesLogParams,
     ): Promise<void>;
     registerUserInviteLog(params: UserInviteLogParams): Promise<void>;
-    registerUserRoleChangeLog(
-        params: UserRoleChangeLogParams,
-    ): Promise<void>;
-    registerUserRepoAccessLog(
-        params: UserRepoAccessLogParams,
-    ): Promise<void>;
+    registerUserRoleChangeLog(params: UserRoleChangeLogParams): Promise<void>;
+    registerUserRepoAccessLog(params: UserRepoAccessLogParams): Promise<void>;
     registerOrgSettingsLog(params: OrgSettingsLogParams): Promise<void>;
     registerCliKeyLog(params: CliKeyLogParams): Promise<void>;
 }

@@ -39,10 +39,7 @@ import {
     revokeCLIKey,
     updateCLIKeyConfig,
 } from "@services/cliKeys/fetch";
-import {
-    CLI_KEY_CAPABILITIES,
-    type CLIKey,
-} from "@services/cliKeys/types";
+import { CLI_KEY_CAPABILITIES, type CLIKey } from "@services/cliKeys/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 import { formatDistanceToNow } from "date-fns";
@@ -610,7 +607,9 @@ export const CliKeysPage = ({
                                 <Switch
                                     checked={configDraft}
                                     onCheckedChange={setConfigDraft}
-                                    disabled={updatingKeyId === keyToConfigure.uuid}
+                                    disabled={
+                                        updatingKeyId === keyToConfigure.uuid
+                                    }
                                 />
                             </div>
                         </div>

@@ -44,15 +44,12 @@ export default async function Layout({ children }: React.PropsWithChildren) {
         return null;
     }
 
-    const [
-        initialShellConfig,
-        initialDefaultConfig,
-        initialPlatformConfig,
-    ] = await Promise.all([
-        getFormattedCodeReviewParameterNoCache(initialTeamId),
-        getDefaultCodeReviewParameterNoCache(),
-        getPlatformConfigParameterNoCache(initialTeamId),
-    ]);
+    const [initialShellConfig, initialDefaultConfig, initialPlatformConfig] =
+        await Promise.all([
+            getFormattedCodeReviewParameterNoCache(initialTeamId),
+            getDefaultCodeReviewParameterNoCache(),
+            getPlatformConfigParameterNoCache(initialTeamId),
+        ]);
 
     return (
         <PageBoundary

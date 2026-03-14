@@ -1,24 +1,20 @@
-import type { FormattedCustomMessageEntity } from "../../../apps/web/src/lib/services/pull-request-messages/types";
+import type { FormattedCustomMessageEntity } from '../../../apps/web/src/lib/services/pull-request-messages/types';
 import {
     buildCustomMessagesEditorState,
     getCustomMessagesDirtySection,
     hasCustomMessagesPendingChanges,
-} from "../../../apps/web/src/app/(app)/settings/code-review/_utils/custom-messages-state";
-import {
-    FormattedConfigLevel,
-} from "../../../apps/web/src/app/(app)/settings/code-review/_types";
-import {
-    PullRequestMessageStatus,
-} from "../../../apps/web/src/lib/services/pull-request-messages/types";
+} from '../../../apps/web/src/app/(app)/settings/code-review/_utils/custom-messages-state';
+import { FormattedConfigLevel } from '../../../apps/web/src/app/(app)/settings/code-review/_types';
+import { PullRequestMessageStatus } from '../../../apps/web/src/lib/services/pull-request-messages/types';
 
 const buildMessages = (): FormattedCustomMessageEntity => ({
-    uuid: "message-1",
-    repositoryId: "global",
+    uuid: 'message-1',
+    repositoryId: 'global',
     directoryId: undefined,
     startReviewMessage: {
         content: {
             level: FormattedConfigLevel.GLOBAL,
-            value: "Start review",
+            value: 'Start review',
         },
         status: {
             level: FormattedConfigLevel.GLOBAL,
@@ -28,7 +24,7 @@ const buildMessages = (): FormattedCustomMessageEntity => ({
     endReviewMessage: {
         content: {
             level: FormattedConfigLevel.GLOBAL,
-            value: "End review",
+            value: 'End review',
         },
         status: {
             level: FormattedConfigLevel.GLOBAL,
@@ -47,8 +43,8 @@ const buildMessages = (): FormattedCustomMessageEntity => ({
     },
 });
 
-describe("hasCustomMessagesPendingChanges", () => {
-    it("returns false when the local state matches the fetched snapshot", () => {
+describe('hasCustomMessagesPendingChanges', () => {
+    it('returns false when the local state matches the fetched snapshot', () => {
         const pullRequestMessages = buildMessages();
 
         expect(
@@ -63,7 +59,7 @@ describe("hasCustomMessagesPendingChanges", () => {
         ).toBe(false);
     });
 
-    it("returns true when the start review message changes", () => {
+    it('returns true when the start review message changes', () => {
         const pullRequestMessages = buildMessages();
 
         expect(
@@ -74,7 +70,7 @@ describe("hasCustomMessagesPendingChanges", () => {
                         ...pullRequestMessages.startReviewMessage,
                         content: {
                             ...pullRequestMessages.startReviewMessage.content,
-                            value: "Changed",
+                            value: 'Changed',
                         },
                     },
                     endReviewMessage: pullRequestMessages.endReviewMessage,
@@ -84,7 +80,7 @@ describe("hasCustomMessagesPendingChanges", () => {
         ).toBe(true);
     });
 
-    it("returns true when the end review status changes", () => {
+    it('returns true when the end review status changes', () => {
         const pullRequestMessages = buildMessages();
 
         expect(
@@ -105,7 +101,7 @@ describe("hasCustomMessagesPendingChanges", () => {
         ).toBe(true);
     });
 
-    it("returns true when the global settings change", () => {
+    it('returns true when the global settings change', () => {
         const pullRequestMessages = buildMessages();
 
         expect(
@@ -118,7 +114,8 @@ describe("hasCustomMessagesPendingChanges", () => {
                 globalSettings: {
                     ...pullRequestMessages.globalSettings,
                     suggestionCopyPrompt: {
-                        ...pullRequestMessages.globalSettings.suggestionCopyPrompt,
+                        ...pullRequestMessages.globalSettings
+                            .suggestionCopyPrompt,
                         value: false,
                     },
                 },
@@ -127,8 +124,8 @@ describe("hasCustomMessagesPendingChanges", () => {
     });
 });
 
-describe("buildCustomMessagesEditorState", () => {
-    it("builds the local editor state from the fetched snapshot", () => {
+describe('buildCustomMessagesEditorState', () => {
+    it('builds the local editor state from the fetched snapshot', () => {
         const pullRequestMessages = buildMessages();
 
         expect(buildCustomMessagesEditorState(pullRequestMessages)).toEqual({
@@ -141,8 +138,8 @@ describe("buildCustomMessagesEditorState", () => {
     });
 });
 
-describe("getCustomMessagesDirtySection", () => {
-    it("returns the first dirty section in priority order", () => {
+describe('getCustomMessagesDirtySection', () => {
+    it('returns the first dirty section in priority order', () => {
         const pullRequestMessages = buildMessages();
         const editorState = buildCustomMessagesEditorState(pullRequestMessages);
 
@@ -160,7 +157,7 @@ describe("getCustomMessagesDirtySection", () => {
                     },
                 },
             }),
-        ).toBe("globalSettings");
+        ).toBe('globalSettings');
 
         expect(
             getCustomMessagesDirtySection({
@@ -174,22 +171,23 @@ describe("getCustomMessagesDirtySection", () => {
                             content: {
                                 ...editorState.messages.startReviewMessage
                                     .content,
-                                value: "Changed",
+                                value: 'Changed',
                             },
                         },
                     },
                 },
             }),
-        ).toBe("startReviewMessage");
+        ).toBe('startReviewMessage');
     });
 
-    it("returns null when nothing changed", () => {
+    it('returns null when nothing changed', () => {
         const pullRequestMessages = buildMessages();
 
         expect(
             getCustomMessagesDirtySection({
                 pullRequestMessages,
-                editorState: buildCustomMessagesEditorState(pullRequestMessages),
+                editorState:
+                    buildCustomMessagesEditorState(pullRequestMessages),
             }),
         ).toBeNull();
     });

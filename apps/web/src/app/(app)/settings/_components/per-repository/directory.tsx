@@ -10,7 +10,6 @@ import {
     CollapsibleIndicator,
     CollapsibleTrigger,
 } from "@components/ui/collapsible";
-import { Link } from "@components/ui/link";
 import { SidebarMenuSub, SidebarMenuSubItem } from "@components/ui/sidebar";
 import {
     Tooltip,
@@ -20,14 +19,21 @@ import {
 import { cn } from "src/core/utils/components";
 
 import { useCodeReviewRouteParams } from "../../_hooks";
-import { type CodeReviewRepositoryConfig } from "../../code-review/_types";
+import { countConfigOverridesForRoutes } from "../../_utils/count-overrides";
+import {
+    FormattedConfigLevel,
+    type CodeReviewRepositoryConfig,
+    type FormattedCodeReviewConfig,
+} from "../../code-review/_types";
+import { RouteButtonWithOverrideCount } from "../route-button-with-override-count";
 import { SidebarRepositoryOrDirectoryDropdown } from "./options-dropdown";
 
 export const PerDirectory = ({
     routes,
     directory,
     repository,
-    overrideCount,
+    configs,
+    customMessagesOverrideCount,
 }: {
     repository: Pick<CodeReviewRepositoryConfig, "id" | "name" | "isSelected">;
     directory: Pick<
@@ -35,12 +41,19 @@ export const PerDirectory = ({
         "id" | "name" | "path"
     >;
     routes: Array<{ label: string; href: string }>;
-    overrideCount?: number;
+    configs?: FormattedCodeReviewConfig;
+    customMessagesOverrideCount?: number;
 }) => {
     const searchParams = useSearchParams();
     const { repositoryId, pageName, directoryId } = useCodeReviewRouteParams();
     const [open, setOpen] = useState(directoryId === directory.id);
-    const resolvedOverrideCount = overrideCount ?? 0;
+    const configOverrideCount = countConfigOverridesForRoutes(
+        configs,
+        routes.map((route) => route.href),
+        FormattedConfigLevel.DIRECTORY,
+    );
+    const resolvedOverrideCount =
+        configOverrideCount + (customMessagesOverrideCount ?? 0);
 
     return (
         <Collapsible
@@ -84,7 +97,8 @@ export const PerDirectory = ({
                         {resolvedOverrideCount > 0 && (
                             <div className="text-text-tertiary mt-1 text-xs">
                                 {resolvedOverrideCount} config
-                                {resolvedOverrideCount !== 1 ? "s" : ""} overridden
+                                {resolvedOverrideCount !== 1 ? "s" : ""}{" "}
+                                overridden
                             </div>
                         )}
                     </TooltipContent>
@@ -106,18 +120,17 @@ export const PerDirectory = ({
 
                         return (
                             <SidebarMenuSubItem key={href}>
-                                <Link
-                                    className="w-full"
-                                    href={`/settings/code-review/${repository.id}/${href}?directoryId=${directory.id}`}>
-                                    <Button
-                                        size="sm"
-                                        decorative
-                                        variant="cancel"
-                                        active={active}
-                                        className="min-h-auto w-full justify-start px-0 py-2">
-                                        {label}
-                                    </Button>
-                                </Link>
+                                <RouteButtonWithOverrideCount
+                                    label={label}
+                                    href={href}
+                                    to={`/settings/code-review/${repository.id}/${href}?directoryId=${directory.id}`}
+                                    active={active}
+                                    level={FormattedConfigLevel.DIRECTORY}
+                                    config={configs}
+                                    customMessagesOverrideCount={
+                                        customMessagesOverrideCount ?? 0
+                                    }
+                                />
                             </SidebarMenuSubItem>
                         );
                     })}

@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddClassificationToSessionEvents1772576294050 implements MigrationInterface {
-    name = 'AddClassificationToSessionEvents1772576294050'
+    name = 'AddClassificationToSessionEvents1772576294050';
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`
@@ -43,5 +43,4 @@ export class AddClassificationToSessionEvents1772576294050 implements MigrationI
             ALTER TABLE "session_events" DROP COLUMN "classification_status"
         `);
     }
-
 }

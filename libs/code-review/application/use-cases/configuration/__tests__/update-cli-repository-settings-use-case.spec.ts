@@ -43,7 +43,9 @@ describe('UpdateCliRepositorySettingsUseCase', () => {
             },
         });
 
-        expect(updateOrCreateCodeReviewParameterUseCase.execute).toHaveBeenCalledWith({
+        expect(
+            updateOrCreateCodeReviewParameterUseCase.execute,
+        ).toHaveBeenCalledWith({
             actor: {
                 source: 'cli',
             },

@@ -120,7 +120,8 @@ export class GetPullRequestSuggestionsUseCase {
 
         return {
             response: payload,
-            suggestionsCount: fileSuggestions.length + prLevelSuggestions.length,
+            suggestionsCount:
+                fileSuggestions.length + prLevelSuggestions.length,
         };
     }
 

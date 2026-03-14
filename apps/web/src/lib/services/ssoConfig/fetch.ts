@@ -1,4 +1,4 @@
-import { TypedFetchError, authorizedFetch } from "@services/fetch";
+import { authorizedFetch, TypedFetchError } from "@services/fetch";
 import { axiosAuthorized } from "src/core/utils/axios";
 import {
     SSOConfig,
@@ -13,9 +13,12 @@ export const getSSOConfig = async <T extends SSOProtocol>(params: {
     protocol?: T;
 }): Promise<SSOConfig<T> | null> => {
     try {
-        const response = await authorizedFetch<SSOConfig<T>>(SSO_CONFIG_PATHS.GET, {
-            params,
-        });
+        const response = await authorizedFetch<SSOConfig<T>>(
+            SSO_CONFIG_PATHS.GET,
+            {
+                params,
+            },
+        );
 
         return response;
     } catch (error) {

@@ -31,9 +31,8 @@ describe('code review settings shell helpers', () => {
                 ignoredTitleKeywords: createFormattedValue([]),
                 summary: {
                     generatePRSummary: createFormattedValue(true),
-                    behaviourForExistingDescription: createFormattedValue(
-                        'replace',
-                    ),
+                    behaviourForExistingDescription:
+                        createFormattedValue('replace'),
                     customInstructions: createFormattedValue(''),
                     behaviourForNewCommits: createFormattedValue('none'),
                 },
