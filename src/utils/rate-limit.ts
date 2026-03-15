@@ -4,7 +4,7 @@ import os from 'os';
 import chalk from 'chalk';
 import { api } from '../services/api/index.js';
 import { gitService } from '../services/git.service.js';
-import type { TrialStatus } from '../types/index.js';
+import type { TrialStatus } from '../types/trial.js';
 import { cliInfo } from './logger.js';
 
 const { machineIdSync } = machineId;

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../../types/index.js';
+import { ApiError } from '../../types/errors.js';
 
 const mocks = vi.hoisted(() => ({
     getPullRequestSuggestions: vi.fn(),
@@ -63,19 +63,20 @@ describe('ReviewService getPullRequestSuggestions auth fallback', () => {
         expect(response.result.summary).toBe('ok');
     });
 
-    it('rethrows the original error if team-key fallback also fails', async () => {
+    it('rethrows the fallback error if team-key fallback also fails', async () => {
         const originalError = new ApiError(401, 'Primary auth failed');
+        const fallbackError = new ApiError(401, 'Fallback failed');
         mocks.getValidToken.mockResolvedValue('personal-token');
         mocks.loadConfig.mockResolvedValue({ teamKey: 'kodus_team_key' });
         mocks.getPullRequestSuggestions
             .mockRejectedValueOnce(originalError)
-            .mockRejectedValueOnce(new ApiError(401, 'Fallback failed'));
+            .mockRejectedValueOnce(fallbackError);
 
         await expect(
             reviewService.getPullRequestSuggestions({
                 prUrl: 'https://github.com/org/repo/pull/1',
             }),
-        ).rejects.toBe(originalError);
+        ).rejects.toBe(fallbackError);
     });
 
     it('does not fallback for non-401 errors', async () => {

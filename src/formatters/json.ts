@@ -1,4 +1,4 @@
-import type { ReviewResult } from '../types/index.js';
+import type { ReviewResult } from '../types/review.js';
 
 class JsonFormatter {
     format(result: ReviewResult): string {

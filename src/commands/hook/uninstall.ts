@@ -5,7 +5,7 @@ import { gitService } from '../../services/git.service.js';
 import { KODUS_MARKER } from './install.js';
 import { exitWithCode } from '../../utils/cli-exit.js';
 import { cliError, cliInfo } from '../../utils/logger.js';
-import type { GlobalOptions } from '../../types/index.js';
+import type { GlobalOptions } from '../../types/cli.js';
 import { createCommandContext } from '../../utils/command-context.js';
 import {
     buildAgentErrorEnvelope,

@@ -69,6 +69,40 @@ export function formatInstallInstruction(
     return [instruction.command, ...instruction.args].join(' ');
 }
 
+function isPackageRegistryLookupFailure(message: string): boolean {
+    const normalizedMessage = message.toLowerCase();
+    return (
+        normalizedMessage.includes('could not be found') ||
+        normalizedMessage.includes('not found') ||
+        normalizedMessage.includes('e404')
+    );
+}
+
+export function getUpdateFailureHints(
+    errorMessage: string,
+    installInstruction: InstallInstruction,
+    registry = process.env.npm_config_registry,
+): string[] {
+    const hints = [
+        `Try running manually: ${formatInstallInstruction(installInstruction)}`,
+    ];
+
+    if (!isPackageRegistryLookupFailure(errorMessage)) {
+        return hints;
+    }
+
+    hints.push('Check your npm registry with: npm config get registry');
+    if (registry && registry !== 'https://registry.npmjs.org/') {
+        hints.push(`Current registry: ${registry}`);
+    }
+    hints.push(
+        `Retry with npmjs registry: npm install -g ${PACKAGE_NAME}@latest --registry https://registry.npmjs.org/`,
+    );
+    hints.push(`Installer fallback: ${remoteInstall.primary}`);
+
+    return hints;
+}
+
 export const updateCommand = new Command('update')
     .description('Update the Kodus CLI to the latest version')
     .action(async () => {
@@ -127,11 +161,12 @@ export const updateCommand = new Command('update')
                 const installInstruction = resolveGlobalInstallInstruction(
                     process.env.npm_config_user_agent,
                 );
-                cliInfo(
-                    chalk.yellow(
-                        `\nTry running manually: ${formatInstallInstruction(installInstruction)}`,
-                    ),
-                );
+                for (const hint of getUpdateFailureHints(
+                    error.message,
+                    installInstruction,
+                )) {
+                    cliInfo(chalk.yellow(`\n${hint}`));
+                }
             }
         }
     });

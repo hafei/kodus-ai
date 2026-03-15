@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     formatInstallInstruction,
+    getUpdateFailureHints,
     resolveGlobalInstallInstruction,
 } from '../update.js';
 
@@ -44,5 +45,34 @@ describe('update command helpers', () => {
                 args: ['add', '-g', '@kodus/cli@latest'],
             }),
         ).toBe('pnpm add -g @kodus/cli@latest');
+    });
+
+    it('adds registry diagnostics when package lookup fails', () => {
+        const hints = getUpdateFailureHints(
+            'Package `@kodus/cli` could not be found',
+            {
+                command: 'npm',
+                args: ['install', '-g', '@kodus/cli@latest'],
+            },
+            'https://registry.internal.example',
+        );
+
+        expect(hints.join('\n')).toContain('npm config get registry');
+        expect(hints.join('\n')).toContain('--registry https://registry.npmjs.org/');
+        expect(hints.join('\n')).toContain('curl -fsSL');
+    });
+
+    it('keeps manual install hint for generic failures', () => {
+        const hints = getUpdateFailureHints(
+            'spawn npm ENOENT',
+            {
+                command: 'npm',
+                args: ['install', '-g', '@kodus/cli@latest'],
+            },
+            undefined,
+        );
+
+        expect(hints[0]).toContain('Try running manually');
+        expect(hints.join('\n')).not.toContain('--registry https://registry.npmjs.org/');
     });
 });

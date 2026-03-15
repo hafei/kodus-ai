@@ -1,6 +1,6 @@
 {
     "name": "@kodus/cli",
-    "version": "0.4.8",
+    "version": "0.4.9",
     "description": "Kodus CLI - AI-powered code review from your terminal",
     "type": "module",
     "bin": {
@@ -67,14 +67,14 @@
         "@eslint/js": "^10.0.1",
         "@types/figlet": "^1.7.0",
         "@types/gradient-string": "^1.1.6",
-        "@types/node": "^25.4.0",
+        "@types/node": "^25.5.0",
         "@types/update-notifier": "^6.0.8",
         "@typescript-eslint/eslint-plugin": "^8.57.0",
         "@typescript-eslint/parser": "^8.57.0",
         "eslint": "^10.0.3",
         "prettier": "^3.8.1",
         "typescript": "^5.9.3",
-        "vitest": "^4.0.18"
+        "vitest": "^4.1.0"
     },
     "engines": {
         "node": ">=20.0.0"

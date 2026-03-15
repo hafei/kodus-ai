@@ -3,7 +3,9 @@ import { reviewService } from '../review.service.js';
 import { api } from '../api/index.js';
 import * as rateLimit from '../../utils/rate-limit.js';
 import { setCliOutputMode } from '../../utils/logger.js';
-import type { PullRequestSuggestionsResponse } from '../../types/index.js';
+import type { PullRequestSuggestionsResponse } from '../../types/review.js';
+import { normalizeSuggestionsResponse } from '../review-normalizer.js';
+import { filterReviewFiles } from '../review-file-filter.js';
 
 describe('normalizeSeverity', () => {
     it('maps critical to critical', () => {
@@ -60,7 +62,7 @@ describe('normalizeSuggestionsResponse', () => {
             duration: 100,
         };
 
-        const result = reviewService.normalizeSuggestionsResponse(response);
+        const result = normalizeSuggestionsResponse(response);
         expect(result.summary).toBe('Found issues');
         expect(result.issues).toHaveLength(1);
         expect(result.issues[0].file).toBe('a.ts');
@@ -80,7 +82,7 @@ describe('normalizeSuggestionsResponse', () => {
             ],
         };
 
-        const result = reviewService.normalizeSuggestionsResponse(response);
+        const result = normalizeSuggestionsResponse(response);
         expect(result.issues).toHaveLength(1);
         expect(result.issues[0].file).toBe('b.ts');
         expect(result.summary).toBe('Pull request suggestions');
@@ -113,7 +115,7 @@ describe('normalizeSuggestionsResponse', () => {
             },
         };
 
-        const result = reviewService.normalizeSuggestionsResponse(response);
+        const result = normalizeSuggestionsResponse(response);
         expect(result.issues).toHaveLength(2);
 
         const fileIssue = result.issues[0];
@@ -135,7 +137,7 @@ describe('normalizeSuggestionsResponse', () => {
     it('handles empty response', () => {
         const response: PullRequestSuggestionsResponse = {};
 
-        const result = reviewService.normalizeSuggestionsResponse(response);
+        const result = normalizeSuggestionsResponse(response);
         expect(result.issues).toHaveLength(0);
         expect(result.summary).toBe('Pull request suggestions');
         expect(result.filesAnalyzed).toBe(0);
@@ -156,7 +158,7 @@ describe('normalizeSuggestionsResponse', () => {
             },
         };
 
-        const result = reviewService.normalizeSuggestionsResponse(response);
+        const result = normalizeSuggestionsResponse(response);
         expect(result.issues[0].file).toBe('new-path.ts');
     });
 });
@@ -170,7 +172,7 @@ describe('filterFiles logging behavior', () => {
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         const oversizedDiff = 'x'.repeat(1024 * 1024 + 1);
 
-        const result = (reviewService as any).filterFiles(
+        const result = filterReviewFiles(
             [
                 {
                     path: 'big.ts',
@@ -190,7 +192,7 @@ describe('filterFiles logging behavior', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const oversizedDiff = 'x'.repeat(1024 * 1024 + 1);
 
-        const result = (reviewService as any).filterFiles(
+        const result = filterReviewFiles(
             [
                 {
                     path: 'big.ts',

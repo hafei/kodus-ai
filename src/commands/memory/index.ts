@@ -3,7 +3,7 @@ import { enableAction } from './enable.js';
 import { disableAction } from './disable.js';
 import { captureAction } from './capture.js';
 import { sessionHooksCommand } from './session-hooks/index.js';
-import type { GlobalOptions } from '../../types/index.js';
+import type { GlobalOptions } from '../../types/cli.js';
 
 export const decisionsCommand = new Command('decisions').description(
     'Session tracking, decision capture, and structured logging',

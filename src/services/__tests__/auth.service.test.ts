@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
-import type { AuthResponse, StoredCredentials } from '../../types/index.js';
-import { AuthError } from '../../types/index.js';
+import type { AuthResponse, StoredCredentials } from '../../types/auth.js';
+import { AuthError } from '../../types/errors.js';
 
 vi.mock('../api/index.js', () => ({
     api: {

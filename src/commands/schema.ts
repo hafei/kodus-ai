@@ -15,7 +15,7 @@ import {
     normalizeCommandError,
     CommandError,
 } from '../utils/command-errors.js';
-import type { GlobalOptions } from '../types/index.js';
+import type { GlobalOptions } from '../types/cli.js';
 import { cliError, cliInfo } from '../utils/logger.js';
 import { exitWithCode } from '../utils/cli-exit.js';
 import fs from 'fs/promises';

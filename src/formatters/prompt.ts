@@ -1,4 +1,4 @@
-import type { ReviewResult, ReviewIssue } from '../types/index.js';
+import type { ReviewIssue, ReviewResult } from '../types/review.js';
 
 /**
  * Prompt-only formatter - Optimized for AI agents

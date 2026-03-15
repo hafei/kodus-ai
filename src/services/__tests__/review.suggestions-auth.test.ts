@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../../types/index.js';
+import { ApiError } from '../../types/errors.js';
 
 vi.mock('../api/index.js', () => ({
     api: {
@@ -108,7 +108,7 @@ describe('ReviewService getPullRequestSuggestions auth fallback', () => {
         ).rejects.toThrow(ApiError);
     });
 
-    it('rethrows original bearer error when fallback with team key also fails', async () => {
+    it('rethrows fallback error when fallback with team key also fails', async () => {
         const originalError = new ApiError(401, 'Bearer unauthorized');
         const fallbackError = new ApiError(401, 'Team key unauthorized');
 
@@ -127,6 +127,6 @@ describe('ReviewService getPullRequestSuggestions auth fallback', () => {
             reviewService.getPullRequestSuggestions({
                 prUrl: 'https://github.com/kodustech/cli/pull/6',
             }),
-        ).rejects.toBe(originalError);
+        ).rejects.toBe(fallbackError);
     });
 });

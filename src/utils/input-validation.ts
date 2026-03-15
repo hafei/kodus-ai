@@ -1,4 +1,4 @@
-import type { OutputFormat } from '../types/index.js';
+import type { OutputFormat } from '../types/cli.js';
 import { CommandError } from './command-errors.js';
 
 export function parseOptionalNumber(

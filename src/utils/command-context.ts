@@ -1,4 +1,4 @@
-import type { GlobalOptions, OutputFormat } from '../types/index.js';
+import type { GlobalOptions, OutputFormat } from '../types/cli.js';
 import type { CommandMode } from '../types/command-output.js';
 
 export interface CommandContext {

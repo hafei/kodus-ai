@@ -5,25 +5,29 @@ import { getTrialIdentifier } from '../utils/rate-limit.js';
 import { loadConfig } from '../utils/config.js';
 import { CLI_VERSION } from '../constants.js';
 import chalk from 'chalk';
-import { ApiError } from '../types/index.js';
-import { cliDebug, cliWarn } from '../utils/logger.js';
+import { cliDebug } from '../utils/logger.js';
+import { withTeamKeyFallback } from './review-auth-fallback.js';
+import { buildReviewConfig } from './review-config-builder.js';
+import { filterReviewFiles } from './review-file-filter.js';
+import {
+    createAnalyzeApiRequestVerboseMessages,
+    createAnalyzeApiResponseVerboseMessages,
+    createAnalyzeStartVerboseMessages,
+    createFullFileContentsVerboseMessages,
+    createTrialAnalyzeResponseVerboseMessages,
+    createTrialAnalyzeStartVerboseMessages,
+} from './review-verbose.js';
+import {
+    normalizeSeverity,
+    normalizeSuggestionsResponse,
+} from './review-normalizer.js';
 import type {
+    BusinessValidationResponse,
     ReviewConfig,
     ReviewResult,
-    TrialReviewResult,
-    PullRequestSuggestionsResponse,
-    BusinessValidationResponse,
-    ReviewIssue,
-    ApiFileSuggestion,
-    ApiPrLevelSuggestion,
-    ApiSuggestionsObject,
     Severity,
-    FileContent,
-} from '../types/index.js';
-
-const MAX_FILES = 500;
-const MAX_DIFF_SIZE = 1024 * 1024; // 1MB
-const MAX_CONTENT_SIZE = 5 * 1024 * 1024; // 5MB
+    TrialReviewResult,
+} from '../types/review.js';
 
 class ReviewService {
     private verbose: boolean = false;
@@ -53,42 +57,22 @@ class ReviewService {
     ): Promise<ReviewResult> {
         const token = await authService.getValidToken();
 
-        this.logVerbose(
-            `[verbose] Review config: rulesOnly=${!!rulesOnly}, fast=${!!fast}`,
+        createAnalyzeStartVerboseMessages({ diff, rulesOnly, fast }).forEach(
+            (message) => this.logVerbose(message),
         );
-        this.logVerbose(`[verbose] Diff size: ${diff.length} characters`);
 
-        const reviewConfig: ReviewConfig = {
+        const reviewConfig: ReviewConfig = await buildReviewConfig({
             rulesOnly,
             fast,
-        };
+            options,
+            getFullFileContents: (files, fileOptions) =>
+                gitService.getFullFileContents(files, fileOptions),
+            filterFiles: filterReviewFiles,
+        });
 
-        if (!fast) {
-            const allFiles = await gitService.getFullFileContents(
-                options?.files,
-                {
-                    staged: options?.staged,
-                    commit: options?.commit,
-                    branch: options?.branch,
-                },
-            );
-
-            reviewConfig.files = this.filterFiles(
-                allFiles,
-                options?.quiet ?? false,
-            );
-
-            this.logVerbose(
-                `[verbose] Full file contents: ${reviewConfig.files?.length || 0} file(s)`,
-            );
-            if (reviewConfig.files && reviewConfig.files.length > 0) {
-                reviewConfig.files.forEach((f) => {
-                    this.logVerbose(
-                        `[verbose]   - ${f.path}: ${f.content.length} chars, status=${f.status}`,
-                    );
-                });
-            }
-        }
+        createFullFileContentsVerboseMessages(reviewConfig.files).forEach(
+            (message) => this.logVerbose(message),
+        );
 
         const teamConfig = await loadConfig();
         const isTeamKey = token.startsWith('kodus_');
@@ -99,15 +83,15 @@ class ReviewService {
                 ? gitService.inferPlatform(gitInfo.remote)
                 : undefined;
 
-            this.logVerbose('[verbose] Using team key with metrics');
-            this.logVerbose(
-                `[verbose] Git info: branch=${gitInfo.branch}, remote=${gitInfo.remote}`,
-            );
-            this.logVerbose('[verbose] Sending to API:');
-            this.logVerbose(`[verbose]   - diff length: ${diff.length} chars`);
-            this.logVerbose(
-                `[verbose]   - config: ${JSON.stringify(reviewConfig)}`,
-            );
+            createAnalyzeApiRequestVerboseMessages({
+                diff,
+                reviewConfig,
+                mode: 'team-key',
+                gitInfo: {
+                    branch: gitInfo.branch,
+                    remote: gitInfo.remote,
+                },
+            }).forEach((message) => this.logVerbose(message));
 
             const result = await api.review.analyzeWithMetrics(
                 diff,
@@ -123,32 +107,28 @@ class ReviewService {
                 },
             );
 
-            this.logVerbose('[verbose] API response:');
-            this.logVerbose(`[verbose]   - summary: ${result.summary}`);
-            this.logVerbose(
-                `[verbose]   - issues: ${result.issues?.length ?? 0}`,
-            );
-            this.logVerbose(
-                `[verbose]   - filesAnalyzed: ${result.filesAnalyzed}`,
-            );
+            createAnalyzeApiResponseVerboseMessages({
+                summary: result.summary,
+                issuesCount: result.issues?.length ?? 0,
+                filesAnalyzed: result.filesAnalyzed,
+            }).forEach((message) => this.logVerbose(message));
 
             return result;
         }
 
-        this.logVerbose('[verbose] Using personal token (no metrics)');
-
-        this.logVerbose('[verbose] Sending to API:');
-        this.logVerbose(`[verbose]   - diff length: ${diff.length} chars`);
-        this.logVerbose(
-            `[verbose]   - config: ${JSON.stringify(reviewConfig)}`,
-        );
+        createAnalyzeApiRequestVerboseMessages({
+            diff,
+            reviewConfig,
+            mode: 'personal-token',
+        }).forEach((message) => this.logVerbose(message));
 
         const result = await api.review.analyze(diff, token, reviewConfig);
 
-        this.logVerbose('[verbose] API response:');
-        this.logVerbose(`[verbose]   - summary: ${result.summary}`);
-        this.logVerbose(`[verbose]   - issues: ${result.issues?.length ?? 0}`);
-        this.logVerbose(`[verbose]   - filesAnalyzed: ${result.filesAnalyzed}`);
+        createAnalyzeApiResponseVerboseMessages({
+            summary: result.summary,
+            issuesCount: result.issues?.length ?? 0,
+            filesAnalyzed: result.filesAnalyzed,
+        }).forEach((message) => this.logVerbose(message));
 
         return result;
     }
@@ -169,39 +149,15 @@ class ReviewService {
 
         const token = await authService.getValidToken();
 
-        let response: PullRequestSuggestionsResponse;
-        try {
-            response = await api.review.getPullRequestSuggestions(
-                token,
-                params,
-            );
-        } catch (error) {
-            const canFallbackToTeamKey =
-                error instanceof ApiError &&
-                error.statusCode === 401 &&
-                !token.startsWith('kodus_');
-            if (!canFallbackToTeamKey) {
-                throw error;
-            }
-
-            const config = await loadConfig();
-            if (!config?.teamKey) {
-                throw error;
-            }
-
-            try {
-                response = await api.review.getPullRequestSuggestions(
-                    config.teamKey,
-                    params,
-                );
-            } catch {
-                // Preserve the primary auth failure from the original token attempt.
-                throw error;
-            }
-        }
+        const response = await withTeamKeyFallback({
+            token,
+            loadConfig,
+            operation: (activeToken) =>
+                api.review.getPullRequestSuggestions(activeToken, params),
+        });
 
         return {
-            result: this.normalizeSuggestionsResponse(response),
+            result: normalizeSuggestionsResponse(response),
             markdown: response.markdown,
         };
     }
@@ -214,168 +170,34 @@ class ReviewService {
     }): Promise<BusinessValidationResponse> {
         const token = await authService.getValidToken();
 
-        try {
-            return await api.review.triggerBusinessValidation(token, params);
-        } catch (error) {
-            const canFallbackToTeamKey =
-                error instanceof ApiError &&
-                error.statusCode === 401 &&
-                !token.startsWith('kodus_');
-
-            if (!canFallbackToTeamKey) {
-                throw error;
-            }
-
-            const config = await loadConfig();
-            if (!config?.teamKey) {
-                throw error;
-            }
-
-            try {
-                return await api.review.triggerBusinessValidation(
-                    config.teamKey,
-                    params,
-                );
-            } catch {
-                throw error;
-            }
-        }
+        return await withTeamKeyFallback({
+            token,
+            loadConfig,
+            operation: (activeToken) =>
+                api.review.triggerBusinessValidation(activeToken, params),
+        });
     }
 
     async trialAnalyze(diff: string): Promise<TrialReviewResult> {
         const fingerprint = await getTrialIdentifier();
 
-        this.logVerbose('[verbose] Running trial analyze');
-        this.logVerbose(`[verbose] Diff size: ${diff.length} characters`);
-        // Show diff preview
-        const preview = diff.substring(0, 300);
-        this.logVerbose(
-            `[verbose] Diff preview:\n${preview}${diff.length > 300 ? '\n... (truncated)' : ''}`,
+        createTrialAnalyzeStartVerboseMessages(diff).forEach((message) =>
+            this.logVerbose(message),
         );
 
         const result = await api.review.trialAnalyze(diff, fingerprint);
 
-        this.logVerbose('[verbose] Trial API response:');
-        this.logVerbose(`[verbose]   - summary: ${result.summary}`);
-        this.logVerbose(`[verbose]   - issues: ${result.issues?.length ?? 0}`);
-        this.logVerbose(`[verbose]   - filesAnalyzed: ${result.filesAnalyzed}`);
+        createTrialAnalyzeResponseVerboseMessages({
+            summary: result.summary,
+            issuesCount: result.issues?.length ?? 0,
+            filesAnalyzed: result.filesAnalyzed,
+        }).forEach((message) => this.logVerbose(message));
 
         return result;
     }
 
-    normalizeSuggestionsResponse(
-        response: PullRequestSuggestionsResponse,
-    ): ReviewResult {
-        let issues: ReviewIssue[] = [];
-
-        if (Array.isArray(response.issues)) {
-            issues = response.issues;
-        } else if (Array.isArray(response.suggestions)) {
-            issues = response.suggestions;
-        } else if (
-            response.suggestions &&
-            typeof response.suggestions === 'object'
-        ) {
-            const suggestionsObj = response.suggestions as ApiSuggestionsObject;
-            issues = [
-                ...this.mapFileSuggestions(suggestionsObj.files ?? []),
-                ...this.mapPrLevelSuggestions(suggestionsObj.prLevel ?? []),
-            ];
-        }
-
-        return {
-            summary: response.summary ?? 'Pull request suggestions',
-            issues,
-            filesAnalyzed:
-                response.filesAnalyzed ??
-                new Set(issues.map((i) => i.file)).size,
-            duration: response.duration ?? 0,
-        };
-    }
-
-    mapFileSuggestions(files: ApiFileSuggestion[]): ReviewIssue[] {
-        return files.map((s) => ({
-            file: s.filePath ?? s.relevantFile,
-            line: s.relevantLinesStart ?? 1,
-            endLine: s.relevantLinesEnd,
-            severity: this.normalizeSeverity(s.severity),
-            message: s.suggestionContent,
-            suggestion: s.oneSentenceSummary,
-            ruleId: s.label,
-        }));
-    }
-
-    mapPrLevelSuggestions(prLevel: ApiPrLevelSuggestion[]): ReviewIssue[] {
-        return prLevel.map((s) => ({
-            file: 'PR',
-            line: 0,
-            severity: this.normalizeSeverity(s.severity),
-            message: s.suggestionContent,
-            suggestion: s.oneSentenceSummary,
-            ruleId: s.label,
-        }));
-    }
-
-    private filterFiles(files: FileContent[], quiet = false): FileContent[] {
-        const skipped: string[] = [];
-        const filtered = files.filter((f) => {
-            const diffBytes = Buffer.byteLength(f.diff, 'utf8');
-            const contentBytes = Buffer.byteLength(f.content, 'utf8');
-            if (diffBytes > MAX_DIFF_SIZE) {
-                const sizeKB = Math.round(diffBytes / 1024);
-                skipped.push(
-                    `  - ${f.path} (diff: ${sizeKB}KB, max: ${MAX_DIFF_SIZE / 1024}KB)`,
-                );
-                return false;
-            }
-            if (contentBytes > MAX_CONTENT_SIZE) {
-                const sizeMB = (contentBytes / (1024 * 1024)).toFixed(1);
-                skipped.push(
-                    `  - ${f.path} (content: ${sizeMB}MB, max: ${MAX_CONTENT_SIZE / (1024 * 1024)}MB)`,
-                );
-                return false;
-            }
-            return true;
-        });
-
-        if (!quiet && skipped.length > 0) {
-            cliWarn(
-                chalk.yellow(
-                    `⚠ Skipped ${skipped.length} file(s) exceeding size limits:`,
-                ),
-            );
-            skipped.forEach((msg) => cliWarn(chalk.yellow(msg)));
-        }
-
-        if (filtered.length > MAX_FILES) {
-            if (!quiet) {
-                cliWarn(
-                    chalk.yellow(
-                        `⚠ Too many files (${filtered.length}), sending first ${MAX_FILES}`,
-                    ),
-                );
-            }
-            return filtered.slice(0, MAX_FILES);
-        }
-
-        return filtered;
-    }
-
     normalizeSeverity(severity?: string): Severity {
-        if (!severity) {
-            return 'info';
-        }
-        const s = severity.toLowerCase();
-        if (s === 'critical') {
-            return 'critical';
-        }
-        if (s === 'high' || s === 'error') {
-            return 'error';
-        }
-        if (s === 'medium' || s === 'warning') {
-            return 'warning';
-        }
-        return 'info';
+        return normalizeSeverity(severity);
     }
 }
 

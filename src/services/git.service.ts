@@ -2,13 +2,26 @@ import { simpleGit, SimpleGit } from 'simple-git';
 import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
-import type {
-    FileDiff,
-    FileContent,
-    GitInfo,
-    PlatformType,
-} from '../types/index.js';
+import type { FileContent } from '../types/review.js';
+import type { FileDiff, GitInfo, PlatformType } from '../types/cli.js';
 import { cliDebug } from '../utils/logger.js';
+import {
+    extractOrgRepoFromRemote,
+    inferPlatformFromRemote,
+} from '../utils/git-remote.js';
+import {
+    parseGitStatus,
+} from '../utils/git-status.js';
+import { countDiffChanges } from '../utils/git-diff.js';
+import {
+    buildFileContentReadPlan,
+    buildFileDiffReadPlan,
+} from '../utils/git-file-reader.js';
+import {
+    createFileSelectionFromModifiedFiles,
+    createFileSelectionFromNameStatus,
+    createFileSelectionFromPaths,
+} from '../utils/git-file-selection.js';
 
 class GitService {
     private git: SimpleGit;
@@ -66,25 +79,7 @@ class GitService {
     }
 
     async extractOrgRepo(): Promise<{ org: string; repo: string } | null> {
-        const remoteUrl = await this.getRemoteUrl();
-        if (!remoteUrl) {
-            return null;
-        }
-
-        const patterns = [
-            /github\.com[:/]([^/]+)\/([^/.]+)/,
-            /gitlab\.com[:/]([^/]+)\/([^/.]+)/,
-            /bitbucket\.org[:/]([^/]+)\/([^/.]+)/,
-        ];
-
-        for (const pattern of patterns) {
-            const match = remoteUrl.match(pattern);
-            if (match) {
-                return { org: match[1], repo: match[2] };
-            }
-        }
-
-        return null;
+        return extractOrgRepoFromRemote(await this.getRemoteUrl());
     }
 
     async getWorkingTreeDiff(): Promise<string> {
@@ -251,19 +246,7 @@ class GitService {
             }
 
             const diff = await this.git.diff(['--', file]);
-            const lines = diff.split('\n');
-
-            let additions = 0;
-            let deletions = 0;
-
-            for (const line of lines) {
-                if (line.startsWith('+') && !line.startsWith('+++')) {
-                    additions++;
-                }
-                if (line.startsWith('-') && !line.startsWith('---')) {
-                    deletions++;
-                }
-            }
+            const { additions, deletions } = countDiffChanges(diff);
 
             return { file, status, additions, deletions, diff };
         };
@@ -294,78 +277,33 @@ class GitService {
         },
     ): Promise<FileContent[]> {
         await this.ensureRepo();
-        // 1. Identify files to process
-        let filesToRead: string[];
-
-        // Map to track file statuses (A=added, M=modified, D=deleted, R=renamed)
-        const fileStatusMap = new Map<string, FileDiff['status']>();
+        let selection:
+            | {
+                  filesToRead: string[];
+                  fileStatusMap: Map<string, FileDiff['status']>;
+              }
+            | undefined;
 
         if (explicitFiles && explicitFiles.length > 0) {
-            // Explicit files provided by the caller
-            filesToRead = explicitFiles;
+            selection = createFileSelectionFromPaths(explicitFiles);
         } else if (options?.branch) {
-            // Branch comparison: get files changed between branch and HEAD with status
             const nameStatus = await this.git.diff([
                 '--name-status',
                 `${options.branch}...HEAD`,
             ]);
-            filesToRead = [];
-            for (const line of nameStatus.split('\n')) {
-                const trimmed = line.trim();
-                if (!trimmed) {
-                    continue;
-                }
-                const parts = trimmed.split('\t');
-                const statusChar = parts[0];
-                // For renames (R) or copies (C), the new file is the last part.
-                const fileName =
-                    statusChar.startsWith('R') || statusChar.startsWith('C')
-                        ? parts[parts.length - 1]
-                        : parts[1];
-                if (fileName) {
-                    filesToRead.push(fileName);
-                    fileStatusMap.set(
-                        fileName,
-                        this.parseGitStatus(statusChar),
-                    );
-                }
-            }
+            selection = createFileSelectionFromNameStatus(nameStatus);
         } else if (options?.commit) {
-            // Commit diff: get files changed in that commit with status
             const nameStatus = await this.git.diff([
                 '--name-status',
                 `${options.commit}^`,
                 options.commit,
             ]);
-            filesToRead = [];
-            for (const line of nameStatus.split('\n')) {
-                const trimmed = line.trim();
-                if (!trimmed) {
-                    continue;
-                }
-                const parts = trimmed.split('\t');
-                const statusChar = parts[0];
-                // For renames (R) or copies (C), the new file is the last part.
-                const fileName =
-                    statusChar.startsWith('R') || statusChar.startsWith('C')
-                        ? parts[parts.length - 1]
-                        : parts[1];
-                if (fileName) {
-                    filesToRead.push(fileName);
-                    fileStatusMap.set(
-                        fileName,
-                        this.parseGitStatus(statusChar),
-                    );
-                }
-            }
+            selection = createFileSelectionFromNameStatus(nameStatus);
         } else {
-            // Working tree: use getModifiedFiles()
             const allModifiedFiles = await this.getModifiedFiles();
-            filesToRead = allModifiedFiles.map((f) => f.file);
-            for (const f of allModifiedFiles) {
-                fileStatusMap.set(f.file, f.status);
-            }
+            selection = createFileSelectionFromModifiedFiles(allModifiedFiles);
         }
+        const { filesToRead, fileStatusMap } = selection;
 
         // 2. For each file, read content and diff
         const fileContents: FileContent[] = [];
@@ -380,56 +318,25 @@ class GitService {
                     continue;
                 }
 
-                // Read diff for this specific file
+                const diffPlan = buildFileDiffReadPlan(filePath, options);
                 let fileDiff: string;
-                if (options?.branch) {
-                    // Diff between target branch and HEAD
-                    fileDiff = await this.git.diff([
-                        `${options.branch}...HEAD`,
-                        '--',
-                        filePath,
-                    ]);
-                } else if (options?.commit) {
-                    // Diff for the selected commit
-                    fileDiff = await this.git.diff([
-                        `${options.commit}^`,
-                        options.commit,
-                        '--',
-                        filePath,
-                    ]);
-                } else if (options?.staged) {
-                    // Staged-only diff
-                    fileDiff = await this.git.diff([
-                        '--cached',
-                        '--',
-                        filePath,
-                    ]);
+                if (diffPlan.mode === 'single-diff') {
+                    fileDiff = await this.git.diff(diffPlan.args);
                 } else {
-                    // Full working-tree diff (staged + unstaged)
-                    const stagedDiff = await this.git.diff([
-                        '--cached',
-                        '--',
-                        filePath,
-                    ]);
-                    const unstagedDiff = await this.git.diff(['--', filePath]);
+                    const stagedDiff = await this.git.diff(diffPlan.stagedArgs);
+                    const unstagedDiff = await this.git.diff(
+                        diffPlan.unstagedArgs,
+                    );
                     fileDiff = `${stagedDiff}\n${unstagedDiff}`.trim();
                 }
 
-                // Read file content
+                const contentPlan = buildFileContentReadPlan(filePath, options);
                 let content: string;
-
-                if (options?.commit) {
-                    // Read file content from the selected commit
-                    content = await this.git.show([
-                        `${options.commit}:${filePath}`,
-                    ]);
-                } else if (options?.branch) {
-                    // Read file content from HEAD to match the branch comparison diff target.
-                    content = await this.git.show([`HEAD:${filePath}`]);
+                if (contentPlan.mode === 'git-show') {
+                    content = await this.git.show(contentPlan.args);
                 } else {
-                    // Read from working tree (fs.readFile)
-                    const fullPath = path.resolve(filePath);
-                    content = await fs.readFile(fullPath, 'utf-8');
+                    const fullPath = path.resolve(contentPlan.path);
+                    content = await fs.readFile(fullPath, contentPlan.encoding);
                 }
 
                 fileContents.push({
@@ -448,17 +355,7 @@ class GitService {
     }
 
     parseGitStatus(statusChar: string): FileDiff['status'] {
-        const char = statusChar.charAt(0).toUpperCase();
-        switch (char) {
-            case 'A':
-                return 'added';
-            case 'D':
-                return 'deleted';
-            case 'R':
-                return 'renamed';
-            default:
-                return 'modified';
-        }
+        return parseGitStatus(statusChar);
     }
 
     async getCurrentBranch(): Promise<string> {
@@ -514,55 +411,7 @@ class GitService {
     }
 
     inferPlatform(remote: string | null | undefined): PlatformType {
-        if (!remote) {
-            return undefined;
-        }
-
-        const host = this.extractRemoteHost(remote);
-        if (!host) {
-            return undefined;
-        }
-
-        if (host === 'github.com') {
-            return 'GITHUB';
-        }
-        if (host === 'gitlab.com') {
-            return 'GITLAB';
-        }
-        if (host === 'bitbucket.org') {
-            return 'BITBUCKET';
-        }
-        if (
-            host === 'dev.azure.com' ||
-            host === 'ssh.dev.azure.com' ||
-            host === 'visualstudio.com' ||
-            host.endsWith('.visualstudio.com')
-        ) {
-            return 'AZURE_REPOS';
-        }
-
-        return undefined;
-    }
-
-    private extractRemoteHost(remote: string): string | undefined {
-        const value = remote.trim().toLowerCase();
-        if (!value) {
-            return undefined;
-        }
-
-        // Handles URLs like https://github.com/org/repo.git and ssh://git@github.com/org/repo.git
-        try {
-            const url = new URL(value);
-            if (url.hostname) {
-                return url.hostname.toLowerCase();
-            }
-        } catch {
-            // Fallback below for SCP-like syntax.
-        }
-
-        // Handles SCP-like Git remotes like git@github.com:org/repo.git
-        const scpLike = value.match(/^(?:[^@/]+@)?([^:/]+):.+$/);
-        return scpLike?.[1];
+        return inferPlatformFromRemote(remote);
     }
 }
 
