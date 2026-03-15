@@ -26,13 +26,14 @@ describe('withTeamKeyFallback', () => {
         expect(operation).toHaveBeenNthCalledWith(2, 'kodus_team');
     });
 
-    it('rethrows the original error when fallback also fails', async () => {
+    it('rethrows the fallback error when fallback also fails', async () => {
         const originalError = new ApiError(401, 'Primary unauthorized');
+        const fallbackError = new ApiError(401, 'Fallback unauthorized');
         const loadConfig = vi.fn().mockResolvedValue({ teamKey: 'kodus_team' });
         const operation = vi
             .fn()
             .mockRejectedValueOnce(originalError)
-            .mockRejectedValueOnce(new ApiError(401, 'Fallback unauthorized'));
+            .mockRejectedValueOnce(fallbackError);
 
         await expect(
             withTeamKeyFallback({
@@ -40,7 +41,7 @@ describe('withTeamKeyFallback', () => {
                 loadConfig,
                 operation,
             }),
-        ).rejects.toBe(originalError);
+        ).rejects.toBe(fallbackError);
     });
 
     it('does not fallback for team-key tokens', async () => {

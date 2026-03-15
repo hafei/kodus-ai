@@ -122,11 +122,11 @@ async function reviewAction(
             globalOpts.format = 'prompt';
         }
 
-        const isAuthenticated = await authService.isAuthenticated();
-
         if (!globalOpts.quiet && !ctx.isAgent) {
             spinner.start(chalk.cyan('Checking authentication...'));
         }
+
+        const isAuthenticated = await authService.isAuthenticated();
 
         let result: ReviewResult | TrialReviewResult;
 
@@ -331,7 +331,7 @@ async function reviewAction(
             return;
         }
 
-        if (!globalOpts.quiet) {
+        if (!globalOpts.quiet && spinner.isSpinning) {
             spinner.fail(chalk.red('Review failed'));
         }
 

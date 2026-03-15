@@ -29,8 +29,8 @@ export async function withTeamKeyFallback<T>({
 
         try {
             return await operation(config.teamKey);
-        } catch {
-            throw error;
+        } catch (fallbackError) {
+            throw fallbackError;
         }
     }
 }

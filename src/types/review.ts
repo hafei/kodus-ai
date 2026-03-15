@@ -1,5 +1,8 @@
 export type Severity = 'info' | 'warning' | 'error' | 'critical';
 
+/** Severity values the API may return before normalization. */
+export type ApiSeverity = Severity | 'high' | 'medium' | 'low';
+
 export type IssueCategory =
     | 'security_vulnerability'
     | 'performance'
@@ -51,7 +54,7 @@ export interface ApiFileSuggestion {
     relevantLinesStart?: number;
     relevantLinesEnd?: number;
     label?: string;
-    severity?: Severity | 'high' | 'medium' | 'low';
+    severity?: ApiSeverity;
     deliveryStatus?: string;
     implementationStatus?: string;
 }
@@ -61,7 +64,7 @@ export interface ApiPrLevelSuggestion {
     suggestionContent: string;
     oneSentenceSummary?: string;
     label?: string;
-    severity?: Severity | 'high' | 'medium' | 'low';
+    severity?: ApiSeverity;
     deliveryStatus?: string;
     files?: {
         violatedFileSha?: string[];

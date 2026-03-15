@@ -203,11 +203,14 @@ function normalizeApiErrorMessage(
 
     if (
         statusCode === 401 ||
-        statusCode === 403 ||
         statusCode === 429 ||
         statusCode >= 500
     ) {
         return fallbackMessage;
+    }
+
+    if (statusCode === 403) {
+        return trimmed && !hasNonAscii ? trimmed : fallbackMessage;
     }
 
     return trimmed;
