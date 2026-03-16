@@ -3871,17 +3871,13 @@ ${copyPrompt}
                                     },
                                 );
 
-                            const webhookUrl =
-                                this.configService.get<string>(
-                                    'GLOBAL_AZURE_REPOS_CODE_MANAGEMENT_WEBHOOK'!,
-                                );
+                            const webhookUrl = this.configService.get<string>(
+                                'GLOBAL_AZURE_REPOS_CODE_MANAGEMENT_WEBHOOK'!,
+                            );
                             const allMatching = subs.filter(
                                 (s) =>
-                                    s.publisherInputs?.repository ===
-                                        repo.id &&
-                                    s.consumerInputs?.url?.includes(
-                                        webhookUrl,
-                                    ),
+                                    s.publisherInputs?.repository === repo.id &&
+                                    s.consumerInputs?.url?.includes(webhookUrl),
                             );
 
                             const deletionPromises = allMatching.map(
@@ -3925,13 +3921,11 @@ ${copyPrompt}
             }
         } catch (error) {
             this.logger.error({
-                message:
-                    'Error authenticating for webhook deletion',
+                message: 'Error authenticating for webhook deletion',
                 context: 'AzureReposService',
                 error: error,
                 metadata: {
-                    organizationAndTeamData:
-                        params.organizationAndTeamData,
+                    organizationAndTeamData: params.organizationAndTeamData,
                 },
             });
         }

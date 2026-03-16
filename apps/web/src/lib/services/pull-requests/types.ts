@@ -43,7 +43,7 @@ export interface CodeReviewTimelineItem {
               fileTimings?: Array<{
                   file: string;
                   durationMs: number;
-                  status: 'success' | 'error' | 'timeout';
+                  status: "success" | "error" | "timeout";
               }> | null;
               cta?: {
                   label: string;

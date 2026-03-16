@@ -120,7 +120,10 @@ export class CodebaseSearchService {
             // 3. Filter by excludes
             const filtered = excludes?.length
                 ? matches.filter(
-                      (m) => !excludes.some((ex) => this.matchesExclude(m.file, ex)),
+                      (m) =>
+                          !excludes.some((ex) =>
+                              this.matchesExclude(m.file, ex),
+                          ),
                   )
                 : matches;
 
@@ -177,7 +180,10 @@ export class CodebaseSearchService {
             if (secondColon === -1) continue;
 
             const file = line.substring(0, firstColon);
-            const lineNum = parseInt(line.substring(firstColon + 1, secondColon), 10);
+            const lineNum = parseInt(
+                line.substring(firstColon + 1, secondColon),
+                10,
+            );
             const text = line.substring(secondColon + 1);
 
             if (!file || isNaN(lineNum)) continue;
@@ -279,7 +285,11 @@ export class CodebaseSearchService {
                 );
 
                 if (content && content.trim()) {
-                    return { file, content, lines: [[start, end]] } as CodebaseSearchContext;
+                    return {
+                        file,
+                        content,
+                        lines: [[start, end]],
+                    } as CodebaseSearchContext;
                 }
                 return null;
             }),
@@ -317,13 +327,16 @@ export class CodebaseSearchService {
         if (exclude.endsWith('/')) {
             const segments = filePath.split('/');
             return segments.some((_, i) =>
-                segments.slice(0, i + 1).join('/').startsWith(exclude.slice(0, -1)),
+                segments
+                    .slice(0, i + 1)
+                    .join('/')
+                    .startsWith(exclude.slice(0, -1)),
             );
         }
 
         // Directory segment: "node_modules" matches as a path segment, not substring
         // "test" matches "test/foo.ts" or "src/test/foo.ts" but NOT "attest.ts"
         const segments = filePath.split('/');
-        return segments.some(seg => seg === exclude);
+        return segments.some((seg) => seg === exclude);
     }
 }

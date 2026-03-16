@@ -218,11 +218,12 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
 
                 if (payload?.object_attributes?.action === 'merge') {
                     try {
-                        await this.generateIssuesFromPrClosedUseCase.execute(params);
+                        await this.generateIssuesFromPrClosedUseCase.execute(
+                            params,
+                        );
                     } catch (error) {
                         this.logger.error({
-                            message:
-                                'Failed to generate issues from merged MR',
+                            message: 'Failed to generate issues from merged MR',
                             context: GitLabMergeRequestHandler.name,
                             error,
                             metadata: {

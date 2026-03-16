@@ -202,9 +202,7 @@ export class CollectCrossFileContextsService {
         });
 
         // 2. Execute search queries via CodebaseSearchService
-        const changedFilePaths = new Set(
-            changedFiles.map((f) => f.filename),
-        );
+        const changedFilePaths = new Set(changedFiles.map((f) => f.filename));
 
         const searchExecution = await this.executeSearchQueries(
             plannerQueries,
@@ -499,26 +497,39 @@ export class CollectCrossFileContextsService {
     ): PlannerQuery[] {
         // Patterns that indicate log/comment strings, not code symbols
         const LOG_STRING_PATTERNS = [
-            /^\[.*\]$/,            // [TIMING], [ERROR], etc.
-            /^\[.*\]/,             // [TIMING] PR#...
-            /^logger\./,           // logger.log, logger.warn
-            /^console\./,          // console.log
+            /^\[.*\]$/, // [TIMING], [ERROR], etc.
+            /^\[.*\]/, // [TIMING] PR#...
+            /^logger\./, // logger.log, logger.warn
+            /^console\./, // console.log
             /error occurred/i,
             /failed to/i,
         ];
 
         // Generic parameter names that match hundreds of files
         const GENERIC_NAMES = new Set([
-            'config', 'options', 'params', 'context', 'data', 'result',
-            'error', 'response', 'request', 'callback', 'handler',
-            'value', 'item', 'input', 'output', 'args',
+            'config',
+            'options',
+            'params',
+            'context',
+            'data',
+            'result',
+            'error',
+            'response',
+            'request',
+            'callback',
+            'handler',
+            'value',
+            'item',
+            'input',
+            'output',
+            'args',
         ]);
 
         // Private/internal symbols unlikely to have external consumers
         const PRIVATE_PATTERNS = [
-            /^(private|#)/,              // private keyword or # prefix
-            /^_[a-z]/,                   // _privateMethod convention
-            /^(MAX_|MIN_|DEFAULT_)/,     // Constants
+            /^(private|#)/, // private keyword or # prefix
+            /^_[a-z]/, // _privateMethod convention
+            /^(MAX_|MIN_|DEFAULT_)/, // Constants
         ];
 
         const kept: PlannerQuery[] = [];
@@ -546,7 +557,11 @@ export class CollectCrossFileContextsService {
             }
 
             // Reject patterns that are just log strings wrapped in regex
-            if (/\[TIMING\]|\[ERROR\]|\[WARN\]|\[INFO\]|\[DEBUG\]/.test(query.pattern)) {
+            if (
+                /\[TIMING\]|\[ERROR\]|\[WARN\]|\[INFO\]|\[DEBUG\]/.test(
+                    query.pattern,
+                )
+            ) {
                 rejected.push(`${query.pattern} (log tag pattern)`);
                 continue;
             }
@@ -576,7 +591,15 @@ export class CollectCrossFileContextsService {
     ): Promise<SearchExecutionResult> {
         return this.observabilityService.runInSpan(
             'CollectCrossFileContextsService::executeSearchQueries',
-            () => this._executeSearchQueriesInner(queries, remoteCommands, changedFilePaths, repoRoot, organizationAndTeamData, prNumber),
+            () =>
+                this._executeSearchQueriesInner(
+                    queries,
+                    remoteCommands,
+                    changedFilePaths,
+                    repoRoot,
+                    organizationAndTeamData,
+                    prNumber,
+                ),
             {
                 organizationId: organizationAndTeamData?.organizationId,
                 prNumber,
@@ -640,7 +663,10 @@ export class CollectCrossFileContextsService {
             return { query, result };
         });
 
-        const results = await this.runWithConcurrency(tasks, SEARCH_CONCURRENCY);
+        const results = await this.runWithConcurrency(
+            tasks,
+            SEARCH_CONCURRENCY,
+        );
 
         const allSnippets: CrossFileContextSnippet[] = [];
         for (const outcome of results) {
@@ -716,12 +742,8 @@ export class CollectCrossFileContextsService {
                     ? CONTEXT_WINDOW_SINGLE_LINE
                     : CONTEXT_WINDOW_SMALL;
 
-            const startLine = Math.max(
-                1,
-                (snippet.startLine || 1) - window,
-            );
-            const endLine =
-                (snippet.endLine || lineCount) + window;
+            const startLine = Math.max(1, (snippet.startLine || 1) - window);
+            const endLine = (snippet.endLine || lineCount) + window;
 
             const expandedContent = await remoteCommands.read(
                 snippet.filePath,
@@ -746,7 +768,10 @@ export class CollectCrossFileContextsService {
             return snippet;
         });
 
-        const results = await this.runWithConcurrency(tasks, SEARCH_CONCURRENCY);
+        const results = await this.runWithConcurrency(
+            tasks,
+            SEARCH_CONCURRENCY,
+        );
 
         return results.map((r, i) =>
             r.status === 'fulfilled' ? r.value : snippets[i],
@@ -802,12 +827,7 @@ export class CollectCrossFileContextsService {
                 const result = await this.codebaseSearchService.search({
                     query: funcName,
                     remoteCommands,
-                    excludes: [
-                        'node_modules',
-                        '.git',
-                        'dist',
-                        'build',
-                    ],
+                    excludes: ['node_modules', '.git', 'dist', 'build'],
                 });
 
                 if (!result.success || !result.contexts?.length) {
@@ -820,17 +840,21 @@ export class CollectCrossFileContextsService {
                         filePath: ctx.file,
                         content: ctx.content,
                         rationale: `Hop 2: caller of ${funcName} found in hop 1 results`,
-                        relevanceScore:
-                            this.getBaseScore('high') - 10,
+                        relevanceScore: this.getBaseScore('high') - 10,
                         relatedSymbol: funcName,
                         relationship: `indirect consumer (hop 2) of ${funcName}`,
                         hop: 2 as const,
                         riskLevel: 'high' as const,
-                        targetFiles: [...(funcToTargetFiles.get(funcName) || [])],
+                        targetFiles: [
+                            ...(funcToTargetFiles.get(funcName) || []),
+                        ],
                     }));
             });
 
-            const results = await this.runWithConcurrency(tasks, SEARCH_CONCURRENCY);
+            const results = await this.runWithConcurrency(
+                tasks,
+                SEARCH_CONCURRENCY,
+            );
             for (const outcome of results) {
                 if (outcome.status === 'fulfilled') {
                     hop2Snippets.push(...outcome.value);
@@ -1183,10 +1207,7 @@ export class CollectCrossFileContextsService {
                     role: PromptRole.USER,
                 })
                 .setTemperature(0)
-                .addTags([
-                    'crossFileContextSufficiency',
-                    `model:${provider}`,
-                ])
+                .addTags(['crossFileContextSufficiency', `model:${provider}`])
                 .setRunName(runName)
                 .addMetadata({
                     organizationAndTeamData,
@@ -1194,14 +1215,12 @@ export class CollectCrossFileContextsService {
                     runName,
                 });
 
-            const { result } =
-                await this.observabilityService.runLLMInSpan({
-                    spanName,
-                    runName,
-                    attrs: spanAttrs,
-                    exec: (callbacks) =>
-                        builder.addCallbacks(callbacks).execute(),
-                });
+            const { result } = await this.observabilityService.runLLMInSpan({
+                spanName,
+                runName,
+                attrs: spanAttrs,
+                exec: (callbacks) => builder.addCallbacks(callbacks).execute(),
+            });
 
             return (result as CrossFileContextSufficiencySchemaType) ?? null;
         } catch (error) {

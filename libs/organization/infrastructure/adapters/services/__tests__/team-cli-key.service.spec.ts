@@ -88,5 +88,4 @@ describe('TeamCliKeyService', () => {
         );
         expect(updatePayload).not.toHaveProperty('config');
     });
-
 });

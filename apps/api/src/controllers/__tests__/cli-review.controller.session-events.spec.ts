@@ -30,7 +30,9 @@ describe('CliReviewController.ingestSessionEvent', () => {
     let authenticatedRateLimiter: { checkRateLimit: jest.Mock };
 
     beforeEach(() => {
-        ingestUseCase = { execute: jest.fn().mockResolvedValue({ accepted: true }) };
+        ingestUseCase = {
+            execute: jest.fn().mockResolvedValue({ accepted: true }),
+        };
 
         teamCliKeyService = {
             validateKey: jest.fn().mockResolvedValue({
@@ -40,21 +42,23 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         authenticatedRateLimiter = {
-            checkRateLimit: jest.fn().mockResolvedValue({ allowed: true, remaining: 999 }),
+            checkRateLimit: jest
+                .fn()
+                .mockResolvedValue({ allowed: true, remaining: 999 }),
         };
 
         controller = new CliReviewController(
-            {} as any,                          // executeCliReviewUseCase
-            ingestUseCase as any,               // ingestSessionEventUseCase
-            {} as any,                          // submitCliSessionCaptureUseCase
-            {} as any,                          // trialRateLimiter
-            authenticatedRateLimiter as any,    // authenticatedRateLimiter
-            teamCliKeyService as any,           // teamCliKeyService
-            {} as any,                          // teamService
-            {} as any,                          // authService
-            {} as any,                          // cliDeviceService
-            {} as any,                          // triggerBusinessValidationUseCase
-            {} as any,                          // jwtService
+            {} as any, // executeCliReviewUseCase
+            ingestUseCase as any, // ingestSessionEventUseCase
+            {} as any, // submitCliSessionCaptureUseCase
+            {} as any, // trialRateLimiter
+            authenticatedRateLimiter as any, // authenticatedRateLimiter
+            teamCliKeyService as any, // teamCliKeyService
+            {} as any, // teamService
+            {} as any, // authService
+            {} as any, // cliDeviceService
+            {} as any, // triggerBusinessValidationUseCase
+            {} as any, // jwtService
             { get: () => ({ secret: 'test' }) } as any, // configService
         );
     });
@@ -77,7 +81,9 @@ describe('CliReviewController.ingestSessionEvent', () => {
         );
 
         expect(result).toEqual({ accepted: true });
-        expect(teamCliKeyService.validateKey).toHaveBeenCalledWith('kodus_test_key');
+        expect(teamCliKeyService.validateKey).toHaveBeenCalledWith(
+            'kodus_test_key',
+        );
         expect(ingestUseCase.execute).toHaveBeenCalledWith({
             organizationAndTeamData: {
                 organizationId: 'org-1',
@@ -104,7 +110,12 @@ describe('CliReviewController.ingestSessionEvent', () => {
             customField: 42,
         };
 
-        await controller.ingestSessionEvent({ body }, 'kodus_key', undefined, undefined);
+        await controller.ingestSessionEvent(
+            { body },
+            'kodus_key',
+            undefined,
+            undefined,
+        );
 
         expect(ingestUseCase.execute).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -127,7 +138,12 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         await expect(
-            controller.ingestSessionEvent({ body }, 'bad_key', undefined, undefined),
+            controller.ingestSessionEvent(
+                { body },
+                'bad_key',
+                undefined,
+                undefined,
+            ),
         ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -140,7 +156,12 @@ describe('CliReviewController.ingestSessionEvent', () => {
         };
 
         await expect(
-            controller.ingestSessionEvent({ body }, undefined, undefined, undefined),
+            controller.ingestSessionEvent(
+                { body },
+                undefined,
+                undefined,
+                undefined,
+            ),
         ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -159,12 +180,17 @@ describe('CliReviewController.ingestSessionEvent', () => {
             undefined,
         );
 
-        expect(teamCliKeyService.validateKey).toHaveBeenCalledWith('kodus_my_key');
+        expect(teamCliKeyService.validateKey).toHaveBeenCalledWith(
+            'kodus_my_key',
+        );
         expect(ingestUseCase.execute).toHaveBeenCalled();
     });
 
     it('returns use case result as-is', async () => {
-        ingestUseCase.execute.mockResolvedValue({ accepted: true, uuid: 'evt-1' });
+        ingestUseCase.execute.mockResolvedValue({
+            accepted: true,
+            uuid: 'evt-1',
+        });
 
         const body = {
             sessionId: 'sess-1',
@@ -173,7 +199,12 @@ describe('CliReviewController.ingestSessionEvent', () => {
             timestamp: '2025-06-01T10:00:00.000Z',
         };
 
-        const result = await controller.ingestSessionEvent({ body }, 'kodus_key', undefined, undefined);
+        const result = await controller.ingestSessionEvent(
+            { body },
+            'kodus_key',
+            undefined,
+            undefined,
+        );
         expect(result).toEqual({ accepted: true, uuid: 'evt-1' });
     });
 });

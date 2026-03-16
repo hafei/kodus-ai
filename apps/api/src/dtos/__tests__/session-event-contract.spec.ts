@@ -191,7 +191,10 @@ describe('CLI → API contract: envelope/payload split', () => {
 
         expect(payload).toHaveProperty('toolUseId', 'tool-2');
         expect(payload).toHaveProperty('subagentType', 'Explore');
-        expect(payload).toHaveProperty('taskDescription', 'Find all authentication controllers');
+        expect(payload).toHaveProperty(
+            'taskDescription',
+            'Find all authentication controllers',
+        );
     });
 
     it('subagent_end — toolUseId goes to payload', () => {

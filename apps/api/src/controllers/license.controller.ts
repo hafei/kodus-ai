@@ -8,11 +8,7 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import {
-    ApiBearerAuth,
-    ApiOperation,
-    ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { OrganizationParametersKey } from '@libs/core/domain/enums';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
@@ -55,13 +51,13 @@ export class LicenseController {
         description:
             'Save a self-hosted license key and return the validation result.',
     })
-    public async activate(
-        @Body() body: { licenseKey: string },
-    ) {
+    public async activate(@Body() body: { licenseKey: string }) {
         const organizationId = this.request?.user?.organization?.uuid;
 
         if (!organizationId) {
-            throw new BadRequestException('Organization ID is missing from request');
+            throw new BadRequestException(
+                'Organization ID is missing from request',
+            );
         }
 
         // Strip any whitespace that may have been introduced by copy-paste
@@ -84,9 +80,8 @@ export class LicenseController {
             });
 
         // Decode payload for status details
-        const payload = this.selfHostedLicenseService.decodePayload(
-            sanitizedKey,
-        );
+        const payload =
+            this.selfHostedLicenseService.decodePayload(sanitizedKey);
 
         return {
             ...result,
@@ -117,7 +112,9 @@ export class LicenseController {
         const organizationId = this.request?.user?.organization?.uuid;
 
         if (!organizationId) {
-            throw new BadRequestException('Organization ID is missing from request');
+            throw new BadRequestException(
+                'Organization ID is missing from request',
+            );
         }
 
         const result =
@@ -126,7 +123,10 @@ export class LicenseController {
             });
 
         if (!result.valid) {
-            return { valid: false, subscriptionStatus: result.subscriptionStatus };
+            return {
+                valid: false,
+                subscriptionStatus: result.subscriptionStatus,
+            };
         }
 
         return result;
@@ -148,7 +148,9 @@ export class LicenseController {
         const organizationId = this.request?.user?.organization?.uuid;
 
         if (!organizationId) {
-            throw new BadRequestException('Organization ID is missing from request');
+            throw new BadRequestException(
+                'Organization ID is missing from request',
+            );
         }
 
         return this.selfHostedLicenseService.getAllUsersWithLicense({
@@ -185,7 +187,9 @@ export class LicenseController {
         const organizationId = this.request?.user?.organization?.uuid;
 
         if (!organizationId) {
-            throw new BadRequestException('Organization ID is missing from request');
+            throw new BadRequestException(
+                'Organization ID is missing from request',
+            );
         }
 
         const orgData = {

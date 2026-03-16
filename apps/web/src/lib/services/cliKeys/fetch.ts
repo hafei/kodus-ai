@@ -1,11 +1,7 @@
 import { authorizedFetch } from "@services/fetch";
 
 import { CLI_KEYS_PATHS } from ".";
-import type {
-    CLIKey,
-    CLIKeyConfig,
-    CreateCLIKeyResponse,
-} from "./types";
+import type { CLIKey, CLIKeyConfig, CreateCLIKeyResponse } from "./types";
 
 export const listCLIKeys = async (teamId: string): Promise<CLIKey[]> => {
     const response = await authorizedFetch<CLIKey[]>(

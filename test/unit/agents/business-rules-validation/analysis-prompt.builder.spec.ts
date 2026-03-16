@@ -105,7 +105,8 @@ describe('buildBusinessRulesAnalysisPrompt', () => {
             },
             userLanguage: 'en-US',
             taskQuality: 'PARTIAL',
-            taskContext: 'Description:\nSome context\n\nLinks:\n- http://editorconfig.org.',
+            taskContext:
+                'Description:\nSome context\n\nLinks:\n- http://editorconfig.org.',
             prDiff: 'diff --git a/file.ts b/file.ts',
             prBody: 'PR body',
         } as BusinessRulesContext);

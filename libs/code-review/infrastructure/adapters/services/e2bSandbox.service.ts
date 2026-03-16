@@ -31,7 +31,14 @@ export class E2BSandboxService implements ISandboxProvider {
     async createSandboxWithRepo(
         params: CreateSandboxParams,
     ): Promise<SandboxInstance> {
-        const { cloneUrl, authToken, authUsername, branch, prNumber, platform } = params;
+        const {
+            cloneUrl,
+            authToken,
+            authUsername,
+            branch,
+            prNumber,
+            platform,
+        } = params;
         const apiKey = this.configService.get<string>('API_E2B_KEY');
 
         if (!apiKey) {
@@ -41,7 +48,13 @@ export class E2BSandboxService implements ISandboxProvider {
         this.logger.log({
             message: `[DEBUG] Creating E2B sandbox for PR#${prNumber ?? '?'} branch=${branch}`,
             context: E2BSandboxService.name,
-            metadata: { cloneUrl, branch, prNumber, platform, hasAuthToken: !!authToken },
+            metadata: {
+                cloneUrl,
+                branch,
+                prNumber,
+                platform,
+                hasAuthToken: !!authToken,
+            },
         });
 
         const { sandbox, usedTemplate } = await this.createSandbox(apiKey);
@@ -63,7 +76,10 @@ export class E2BSandboxService implements ISandboxProvider {
                 this.logger.log({
                     message: `[DEBUG] apt-get install exitCode=${installResult.exitCode}`,
                     context: E2BSandboxService.name,
-                    metadata: { exitCode: installResult.exitCode, stderr: installResult.stderr?.slice(0, 300) },
+                    metadata: {
+                        exitCode: installResult.exitCode,
+                        stderr: installResult.stderr?.slice(0, 300),
+                    },
                 });
             }
 
@@ -76,12 +92,22 @@ export class E2BSandboxService implements ISandboxProvider {
                     ? this.getPrRefspec(platform, prNumber)
                     : `refs/heads/${branch}`;
             const localRef = prNumber != null ? 'pr-head' : 'cli-head';
-            const authHeader = this.buildAuthHeader(platform, authToken, authUsername);
+            const authHeader = this.buildAuthHeader(
+                platform,
+                authToken,
+                authUsername,
+            );
 
             this.logger.log({
                 message: `[DEBUG] Git clone starting: refspec=${refspec} localRef=${localRef} cloneUrl=${cloneUrl}`,
                 context: E2BSandboxService.name,
-                metadata: { refspec, localRef, cloneUrl, platform, hasProxy: this.isProxyConfigured() },
+                metadata: {
+                    refspec,
+                    localRef,
+                    cloneUrl,
+                    platform,
+                    hasProxy: this.isProxyConfigured(),
+                },
             });
 
             const cloneResult = await sandbox.commands.run(
@@ -114,7 +140,10 @@ export class E2BSandboxService implements ISandboxProvider {
 
             if (cloneResult.exitCode !== 0) {
                 throw new Error(
-                    `Git clone failed in E2B sandbox (exit code ${cloneResult.exitCode}): ${cloneResult.stderr || cloneResult.stdout}`.slice(0, 500),
+                    `Git clone failed in E2B sandbox (exit code ${cloneResult.exitCode}): ${cloneResult.stderr || cloneResult.stdout}`.slice(
+                        0,
+                        500,
+                    ),
                 );
             }
 
@@ -126,7 +155,10 @@ export class E2BSandboxService implements ISandboxProvider {
             this.logger.log({
                 message: `[DEBUG] Repo contents after clone (first 500 chars): ${verifyResult.stdout?.slice(0, 500)}`,
                 context: E2BSandboxService.name,
-                metadata: { exitCode: verifyResult.exitCode, stdout: verifyResult.stdout?.slice(0, 500) },
+                metadata: {
+                    exitCode: verifyResult.exitCode,
+                    stdout: verifyResult.stdout?.slice(0, 500),
+                },
             });
 
             const remoteCommands = this.buildRemoteCommands(sandbox);
@@ -228,7 +260,11 @@ export class E2BSandboxService implements ISandboxProvider {
         });
     }
 
-    private buildAuthHeader(platform: PlatformType, token: string, username?: string): string {
+    private buildAuthHeader(
+        platform: PlatformType,
+        token: string,
+        username?: string,
+    ): string {
         // Git http.extraHeader sends an Authorization header — token never embedded in URLs
         switch (platform) {
             case PlatformType.GITHUB:
@@ -236,7 +272,9 @@ export class E2BSandboxService implements ISandboxProvider {
             case PlatformType.BITBUCKET:
                 // Bitbucket App Passwords require the actual username, not x-access-token
                 if (!username) {
-                    throw new Error('Bitbucket authentication requires a username, but it was not provided.');
+                    throw new Error(
+                        'Bitbucket authentication requires a username, but it was not provided.',
+                    );
                 }
                 return `Authorization: Basic ${Buffer.from(`${username}:${token}`).toString('base64')}`;
             case PlatformType.GITLAB:
@@ -274,9 +312,7 @@ export class E2BSandboxService implements ISandboxProvider {
                     throw new Error('Absolute paths are not allowed');
                 }
                 if (path.includes('..')) {
-                    throw new Error(
-                        'Path traversal using ".." is not allowed',
-                    );
+                    throw new Error('Path traversal using ".." is not allowed');
                 }
                 const escapedPath = path.replace(/'/g, "'\\''");
                 const globArg = glob
@@ -306,8 +342,8 @@ export class E2BSandboxService implements ISandboxProvider {
                 const cmd =
                     start === 0 && end === 0
                         ? `cat '${escapedPath}'`
-                        // sed is 1-indexed; a start address of 0 is invalid in GNU sed.
-                        : `sed -n '${start < 1 ? 1 : start},${end}p' '${escapedPath}'`;
+                        : // sed is 1-indexed; a start address of 0 is invalid in GNU sed.
+                          `sed -n '${start < 1 ? 1 : start},${end}p' '${escapedPath}'`;
                 const result = await sandbox.commands.run(cmd, {
                     timeoutMs: 10_000,
                 });

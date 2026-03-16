@@ -7,6 +7,7 @@ import {
 } from '@libs/identity/domain/auth/contracts/auth.service.contracts';
 import { BackfillHistoricalPRsUseCase } from '@libs/platformData/application/use-cases/pullRequests/backfill-historical-prs.use-case';
 import { GetEnrichedPullRequestsUseCase } from '@libs/code-review/application/use-cases/dashboard/get-enriched-pull-requests.use-case';
+import { GetPullRequestSuggestionsUseCase } from '@libs/code-review/application/use-cases/pullRequests/get-pull-request-suggestions.use-case';
 import {
     Action,
     ResourceType,
@@ -48,7 +49,6 @@ import {
     PolicyGuard,
 } from '@libs/identity/infrastructure/adapters/services/permissions/policy.guard';
 import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
-import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
 import {
     ApiBearerAuth,
     ApiCreatedResponse,
@@ -90,6 +90,7 @@ export class PullRequestController implements OnApplicationShutdown {
 
     constructor(
         private readonly getEnrichedPullRequestsUseCase: GetEnrichedPullRequestsUseCase,
+        private readonly getPullRequestSuggestionsUseCase: GetPullRequestSuggestionsUseCase,
         private readonly codeManagementService: CodeManagementService,
         private readonly backfillHistoricalPRsUseCase: BackfillHistoricalPRsUseCase,
         @Inject(REQUEST)
@@ -163,9 +164,7 @@ export class PullRequestController implements OnApplicationShutdown {
             this.eventEmitter,
             PR_EXECUTION_UPDATED_EVENT,
         ).pipe(
-            filter(
-                (event: any) => event?.organizationId === organizationId,
-            ),
+            filter((event: any) => event?.organizationId === organizationId),
             map((event: any) => ({
                 data: {
                     type: 'execution_updated',
@@ -433,12 +432,22 @@ export class PullRequestController implements OnApplicationShutdown {
         }
 
         const pr = prEntity.toObject();
-        const response = this.buildSuggestionsResponse({
-            pr,
-            format,
-            severity,
-            category,
+        const { response, suggestionsCount } =
+            await this.getPullRequestSuggestionsUseCase.execute({
+                organizationId,
+                pr,
+                format,
+                severity,
+                category,
+            });
+
+        this.trackSuggestionsFetch({
             organizationId,
+            prNumber: pr.number,
+            repositoryFullName: pr.repository?.fullName,
+            format,
+            suggestionsCount,
+            filters: severity || category ? { severity, category } : undefined,
         });
 
         if (deviceResult?.deviceToken) {
@@ -527,120 +536,6 @@ export class PullRequestController implements OnApplicationShutdown {
             .catch(() => {}); // fire-and-forget
     }
 
-    private buildSuggestionsResponse(params: {
-        pr: any;
-        format: 'json' | 'markdown';
-        severity?: string;
-        category?: string;
-        organizationId: string;
-    }) {
-        const { pr, format, severity, category, organizationId } = params;
-
-        const severityFilter = severity
-            ? new Set(
-                  severity
-                      .split(',')
-                      .map((v) => v.trim())
-                      .filter(Boolean),
-              )
-            : null;
-        const categoryFilter = category
-            ? new Set(
-                  category
-                      .split(',')
-                      .map((v) => v.trim())
-                      .filter(Boolean),
-              )
-            : null;
-
-        const matchesFilters = (s: any) => {
-            const sevOk = severityFilter
-                ? severityFilter.has(s.severity)
-                : true;
-            const catOk = categoryFilter ? categoryFilter.has(s.label) : true;
-            return sevOk && catOk;
-        };
-
-        const fileSuggestions = (pr.files || []).flatMap((file) =>
-            (file.suggestions || [])
-                .filter(
-                    (s) =>
-                        s.deliveryStatus === DeliveryStatus.SENT &&
-                        matchesFilters(s),
-                )
-                .map((s) => ({
-                    ...s,
-                    filePath: file.path,
-                })),
-        );
-
-        const prLevelSuggestions = (pr.prLevelSuggestions || []).filter(
-            (s) =>
-                s.deliveryStatus === DeliveryStatus.SENT && matchesFilters(s),
-        );
-
-        this.trackSuggestionsFetch({
-            organizationId,
-            prNumber: pr.number,
-            repositoryFullName: pr.repository?.fullName,
-            format,
-            suggestionsCount:
-                fileSuggestions.length + prLevelSuggestions.length,
-            filters: severity || category ? { severity, category } : undefined,
-        });
-
-        const payload = {
-            prNumber: pr.number,
-            repositoryId: pr.repository?.id,
-            repositoryFullName: pr.repository?.fullName,
-            suggestions: {
-                files: fileSuggestions,
-                prLevel: prLevelSuggestions,
-            },
-        };
-
-        if (format === 'markdown') {
-            const header = `# Suggestions for PR #${payload.prNumber} (${payload.repositoryFullName || payload.repositoryId || ''})`;
-            const filtersInfo = [
-                severityFilter
-                    ? `severity in [${[...severityFilter].join(', ')}]`
-                    : null,
-                categoryFilter
-                    ? `category in [${[...categoryFilter].join(', ')}]`
-                    : null,
-            ]
-                .filter(Boolean)
-                .join(' | ');
-
-            const filesSection = fileSuggestions.length
-                ? fileSuggestions
-                      .map(
-                          (s) =>
-                              `- [File] ${s.filePath} — ${s.oneSentenceSummary || s.label || ''}\n  - Severity: ${s.severity || ''}\n  - Category: ${s.label || ''}\n  - Status: ${s.deliveryStatus || ''}\n  - Lines: ${s.relevantLinesStart ?? ''}-${s.relevantLinesEnd ?? ''}\n  - Content:\n\n${'```'}
-${s.suggestionContent || s.improvedCode || ''}
-${'```'}`,
-                      )
-                      .join('\n\n')
-                : '_No file-level suggestions sent_';
-
-            const prLevelSection = prLevelSuggestions.length
-                ? prLevelSuggestions
-                      .map(
-                          (s) =>
-                              `- [PR] ${s.oneSentenceSummary || s.label || ''}\n  - Severity: ${s.severity || ''}\n  - Category: ${s.label || ''}\n  - Status: ${s.deliveryStatus || ''}\n  - Content:\n\n${'```'}
-${s.suggestionContent || ''}
-${'```'}`,
-                      )
-                      .join('\n\n')
-                : '_No PR-level suggestions sent_';
-
-            const markdown = `${header}${filtersInfo ? `\n\n_Filters: ${filtersInfo}_` : ''}\n\n## File suggestions\n${filesSection}\n\n## PR-level suggestions\n${prLevelSection}`;
-            return { markdown };
-        }
-
-        return payload;
-    }
-
     @Get('/files')
     @ApiBearerAuth('jwt')
     @UseGuards(PolicyGuard)
@@ -689,12 +584,11 @@ ${'```'}`,
             repoName = repo.name;
         }
 
-        const files =
-            await this.codeManagementService.getFilesByPullRequestId({
-                organizationAndTeamData,
-                repository: { name: repoName, id: repositoryId },
-                prNumber: parseInt(prNumber, 10),
-            });
+        const files = await this.codeManagementService.getFilesByPullRequestId({
+            organizationAndTeamData,
+            repository: { name: repoName, id: repositoryId },
+            prNumber: parseInt(prNumber, 10),
+        });
 
         return {
             files: (files || []).map((f: any) => ({

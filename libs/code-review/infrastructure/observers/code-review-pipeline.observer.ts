@@ -178,7 +178,10 @@ export class CodeReviewPipelineObserver implements IPipelineObserver {
             };
         }
 
-        if (stageName === 'FileAnalysisStage' && context.fileMetadata?.size > 0) {
+        if (
+            stageName === 'FileAnalysisStage' &&
+            context.fileMetadata?.size > 0
+        ) {
             additionalMetadata = additionalMetadata || {};
             const fileTimings: Array<{
                 file: string;
@@ -191,7 +194,11 @@ export class CodeReviewPipelineObserver implements IPipelineObserver {
                     fileTimings.push({
                         file: filename,
                         durationMs: meta.durationMs,
-                        status: meta.isTimeout ? 'timeout' : meta.hasError ? 'error' : 'success',
+                        status: meta.isTimeout
+                            ? 'timeout'
+                            : meta.hasError
+                              ? 'error'
+                              : 'success',
                     });
                 }
             });

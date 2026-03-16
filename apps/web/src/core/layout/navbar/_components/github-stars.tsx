@@ -1,4 +1,6 @@
-import { useState } from "react";
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@components/ui/button";
 import { SvgGithub } from "@components/ui/icons/SvgGithub";
 import { Link } from "@components/ui/link";
@@ -11,13 +13,19 @@ const repository = "kodustech/kodus-ai";
 const repositoryUrl = `https://github.com/${repository}`;
 const localStorageKey = "hide-github-stars-on-navbar";
 
-export const GithubStars = () => {
-    const [visible, setVisible] = useState(
-        localStorage.getItem(localStorageKey) !== "true",
-    );
+const GithubStarsContent = () => {
+    const [visible, setVisible] = useState(true);
+
+    useEffect(() => {
+        setVisible(localStorage.getItem(localStorageKey) !== "true");
+    }, []);
 
     const data = useSuspenseQuery({
         queryKey: ["github-project-repository-data"],
+        staleTime: 1000 * 60 * 60,
+        gcTime: 1000 * 60 * 60 * 6,
+        refetchOnWindowFocus: false,
+        retry: 1,
         queryFn: async ({ signal }) => {
             return typedFetch<{ stargazers_count: number }>(
                 `https://api.github.com/repos/${repository}`,
@@ -69,5 +77,13 @@ export const GithubStars = () => {
                 </Button>
             </Link>
         </div>
+    );
+};
+
+export const GithubStars = () => {
+    return (
+        <Suspense fallback={null}>
+            <GithubStarsContent />
+        </Suspense>
     );
 };

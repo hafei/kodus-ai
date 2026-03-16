@@ -284,6 +284,20 @@ export interface ISuggestionService {
     ): ISuggestionByPR[];
 
     /**
+     * Filters persisted review suggestions to only those whose provider comments
+     * are still active in the current review iteration.
+     */
+    filterActiveReviewSuggestions<
+        T extends { comment?: { id?: number | string } },
+    >(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: Partial<Repository>;
+        prNumber: number;
+        platformType: PlatformType;
+        suggestions: T[];
+    }): Promise<T[]>;
+
+    /**
      * Resolves comments on the platform (GitHub, etc.) for implemented suggestions
      */
     resolveImplementedSuggestionsOnPlatform(params: {

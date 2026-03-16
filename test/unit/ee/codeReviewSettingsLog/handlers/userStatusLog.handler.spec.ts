@@ -42,11 +42,15 @@ describe('UserStatusLogHandler', () => {
 
         expect(data[0].actionDescription).toBe('User Enabled');
         expect(data[0].currentValue.status).toBe('active');
-        expect(data[0].description).toContain('enabled license for user "Alice"');
+        expect(data[0].description).toContain(
+            'enabled license for user "Alice"',
+        );
 
         expect(data[1].actionDescription).toBe('User Disabled');
         expect(data[1].currentValue.status).toBe('inactive');
-        expect(data[1].description).toContain('disabled license for user "Bob"');
+        expect(data[1].description).toContain(
+            'disabled license for user "Bob"',
+        );
     });
 
     it('licenseStatus true → "active", false → "inactive"', async () => {

@@ -177,10 +177,7 @@ export class CodeReviewConfigLogHandler {
     ): ChangedDataToExport {
         const userEmail = params.userInfo.userEmail;
 
-        if (
-            params.configLevel === ConfigLevel.DIRECTORY &&
-            params.directory
-        ) {
+        if (params.configLevel === ConfigLevel.DIRECTORY && params.directory) {
             const directoryLabel = params.directory.path || params.directory.id;
             const repoLabel = params.repository?.name || params.repository?.id;
 
@@ -217,7 +214,10 @@ export class CodeReviewConfigLogHandler {
         const resolvedOld = this.resolveWithDefaults(oldConfig);
         const resolvedNew = this.resolveWithDefaults(newConfig);
 
-        const specialChanges = this.collectSpecialChanges(resolvedOld, resolvedNew);
+        const specialChanges = this.collectSpecialChanges(
+            resolvedOld,
+            resolvedNew,
+        );
         const excludeFromBasic =
             this.getPropertiesHandledBySpecialCases(specialChanges);
         const basicChanges = this.collectBasicChanges(

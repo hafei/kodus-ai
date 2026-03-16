@@ -3,10 +3,7 @@
 import { Button } from "@components/ui/button";
 import { Page } from "@components/ui/page";
 import { toast } from "@components/ui/toaster/use-toast";
-import { useReactQueryInvalidateQueries } from "@hooks/use-invalidate-queries";
-import { PARAMETERS_PATHS } from "@services/parameters";
 import {
-    createOrUpdateCodeReviewParameter,
     createOrUpdateParameter,
     getGenerateKodusConfigFile,
 } from "@services/parameters/fetch";
@@ -16,7 +13,7 @@ import {
 } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
-import { DownloadIcon, SaveIcon } from "lucide-react";
+import { DownloadIcon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { FormProvider, useFormContext } from "react-hook-form";
 import { AsyncBoundary } from "src/core/components/async-boundary";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
@@ -24,6 +21,8 @@ import { unformatConfig } from "src/core/utils/helpers";
 
 import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import GeneratingConfig from "../../_components/generating-config";
+import { CodeReviewSaveButton } from "../../_components/save-button";
+import { useCodeReviewSettingsMutation } from "../../_hooks/use-code-review-settings-mutation";
 import { FormattedConfigLevel, type CodeReviewFormType } from "../../_types";
 import { usePlatformConfig } from "../../../_components/context";
 import {
@@ -48,8 +47,13 @@ export default function General() {
     const form = useFormContext<CodeReviewFormType>();
     const { teamId } = useSelectedTeamId();
     const { repositoryId, directoryId } = useCodeReviewRouteParams();
-    const { resetQueries, generateQueryKey } = useReactQueryInvalidateQueries();
     const currentLevel = useCurrentConfigLevel();
+    const { saveSettings } = useCodeReviewSettingsMutation({
+        teamId,
+        repositoryId,
+        directoryId,
+        form,
+    });
 
     const canEdit = usePermission(
         Action.Update,
@@ -66,53 +70,26 @@ export default function General() {
         const unformattedConfig = unformatConfig(config);
 
         try {
-            const [languageResult, reviewResult] = await Promise.all([
-                createOrUpdateParameter(
-                    ParametersConfigKey.LANGUAGE_CONFIG,
-                    language,
-                    teamId,
-                ),
-                createOrUpdateCodeReviewParameter(
-                    unformattedConfig,
-                    teamId,
-                    repositoryId,
-                    directoryId,
-                ),
-            ]);
+            await saveSettings(formData, {
+                prepare: async () => {
+                    const languageResult = await createOrUpdateParameter(
+                        ParametersConfigKey.LANGUAGE_CONFIG,
+                        language,
+                        teamId,
+                    );
 
-            if (languageResult.error || reviewResult.error) {
-                throw new Error(
-                    `Failed to save settings: ${[
-                        languageResult.error,
-                        reviewResult.error,
-                    ]
-                        .filter(Boolean)
-                        .join(", ")}`,
-                );
-            }
+                    if (languageResult.error) {
+                        throw new Error(
+                            `Failed to save settings: ${languageResult.error}`,
+                        );
+                    }
 
-            await Promise.all([
-                resetQueries({
-                    queryKey: generateQueryKey(PARAMETERS_PATHS.GET_BY_KEY, {
-                        params: {
-                            key: ParametersConfigKey.CODE_REVIEW_CONFIG,
-                            teamId,
-                        },
-                    }),
-                }),
-                resetQueries({
-                    queryKey: generateQueryKey(
-                        PARAMETERS_PATHS.GET_CODE_REVIEW_PARAMETER,
-                        {
-                            params: {
-                                teamId,
-                            },
-                        },
-                    ),
-                }),
-            ]);
-
-            form.reset({ ...config, language });
+                    return {
+                        savedFormData: { ...config, language },
+                        codeReviewConfig: unformattedConfig,
+                    };
+                },
+            });
 
             toast({
                 description: "Settings saved",
@@ -206,7 +183,18 @@ export default function General() {
                         Download {downloadFileText} YML configuration file
                     </Button>
 
-                    <Button
+                    {formIsDirty && (
+                        <Button
+                            size="md"
+                            variant="cancel"
+                            leftIcon={<RotateCcwIcon />}
+                            onClick={() => form.reset()}
+                            disabled={formIsSubmitting}>
+                            Reset
+                        </Button>
+                    )}
+
+                    <CodeReviewSaveButton
                         size="md"
                         variant="primary"
                         leftIcon={<SaveIcon />}
@@ -214,33 +202,57 @@ export default function General() {
                         disabled={!canEdit || !formIsDirty || !formIsValid}
                         loading={formIsSubmitting}>
                         Save settings
-                    </Button>
+                    </CodeReviewSaveButton>
                 </Page.HeaderActions>
             </Page.Header>
 
             <Page.Content>
-                <AutomatedReviewActive />
-                <KodusConfigFileOverridesWebPreferences />
-                <PullRequestApprovalActive />
+                <div data-field-name="automatedReviewActive">
+                    <AutomatedReviewActive />
+                </div>
+                <div data-field-name="kodusConfigFileOverridesWebPreferences">
+                    <KodusConfigFileOverridesWebPreferences />
+                </div>
+                <div data-field-name="pullRequestApprovalActive">
+                    <PullRequestApprovalActive />
+                </div>
                 <AsyncBoundary errorVariant="minimal">
-                    <IsRequestChangesActive />
+                    <div data-field-name="isRequestChangesActive">
+                        <IsRequestChangesActive />
+                    </div>
                 </AsyncBoundary>
-                <RunOnDraft />
-                <ShowStatusFeedback />
+                <div data-field-name="runOnDraft">
+                    <RunOnDraft />
+                </div>
+                <div data-field-name="showStatusFeedback">
+                    <ShowStatusFeedback />
+                </div>
                 <AsyncBoundary errorVariant="minimal">
-                    <EnableCommittableSuggestions />
+                    <div data-field-name="enableCommittableSuggestions">
+                        <EnableCommittableSuggestions />
+                    </div>
                 </AsyncBoundary>
                 <AsyncBoundary errorVariant="minimal">
-                    <CrossfileDependenciesAnalysis />
+                    <div data-field-name="crossFileDependenciesAnalysis">
+                        <CrossfileDependenciesAnalysis />
+                    </div>
                 </AsyncBoundary>
-                <IgnorePaths />
-                <IgnoredTitleKeywords />
-                <BaseBranches />
+                <div data-field-name="ignorePaths">
+                    <IgnorePaths />
+                </div>
+                <div data-field-name="ignoredTitleKeywords">
+                    <IgnoredTitleKeywords />
+                </div>
+                <div data-field-name="baseBranches">
+                    <BaseBranches />
+                </div>
 
                 {repositoryId === "global" && (
-                    <FormProvider {...form}>
-                        <LanguageSelector />
-                    </FormProvider>
+                    <div data-field-name="language">
+                        <FormProvider {...form}>
+                            <LanguageSelector />
+                        </FormProvider>
+                    </div>
                 )}
             </Page.Content>
         </Page.Root>

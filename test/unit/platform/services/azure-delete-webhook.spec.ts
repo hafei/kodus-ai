@@ -104,11 +104,8 @@ describe('Azure Repos deleteWebhook', () => {
                             );
                             const allMatching = subs.filter(
                                 (s: any) =>
-                                    s.publisherInputs?.repository ===
-                                        repo.id &&
-                                    s.consumerInputs?.url?.includes(
-                                        webhookUrl,
-                                    ),
+                                    s.publisherInputs?.repository === repo.id &&
+                                    s.consumerInputs?.url?.includes(webhookUrl),
                             );
 
                             for (const existing of allMatching) {

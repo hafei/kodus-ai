@@ -13,7 +13,9 @@ describe('CreateRepositoriesUseCase', () => {
         };
 
         const codeManagementService = {
-            createOrUpdateIntegrationConfig: jest.fn().mockResolvedValue(undefined),
+            createOrUpdateIntegrationConfig: jest
+                .fn()
+                .mockResolvedValue(undefined),
         };
 
         const useCase = new CreateRepositoriesUseCase(
@@ -41,23 +43,24 @@ describe('CreateRepositoriesUseCase', () => {
             type: 'replace',
         });
 
-        expect(codeManagementService.createOrUpdateIntegrationConfig)
-            .toHaveBeenCalledWith({
-                configKey: 'repositories',
-                configValue: [
-                    {
-                        id: 'repo-1',
-                        name: 'alpha',
-                        organizationName: 'kodus',
-                        selected: true,
-                    },
-                ],
-                organizationAndTeamData: {
-                    organizationId: 'org-1',
-                    teamId: 'team-1',
+        expect(
+            codeManagementService.createOrUpdateIntegrationConfig,
+        ).toHaveBeenCalledWith({
+            configKey: 'repositories',
+            configValue: [
+                {
+                    id: 'repo-1',
+                    name: 'alpha',
+                    organizationName: 'kodus',
+                    selected: true,
                 },
-                type: 'replace',
-            });
+            ],
+            organizationAndTeamData: {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            },
+            type: 'replace',
+        });
     });
 
     it('does not crash when request itself is undefined', async () => {
@@ -71,7 +74,9 @@ describe('CreateRepositoriesUseCase', () => {
         };
 
         const codeManagementService = {
-            createOrUpdateIntegrationConfig: jest.fn().mockResolvedValue(undefined),
+            createOrUpdateIntegrationConfig: jest
+                .fn()
+                .mockResolvedValue(undefined),
         };
 
         const useCase = new CreateRepositoriesUseCase(

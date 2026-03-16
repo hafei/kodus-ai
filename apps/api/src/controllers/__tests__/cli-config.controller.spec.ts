@@ -17,6 +17,8 @@ describe('CliConfigController', () => {
     let createRepositoriesUseCase: { execute: jest.Mock };
     let updateCodeReviewParameterRepositoriesUseCase: { execute: jest.Mock };
     let updateOrCreateCodeReviewParameterUseCase: { execute: jest.Mock };
+    let getCliRepositorySettingsUseCase: { execute: jest.Mock };
+    let updateCliRepositorySettingsUseCase: { execute: jest.Mock };
 
     const teamData = {
         team: { uuid: 'team-1', name: 'Core Team' },
@@ -74,9 +76,7 @@ describe('CliConfigController', () => {
 
         codeManagementService = {
             getTypeIntegration: jest.fn().mockResolvedValue('github'),
-            getRepositories: jest
-                .fn()
-                .mockResolvedValue(availableRepositories),
+            getRepositories: jest.fn().mockResolvedValue(availableRepositories),
         } as any;
 
         integrationConfigService = {
@@ -97,6 +97,34 @@ describe('CliConfigController', () => {
             execute: jest.fn().mockResolvedValue(true),
         };
 
+        getCliRepositorySettingsUseCase = {
+            execute: jest.fn().mockResolvedValue({
+                reviewEnabled: true,
+                autoApproveEnabled: false,
+                requestChangesMinSeverity: 'critical',
+                ignoredFilePatterns: ['**/*.lock'],
+                baseBranchPatterns: ['main'],
+                ignoredTitlePatterns: ['wip*'],
+                sources: {
+                    reviewEnabled: {
+                        level: 'repository',
+                        overriddenLevel: 'global',
+                    },
+                },
+            }),
+        };
+
+        updateCliRepositorySettingsUseCase = {
+            execute: jest.fn().mockResolvedValue({
+                reviewEnabled: false,
+                autoApproveEnabled: true,
+                requestChangesMinSeverity: 'high',
+                ignoredFilePatterns: ['dist/**'],
+                baseBranchPatterns: ['main', 'release/*'],
+                ignoredTitlePatterns: ['draft*'],
+            }),
+        };
+
         controller = new CliConfigController(
             teamCliKeyService as any,
             codeManagementService as any,
@@ -104,6 +132,8 @@ describe('CliConfigController', () => {
             createRepositoriesUseCase as any,
             updateCodeReviewParameterRepositoriesUseCase as any,
             updateOrCreateCodeReviewParameterUseCase as any,
+            getCliRepositorySettingsUseCase as any,
+            updateCliRepositorySettingsUseCase as any,
         );
     });
 
@@ -134,11 +164,12 @@ describe('CliConfigController', () => {
         expect(teamCliKeyService.validateKey).toHaveBeenCalledWith(
             'kodus_bearer_key',
         );
-        expect(integrationConfigService.findIntegrationConfigFormatted)
-            .toHaveBeenCalledWith('repositories', {
-                organizationId: 'org-1',
-                teamId: 'team-1',
-            });
+        expect(
+            integrationConfigService.findIntegrationConfigFormatted,
+        ).toHaveBeenCalledWith('repositories', {
+            organizationId: 'org-1',
+            teamId: 'team-1',
+        });
         expect(result).toEqual(selectedRepositories);
     });
 
@@ -213,10 +244,7 @@ describe('CliConfigController', () => {
         teamCliKeyService.validateKey.mockResolvedValue(null);
 
         await expect(
-            controller.getAvailableRepositories(
-                'kodus_bad_key',
-                undefined,
-            ),
+            controller.getAvailableRepositories('kodus_bad_key', undefined),
         ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -304,10 +332,72 @@ describe('CliConfigController', () => {
         codeManagementService.getTypeIntegration.mockResolvedValue(null);
 
         await expect(
-            controller.getAvailableRepositories(
-                'kodus_test_key',
-                undefined,
-            ),
+            controller.getAvailableRepositories('kodus_test_key', undefined),
         ).rejects.toThrow(BadRequestException);
+    });
+
+    it('returns repository settings for a selected repository', async () => {
+        const result = await controller.getRepositorySettings(
+            'repo-1',
+            'kodus_test_key',
+            undefined,
+        );
+
+        expect(getCliRepositorySettingsUseCase.execute).toHaveBeenCalledWith({
+            repositoryId: 'repo-1',
+            organizationAndTeamData: {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            },
+        });
+        expect(result).toEqual({
+            reviewEnabled: true,
+            autoApproveEnabled: false,
+            requestChangesMinSeverity: 'critical',
+            ignoredFilePatterns: ['**/*.lock'],
+            baseBranchPatterns: ['main'],
+            ignoredTitlePatterns: ['wip*'],
+            sources: {
+                reviewEnabled: {
+                    level: 'repository',
+                    overriddenLevel: 'global',
+                },
+            },
+        });
+    });
+
+    it('updates repository settings through the CLI use case', async () => {
+        const result = await controller.updateRepositorySettings(
+            'repo-1',
+            {
+                reviewEnabled: false,
+                autoApproveEnabled: true,
+                requestChangesMinSeverity: 'high',
+                ignoredFilePatterns: ['dist/**'],
+                baseBranchPatterns: ['main', 'release/*'],
+                ignoredTitlePatterns: ['draft*'],
+            },
+            'kodus_test_key',
+            undefined,
+        );
+
+        expect(updateCliRepositorySettingsUseCase.execute).toHaveBeenCalledWith(
+            {
+                repositoryId: 'repo-1',
+                organizationAndTeamData: {
+                    organizationId: 'org-1',
+                    teamId: 'team-1',
+                },
+                settings: {
+                    reviewEnabled: false,
+                    autoApproveEnabled: true,
+                    requestChangesMinSeverity: 'high',
+                    ignoredFilePatterns: ['dist/**'],
+                    baseBranchPatterns: ['main', 'release/*'],
+                    ignoredTitlePatterns: ['draft*'],
+                },
+            },
+        );
+        expect(result.autoApproveEnabled).toBe(true);
     });
 });

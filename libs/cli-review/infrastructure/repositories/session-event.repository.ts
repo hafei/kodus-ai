@@ -93,9 +93,7 @@ export class SessionEventRepository {
             lastEventTimestamp: Date;
         }>
     > {
-        const threshold = new Date(
-            Date.now() - inactivityMinutes * 60 * 1000,
-        );
+        const threshold = new Date(Date.now() - inactivityMinutes * 60 * 1000);
 
         // Step 1: find (sessionId, organizationId) with max timestamp < threshold,
         // no session_end, and no classification.

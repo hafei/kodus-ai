@@ -3,9 +3,7 @@ import { SessionEventRepository } from '@libs/cli-review/infrastructure/reposito
 import { SessionEventModel } from '@libs/cli-review/infrastructure/repositories/schemas/session-event.model';
 import { PromptRunnerService } from '@kodus/kodus-common/llm';
 
-function makeEvent(
-    overrides: Partial<SessionEventModel>,
-): SessionEventModel {
+function makeEvent(overrides: Partial<SessionEventModel>): SessionEventModel {
     return {
         uuid: 'evt-1',
         organizationId: 'org-1',
@@ -156,7 +154,9 @@ describe('ClassifySessionUseCase', () => {
         repo.findBySessionId.mockResolvedValue([
             makeEvent({
                 type: 'turn_start',
-                payload: { prompt: 'We decided to use Redis for caching instead of Memcached' },
+                payload: {
+                    prompt: 'We decided to use Redis for caching instead of Memcached',
+                },
             }),
             makeEvent({
                 type: 'turn_end',
@@ -200,7 +200,9 @@ describe('ClassifySessionUseCase', () => {
         repo.findBySessionId.mockResolvedValue([
             makeEvent({
                 type: 'turn_start',
-                payload: { prompt: 'Adopt convention: always use snake_case for DB columns' },
+                payload: {
+                    prompt: 'Adopt convention: always use snake_case for DB columns',
+                },
             }),
             makeEvent({
                 type: 'turn_end',
@@ -209,7 +211,9 @@ describe('ClassifySessionUseCase', () => {
             makeEvent({ type: 'session_end', uuid: 'end-1', payload: {} }),
         ]);
 
-        const mockExecute = jest.fn().mockRejectedValue(new Error('LLM timeout'));
+        const mockExecute = jest
+            .fn()
+            .mockRejectedValue(new Error('LLM timeout'));
 
         promptRunner.builder.mockReturnValue({
             setProviders: jest.fn().mockReturnThis(),
@@ -278,7 +282,9 @@ describe('ClassifySessionUseCase', () => {
     // ---------------------------------------------------------------
 
     function setupLLMFailure() {
-        const mockExecute = jest.fn().mockRejectedValue(new Error('LLM unavailable'));
+        const mockExecute = jest
+            .fn()
+            .mockRejectedValue(new Error('LLM unavailable'));
         promptRunner.builder.mockReturnValue({
             setProviders: jest.fn().mockReturnThis(),
             setParser: jest.fn().mockReturnThis(),
@@ -317,22 +323,13 @@ describe('ClassifySessionUseCase', () => {
                 'We decided to use a microservice architecture',
                 'architectural_decision',
             ],
-            [
-                'Convention: always use snake_case for DB columns',
-                'convention',
-            ],
+            ['Convention: always use snake_case for DB columns', 'convention'],
             [
                 'Used Redis instead of Memcached because of better pub/sub',
                 'tradeoff',
             ],
-            [
-                'Added express framework as dependency',
-                'tooling',
-            ],
-            [
-                'Implemented JWT validation middleware',
-                'implementation_detail',
-            ],
+            ['Added express framework as dependency', 'tooling'],
+            ['Implemented JWT validation middleware', 'implementation_detail'],
         ])(
             'prompt "%s" should map to type "%s"',
             async (prompt, expectedType) => {
@@ -428,7 +425,11 @@ describe('ClassifySessionUseCase', () => {
                     type: 'turn_end',
                     payload: { filesModified: ['src/x.ts'] },
                 }),
-                makeEvent({ type: 'session_end', uuid: 'end-ap2', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-ap2',
+                    payload: {},
+                }),
             ]);
 
             const mockExecute = jest.fn().mockResolvedValue({
@@ -473,7 +474,11 @@ describe('ClassifySessionUseCase', () => {
                     type: 'turn_end',
                     payload: { filesModified: ['src/y.ts'] },
                 }),
-                makeEvent({ type: 'session_end', uuid: 'end-ap3', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-ap3',
+                    payload: {},
+                }),
             ]);
 
             const mockExecute = jest.fn().mockResolvedValue({
@@ -518,7 +523,9 @@ describe('ClassifySessionUseCase', () => {
         });
 
         it('heuristic fallback decisions always have autoPromoteCandidate=false (confidence too low)', async () => {
-            setupSessionWithPrompt('We decided to use a microservice architecture');
+            setupSessionWithPrompt(
+                'We decided to use a microservice architecture',
+            );
             setupLLMFailure();
 
             await useCase.execute('end-h');
@@ -542,9 +549,16 @@ describe('ClassifySessionUseCase', () => {
             repo.findBySessionId.mockResolvedValue([
                 makeEvent({
                     type: 'session_start',
-                    payload: { agentType: 'claude-code', gitRemote: 'github.com/org/repo' },
+                    payload: {
+                        agentType: 'claude-code',
+                        gitRemote: 'github.com/org/repo',
+                    },
                 }),
-                makeEvent({ type: 'session_end', uuid: 'end-empty', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-empty',
+                    payload: {},
+                }),
             ]);
 
             await useCase.execute('end-empty');
@@ -574,7 +588,11 @@ describe('ClassifySessionUseCase', () => {
                     type: 'turn_end',
                     payload: { toolCalls: [], filesModified: [], commands: [] },
                 }),
-                makeEvent({ type: 'session_end', uuid: 'end-blank', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-blank',
+                    payload: {},
+                }),
             ]);
 
             await useCase.execute('end-blank');
@@ -598,7 +616,11 @@ describe('ClassifySessionUseCase', () => {
                         taskDescription: 'Review auth module',
                     },
                 }),
-                makeEvent({ type: 'session_end', uuid: 'end-sub', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-sub',
+                    payload: {},
+                }),
             ]);
 
             // Subagents count as useful content, so it should proceed to LLM
@@ -620,7 +642,9 @@ describe('ClassifySessionUseCase', () => {
 
             // Should NOT be skipped — subagents are useful content
             expect(repo.markClassificationSkipped).not.toHaveBeenCalled();
-            expect(repo.markClassificationProcessing).toHaveBeenCalledWith('end-sub');
+            expect(repo.markClassificationProcessing).toHaveBeenCalledWith(
+                'end-sub',
+            );
 
             // Verify subagent data was passed to LLM via setPayload
             const builderMock = promptRunner.builder.mock.results[0].value;
@@ -642,7 +666,10 @@ describe('ClassifySessionUseCase', () => {
             );
 
             const events: SessionEventModel[] = [
-                makeEvent({ type: 'session_start', payload: { agentType: 'claude-code' } }),
+                makeEvent({
+                    type: 'session_start',
+                    payload: { agentType: 'claude-code' },
+                }),
             ];
 
             for (let i = 0; i < 120; i++) {
@@ -657,7 +684,9 @@ describe('ClassifySessionUseCase', () => {
                         type: 'turn_end',
                         payload: {
                             response: `Done with task ${i}`,
-                            toolCalls: [{ tool: 'Edit', summary: `edited file${i}.ts` }],
+                            toolCalls: [
+                                { tool: 'Edit', summary: `edited file${i}.ts` },
+                            ],
                             filesModified: [`src/module${i}.ts`],
                             filesRead: [`src/module${i}.ts`],
                             commands: [`yarn test module${i}`],
@@ -667,7 +696,11 @@ describe('ClassifySessionUseCase', () => {
             }
 
             events.push(
-                makeEvent({ type: 'session_end', uuid: 'end-large', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-large',
+                    payload: {},
+                }),
             );
 
             repo.findBySessionId.mockResolvedValue(events);
@@ -728,14 +761,24 @@ describe('ClassifySessionUseCase', () => {
                 makeEvent({ type: 'session_start', payload: {} }),
                 makeEvent({
                     type: 'turn_start',
-                    payload: { prompt: 'We decided to adopt a monorepo convention' },
+                    payload: {
+                        prompt: 'We decided to adopt a monorepo convention',
+                    },
                 }),
                 makeEvent({
                     type: 'turn_end',
                     payload: { filesModified: ['nx.json'] },
                 }),
-                makeEvent({ type: 'session_end', uuid: 'end-dup-1', payload: {} }),
-                makeEvent({ type: 'session_end', uuid: 'end-dup-2', payload: {} }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-dup-1',
+                    payload: {},
+                }),
+                makeEvent({
+                    type: 'session_end',
+                    uuid: 'end-dup-2',
+                    payload: {},
+                }),
             ];
 
             // First call

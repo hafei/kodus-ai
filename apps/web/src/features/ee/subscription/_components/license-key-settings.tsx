@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "src/core/utils/components";
 import { pathToApiUrl } from "src/core/utils/helpers";
+
 import { useSubscriptionStatus } from "../_hooks/use-subscription-status";
 
 type LicenseActivationResult = {
@@ -89,7 +90,11 @@ export const LicenseKeySettings = () => {
 
     return (
         <div className="space-y-4">
-            {isLicensed ? <ActiveLicenseCard subscription={subscription} /> : <CommunityCard />}
+            {isLicensed ? (
+                <ActiveLicenseCard subscription={subscription} />
+            ) : (
+                <CommunityCard />
+            )}
             <ActivateKeyCard
                 isLicensed={isLicensed}
                 licenseKey={licenseKey}
@@ -154,8 +159,9 @@ function ActiveLicenseCard({
                     </div>
                     <div className="flex flex-col gap-0.5">
                         <span className="text-text-secondary">Seats</span>
-                        <span className="tabular-nums font-medium">
-                            {subscription.usersWithAssignedLicense.length} / {subscription.numberOfLicenses}
+                        <span className="font-medium tabular-nums">
+                            {subscription.usersWithAssignedLicense.length} /{" "}
+                            {subscription.numberOfLicenses}
                         </span>
                     </div>
                 </div>

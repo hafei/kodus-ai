@@ -13,10 +13,12 @@ import { IntegrationConfigModule } from '@libs/integrations/modules/config.modul
 import { ApplyCodeReviewPresetUseCase } from '../application/use-cases/configuration/apply-code-review-preset.use-case';
 import { DeleteRepositoryCodeReviewParameterUseCase } from '../application/use-cases/configuration/delete-repository-code-review-parameter.use-case';
 import { GenerateKodusConfigFileUseCase } from '../application/use-cases/configuration/generate-kodus-config-file.use-case';
+import { GetCliRepositorySettingsUseCase } from '../application/use-cases/configuration/get-cli-repository-settings.use-case';
 import { GetCodeReviewParameterUseCase } from '../application/use-cases/configuration/get-code-review-parameter.use-case';
 import { ListCodeReviewAutomationLabelsUseCase } from '../application/use-cases/configuration/list-code-review-automation-labels-use-case';
 import { ListCodeReviewAutomationLabelsWithStatusUseCase } from '../application/use-cases/configuration/list-code-review-automation-labels-with-status.use-case';
 import { UpdateCodeReviewParameterRepositoriesUseCase } from '../application/use-cases/configuration/update-code-review-parameter-repositories-use-case';
+import { UpdateCliRepositorySettingsUseCase } from '../application/use-cases/configuration/update-cli-repository-settings.use-case';
 import { UpdateOrCreateCodeReviewParameterUseCase } from '../application/use-cases/configuration/update-or-create-code-review-parameter-use-case';
 import { PreviewPrSummaryUseCase } from '../application/use-cases/summary/preview-pr-summary.use-case'; // Added
 
@@ -37,10 +39,12 @@ import { PreviewPrSummaryUseCase } from '../application/use-cases/summary/previe
         ApplyCodeReviewPresetUseCase,
         DeleteRepositoryCodeReviewParameterUseCase,
         GenerateKodusConfigFileUseCase,
+        GetCliRepositorySettingsUseCase,
         GetCodeReviewParameterUseCase,
         ListCodeReviewAutomationLabelsUseCase,
         ListCodeReviewAutomationLabelsWithStatusUseCase,
         UpdateCodeReviewParameterRepositoriesUseCase,
+        UpdateCliRepositorySettingsUseCase,
         UpdateOrCreateCodeReviewParameterUseCase,
         PreviewPrSummaryUseCase, // Added
     ],
@@ -48,10 +52,12 @@ import { PreviewPrSummaryUseCase } from '../application/use-cases/summary/previe
         ApplyCodeReviewPresetUseCase,
         DeleteRepositoryCodeReviewParameterUseCase,
         GenerateKodusConfigFileUseCase,
+        GetCliRepositorySettingsUseCase,
         GetCodeReviewParameterUseCase,
         ListCodeReviewAutomationLabelsUseCase,
         ListCodeReviewAutomationLabelsWithStatusUseCase,
         UpdateCodeReviewParameterRepositoriesUseCase,
+        UpdateCliRepositorySettingsUseCase,
         UpdateOrCreateCodeReviewParameterUseCase,
         PreviewPrSummaryUseCase, // Added
     ],

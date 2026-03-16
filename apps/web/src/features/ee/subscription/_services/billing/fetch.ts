@@ -159,7 +159,10 @@ export const validateOrganizationLicense = async (params: {
                 expiresAt?: string;
             }>(pathToApiUrl("/license/status"));
 
-            if (result?.valid && result.subscriptionStatus === "licensed-self-hosted") {
+            if (
+                result?.valid &&
+                result.subscriptionStatus === "licensed-self-hosted"
+            ) {
                 return {
                     valid: true,
                     subscriptionStatus: "licensed-self-hosted",

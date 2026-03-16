@@ -176,10 +176,9 @@ describe('GenerateIssuesFromPrClosedUseCase (cloud mode)', () => {
             });
 
             const callArgs =
-                kodyIssuesManagementServiceMock.processClosedPr.mock.calls[0][0];
-            expect(callArgs.pullRequest.user).toEqual(
-                gitlabMergePayload.user,
-            );
+                kodyIssuesManagementServiceMock.processClosedPr.mock
+                    .calls[0][0];
+            expect(callArgs.pullRequest.user).toEqual(gitlabMergePayload.user);
             expect(callArgs.pullRequest.user.id).toBe(101);
         });
 
@@ -251,7 +250,8 @@ describe('GenerateIssuesFromPrClosedUseCase (cloud mode)', () => {
             });
 
             const callArgs =
-                kodyIssuesManagementServiceMock.processClosedPr.mock.calls[0][0];
+                kodyIssuesManagementServiceMock.processClosedPr.mock
+                    .calls[0][0];
             expect(callArgs.pullRequest.user).toEqual(
                 githubMergePayload.pull_request.user,
             );

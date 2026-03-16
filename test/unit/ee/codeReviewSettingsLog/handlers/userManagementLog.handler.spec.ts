@@ -58,9 +58,7 @@ describe('UserManagementLogHandler', () => {
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data).toHaveLength(1);
-            expect(data[0].actionDescription).toBe(
-                'Repository Access Granted',
-            );
+            expect(data[0].actionDescription).toBe('Repository Access Granted');
             expect(data[0].description).toContain('repo-a');
         });
 
@@ -74,9 +72,7 @@ describe('UserManagementLogHandler', () => {
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data).toHaveLength(1);
-            expect(data[0].actionDescription).toBe(
-                'Repository Access Revoked',
-            );
+            expect(data[0].actionDescription).toBe('Repository Access Revoked');
         });
 
         it('handles both added + removed', async () => {

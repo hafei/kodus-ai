@@ -60,11 +60,7 @@ describe('CodeReviewConfigLogHandler', () => {
         handler = new CodeReviewConfigLogHandler(mockUnified as any);
     });
 
-    const callHandler = (
-        oldConfig: any,
-        newConfig: any,
-        overrides: any = {},
-    ) =>
+    const callHandler = (oldConfig: any, newConfig: any, overrides: any = {}) =>
         handler.logCodeReviewConfig({
             ...createBaseParams(),
             oldConfig,
@@ -101,10 +97,7 @@ describe('CodeReviewConfigLogHandler', () => {
         });
 
         it('detects runOnDraft toggle', async () => {
-            await callHandler(
-                { runOnDraft: false },
-                { runOnDraft: true },
-            );
+            await callHandler({ runOnDraft: false }, { runOnDraft: true });
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data).toHaveLength(1);
@@ -125,10 +118,7 @@ describe('CodeReviewConfigLogHandler', () => {
         });
 
         it('detects isCommitMode toggle', async () => {
-            await callHandler(
-                { isCommitMode: false },
-                { isCommitMode: true },
-            );
+            await callHandler({ isCommitMode: false }, { isCommitMode: true });
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data).toHaveLength(1);
@@ -222,7 +212,9 @@ describe('CodeReviewConfigLogHandler', () => {
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data).toHaveLength(1);
-            expect(data[0].description).toContain('Apply Filters to Kody Rules');
+            expect(data[0].description).toContain(
+                'Apply Filters to Kody Rules',
+            );
         });
     });
 

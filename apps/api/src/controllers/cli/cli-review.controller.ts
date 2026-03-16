@@ -920,7 +920,9 @@ export class CliReviewController {
         Object.assign(dto, body);
         const errors = await validate(dto);
         if (errors.length > 0) {
-            const messages = errors.flatMap(e => Object.values(e.constraints || {}));
+            const messages = errors.flatMap((e) =>
+                Object.values(e.constraints || {}),
+            );
             throw new BadRequestException(messages);
         }
 

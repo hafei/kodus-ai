@@ -48,7 +48,9 @@ export class AuditLogListener {
     @OnEvent(AuditLogEvents.KODY_RULES)
     async handleKodyRules(params: KodyRuleLogParams) {
         try {
-            await this.codeReviewSettingsLogService.registerKodyRulesLog(params);
+            await this.codeReviewSettingsLogService.registerKodyRulesLog(
+                params,
+            );
         } catch (error) {
             this.logError('kody rules', error, params);
         }
@@ -179,8 +181,7 @@ export class AuditLogListener {
             context: AuditLogListener.name,
             error,
             metadata: {
-                organizationId:
-                    params?.organizationAndTeamData?.organizationId,
+                organizationId: params?.organizationAndTeamData?.organizationId,
             },
         });
     }

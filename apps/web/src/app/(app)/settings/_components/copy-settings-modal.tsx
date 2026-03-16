@@ -175,23 +175,21 @@ export const AddRepoModal = ({
 
                                     {unselectedRepositories.length > 0 && (
                                         <CommandGroup heading="Not selected">
-                                            {unselectedRepositories.map(
-                                                (r) => (
-                                                    <CommandItem
-                                                        key={r.id}
-                                                        value={r.id}
-                                                        onSelect={(
+                                            {unselectedRepositories.map((r) => (
+                                                <CommandItem
+                                                    key={r.id}
+                                                    value={r.id}
+                                                    onSelect={(
+                                                        currentValue,
+                                                    ) => {
+                                                        setSelectedIds([
+                                                            ...selectedIds,
                                                             currentValue,
-                                                        ) => {
-                                                            setSelectedIds([
-                                                                ...selectedIds,
-                                                                currentValue,
-                                                            ]);
-                                                        }}>
-                                                        {r.name}
-                                                    </CommandItem>
-                                                ),
-                                            )}
+                                                        ]);
+                                                    }}>
+                                                    {r.name}
+                                                </CommandItem>
+                                            ))}
                                         </CommandGroup>
                                     )}
                                 </CommandList>

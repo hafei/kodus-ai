@@ -126,11 +126,7 @@ describe('OrgSettingsLogHandler', () => {
         });
 
         it('null previous → "not set"', async () => {
-            await callHandler(
-                'timezone_config',
-                null,
-                'America/Chicago',
-            );
+            await callHandler('timezone_config', null, 'America/Chicago');
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data[0].description).toContain('not set');
@@ -208,13 +204,17 @@ describe('OrgSettingsLogHandler', () => {
 
     describe('byok_config', () => {
         it('logs slot added (main) with apiKey sanitized', async () => {
-            await callHandler('byok_config', {}, {
-                main: {
-                    provider: 'openai',
-                    model: 'gpt-4',
-                    apiKey: 'sk-secret',
+            await callHandler(
+                'byok_config',
+                {},
+                {
+                    main: {
+                        provider: 'openai',
+                        model: 'gpt-4',
+                        apiKey: 'sk-secret',
+                    },
                 },
-            });
+            );
 
             const data = extractChangedData(mockUnified.saveLogEntry);
             expect(data).toHaveLength(1);
@@ -256,9 +256,7 @@ describe('OrgSettingsLogHandler', () => {
             expect(data[0].actionDescription).toBe(
                 'BYOK Main Provider Updated',
             );
-            expect(data[1].actionDescription).toBe(
-                'BYOK Main Model Updated',
-            );
+            expect(data[1].actionDescription).toBe('BYOK Main Model Updated');
         });
 
         it('logs API key update as *** both sides', async () => {

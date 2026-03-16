@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@components/ui/button";
 import {
     Command,
@@ -62,6 +62,7 @@ export const PullRequestsFilters = ({
     onAuthorPolicyChange,
 }: PullRequestsFiltersProps) => {
     const [open, setOpen] = useState(false);
+    const [mounted, setMounted] = useState(false);
     const { organizationId } = useAuth();
     const permissions = usePermissions();
 
@@ -89,6 +90,27 @@ export const PullRequestsFilters = ({
         (suggestionsFilter !== "all" ? 1 : 0) +
         (authorPolicy !== "reviewable" ? 1 : 0) +
         (selectedRepository ? 1 : 0);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) {
+        return (
+            <Button
+                size="xs"
+                variant="helper"
+                loading={isLoading}
+                leftIcon={<ListFilterIcon />}>
+                Filters
+                {appliedFiltersCount > 0 && (
+                    <span className="text-text-secondary">
+                        {` (${appliedFiltersCount})`}
+                    </span>
+                )}
+            </Button>
+        );
+    }
 
     return (
         <Popover open={open} onOpenChange={setOpen} modal>

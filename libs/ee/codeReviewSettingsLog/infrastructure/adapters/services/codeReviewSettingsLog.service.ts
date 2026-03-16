@@ -37,10 +37,7 @@ import {
     OrgSettingsLogHandler,
     OrgSettingsLogParams,
 } from './orgSettingsLog.handler';
-import {
-    CliKeyLogHandler,
-    CliKeyLogParams,
-} from './cliKeyLog.handler';
+import { CliKeyLogHandler, CliKeyLogParams } from './cliKeyLog.handler';
 import { ICodeReviewSettingsLogService } from '@libs/ee/codeReviewSettingsLog/domain/contracts/codeReviewSettingsLog.service.contract';
 import {
     CODE_REVIEW_SETTINGS_LOG_REPOSITORY_TOKEN,
@@ -276,9 +273,7 @@ export class CodeReviewSettingsLogService implements ICodeReviewSettingsLogServi
     }
 
     // CLI Keys
-    public async registerCliKeyLog(
-        params: CliKeyLogParams,
-    ): Promise<void> {
+    public async registerCliKeyLog(params: CliKeyLogParams): Promise<void> {
         const canAudit = await this.shouldAllowAuditLogs(
             params.organizationAndTeamData,
         );

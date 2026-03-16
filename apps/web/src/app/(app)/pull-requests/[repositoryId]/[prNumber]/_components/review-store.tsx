@@ -112,14 +112,10 @@ export function ReviewStateProvider({
             let nextIndex: number;
             if (direction === "next") {
                 nextIndex =
-                    currentIndex < filePaths.length - 1
-                        ? currentIndex + 1
-                        : 0;
+                    currentIndex < filePaths.length - 1 ? currentIndex + 1 : 0;
             } else {
                 nextIndex =
-                    currentIndex > 0
-                        ? currentIndex - 1
-                        : filePaths.length - 1;
+                    currentIndex > 0 ? currentIndex - 1 : filePaths.length - 1;
             }
             dispatch({ type: "SELECT_FILE", path: filePaths[nextIndex] });
         },
@@ -147,6 +143,8 @@ export function ReviewStateProvider({
 export function useReviewStore() {
     const ctx = useContext(ReviewContext);
     if (!ctx)
-        throw new Error("useReviewStore must be used within ReviewStateProvider");
+        throw new Error(
+            "useReviewStore must be used within ReviewStateProvider",
+        );
     return ctx;
 }

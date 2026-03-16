@@ -20,9 +20,7 @@ interface TreeNode {
     suggestionCount: number;
 }
 
-function buildTree(
-    fileGroups: Map<string, number>,
-): TreeNode[] {
+function buildTree(fileGroups: Map<string, number>): TreeNode[] {
     const root: TreeNode[] = [];
 
     for (const [filePath, count] of fileGroups) {
@@ -67,9 +65,7 @@ function sortTree(nodes: TreeNode[]): TreeNode[] {
         });
 }
 
-function flattenWithCollapse(
-    nodes: TreeNode[],
-): TreeNode[] {
+function flattenWithCollapse(nodes: TreeNode[]): TreeNode[] {
     const result: TreeNode[] = [];
 
     function collapse(node: TreeNode): TreeNode {
@@ -95,13 +91,7 @@ function flattenWithCollapse(
     return result;
 }
 
-function TreeNodeItem({
-    node,
-    depth,
-}: {
-    node: TreeNode;
-    depth: number;
-}) {
+function TreeNodeItem({ node, depth }: { node: TreeNode; depth: number }) {
     const { state, dispatch } = useReviewStore();
     const [expanded, setExpanded] = useState(true);
     const isSelected = state.selectedFilePath === node.path;
@@ -124,7 +114,7 @@ function TreeNodeItem({
                         : "text-text-secondary hover:bg-card-lv3/50 hover:text-text-primary",
                 )}
                 style={{ paddingLeft: `${depth * 12 + 8}px` }}>
-                <FileIcon className="size-4 shrink-0 text-text-tertiary" />
+                <FileIcon className="text-text-tertiary size-4 shrink-0" />
                 <span className="truncate font-mono text-xs">{node.name}</span>
                 {node.suggestionCount > 0 && (
                     <span
@@ -145,7 +135,7 @@ function TreeNodeItem({
         <div>
             <button
                 onClick={() => setExpanded(!expanded)}
-                className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary transition-colors hover:text-text-primary"
+                className="group text-text-secondary hover:text-text-primary flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors"
                 style={{ paddingLeft: `${depth * 12 + 8}px` }}>
                 {expanded ? (
                     <ChevronDownIcon className="size-3 shrink-0" />
@@ -153,12 +143,12 @@ function TreeNodeItem({
                     <ChevronRightIcon className="size-3 shrink-0" />
                 )}
                 {expanded ? (
-                    <FolderOpenIcon className="size-4 shrink-0 text-text-tertiary" />
+                    <FolderOpenIcon className="text-text-tertiary size-4 shrink-0" />
                 ) : (
-                    <FolderIcon className="size-4 shrink-0 text-text-tertiary" />
+                    <FolderIcon className="text-text-tertiary size-4 shrink-0" />
                 )}
                 <span className="truncate font-mono text-xs">{node.name}</span>
-                <span className="ml-auto shrink-0 text-[10px] tabular-nums text-text-tertiary">
+                <span className="text-text-tertiary ml-auto shrink-0 text-[10px] tabular-nums">
                     {node.suggestionCount}
                 </span>
             </button>
@@ -196,10 +186,10 @@ export function FileTree() {
     return (
         <div className="flex h-full flex-col">
             <div className="border-card-lv2 flex items-center justify-between border-b px-4 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                <h3 className="text-text-tertiary text-xs font-semibold tracking-wider uppercase">
                     Files
                 </h3>
-                <span className="text-xs tabular-nums text-text-tertiary">
+                <span className="text-text-tertiary text-xs tabular-nums">
                     {filePaths.length}
                 </span>
             </div>

@@ -35,12 +35,12 @@ export function SuggestionCard({
             {/* Header */}
             <button
                 onClick={() => setExpanded(!expanded)}
-                className="flex w-full items-start gap-3 p-3 px-4 text-left transition-colors hover:bg-card-lv2/30">
+                className="hover:bg-card-lv2/30 flex w-full items-start gap-3 p-3 px-4 text-left transition-colors">
                 <div className="mt-0.5">
                     {expanded ? (
-                        <ChevronDownIcon className="size-4 text-text-tertiary" />
+                        <ChevronDownIcon className="text-text-tertiary size-4" />
                     ) : (
-                        <ChevronRightIcon className="size-4 text-text-tertiary" />
+                        <ChevronRightIcon className="text-text-tertiary size-4" />
                     )}
                 </div>
 
@@ -57,12 +57,12 @@ export function SuggestionCard({
                             />
                         )}
                     </div>
-                    <p className="text-sm text-text-primary leading-relaxed">
+                    <p className="text-text-primary text-sm leading-relaxed">
                         {suggestion.oneSentenceSummary}
                     </p>
 
                     {!compact && suggestion.filePath && (
-                        <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+                        <div className="text-text-tertiary flex items-center gap-1.5 text-xs">
                             <FileIcon className="size-3" />
                             <span className="font-mono">
                                 {suggestion.filePath}
@@ -121,7 +121,7 @@ export function SuggestionCard({
                             <Suspense
                                 fallback={
                                     <div className="flex items-center justify-center py-8">
-                                        <div className="size-4 animate-spin rounded-full border-2 border-text-tertiary/30 border-t-text-tertiary" />
+                                        <div className="border-text-tertiary/30 border-t-text-tertiary size-4 animate-spin rounded-full border-2" />
                                     </div>
                                 }>
                                 <PierreDiff

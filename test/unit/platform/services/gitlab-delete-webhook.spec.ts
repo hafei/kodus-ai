@@ -235,9 +235,9 @@ describe('GitLab deleteWebhook', () => {
 
             const mockGitlabApi = {
                 ProjectHooks: {
-                    all: jest.fn().mockRejectedValue(
-                        new Error('401 Unauthorized'),
-                    ),
+                    all: jest
+                        .fn()
+                        .mockRejectedValue(new Error('401 Unauthorized')),
                     remove: jest.fn(),
                 },
             };
@@ -306,9 +306,9 @@ describe('GitLab deleteWebhook', () => {
 
             const mockGitlabApi = {
                 ProjectHooks: {
-                    all: jest.fn().mockRejectedValue(
-                        new Error('401 Unauthorized'),
-                    ),
+                    all: jest
+                        .fn()
+                        .mockRejectedValue(new Error('401 Unauthorized')),
                     remove: jest.fn(),
                 },
             };

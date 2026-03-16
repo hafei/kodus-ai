@@ -339,7 +339,11 @@ export class TriggerBusinessValidationUseCase implements IUseCase {
     }
 
     private normalizeUrl(url?: string): string {
-        return (url || '').trim().replace(/\/+$/, '').toLowerCase();
+        let normalized = (url || '').trim().toLowerCase();
+        while (normalized.endsWith('/')) {
+            normalized = normalized.slice(0, -1);
+        }
+        return normalized;
     }
 
     private async resolveRepository(params: {

@@ -237,9 +237,9 @@ describe('GitHub deleteWebhook', () => {
 
             const mockAppOctokit = {
                 apps: {
-                    deleteInstallation: jest.fn().mockRejectedValue(
-                        new Error('Not Found'),
-                    ),
+                    deleteInstallation: jest
+                        .fn()
+                        .mockRejectedValue(new Error('Not Found')),
                 },
             };
             service.createOctokitInstance.mockReturnValue(mockAppOctokit);

@@ -260,8 +260,16 @@ describe('SuggestionService', () => {
     describe('frozen object safety — filterSuggestionsBySeverityLevel', () => {
         it('should not throw when suggestions are frozen (Object.freeze)', async () => {
             const frozenSuggestions = [
-                Object.freeze({ id: '1', severity: 'critical', label: 'security' }),
-                Object.freeze({ id: '2', severity: 'low', label: 'code_style' }),
+                Object.freeze({
+                    id: '1',
+                    severity: 'critical',
+                    label: 'security',
+                }),
+                Object.freeze({
+                    id: '2',
+                    severity: 'low',
+                    label: 'code_style',
+                }),
             ];
 
             const result = await service.filterSuggestionsBySeverityLevel(
@@ -273,7 +281,9 @@ describe('SuggestionService', () => {
 
             expect(result).toHaveLength(2);
             expect(result[0].priorityStatus).toBe(PriorityStatus.PRIORITIZED);
-            expect(result[1].priorityStatus).toBe(PriorityStatus.DISCARDED_BY_SEVERITY);
+            expect(result[1].priorityStatus).toBe(
+                PriorityStatus.DISCARDED_BY_SEVERITY,
+            );
         });
 
         it('should not mutate the original frozen objects', async () => {
@@ -324,7 +334,10 @@ describe('SuggestionService', () => {
         });
 
         it('should not mutate the original frozen related suggestion', async () => {
-            const parent = { id: 'p1', priorityStatus: PriorityStatus.PRIORITIZED };
+            const parent = {
+                id: 'p1',
+                priorityStatus: PriorityStatus.PRIORITIZED,
+            };
             const related = Object.freeze({
                 id: 'r1',
                 clusteringInformation: {
@@ -348,17 +361,20 @@ describe('SuggestionService', () => {
     describe('frozen object safety — prioritizeSuggestionsBySeverityLimits', () => {
         it('should not throw when suggestions are frozen', async () => {
             const frozenSuggestions = [
-                Object.freeze({ id: '1', severity: 'critical', rankScore: 100 }),
+                Object.freeze({
+                    id: '1',
+                    severity: 'critical',
+                    rankScore: 100,
+                }),
                 Object.freeze({ id: '2', severity: 'high', rankScore: 80 }),
             ];
 
-            const result =
-                await service.prioritizeSuggestionsBySeverityLimits(
-                    mockOrganizationAndTeamData as any,
-                    99,
-                    frozenSuggestions,
-                    { critical: 1, high: 1, medium: 0, low: 0 },
-                );
+            const result = await service.prioritizeSuggestionsBySeverityLimits(
+                mockOrganizationAndTeamData as any,
+                99,
+                frozenSuggestions,
+                { critical: 1, high: 1, medium: 0, low: 0 },
+            );
 
             expect(result).toHaveLength(2);
         });
@@ -1716,8 +1732,7 @@ __new hunk__
             );
 
             await service.resolveImplementedSuggestionsOnPlatform({
-                organizationAndTeamData:
-                    mockOrganizationAndTeamData as any,
+                organizationAndTeamData: mockOrganizationAndTeamData as any,
                 repository: { id: 'repo-1', name: 'test-repo' },
                 prNumber: 42,
                 platformType: PlatformType.GITLAB,
@@ -1733,6 +1748,60 @@ __new hunk__
                 expect.objectContaining({
                     commentId: 't-200',
                 }),
+            );
+        });
+    });
+
+    describe('filterActiveReviewSuggestions', () => {
+        it('should only keep active GitHub review thread suggestions from the current iteration', async () => {
+            const suggestions = [
+                {
+                    id: 'old-suggestion',
+                    comment: { id: 101, pullRequestReviewId: 1001 },
+                },
+                {
+                    id: 'current-suggestion',
+                    comment: { id: 202, pullRequestReviewId: 1002 },
+                },
+            ];
+
+            mockCodeManagementService.getPullRequestReviewThreads.mockResolvedValue(
+                [
+                    {
+                        fullDatabaseId: '101',
+                        threadId: 'thread-1',
+                        body: 'old',
+                        isResolved: true,
+                        isOutdated: true,
+                    },
+                    {
+                        fullDatabaseId: '202',
+                        threadId: 'thread-2',
+                        body: 'current',
+                        isResolved: false,
+                        isOutdated: false,
+                    },
+                ],
+            );
+
+            const result = await service.filterActiveReviewSuggestions({
+                organizationAndTeamData: mockOrganizationAndTeamData as any,
+                repository: { id: 'repo-1', name: 'test-repo' },
+                prNumber: 42,
+                platformType: PlatformType.GITHUB,
+                suggestions,
+            });
+
+            expect(result).toEqual([suggestions[1]]);
+            expect(
+                mockCodeManagementService.getPullRequestReviewThreads,
+            ).toHaveBeenCalledWith(
+                {
+                    organizationAndTeamData: mockOrganizationAndTeamData,
+                    repository: { id: 'repo-1', name: 'test-repo' },
+                    prNumber: 42,
+                },
+                PlatformType.GITHUB,
             );
         });
     });

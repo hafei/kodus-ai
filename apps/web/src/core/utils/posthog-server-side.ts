@@ -58,7 +58,8 @@ export const getFeatureFlagWithPayload = async ({
     | undefined
 > => {
     // if no environment key is provided, assume self-hosted with all features enabled
-    if (!process.env.WEB_POSTHOG_KEY) return { value: true, payload: undefined };
+    if (!process.env.WEB_POSTHOG_KEY)
+        return { value: true, payload: undefined };
 
     const jwtPayload = await auth();
     const id =

@@ -1902,6 +1902,101 @@ export class SuggestionService implements ISuggestionService {
         }
     }
 
+    public async filterActiveReviewSuggestions<
+        T extends { comment?: { id?: number | string } },
+    >(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: Partial<Repository>;
+        prNumber: number;
+        platformType: PlatformType;
+        suggestions: T[];
+    }): Promise<T[]> {
+        const {
+            organizationAndTeamData,
+            repository,
+            prNumber,
+            platformType,
+            suggestions,
+        } = params;
+
+        if (!suggestions?.length) {
+            return suggestions;
+        }
+
+        const suggestionsWithCommentId = suggestions.filter(
+            (suggestion) => suggestion?.comment?.id != null,
+        );
+
+        if (!suggestionsWithCommentId.length) {
+            return suggestions;
+        }
+
+        try {
+            const reviewComments =
+                platformType === PlatformType.GITHUB
+                    ? await this.codeManagementService.getPullRequestReviewThreads(
+                          {
+                              organizationAndTeamData,
+                              repository,
+                              prNumber,
+                          },
+                          platformType,
+                      )
+                    : await this.codeManagementService.getPullRequestReviewComments(
+                          {
+                              organizationAndTeamData,
+                              repository,
+                              prNumber,
+                          },
+                          platformType,
+                      );
+
+            if (!reviewComments?.length) {
+                return suggestions;
+            }
+
+            const activeCommentIds = new Set(
+                reviewComments
+                    .filter((comment) =>
+                        this.isActiveReviewComment(comment, platformType),
+                    )
+                    .map((comment) =>
+                        this.getReviewCommentMatchId(comment, platformType),
+                    )
+                    .filter(Boolean),
+            );
+
+            if (!activeCommentIds.size) {
+                return [];
+            }
+
+            return suggestions.filter((suggestion) => {
+                const suggestionCommentId = suggestion?.comment?.id;
+
+                if (suggestionCommentId == null) {
+                    return true;
+                }
+
+                return activeCommentIds.has(String(suggestionCommentId));
+            });
+        } catch (error) {
+            this.logger.warn({
+                message: `Failed to filter active review suggestions for PR#${prNumber}`,
+                context: SuggestionService.name,
+                metadata: {
+                    organizationAndTeamData,
+                    prNumber,
+                    repositoryName: repository?.name,
+                    platformType,
+                    suggestionsCount: suggestions.length,
+                },
+                error,
+            });
+
+            return suggestions;
+        }
+    }
+
     /**
      * Resolves comments on the platform (GitHub, etc.) for implemented suggestions
      */
@@ -2082,5 +2177,35 @@ export class SuggestionService implements ISuggestionService {
         });
 
         return implementedSuggestionsCommentIds;
+    }
+
+    private isActiveReviewComment(
+        comment: PullRequestReviewComment,
+        platformType: PlatformType,
+    ): boolean {
+        if (platformType === PlatformType.GITHUB) {
+            return !comment?.isResolved && !comment?.isOutdated;
+        }
+
+        return !comment?.isResolved;
+    }
+
+    private getReviewCommentMatchId(
+        comment: PullRequestReviewComment,
+        platformType: PlatformType,
+    ): string | null {
+        if (platformType === PlatformType.GITHUB) {
+            return comment?.fullDatabaseId != null
+                ? String(comment.fullDatabaseId)
+                : comment?.id != null
+                  ? String(comment.id)
+                  : null;
+        }
+
+        if (platformType === PlatformType.AZURE_REPOS) {
+            return comment?.threadId != null ? String(comment.threadId) : null;
+        }
+
+        return comment?.id != null ? String(comment.id) : null;
     }
 }

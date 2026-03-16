@@ -20,8 +20,8 @@ function getDefaultMessages() {
             hideComments:
                 defaults.customMessages?.globalSettings?.hideComments ?? false,
             suggestionCopyPrompt:
-                defaults.customMessages?.globalSettings
-                    ?.suggestionCopyPrompt ?? true,
+                defaults.customMessages?.globalSettings?.suggestionCopyPrompt ??
+                true,
         },
     };
 }
@@ -127,9 +127,7 @@ export class PullRequestMessagesLogHandler {
         if (params.globalSettings) {
             const globalSettingsChanges = this.analyzeGlobalSettingsChanges(
                 params.globalSettings,
-                params.isUpdate
-                    ? params.existingGlobalSettings
-                    : undefined,
+                params.isUpdate ? params.existingGlobalSettings : undefined,
                 defaultMessages.globalSettings,
                 params.isUpdate,
                 params.configLevel,
@@ -247,7 +245,7 @@ export class PullRequestMessagesLogHandler {
     ): ChangedDataToExport[] {
         const changes: ChangedDataToExport[] = [];
         const baseSettings = isUpdate
-            ? existingSettings ?? defaultSettings
+            ? (existingSettings ?? defaultSettings)
             : defaultSettings;
         const levelDesc = this.getConfigLevelDescription(
             configLevel,
@@ -262,7 +260,8 @@ export class PullRequestMessagesLogHandler {
         if (prevHideComments !== newHideComments) {
             const action = newHideComments ? 'enabled' : 'disabled';
             changes.push({
-                actionDescription: 'Global Setting Updated: Post as Hidden Comment',
+                actionDescription:
+                    'Global Setting Updated: Post as Hidden Comment',
                 previousValue: { hideComments: prevHideComments },
                 currentValue: { hideComments: newHideComments },
                 description: `User ${userEmail} ${action} Post as Hidden Comment ${levelDesc}`,

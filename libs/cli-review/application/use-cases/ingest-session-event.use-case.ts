@@ -26,14 +26,22 @@ export class IngestSessionEventUseCase implements IUseCase {
         private readonly classifySessionUseCase: ClassifySessionUseCase,
     ) {}
 
-    async execute(params: IngestSessionEventInput): Promise<{ accepted: boolean }> {
+    async execute(
+        params: IngestSessionEventInput,
+    ): Promise<{ accepted: boolean }> {
         const { organizationAndTeamData, event } = params;
 
         let sessionId: string | undefined;
         let type: SessionEventType | undefined;
 
         try {
-            const { sessionId: sid, type: t, branch, timestamp, ...rest } = event;
+            const {
+                sessionId: sid,
+                type: t,
+                branch,
+                timestamp,
+                ...rest
+            } = event;
             sessionId = sid;
             type = t;
 
@@ -50,18 +58,14 @@ export class IngestSessionEventUseCase implements IUseCase {
             // Warn when turn_end arrives without a prior turn_start — helps
             // verify the CLI-side synthetic turn_start fix is working.
             if (type === 'turn_end') {
-                const prior =
-                    await this.sessionEventRepository.findBySessionId(
-                        sessionId,
-                        organizationAndTeamData.organizationId,
-                    );
-                const hasTurnStart = prior.some(
-                    (e) => e.type === 'turn_start',
+                const prior = await this.sessionEventRepository.findBySessionId(
+                    sessionId,
+                    organizationAndTeamData.organizationId,
                 );
+                const hasTurnStart = prior.some((e) => e.type === 'turn_start');
                 if (!hasTurnStart) {
                     this.logger.warn({
-                        message:
-                            'turn_end received without prior turn_start',
+                        message: 'turn_end received without prior turn_start',
                         context: IngestSessionEventUseCase.name,
                         metadata: {
                             sessionId,

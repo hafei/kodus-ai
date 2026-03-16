@@ -3453,13 +3453,11 @@ export class GitlabService implements Omit<
             }
         } catch (error) {
             this.logger.error({
-                message:
-                    'Error authenticating for webhook deletion',
+                message: 'Error authenticating for webhook deletion',
                 context: GitlabService.name,
                 error: error,
                 metadata: {
-                    organizationAndTeamData:
-                        params.organizationAndTeamData,
+                    organizationAndTeamData: params.organizationAndTeamData,
                 },
             });
         }

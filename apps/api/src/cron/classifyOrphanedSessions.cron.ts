@@ -54,10 +54,12 @@ export class ClassifyOrphanedSessionsCronProvider {
                         this.logger.error({
                             message:
                                 'Failed to recover classification for synthetic session_end',
-                            context:
-                                ClassifyOrphanedSessionsCronProvider.name,
+                            context: ClassifyOrphanedSessionsCronProvider.name,
                             error,
-                            metadata: { uuid: evt.uuid, sessionId: evt.sessionId },
+                            metadata: {
+                                uuid: evt.uuid,
+                                sessionId: evt.sessionId,
+                            },
                         });
                     }
                 }
@@ -98,8 +100,7 @@ export class ClassifyOrphanedSessionsCronProvider {
                         } else {
                             failed++;
                             this.logger.error({
-                                message:
-                                    'Failed to classify orphaned session',
+                                message: 'Failed to classify orphaned session',
                                 context:
                                     ClassifyOrphanedSessionsCronProvider.name,
                                 error: result.reason,

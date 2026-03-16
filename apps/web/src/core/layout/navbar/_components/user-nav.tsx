@@ -12,7 +12,6 @@ import {
     UserIcon,
 } from "lucide-react";
 import { useFeatureFlags } from "src/app/(app)/settings/_components/context";
-import { isSelfHosted } from "src/core/utils/self-hosted";
 import { Avatar, AvatarFallback } from "src/core/components/ui/avatar";
 import { Button } from "src/core/components/ui/button";
 import {
@@ -30,6 +29,7 @@ import { useAuth } from "src/core/providers/auth.provider";
 import { useSubscriptionStatus } from "src/core/providers/byok.provider";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { TEAM_STATUS } from "src/core/types";
+import { isSelfHosted } from "src/core/utils/self-hosted";
 
 export function UserNav() {
     const { tokenUsagePage } = useFeatureFlags();
@@ -119,13 +119,15 @@ export function UserNav() {
                     </Link>
                 )}
 
-                {(isSelfHosted || isBYOK || isTrial) && tokenUsagePage && canReadLogs && (
-                    <Link href="/token-usage">
-                        <DropdownMenuItem leftIcon={<ChartColumn />}>
-                            Token Usage
-                        </DropdownMenuItem>
-                    </Link>
-                )}
+                {(isSelfHosted || isBYOK || isTrial) &&
+                    tokenUsagePage &&
+                    canReadLogs && (
+                        <Link href="/token-usage">
+                            <DropdownMenuItem leftIcon={<ChartColumn />}>
+                                Token Usage
+                            </DropdownMenuItem>
+                        </Link>
+                    )}
 
                 <Link href="/sign-out" replace>
                     <DropdownMenuItem leftIcon={<LogOutIcon />}>

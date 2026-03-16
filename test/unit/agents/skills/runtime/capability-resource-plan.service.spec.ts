@@ -37,10 +37,7 @@ describe('CapabilityResourcePlanService', () => {
             'NOTION_QUERY_DATABASE',
             'NOTION_GET_PAGE_PROPERTY_ACTION',
         ]);
-        expect(clickupTools).toEqual([
-            'CLICKUP_GET_TASK',
-            'CLICKUP_GET_TASKS',
-        ]);
+        expect(clickupTools).toEqual(['CLICKUP_GET_TASK', 'CLICKUP_GET_TASKS']);
     });
 
     it('resolves provider aliases to canonical seed directories', () => {

@@ -10,10 +10,7 @@ export type CliSessionDecisionType =
     | 'tooling'
     | 'other';
 
-export type CliSessionDecisionOrigin =
-    | 'human'
-    | 'agent'
-    | 'collaborative';
+export type CliSessionDecisionOrigin = 'human' | 'agent' | 'collaborative';
 
 export interface CliSessionToolUse {
     tool: string;
