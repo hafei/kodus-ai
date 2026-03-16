@@ -141,6 +141,7 @@ describe('CollectCrossFileContextStage', () => {
                         pattern: 'greet\\(',
                         rationale: 'test',
                         riskLevel: 'high',
+                        sourceFile: 'test.ts',
                         fileGlob: '**/*.ts',
                     },
                 ],

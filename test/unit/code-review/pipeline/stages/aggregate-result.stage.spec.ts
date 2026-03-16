@@ -24,7 +24,7 @@ describe('AggregateResultsStage', () => {
 
     const createBaseContext = (
         overrides: Partial<CodeReviewPipelineContext> = {},
-    ): CodeReviewPipelineContext => ({
+    ) => ({
         dryRun: { enabled: false },
         organizationAndTeamData: mockOrganizationAndTeamData as any,
         repository: { id: 'repo-1', name: 'test-repo' } as any,
@@ -46,13 +46,12 @@ describe('AggregateResultsStage', () => {
         origin: 'github',
         action: 'opened',
         platformType: PlatformType.GITHUB,
-        batches: [],
         preparedFileContexts: [],
         validSuggestions: [],
         discardedSuggestions: [],
         correlationId: 'test-correlation-id',
         ...overrides,
-    });
+    } as CodeReviewPipelineContext);
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({

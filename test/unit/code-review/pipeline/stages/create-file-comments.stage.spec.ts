@@ -58,7 +58,7 @@ describe('CreateFileCommentsStage', () => {
 
     const createBaseContext = (
         overrides: Partial<CodeReviewPipelineContext> = {},
-    ): CodeReviewPipelineContext => ({
+    ) => ({
         dryRun: { enabled: false },
         organizationAndTeamData: mockOrganizationAndTeamData as any,
         repository: {
@@ -90,7 +90,6 @@ describe('CreateFileCommentsStage', () => {
         validSuggestions: [],
         discardedSuggestions: [],
         changedFiles: [],
-        batches: [],
         preparedFileContexts: [],
         correlationId: 'test-correlation-id',
         ...overrides,
@@ -614,7 +613,7 @@ describe('CreateFileCommentsStage', () => {
                     suggestionContent: 'Add type annotation',
                     priorityStatus: 'discarded-by-code-diff',
                 },
-            ];
+            ] as any[];
 
             const changedFiles = [{ filename: 'test.ts' } as any];
 
@@ -677,7 +676,7 @@ describe('CreateFileCommentsStage', () => {
                     suggestionContent: 'Consider refactoring',
                     priorityStatus: 'discarded-by-severity',
                 },
-            ];
+            ] as any[];
 
             const changedFiles = [{ filename: 'test.ts' } as any];
 
@@ -730,7 +729,7 @@ describe('CreateFileCommentsStage', () => {
                     suggestionContent: 'Remove this code',
                     priorityStatus: 'discarded-by-safeguard',
                 },
-            ];
+            ] as any[];
 
             const changedFiles = [{ filename: 'test.ts' } as any];
 
@@ -788,7 +787,7 @@ describe('CreateFileCommentsStage', () => {
                     suggestionContent: 'Fix this issue',
                     priorityStatus: 'discarded-by-kody-fine-tuning',
                 },
-            ];
+            ] as any[];
 
             const changedFiles = [{ filename: 'test.ts' } as any];
 
@@ -862,7 +861,7 @@ describe('CreateFileCommentsStage', () => {
                     suggestionContent: 'Fix 4',
                     priorityStatus: 'discarded-by-kody-fine-tuning',
                 },
-            ];
+            ] as any[];
 
             const changedFiles = [{ filename: 'test.ts' } as any];
 

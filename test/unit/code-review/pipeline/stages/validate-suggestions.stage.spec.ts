@@ -53,7 +53,7 @@ describe('ValidateSuggestionsStage', () => {
 
     const createBaseContext = (
         overrides: Partial<CodeReviewPipelineContext> = {},
-    ): CodeReviewPipelineContext => ({
+    ) => ({
         dryRun: { enabled: false },
         organizationAndTeamData: mockOrganizationAndTeamData as any,
         repository: {
@@ -85,7 +85,6 @@ describe('ValidateSuggestionsStage', () => {
         validSuggestions: [],
         discardedSuggestions: [],
         changedFiles: [],
-        batches: [],
         preparedFileContexts: [],
         correlationId: 'test-correlation-id',
         ...overrides,
