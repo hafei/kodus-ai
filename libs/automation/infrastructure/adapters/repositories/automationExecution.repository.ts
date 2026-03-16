@@ -451,14 +451,14 @@ export class AutomationExecutionRepository implements IAutomationExecutionReposi
                 );
 
             const successRepositoryExpr =
-                "COALESCE(success.repositoryId, success.dataExecution->>'repositoryId')";
+                'COALESCE("success"."repositoryId", "success"."dataExecution"->>\'repositoryId\')';
             const successPullRequestExpr =
-                "COALESCE(success.pullRequestNumber, CASE WHEN (success.dataExecution->>'pullRequestNumber') ~ '^[0-9]+$' THEN (success.dataExecution->>'pullRequestNumber')::integer ELSE NULL END)";
+                'COALESCE("success"."pullRequestNumber", CASE WHEN ("success"."dataExecution"->>\'pullRequestNumber\') ~ \'^[0-9]+$\' THEN ("success"."dataExecution"->>\'pullRequestNumber\')::integer ELSE NULL END)';
 
             const inProgressRepositoryExpr =
-                "COALESCE(in_progress.repositoryId, in_progress.dataExecution->>'repositoryId')";
+                'COALESCE("in_progress"."repositoryId", "in_progress"."dataExecution"->>\'repositoryId\')';
             const inProgressPullRequestExpr =
-                "COALESCE(in_progress.pullRequestNumber, CASE WHEN (in_progress.dataExecution->>'pullRequestNumber') ~ '^[0-9]+$' THEN (in_progress.dataExecution->>'pullRequestNumber')::integer ELSE NULL END)";
+                'COALESCE("in_progress"."pullRequestNumber", CASE WHEN ("in_progress"."dataExecution"->>\'pullRequestNumber\') ~ \'^[0-9]+$\' THEN ("in_progress"."dataExecution"->>\'pullRequestNumber\')::integer ELSE NULL END)';
 
             const inProgressSubquery = queryBuilder
                 .subQuery()

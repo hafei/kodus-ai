@@ -95,7 +95,7 @@ export class FindOverrideCountsByRepositoryPullRequestMessagesUseCase {
                 FormattedConfigLevel.REPOSITORY,
             );
 
-            const directoryOverrideCounts = directoryEntities.map((entity) => {
+            const directoryOverrideCounts = (directoryEntities ?? []).map((entity) => {
                 const directoryConfig = this.getConfigs(entity);
                 const directoryDelta = deepDifference(
                     resolvedRepositoryConfig,
