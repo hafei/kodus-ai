@@ -450,10 +450,14 @@ function buildTools(
                     .optional()
                     .describe('Optional directory to scope the search'),
             }),
-            execute: async ({ pattern, glob, path }: any) => {
+            execute: async (args: any) => {
+                const pattern = args.pattern || args.regex || '';
+                const glob = args.glob || args.include || undefined;
+                let searchPath = (args.path || args.directory || args.dir || '.').replace(/^\/+/, '') || '.';
+                if (!pattern) return 'Error: pattern is required';
                 let result = await remoteCommands.grep(
                     pattern,
-                    path || '.',
+                    searchPath,
                     glob,
                 );
                 const lines = result.split('\n');
@@ -474,11 +478,18 @@ function buildTools(
                 startLine: z.number().optional().describe('Start line (1-based)'),
                 endLine: z.number().optional().describe('End line (1-based)'),
             }),
-            execute: async ({ path, startLine, endLine }: any) => {
+            execute: async (args: any) => {
+                // Tolerate models sending file/filePath instead of path
+                let filePath: string = args.path || args.filePath || args.file || '';
+                const startLine = args.startLine || args.start_line || 0;
+                const endLine = args.endLine || args.end_line || 0;
+                // Strip leading slash — paths are relative to repo root
+                filePath = filePath.replace(/^\/+/, '');
+                if (!filePath) return 'Error: path is required';
                 let result = await remoteCommands.read(
-                    path,
-                    startLine || 0,
-                    endLine || 0,
+                    filePath,
+                    startLine,
+                    endLine,
                 );
                 if (result.length > MAX_READ_LENGTH) {
                     result =
@@ -502,9 +513,10 @@ function buildTools(
                     .optional()
                     .describe('Max recursion depth (default: 2, max: 4)'),
             }),
-            execute: async ({ path, maxDepth }: any) => {
-                const depth = Math.min(maxDepth || 2, 4);
-                let result = await remoteCommands.listDir(path || '.', depth);
+            execute: async (args: any) => {
+                let dirPath = (args.path || args.directory || args.dir || '.').replace(/^\/+/, '') || '.';
+                const depth = Math.min(args.maxDepth || args.max_depth || 2, 4);
+                let result = await remoteCommands.listDir(dirPath, depth);
                 if (result.length > MAX_LIST_LENGTH) {
                     result =
                         result.substring(0, MAX_LIST_LENGTH) +
