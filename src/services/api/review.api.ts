@@ -21,39 +21,7 @@ export class RealReviewApi implements IReviewApi {
         accessToken: string,
         config?: ReviewConfig,
     ): Promise<ReviewResult> {
-        const isTeamKey = accessToken.startsWith('kodus_');
-
-        if (isTeamKey) {
-            return this.requester<ReviewResult>('/cli/review', {
-                method: 'POST',
-                headers: {
-                    'X-Team-Key': accessToken,
-                },
-                body: JSON.stringify({ diff, config }),
-            });
-        }
-
-        let teamId: string | undefined;
-        try {
-            const payload = JSON.parse(
-                Buffer.from(accessToken.split('.')[1], 'base64').toString(),
-            );
-            teamId = payload.organizationId;
-        } catch {
-            // Ignore if cannot decode
-        }
-
-        const endpoint = teamId
-            ? `/cli/review?teamId=${encodeURIComponent(teamId)}`
-            : '/cli/review';
-
-        return this.requester<ReviewResult>(endpoint, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({ diff, config }),
-        });
+        return this.analyzeWithMetrics(diff, accessToken, config);
     }
 
     async analyzeWithMetrics(
