@@ -1,19 +1,21 @@
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@components/ui/button";
-import { Checkbox } from "@components/ui/checkbox";
 import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleIndicator,
-    CollapsibleTrigger,
-} from "@components/ui/collapsible";
-import { Heading } from "@components/ui/heading";
-import { ChevronDown } from "lucide-react";
-import type {
-    CodeReviewRepositoryConfig,
-} from "src/app/(app)/settings/code-review/_types";
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@components/ui/command";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@components/ui/popover";
+import { ChevronDown, Check } from "lucide-react";
+import type { CodeReviewRepositoryConfig } from "src/app/(app)/settings/code-review/_types";
 import type { LiteralUnion } from "src/core/types";
-import { cn } from "src/core/utils/components";
 
 export const SelectRepositoriesDropdown = ({
     repositories: _repositories,
@@ -35,8 +37,8 @@ export const SelectRepositoriesDropdown = ({
     canEdit: boolean;
     global?: boolean;
 }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
 
     const repositories: Array<
         Omit<CodeReviewRepositoryConfig, "configs"> & {
@@ -48,155 +50,211 @@ export const SelectRepositoriesDropdown = ({
           )
         : _repositories;
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (
-                containerRef.current &&
-                !containerRef.current.contains(event.target as Node)
-            ) {
-                setIsOpen(false);
-            }
-        };
+    const matchesSearch = (repo: (typeof repositories)[0]) => {
+        if (!search) return true;
+        return repo.name.toLowerCase().includes(search.toLowerCase());
+    };
 
-        if (isOpen) {
-            document.addEventListener("mousedown", handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [isOpen]);
+    const selectedRepos = useMemo(
+        () =>
+            repositories
+                .filter(
+                    (r) =>
+                        selectedRepositoriesIds.includes(r.id) ||
+                        r.id === "global",
+                )
+                .filter(matchesSearch),
+        [repositories, selectedRepositoriesIds, search],
+    );
+    const unselectedRepos = useMemo(
+        () =>
+            repositories
+                .filter(
+                    (r) =>
+                        !selectedRepositoriesIds.includes(r.id) &&
+                        r.id !== "global",
+                )
+                .filter(matchesSearch),
+        [repositories, selectedRepositoriesIds, search],
+    );
 
     return (
-        <div className="relative" ref={containerRef}>
-            <Button
-                size="md"
-                variant="primary"
-                disabled={!canEdit}
-                className="group rounded-l-none px-3"
-                onClick={() => setIsOpen(!isOpen)}>
-                <ChevronDown
-                    className={cn(
-                        "size-4 transition-transform",
-                        isOpen && "rotate-180",
-                    )}
-                />
-            </Button>
+        <Popover
+            open={open}
+            onOpenChange={(o) => {
+                setOpen(o);
+                if (!o) setSearch("");
+            }}>
+            <PopoverTrigger asChild>
+                <Button
+                    size="md"
+                    variant="primary"
+                    disabled={!canEdit}
+                    className="group rounded-l-none px-3">
+                    <ChevronDown className="size-4 transition-transform group-data-[state=closed]:rotate-180" />
+                </Button>
+            </PopoverTrigger>
 
-            {isOpen && (
-                    <div
-                        className="absolute z-50 w-72 rounded-xl border border-card-lv3 bg-card-lv2 shadow-md"
-                        style={{ maxHeight: "300px", maxWidth: "270px", right: "-40px", overflow: "auto", bottom: "100%", marginBottom: "10px" }}>
-                    <div className="px-5 py-4 border-b border-card-lv3">
-                        <Heading variant="h3" className="mb-2">
-                            Select repositories/directories
-                        </Heading>
-                    </div>
+            <PopoverContent
+                align="end"
+                side="top"
+                sideOffset={10}
+                alignOffset={-40}
+                className="w-72 p-0">
+                <Command
+                    filter={(value, search) => {
+                        const repo = repositories.find((r) => r.id === value);
+                        if (!repo) return 0;
+                        if (
+                            repo.name
+                                .toLowerCase()
+                                .startsWith(search.toLowerCase())
+                        ) {
+                            return 1;
+                        }
+                        return 0;
+                    }}>
+                    <CommandInput
+                        placeholder="Search repositories..."
+                        onValueChange={setSearch}
+                    />
 
-                    <div className="p-5">
-                        {repositories
-                            .filter((r) => r.isSelected || r.id === "global")
-                            .map((r) => (
-                                <div key={r.id}>
-                                    <Collapsible
-                                        className="flex-1"
-                                        disabled={
-                                            r.id === "global" || !r.directories?.length
-                                        }>
-                                        <div className="flex items-center gap-3">
-                                            <div className="size-6">
-                                                {r.isSelected && (
-                                                    <Checkbox
-                                                        className="size-full"
-                                                        checked={selectedRepositoriesIds.includes(
-                                                            r.id,
-                                                        )}
-                                                        onCheckedChange={(checked) => {
-                                                            if (!checked) {
-                                                                return setSelectedRepositoriesIds(
-                                                                    selectedRepositoriesIds.filter(
-                                                                        (id) =>
-                                                                            id !==
-                                                                            r.id,
-                                                                    ),
-                                                                );
-                                                            }
 
-                                                            setSelectedRepositoriesIds([
-                                                                ...selectedRepositoriesIds,
-                                                                r.id,
-                                                            ]);
-                                                        }}
-                                                    />
-                                                )}
-                                            </div>
+                        {(selectedRepos.length > 0 || unselectedRepos.length > 0) && (
+                            <div className="flex justify-end gap-3 border-b px-3 py-1.5">
+                                {selectedRepos.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="cursor-pointer text-xs font-medium text-text-secondary hover:text-text-primary"
+                                        onClick={() => {
+                                            const idsToRemove = new Set(
+                                                selectedRepos
+                                                    .map((r) => r.id)
+                                                    .filter((id) => id !== "global"),
+                                            );
+                                            setSelectedRepositoriesIds(
+                                                selectedRepositoriesIds.filter(
+                                                    (id) => !idsToRemove.has(id),
+                                                ),
+                                            );
+                                        }}>
+                                        Clear selection
+                                        {search
+                                            ? ` (${selectedRepos.length})`
+                                            : ""}
+                                    </button>
+                                )}
+                                {unselectedRepos.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="cursor-pointer text-xs font-medium text-primary-light hover:text-primary-dark"
+                                        onClick={() => {
+                                            const idsToAdd = unselectedRepos.map(
+                                                (r) => r.id,
+                                            );
+                                            setSelectedRepositoriesIds([
+                                                ...selectedRepositoriesIds,
+                                                ...idsToAdd,
+                                            ]);
+                                        }}>
+                                        Select all
+                                        {search
+                                            ? ` (${unselectedRepos.length})`
+                                            : ""}
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
-                                            <CollapsibleTrigger
-                                                asChild
-                                                className="flex-1">
-                                                <Button
-                                                    active
-                                                    size="sm"
-                                                    variant="cancel"
-                                                    data-disabled={undefined}
-                                                    className={cn(
-                                                        "flex-1 justify-start px-0",
-                                                        r.id === "global" &&
-                                                            "pointer-events-none",
-                                                    )}
-                                                    rightIcon={
-                                                        r.id !== "global" &&
-                                                        r.directories?.length && (
-                                                            <CollapsibleIndicator />
-                                                        )
-                                                    }>
-                                                    {r.name}
-                                                </Button>
-                                            </CollapsibleTrigger>
-                                        </div>
+                        <CommandList className="max-h-[220px] overflow-y-auto">
+                            <CommandEmpty>No repository found.</CommandEmpty>
 
-                                        <CollapsibleContent className="mt-1 ml-2 flex flex-col justify-center gap-2 border-l pb-0 pl-3">
-                                            {r.directories?.map((d) => (
-                                                <div key={d.id} className="flex gap-3">
-                                                    <Checkbox
-                                                        checked={selectedDirectoriesIds.some(
-                                                            (dId) =>
-                                                                d.id ===
-                                                                dId.directoryId,
-                                                        )}
-                                                        onCheckedChange={(checked) => {
-                                                            if (!checked) {
-                                                                return setSelectedDirectoriesIds(
-                                                                    selectedDirectoriesIds.filter(
-                                                                        ({
-                                                                            directoryId,
-                                                                        }) =>
-                                                                            directoryId !==
+                        <div className="m-0 p-0 max-h-[220px] overflow-y-auto" onWheel={(e) => e.stopPropagation()}>
+                            {selectedRepos.length > 0 && (
+                                <CommandGroup heading="Selected">
+                                    {selectedRepos.map((r) => (
+                                        <CommandItem
+                                            key={r.id}
+                                            value={r.id}
+                                            onSelect={() => {
+                                                if (r.id === "global") return;
+                                                setSelectedRepositoriesIds(
+                                                    selectedRepositoriesIds.filter(
+                                                        (id) => id !== r.id,
+                                                    ),
+                                                );
+                                            }}>
+                                            <span className="flex flex-1 flex-col items-start gap-1 text-left">
+                                                <span>{r.name}</span>
+                                                {r.directories &&
+                                                    r.directories.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {r.directories
+                                                                .filter((d) =>
+                                                                    selectedDirectoriesIds.some(
+                                                                        (
+                                                                            sd,
+                                                                        ) =>
+                                                                            sd.directoryId ===
                                                                             d.id,
                                                                     ),
-                                                                );
-                                                            }
+                                                                )
+                                                                .map((d) => (
+                                                                    <span
+                                                                        key={
+                                                                            d.id
+                                                                        }
+                                                                        className="text-text-tertiary text-xs">
+                                                                        {d.path}
+                                                                    </span>
+                                                                ))}
+                                                        </div>
+                                                    )}
+                                            </span>
+                                            {r.id !== "global" && (
+                                                <Check className="text-primary-light -mr-2 size-5" />
+                                            )}
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            )}
 
-                                                            setSelectedDirectoriesIds([
-                                                                ...selectedDirectoriesIds,
-                                                                {
-                                                                    directoryId: d.id,
-                                                                    repositoryId: r.id,
-                                                                },
-                                                            ]);
-                                                        }}
-                                                    />
+                            {unselectedRepos.length > 0 && (
+                                <CommandGroup heading="Not selected">
+                                    {unselectedRepos.map((r) => (
+                                        <CommandItem
+                                            key={r.id}
+                                            value={r.id}
+                                            onSelect={() => {
+                                                setSelectedRepositoriesIds([
+                                                    ...selectedRepositoriesIds,
+                                                    r.id,
+                                                ]);
+                                            }}>
+                                            <span className="flex flex-1 flex-col items-start gap-1 text-left">
+                                                <span>{r.name}</span>
+                                                {r.directories &&
+                                                    r.directories.length > 0 && (
+                                                        <span className="text-text-tertiary text-xs">
+                                                            {r.directories.length}{" "}
+                                                            director
+                                                            {r.directories.length >
+                                                            1
+                                                                ? "ies"
+                                                                : "y"}
+                                                        </span>
+                                                    )}
+                                            </span>
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            )}
 
-                                                    <span>{d.path}</span>
-                                                </div>
-                                            ))}
-                                        </CollapsibleContent>
-                                    </Collapsible>
-                                </div>
-                            ))}
-                    </div>
-                </div>
-            )}
-        </div>
+                        </div>
+                        </CommandList>
+
+                </Command>
+            </PopoverContent>
+        </Popover>
     );
 };
