@@ -61,6 +61,25 @@ kodus review --prompt-only      # Structured output for AI agents
 
 Reviews are **context-aware** — Kodus reads your `.cursorrules`, `claude.md`, and `.kodus.md` so suggestions follow your team's standards. [More on review modes](#review-modes)
 
+### Kody Rules
+
+Create, update, and inspect the Kody Rules that guide Kodus behavior for your team.
+
+```bash
+kodus rules create --title "Use async/await" --rule "Prefer async/await over raw promises" --severity high --scope file --path "**/*.ts"
+kodus rules update --uuid <uuid> --severity critical
+kodus rules view
+kodus rules view --title "Use async/await"
+```
+
+`kodus rules update` requires `--uuid`.
+
+Defaults:
+
+- `severity` defaults to `medium`
+- `scope` defaults to `file`
+- `path` is optional (omitted means all files)
+
 ### PR Suggestions
 
 Fetch AI-powered suggestions for open pull requests directly from your terminal.

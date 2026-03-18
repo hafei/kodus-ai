@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { type BundledSkillDocument, readBundledSkills } from './skills.js';
 import {
     readManagedSkillNames,
     resolveManagedManifestPath,
@@ -13,11 +12,13 @@ import {
     resolveManagedSkillPath,
 } from './skills-sync-paths.js';
 import { buildSkillSyncTargets } from './skills-sync-targets.js';
+import { type BundledSkillDocument, readBundledSkills } from './skills.js';
 
 export const DEFAULT_SYNC_SKILL_NAMES = [
     'kodus-review',
     'kodus-pr-suggestions-resolver',
     'kodus-business-rules-validation',
+    'kodus-kody-rules',
 ] as const;
 
 const LEGACY_BUSINESS_RULES_NAME = 'business-rules-validation';
