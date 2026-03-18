@@ -198,7 +198,7 @@ function CustomPromptsContent() {
         name: promptFields as any[],
     });
 
-    const dirtyPromptFields = useMemo(
+    const dirtyFields = useMemo(
         () =>
             Object.fromEntries(
                 promptFields.map((fieldName, index) => {
@@ -219,8 +219,8 @@ function CustomPromptsContent() {
         [watchedPromptValues, promptFields],
     );
     const isPromptsDirty = useMemo(
-        () => Object.values(dirtyPromptFields).some(Boolean),
-        [dirtyPromptFields],
+        () => Object.values(dirtyFields).some(Boolean),
+        [dirtyFields],
     );
 
     const handleSubmit = form.handleSubmit(async (formData) => {
@@ -256,7 +256,7 @@ function CustomPromptsContent() {
 
     const scrollToDirtyPrompt = useCallback(() => {
         const dirtyField = promptFields.find(
-            (field) => dirtyPromptFields[field],
+            (field) => dirtyFields[field],
         );
 
         if (dirtyField) {
@@ -308,7 +308,7 @@ function CustomPromptsContent() {
                 headerElement.classList.remove("field-highlight");
             }, 1800);
         }
-    }, [dirtyPromptFields, promptFields]);
+    }, [dirtyFields, promptFields]);
 
     useUnsavedChangesGuard({
         id: "custom-prompts",
