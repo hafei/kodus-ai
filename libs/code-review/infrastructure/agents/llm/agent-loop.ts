@@ -31,7 +31,7 @@ import { DocumentationSearchAdapter } from '../tools/sandbox-tools';
 const logger = createLogger('AgentLoop');
 
 const MAX_STEPS = 35;
-const AGENT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max per agent to prevent hanging on slow/dead providers
+const AGENT_TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes max per agent — some models (Gemini) need 30+ tool calls
 
 /** Schema for structured output */
 const suggestionSchema = z.object({
@@ -97,10 +97,11 @@ export async function runAgentLoop(
     const allToolCalls: AgentLoopOutput['toolCalls'] = [];
     let stepCount = 0;
     let lastStepText = ''; // Capture text from intermediate steps for timeout recovery
+    const allStepTexts: string[] = []; // Accumulate ALL text steps for better timeout recovery
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
-    // Timeout: 5 minutes max per agent to prevent hanging on slow/dead providers
+    // Timeout: 8 minutes max per agent — some models need many tool calls
     const abortController = new AbortController();
     const timeoutHandle = setTimeout(() => {
         logger.warn({
@@ -119,17 +120,19 @@ export async function runAgentLoop(
             prompt: input.userPrompt,
             tools,
             stopWhen: stepCountIs(input.maxSteps || MAX_STEPS),
-            // Last 2 steps: force text response (prevent infinite tool loops)
+            // Last 2 steps: remove tools entirely to force text response.
+            // toolChoice: 'none' doesn't work with all providers (e.g., Gemini ignores it).
+            // Removing tools entirely guarantees the model can only respond with text.
             prepareStep: ({ stepNumber }: any) => {
                 const maxSteps = input.maxSteps || MAX_STEPS;
                 const forceTextAfter = maxSteps - 2;
 
                 if (stepNumber >= forceTextAfter) {
                     logger.log({
-                        message: `[AGENT-FORCE-TEXT] step=${stepNumber}/${maxSteps} — disabling tools, forcing text response`,
+                        message: `[AGENT-FORCE-TEXT] step=${stepNumber}/${maxSteps} — removing tools, forcing text response`,
                         context: 'AgentLoop',
                     });
-                    return { toolChoice: 'none' as const };
+                    return { toolChoice: 'none' as const, activeTools: [] };
                 }
                 return {};
             },
@@ -166,6 +169,7 @@ export async function runAgentLoop(
 
                 if (event.text) {
                     lastStepText = event.text;
+                    allStepTexts.push(event.text);
                     logger.log({
                         message: `[AGENT-TEXT] step=${stepCount} finishReason=${event.finishReason} textLength=${event.text.length} tokens=${event.usage?.totalTokens ?? 0}`,
                         context: 'AgentLoop',
@@ -195,33 +199,47 @@ export async function runAgentLoop(
             let findings: FindingsOutput | null = null;
             let source: AgentLoopOutput['source'] = 'empty';
 
-            if (lastStepText) {
+            // Try to recover from ALL accumulated text steps (not just the last one)
+            // Models often produce partial findings in intermediate steps before timeout
+            const textsToTry = [
+                lastStepText,
+                ...allStepTexts.slice().reverse(), // Try most recent first
+                allStepTexts.join('\n\n'), // Try concatenated as last resort
+            ].filter((t) => t && t.length > 50);
+
+            // Deduplicate
+            const uniqueTexts = [...new Set(textsToTry)];
+
+            for (const text of uniqueTexts) {
+                if (findings && findings.suggestions.length > 0) break;
+
                 // Strategy 1: Try to parse JSON directly (safe — no hallucination risk)
-                findings = tryParseFindings(lastStepText);
+                findings = tryParseFindings(text);
                 if (findings && findings.suggestions.length > 0) {
                     source = 'json-parse';
                     logger.log({
-                        message: `[AGENT-TIMEOUT-RECOVERY] Recovered ${findings.suggestions.length} suggestions from last step text (${lastStepText.length} chars)`,
+                        message: `[AGENT-TIMEOUT-RECOVERY] Recovered ${findings.suggestions.length} suggestions from step text (${text.length} chars)`,
                         context: 'AgentLoop',
                     });
+                    break;
                 }
-                // Strategy 2: Only use fallback LLM if text clearly contains findings
-                // (not just investigation text). This prevents the LLM from fabricating
-                // suggestions to fill the schema when the agent was still investigating.
-                if (
-                    !findings &&
-                    lastStepText.length > 100 &&
-                    looksLikeFindings(lastStepText)
-                ) {
+            }
+
+            // Strategy 2: If no JSON found, try fallback LLM with the richest text
+            if (!findings) {
+                const bestText = uniqueTexts.find(
+                    (t) => t.length > 100 && looksLikeFindings(t),
+                );
+                if (bestText) {
                     try {
                         findings = await structureWithFallbackModel(
-                            lastStepText,
+                            bestText,
                             input.byokConfig,
                         );
                         if (findings && findings.suggestions.length > 0) {
                             source = 'generate-object';
                             logger.log({
-                                message: `[AGENT-TIMEOUT-RECOVERY] Recovered ${findings.suggestions.length} suggestions via fallback model`,
+                                message: `[AGENT-TIMEOUT-RECOVERY] Recovered ${findings.suggestions.length} suggestions via fallback model (${bestText.length} chars)`,
                                 context: 'AgentLoop',
                             });
                         }
@@ -257,7 +275,16 @@ export async function runAgentLoop(
     }
     clearTimeout(timeoutHandle);
 
-    const finalText = result.text || '';
+    // result.text may be empty if the model's last step was a tool call.
+    // Fall back to accumulated step texts (e.g., from forced text steps 33/34).
+    let finalText = result.text || '';
+    if (!finalText && allStepTexts.length > 0) {
+        finalText = allStepTexts[allStepTexts.length - 1]; // Use last text step
+        logger.log({
+            message: `[AGENT-FALLBACK-TEXT] result.text empty, using last step text (${finalText.length} chars)`,
+            context: 'AgentLoop',
+        });
+    }
 
     if (allToolCalls.length === 0) {
         logger.warn({
