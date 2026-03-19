@@ -122,10 +122,12 @@ function resolveManagedSkillNestedFilePath(
 
     const skillRoot = resolveManagedSkillEntryPath(target, skillName);
     const resolvedPath = path.resolve(skillRoot, normalizedRelativePath);
-    const expectedPrefix = `${skillRoot}${path.sep}`;
+    const relativeFromRoot = path.relative(skillRoot, resolvedPath);
     if (
-        resolvedPath !== skillRoot &&
-        !resolvedPath.startsWith(expectedPrefix)
+        !relativeFromRoot ||
+        relativeFromRoot === '.' ||
+        relativeFromRoot.startsWith('..') ||
+        path.isAbsolute(relativeFromRoot)
     ) {
         throw new Error(`Invalid skill file path: ${relativePath}`);
     }

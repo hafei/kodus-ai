@@ -33,7 +33,6 @@ export type RulesUpdateOptions = {
 
 export type RulesViewOptions = {
     uuid?: string;
-    title?: string;
     repoId?: string;
     json?: boolean;
 };

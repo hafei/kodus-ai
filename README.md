@@ -69,7 +69,6 @@ Create, update, and inspect the Kody Rules that guide Kodus behavior for your te
 kodus rules create --title "Use async/await" --rule "Prefer async/await over raw promises" --repo-id global --severity high --scope file --path "**/*.ts"
 kodus rules update --uuid <uuid> --repo-id global --severity critical
 kodus rules view --repo-id global
-kodus rules view --repo-id global --title "Use async/await"
 ```
 
 `kodus rules update` requires `--uuid`.
