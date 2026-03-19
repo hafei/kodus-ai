@@ -11,12 +11,14 @@ import { PermissionsAbilityFactory } from '../infrastructure/adapters/services/p
 import { UseCases } from '../application/use-cases/permissions';
 import { UserModule } from './user.module';
 import { IntegrationConfigModule } from '@libs/integrations/modules/config.module';
+import { LicenseModule } from '@libs/ee/license/license.module';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([PermissionsModel]),
         forwardRef(() => UserModule),
         forwardRef(() => IntegrationConfigModule),
+        forwardRef(() => LicenseModule),
     ],
     providers: [
         {
