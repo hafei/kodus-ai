@@ -13,6 +13,7 @@ import { cliError, cliInfo } from '../utils/logger.js';
 export type RulesCreateOptions = {
     title: string;
     rule: string;
+    repoId?: string;
     severity?: KodyRuleSeverity;
     scope?: KodyRuleScope;
     path?: string;
@@ -21,6 +22,7 @@ export type RulesCreateOptions = {
 
 export type RulesUpdateOptions = {
     uuid: string;
+    repoId?: string;
     title?: string;
     rule?: string;
     severity?: KodyRuleSeverity;
@@ -32,11 +34,13 @@ export type RulesUpdateOptions = {
 export type RulesViewOptions = {
     uuid?: string;
     title?: string;
+    repoId?: string;
     json?: boolean;
 };
 
-function printRule(rule: KodyRule): void {
+function printRule(rule: KodyRule, fallbackRepositoryId = 'global'): void {
     cliInfo(`Rule UUID: ${rule.uuid}`);
+    cliInfo(`Repository ID: ${rule.repositoryId ?? fallbackRepositoryId}`);
     cliInfo(`Rule Title: ${rule.title}`);
     cliInfo(`Rule: ${rule.rule}`);
     if (rule.severity) {
@@ -50,14 +54,17 @@ function printRule(rule: KodyRule): void {
     }
 }
 
-function printRuleList(rules: KodyRule[]): void {
+function printRuleList(
+    rules: KodyRule[],
+    fallbackRepositoryId = 'global',
+): void {
     if (rules.length === 0) {
         cliInfo(chalk.yellow('No Kody Rules found.'));
         return;
     }
 
     rules.forEach((rule, index) => {
-        printRule(rule);
+        printRule(rule, fallbackRepositoryId);
         if (index < rules.length - 1) {
             cliInfo('');
         }
@@ -71,6 +78,7 @@ export async function rulesCreateAction(
         const createdRule = await rulesService.createRule({
             title: options.title,
             rule: options.rule,
+            repositoryId: options.repoId,
             severity: options.severity,
             scope: options.scope,
             path: options.path,
@@ -82,7 +90,7 @@ export async function rulesCreateAction(
         }
 
         cliInfo(chalk.green('Kody Rule created successfully.'));
-        printRule(createdRule);
+        printRule(createdRule, options.repoId ?? 'global');
     } catch (error) {
         const normalized = normalizeCommandError(error);
         cliError(chalk.red(normalized.message));
@@ -96,6 +104,7 @@ export async function rulesUpdateAction(
     try {
         const updatedRule = await rulesService.updateRule({
             ruleId: options.uuid,
+            repositoryId: options.repoId,
             title: options.title,
             rule: options.rule,
             severity: options.severity,
@@ -109,7 +118,7 @@ export async function rulesUpdateAction(
         }
 
         cliInfo(chalk.green('Kody Rule updated successfully.'));
-        printRule(updatedRule);
+        printRule(updatedRule, options.repoId ?? 'global');
     } catch (error) {
         const normalized = normalizeCommandError(error);
         cliError(chalk.red(normalized.message));
@@ -123,7 +132,7 @@ export async function rulesViewAction(
     try {
         const rules = await rulesService.viewRules({
             ruleId: options.uuid,
-            ruleName: options.title,
+            repositoryId: options.repoId,
         });
 
         if (options.json) {
@@ -131,7 +140,7 @@ export async function rulesViewAction(
             return;
         }
 
-        printRuleList(rules);
+        printRuleList(rules, options.repoId ?? 'global');
     } catch (error) {
         const normalized = normalizeCommandError(error);
         cliError(chalk.red(normalized.message));
@@ -148,19 +157,22 @@ rulesCommand
     .description('Create a new Kody Rule')
     .requiredOption('--title <title>', 'Rule title')
     .requiredOption('--rule <rule>', 'Rule content/description')
+    .option('--repo-id <id>', 'Repository ID for the rule', 'global')
     .option(
         '--severity <severity>',
         'Rule severity (low, medium, high, critical)',
+        'medium',
     )
-    .option('--scope <scope>', "Rule scope ('pull request' or 'file')")
-    .option('--path <glob>', 'Optional glob pattern for file targeting')
-    .option('--json', 'Output created rule as JSON')
+    .option('--scope <scope>', "Rule scope ('pull request' or 'file')", 'file')
+    .option('--path <glob>', 'Optional glob pattern for file targeting', '**/*')
+    .option('--json', 'Output created rule as JSON', false)
     .action(rulesCreateAction);
 
 rulesCommand
     .command('update')
     .description('Update an existing Kody Rule')
     .requiredOption('--uuid <uuid>', 'Rule UUID to update')
+    .option('--repo-id <id>', 'Updated rule repository ID')
     .option('--title <title>', 'Updated rule title')
     .option('--rule <rule>', 'Updated rule content/description')
     .option(
@@ -176,6 +188,6 @@ rulesCommand
     .command('view')
     .description('View Kody Rules')
     .option('--uuid <uuid>', 'Rule UUID to fetch')
-    .option('--title <title>', 'Rule title to fetch when UUID is not provided')
+    .option('--repo-id <id>', 'Repository ID to filter rules')
     .option('--json', 'Output rules as JSON')
     .action(rulesViewAction);

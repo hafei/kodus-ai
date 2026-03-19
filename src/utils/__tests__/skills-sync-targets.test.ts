@@ -13,13 +13,6 @@ describe('buildSkillSyncTargets', () => {
         });
 
         expect(targets).toContainEqual({
-            label: 'Copilot user skills',
-            type: 'skill',
-            activationPath: '/users/demo/.copilot',
-            baseDir: '/users/demo/.copilot/skills',
-        });
-
-        expect(targets).toContainEqual({
             label: 'Claude config commands',
             type: 'command',
             activationPath: '/users/demo/.config/claude',

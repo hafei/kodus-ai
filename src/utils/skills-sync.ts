@@ -98,6 +98,41 @@ async function writeIfChanged(
     return existingContent === null ? 'created' : 'updated';
 }
 
+function resolveManagedSkillNestedFilePath(
+    target: SkillSyncTarget,
+    skillName: string,
+    relativePath: string,
+): string {
+    if (target.type !== 'skill') {
+        throw new Error(
+            'Nested skill files are only supported for skill targets.',
+        );
+    }
+
+    const normalizedRelativePath = path
+        .normalize(relativePath)
+        .replace(/^\.([/\\])/, '');
+    if (
+        !normalizedRelativePath ||
+        normalizedRelativePath.startsWith('..') ||
+        path.isAbsolute(normalizedRelativePath)
+    ) {
+        throw new Error(`Invalid skill file path: ${relativePath}`);
+    }
+
+    const skillRoot = resolveManagedSkillEntryPath(target, skillName);
+    const resolvedPath = path.resolve(skillRoot, normalizedRelativePath);
+    const expectedPrefix = `${skillRoot}${path.sep}`;
+    if (
+        resolvedPath !== skillRoot &&
+        !resolvedPath.startsWith(expectedPrefix)
+    ) {
+        throw new Error(`Invalid skill file path: ${relativePath}`);
+    }
+
+    return resolvedPath;
+}
+
 function applyWriteStatus(
     result: SkillSyncTargetResult,
     writeStatus: WriteStatus,
@@ -228,13 +263,43 @@ export async function syncSkillsToTargets(
             );
         } else {
             for (const skill of skills) {
-                const filePath = resolveManagedSkillPath(target, skill.name);
-                const writeStatus = await writeIfChanged(
-                    filePath,
-                    skill.content,
-                    dryRun,
-                );
-                applyWriteStatus(targetResult, writeStatus);
+                if (target.type === 'command') {
+                    const filePath = resolveManagedSkillPath(
+                        target,
+                        skill.name,
+                    );
+                    const writeStatus = await writeIfChanged(
+                        filePath,
+                        skill.content,
+                        dryRun,
+                    );
+                    applyWriteStatus(targetResult, writeStatus);
+                    continue;
+                }
+
+                const filesToSync =
+                    skill.files && skill.files.length > 0
+                        ? skill.files
+                        : [
+                              {
+                                  relativePath: 'SKILL.md',
+                                  content: skill.content,
+                              },
+                          ];
+
+                for (const skillFile of filesToSync) {
+                    const filePath = resolveManagedSkillNestedFilePath(
+                        target,
+                        skill.name,
+                        skillFile.relativePath,
+                    );
+                    const writeStatus = await writeIfChanged(
+                        filePath,
+                        skillFile.content,
+                        dryRun,
+                    );
+                    applyWriteStatus(targetResult, writeStatus);
+                }
             }
 
             for (const skillName of staleManagedSkillNames) {

@@ -4,6 +4,7 @@ export type KodyRuleScope = 'pull request' | 'file';
 
 export interface KodyRule {
     uuid: string;
+    repositoryId?: string;
     title: string;
     rule: string;
     severity?: KodyRuleSeverity;
@@ -14,12 +15,14 @@ export interface KodyRule {
 export interface CreateKodyRuleRequest {
     title: string;
     rule: string;
+    repositoryId?: string;
     severity?: KodyRuleSeverity;
     scope?: KodyRuleScope;
     path?: string;
 }
 
 export interface UpdateKodyRuleRequest {
+    repositoryId?: string;
     title?: string;
     rule?: string;
     severity?: KodyRuleSeverity;
@@ -29,5 +32,5 @@ export interface UpdateKodyRuleRequest {
 
 export interface ViewKodyRulesRequest {
     ruleId?: string;
-    ruleName?: string;
+    repositoryId?: string;
 }

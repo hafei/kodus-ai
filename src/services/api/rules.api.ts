@@ -54,11 +54,11 @@ export class RealRulesApi implements IRulesApi {
         query: ViewKodyRulesRequest = {},
     ): Promise<KodyRule[]> {
         const params = new URLSearchParams();
+        if (query.repositoryId) {
+            params.set('repositoryId', query.repositoryId);
+        }
         if (query.ruleId) {
             params.set('ruleId', query.ruleId);
-        } else if (query.ruleName) {
-            // Rule ID is authoritative when both are provided.
-            params.set('ruleName', query.ruleName);
         }
 
         const queryString = params.toString();

@@ -11,10 +11,10 @@ When updating an existing Kody Rule, it's important to ensure that the changes a
 
 ## Workflow for Updating a Kody Rule
 
-1. **Identify the Kody Rule to Update**:
-    - If the user specified a specific `uuid` of the Kody Rule they want to update, use it to identify the rule.
-    - If the user described the rule to update without providing a `uuid`, list all rules (or filter by repository if specified), select the most relevant one based on the description, and confirm with the user that this is the correct rule to update before proceeding.
-    - Otherwise, ask the user to specify the rule they want to update by providing its `uuid` or a clear description that can be used to identify it. Emphasize that `uuid` is the most reliable way to identify the rule for updating.
+1. **Identify the Kody Rule to Update**: If the user did not specify which Kody Rule they want to update, ask for one of:
+    - `--uuid <uuid>`
+
+Updates must use `--uuid`.
 
 2. **Collect the user's intent for the update**: Understand the specific changes the user wants to make to the existing Kody Rule. Ask clarifying questions if necessary to ensure you have a clear understanding of the user's intent.
 
@@ -28,11 +28,15 @@ When updating an existing Kody Rule, it's important to ensure that the changes a
 
 7. **Save and Implement the updated Kody Rule**: Once the updated Kody Rule is finalized and approved by the user, save it. Send only the fields that were updated, along with the `uuid` to identify which rule to update.
 
+Always include the repository id when updating a rule. Use `global` when the user does not provide one.
+
 Use the following command to save the updated Kody Rule:
 
 ```
 kodus rules update --uuid <uuid> [--repo-id <repository-id>] [--title <title>] [--rule <rule-content>] [--severity <severity-level>] [--scope <scope-level>] [--path <glob-pattern>]
 ```
+
+If `--repo-id` is omitted, the default repository id is `global`.
 
 8. **Communicate the updated Kody Rule**: Inform the user about the updated Kody Rule and how the changes will affect future code generation.
 

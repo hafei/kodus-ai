@@ -66,16 +66,17 @@ Reviews are **context-aware** — Kodus reads your `.cursorrules`, `claude.md`, 
 Create, update, and inspect the Kody Rules that guide Kodus behavior for your team.
 
 ```bash
-kodus rules create --title "Use async/await" --rule "Prefer async/await over raw promises" --severity high --scope file --path "**/*.ts"
-kodus rules update --uuid <uuid> --severity critical
-kodus rules view
-kodus rules view --title "Use async/await"
+kodus rules create --title "Use async/await" --rule "Prefer async/await over raw promises" --repo-id global --severity high --scope file --path "**/*.ts"
+kodus rules update --uuid <uuid> --repo-id global --severity critical
+kodus rules view --repo-id global
+kodus rules view --repo-id global --title "Use async/await"
 ```
 
 `kodus rules update` requires `--uuid`.
 
 Defaults:
 
+- `repo-id` defaults to `global`
 - `severity` defaults to `medium`
 - `scope` defaults to `file`
 - `path` is optional (omitted means all files)

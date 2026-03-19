@@ -21,11 +21,15 @@ When creating a new Kody Rule, it's important to ensure that the rule is clear, 
 
 5. **Save and Implement the Kody Rule**: Once the Kody Rule is finalized and approved by the user, save it. Send the title, rule, and any optional fields such as severity, scope, and path.
 
+Always include the repository id when creating a rule. Use `global` when the user does not provide one.
+
 Use the following command to save the Kody Rule:
 
 ```
 kodus rules create --title <title> --rule <rule-content> [--repo-id <repository-id>] [--severity <severity-level>] [--scope <scope-level>] [--path <glob-pattern>]
 ```
+
+If `--repo-id` is omitted, the default repository id is `global`.
 
 6. **Communicate the new Kody Rule**: Inform the user about the new Kody Rule and how it will be applied in future code generation.
 

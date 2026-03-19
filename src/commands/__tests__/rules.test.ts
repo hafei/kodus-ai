@@ -28,6 +28,7 @@ describe('rules command actions', () => {
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         mockRulesService.createRule.mockResolvedValue({
             uuid: 'rule-1',
+            repositoryId: 'global',
             title: 'Use async/await',
             rule: 'Prefer async/await',
             severity: 'high',
@@ -38,6 +39,7 @@ describe('rules command actions', () => {
         await rulesCreateAction({
             title: 'Use async/await',
             rule: 'Prefer async/await',
+            repoId: 'global',
             severity: 'high',
             scope: 'file',
             path: '**/*.ts',
@@ -48,6 +50,10 @@ describe('rules command actions', () => {
             .join('\n');
         expect(output).toContain('Kody Rule created successfully.');
         expect(output).toContain('Rule UUID: rule-1');
+        expect(output).toContain('Repository ID: global');
+        expect(mockRulesService.createRule).toHaveBeenCalledWith(
+            expect.objectContaining({ repositoryId: 'global' }),
+        );
     });
 
     it('prints JSON for view when requested', async () => {
@@ -55,12 +61,13 @@ describe('rules command actions', () => {
         mockRulesService.viewRules.mockResolvedValue([
             {
                 uuid: 'rule-2',
+                repositoryId: 'global',
                 title: 'Rule',
                 rule: 'Description',
             },
         ]);
 
-        await rulesViewAction({ json: true });
+        await rulesViewAction({ json: true, repoId: 'global' });
 
         const output = logSpy.mock.calls
             .map((call) => call.join(' '))
@@ -68,10 +75,14 @@ describe('rules command actions', () => {
         expect(JSON.parse(output)).toEqual([
             {
                 uuid: 'rule-2',
+                repositoryId: 'global',
                 title: 'Rule',
                 rule: 'Description',
             },
         ]);
+        expect(mockRulesService.viewRules).toHaveBeenCalledWith(
+            expect.objectContaining({ repositoryId: 'global' }),
+        );
     });
 
     it('converts service errors to CLI exits', async () => {

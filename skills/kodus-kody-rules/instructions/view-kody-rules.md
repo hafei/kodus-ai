@@ -11,27 +11,32 @@ When viewing existing Kody Rules, it's important to understand the details of ea
 
 ## Workflow for Viewing Kody Rules
 
-1. **Retrieve Rule Target**: Specific rules can be retrieved by their `uuid`. Otherwise you can list all rules or filter them by their `repositoryId`.
-   This can be achieved with the following options:
+1. **Retrieve Rule Target**: If the user specified a particular rule(s) to view, identify it using one of:
+    - `--title <title>`
     - `--uuid <uuid>`
-    - `--repo-id <repository-id>`
+
+If both are provided, prefer `--uuid`. If no specific rule is requested, prepare to display all existing Kody Rules.
 
 2. **Fetch Kody Rules**: Use the appropriate command to fetch the Kody Rule(s) based on the identified target(s). If no specific rule was requested, fetch all existing Kody Rules.
+
+Always include the repository id when fetching rules. Use `global` when the user does not provide one.
 
 Use the following command to fetch Kody Rules:
 
 ```
-kodus rules view [--repo-id <repository-id>] [--uuid <uuid>]
+kodus rules view [--repo-id <repository-id>] [--uuid <uuid>] [--title <title>]
 ```
+
+If `--repo-id` is omitted, the default repository id is `global`.
 
 3. **Display Kody Rules**: Present the retrieved Kody Rule(s) in a clear and organized manner. For each rule, display the following information:
     - Rule UUID
     - Repository ID
     - Rule Title
     - Rule
-    - Severity
-    - Scope
-    - Path
+    - Severity (if specified)
+    - Scope (if specified)
+    - Path (if specified)
 
 Do not alter the content of the rules; display them as they are retrieved to ensure accuracy.
 
