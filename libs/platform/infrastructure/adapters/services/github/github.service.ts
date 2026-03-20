@@ -365,21 +365,46 @@ export class GithubService
                 githubAuthDetail?.authMode === AuthMode.TOKEN &&
                 params.configKey === IntegrationConfigKey.REPOSITORIES;
 
-            if (shouldRefreshTokenWebhooks) {
-                await this.deleteWebhook({
-                    organizationAndTeamData: params.organizationAndTeamData,
-                });
-            }
+            const previousRepositories = shouldRefreshTokenWebhooks
+                ? ((await this.findOneByOrganizationAndTeamDataAndConfigKey(
+                      params.organizationAndTeamData,
+                      IntegrationConfigKey.REPOSITORIES,
+                  )) ?? [])
+                : [];
 
-            await this.integrationConfigService.createOrUpdateConfig(
+            const updatedConfig =
+                await this.integrationConfigService.createOrUpdateConfig(
                 params.configKey,
                 params.configValue,
                 integration?.uuid,
                 params.organizationAndTeamData,
                 params.type,
-            );
+                );
 
             if (shouldRefreshTokenWebhooks) {
+                const nextRepositories = <Repositories[]>(
+                    updatedConfig?.configValue ??
+                        params.configValue ??
+                        []
+                );
+                const removedRepositories = previousRepositories.filter(
+                    (previousRepository) =>
+                        !nextRepositories.some(
+                            (nextRepository) =>
+                                nextRepository.id?.toString() ===
+                                    previousRepository.id?.toString() ||
+                                nextRepository.name === previousRepository.name,
+                        ),
+                );
+
+                if (removedRepositories.length > 0) {
+                    await this.deleteWebhook({
+                        organizationAndTeamData:
+                            params.organizationAndTeamData,
+                        repositories: removedRepositories,
+                    });
+                }
+
                 await this.createPullRequestWebhook({
                     organizationAndTeamData: params.organizationAndTeamData,
                 });
@@ -4209,10 +4234,8 @@ This is an experimental feature that generates committable changes. Review the d
     }
 
     private getGithubWebhookUrl(): string | undefined {
-        return (
-            this.configService.get<string>(
-                'API_GITHUB_CODE_MANAGEMENT_WEBHOOK',
-            ) ?? process.env.API_GITHUB_CODE_MANAGEMENT_WEBHOOK
+        return this.configService.get<string>(
+            'API_GITHUB_CODE_MANAGEMENT_WEBHOOK',
         );
     }
 
@@ -5314,10 +5337,9 @@ This is an experimental feature that generates committable changes. Review the d
                 repo: repository.name,
             });
 
-            const webhookUrl =
-                this.configService.get<string>(
-                    'API_GITHUB_CODE_MANAGEMENT_WEBHOOK',
-                ) ?? process.env.API_GITHUB_CODE_MANAGEMENT_WEBHOOK;
+            const webhookUrl = this.configService.get<string>(
+                'API_GITHUB_CODE_MANAGEMENT_WEBHOOK',
+            );
 
             if (!webhookUrl) {
                 return false;
@@ -5344,6 +5366,7 @@ This is an experimental feature that generates committable changes. Review the d
 
     async deleteWebhook(params: {
         organizationAndTeamData: OrganizationAndTeamData;
+        repositories?: Repositories[];
     }): Promise<void> {
         const integration = await this.integrationService.findOne({
             organization: {
@@ -5391,10 +5414,11 @@ This is an experimental feature that generates committable changes. Review the d
                 );
 
                 const repositories =
-                    await this.findOneByOrganizationAndTeamDataAndConfigKey(
+                    params.repositories ??
+                    (await this.findOneByOrganizationAndTeamDataAndConfigKey(
                         params.organizationAndTeamData,
                         IntegrationConfigKey.REPOSITORIES,
-                    );
+                    ));
 
                 if (repositories) {
                     // Usar método centralizado para determinar o owner correto

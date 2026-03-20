@@ -278,7 +278,7 @@ export function SetupConnectingGitToolPage(props: {
                                 size="lg"
                                 variant="primary"
                                 className="w-full"
-                                onClick={() => {
+                                onClick={async () => {
                                     captureSegmentEvent({
                                         userId: userId!,
                                         event: "try_setup_git_integration",
@@ -288,13 +288,18 @@ export function SetupConnectingGitToolPage(props: {
                                         },
                                     });
 
-                                    magicModal.show(() => (
+                                    const response =
+                                        await magicModal.show<true>(() => (
                                         <BitbucketTokenModal
                                             teamId={teamId}
                                             userId={userId!}
                                             userEmail={email}
                                         />
                                     ));
+
+                                    if (!response) return;
+
+                                    router.push(nextStepPath);
                                 }}>
                                 Connect via token
                             </Button>
@@ -307,7 +312,7 @@ export function SetupConnectingGitToolPage(props: {
                                 size="lg"
                                 variant="primary"
                                 className="w-full"
-                                onClick={() => {
+                                onClick={async () => {
                                     captureSegmentEvent({
                                         userId: userId!,
                                         event: "try_setup_git_integration",
@@ -317,13 +322,18 @@ export function SetupConnectingGitToolPage(props: {
                                         },
                                     });
 
-                                    magicModal.show(() => (
+                                    const response =
+                                        await magicModal.show<true>(() => (
                                         <AzureReposTokenModal
                                             teamId={teamId}
                                             userId={userId!}
                                             userEmail={email}
                                         />
                                     ));
+
+                                    if (!response) return;
+
+                                    router.push(nextStepPath);
                                 }}>
                                 Connect via token
                             </Button>

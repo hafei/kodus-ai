@@ -10,6 +10,10 @@ describe('GithubService', () => {
         teamId: 'team-1',
     };
 
+    const previousRepositories = [
+        { id: '1', name: 'repo-one' },
+        { id: '2', name: 'repo-two' },
+    ];
     const nextRepositories = [{ id: '2', name: 'repo-two' }];
 
     const integration = {
@@ -51,7 +55,12 @@ describe('GithubService', () => {
         );
     });
 
-    it('deletes old GitHub webhooks before saving repositories and recreates them after saving', async () => {
+    it('updates the repository config before removing deselected webhooks and recreating selected ones', async () => {
+        jest.spyOn(
+            service,
+            'findOneByOrganizationAndTeamDataAndConfigKey',
+        ).mockResolvedValue(previousRepositories);
+
         jest.spyOn(service as any, 'getGithubAuthDetails').mockResolvedValue({
             authMode: AuthMode.TOKEN,
         });
@@ -72,6 +81,7 @@ describe('GithubService', () => {
 
         expect(deleteWebhook).toHaveBeenCalledWith({
             organizationAndTeamData,
+            repositories: [{ id: '1', name: 'repo-one' }],
         });
         expect(integrationConfigService.createOrUpdateConfig).toHaveBeenCalledWith(
             IntegrationConfigKey.REPOSITORIES,
@@ -80,6 +90,9 @@ describe('GithubService', () => {
             organizationAndTeamData,
             undefined,
         );
+        expect(
+            integrationConfigService.createOrUpdateConfig.mock.invocationCallOrder[0],
+        ).toBeLessThan(deleteWebhook.mock.invocationCallOrder[0]);
         expect(createPullRequestWebhook).toHaveBeenCalledWith({
             organizationAndTeamData,
         });
