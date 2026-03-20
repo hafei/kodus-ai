@@ -180,6 +180,7 @@ If no violations found, respond with \`{"reasoning": "Checked all rules, no viol
     <Rule>Check EVERY rule against the diffs and use tools to investigate further if needed.</Rule>
     <Rule>For PR-level rules (e.g., "must have tests"), check the full list of changed files.</Rule>
     <Rule>For file-level rules, check the diff of each applicable file.</Rule>
+    <Rule>If a rule has a Reference file, use readFile to read it and understand the expected pattern before checking.</Rule>
     <Rule>Only report actual violations — not code that follows the rules.</Rule>
     <Rule>Include the rule title in the suggestionContent so the team knows which rule was violated.</Rule>
   </Rules>
@@ -234,6 +235,20 @@ If no violations found, respond with \`{"reasoning": "Checked all rules, no viol
                     const label = ex.isCorrect ? 'Correct' : 'Incorrect';
                     parts.push(`- ${label}:\n\`\`\`\n${ex.snippet}\n\`\`\``);
                 }
+            }
+
+            // External references: tell the agent to use readFile to fetch them
+            if (rule.sourcePath) {
+                const anchor = rule.sourceAnchor
+                    ? ` (section: ${rule.sourceAnchor})`
+                    : '';
+                parts.push(
+                    `**Reference**: \`${rule.sourcePath}\`${anchor} — use readFile to read this file for the full pattern/convention`,
+                );
+            }
+
+            if (rule.extendedContext?.todo) {
+                parts.push(`**Additional context**: ${rule.extendedContext.todo}`);
             }
 
             return parts.join('\n');

@@ -223,6 +223,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                 draft.sandboxHandle = {
                     remoteCommands: sandbox.remoteCommands,
                     cleanup: sandbox.cleanup,
+                    type: sandbox.type ?? 'e2b',
                 };
                 // Save a factory for clone params so safeguard can renew sandbox if it expires
                 draft.getFreshCloneParams = async () => {

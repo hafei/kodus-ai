@@ -78,16 +78,17 @@ export class CodeReviewPipelineStrategyEE implements IPipelineStrategy<CodeRevie
             this.resolveConfigStage,
             this.validateConfigStage,
             this.fetchChangedFilesStage,
-            this.gatherDocumentationContextStage,        // self-gates: skips in v3
+            // V2 stages removed: agents handle documentation + cross-file via tools
+            // this.gatherDocumentationContextStage,
             this.loadExternalContextStage,
             this.fileContextGateStage,
             this.initialCommentStage,
-            this.collectCrossFileContextStage,            // self-gates: skips in v3
+            // this.collectCrossFileContextStage,
             this.kodyFineTuningStage,
             this.processFilesPrLevelReviewStage,
-            this.createSandboxStage,                      // moved here: sandbox is fresh for agents (was expiring during PRLevel review)
-            this.processFilesReview,                      // self-gates: skips in v3
-            this.agentReviewStage,                        // self-gates: only runs in v3
+            this.createSandboxStage,
+            // this.processFilesReview,                   // replaced by agentReviewStage
+            this.agentReviewStage,
             this.createPrLevelCommentsStage,
             this.validateSuggestionsStage,
             this.createFileCommentsStage,

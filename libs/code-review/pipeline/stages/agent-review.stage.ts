@@ -5,7 +5,6 @@ import { getInternalModel } from '@libs/code-review/infrastructure/agents/llm/by
 
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
-import { CodeReviewVersion } from '@libs/core/domain/enums/code-review.enum';
 import { CodeSuggestion } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { ReviewOrchestratorService } from '@libs/code-review/infrastructure/agents/review-orchestrator.service';
 import { DocumentationSearchAdapter } from '@libs/code-review/infrastructure/agents/tools/sandbox-tools';
@@ -148,7 +147,7 @@ export const DOCUMENTATION_SEARCH_ADAPTER_TOKEN = Symbol(
 /**
  * Pipeline stage that runs the agent-based code review.
  *
- * Replaces ProcessFilesReview for v3-agent mode:
+ * Agent-based code review:
  * - Passes all changed files + sandbox to the ReviewOrchestrator
  * - Orchestrator dispatches specialized agents (bug, security, performance) in parallel
  * - Agents investigate the codebase using sandbox tools before suggesting
@@ -177,14 +176,6 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
     protected async executeStage(
         context: CodeReviewPipelineContext,
     ): Promise<CodeReviewPipelineContext> {
-        // Guard: only runs in v3-agent mode
-        if (
-            context.codeReviewConfig?.codeReviewVersion !==
-            CodeReviewVersion.V3_AGENT
-        ) {
-            return context;
-        }
-
         const prNumber = context.pullRequest?.number;
         const changedFiles = context.changedFiles;
 
@@ -264,6 +255,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 kodyRules: context.codeReviewConfig?.kodyRules,
                 reviewOptions,
                 onAgentProgress,
+                gitHubToken: await this.resolveGitHubToken(context),
             });
 
             const durationMs = Date.now() - startTime;
@@ -319,10 +311,12 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 .filter(Boolean)
                 .join('\n');
 
+            const levelOverrides = context.codeReviewConfig?.v2PromptOverrides?.level;
             const classified = await this.classifyLevels(
                 validatedSuggestions,
                 prNumber,
                 prContext,
+                levelOverrides,
             );
 
             // Deduplicate suggestions that describe the same issue
@@ -401,6 +395,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
         suggestions: Partial<CodeSuggestion>[],
         prNumber: number,
         prContext?: string,
+        levelOverrides?: { issue?: string; warning?: string },
     ): Promise<Partial<CodeSuggestion>[]> {
         if (suggestions.length === 0) return suggestions;
 
@@ -465,8 +460,8 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 prompt: `<LevelClassifier>
   <Context>Each finding was confirmed by an expert code review agent. Classify only — do not question validity.</Context>${prContext ? `\n  <PRContext>${prContext}</PRContext>` : ''}
   <Definitions>
-    <Level name="issue">The code produces WRONG results, crashes, loses data, or silently fails to perform its intended function in at least one scenario.</Level>
-    <Level name="warning">The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.</Level>
+    <Level name="issue">${levelOverrides?.issue || 'The code produces WRONG results, crashes, loses data, or silently fails to perform its intended function in at least one scenario.'}</Level>
+    <Level name="warning">${levelOverrides?.warning || 'The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.'}</Level>
   </Definitions>
   <DecisionRule>
     Ask: "Does the code produce WRONG output, lose data, crash, or fail to perform what it was meant to do — in at least one scenario?"
@@ -751,7 +746,9 @@ ${summaries}`,
                 ? 'Bug'
                 : name === 'security'
                   ? 'Security'
-                  : 'Performance';
+                  : name === 'rules'
+                    ? 'Rules'
+                    : 'Performance';
 
         const duration = event.durationMs
             ? `in ${Math.round(event.durationMs / 1000)}s`
@@ -888,6 +885,24 @@ ${summaries}`,
         } catch {
             // Best effort
         }
+    }
+
+    /**
+     * Resolve GitHub token for cross-repo file reading (readReference tool).
+     * Uses the same token that was used to clone the repo for the sandbox.
+     */
+    private async resolveGitHubToken(
+        context: CodeReviewPipelineContext,
+    ): Promise<string | undefined> {
+        try {
+            if (context.getFreshCloneParams) {
+                const params = await context.getFreshCloneParams();
+                return params?.authToken;
+            }
+        } catch {
+            // Best effort — tool just won't be available
+        }
+        return undefined;
     }
 
     private summarizeToolCalls(

@@ -110,6 +110,10 @@ export type CodeReviewGlobalConfig = {
                 low?: string;
             };
         };
+        level?: {
+            issue?: string;
+            warning?: string;
+        };
         generation?: {
             main?: string;
         };

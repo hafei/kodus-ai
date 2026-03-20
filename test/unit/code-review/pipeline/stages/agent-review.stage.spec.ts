@@ -120,21 +120,6 @@ describe('AgentReviewStage', () => {
     });
 
     describe('guard conditions', () => {
-        it('should skip when codeReviewVersion is not V3_AGENT', async () => {
-            const context = createBaseContext({
-                codeReviewConfig: { codeReviewVersion: CodeReviewVersion.v2 } as any,
-                changedFiles: [{ filename: 'src/index.ts' } as any],
-                sandboxHandle: {
-                    remoteCommands: { grep: jest.fn(), read: jest.fn(), listDir: jest.fn() },
-                    cleanup: jest.fn(), type: 'e2b' as const,
-                },
-            });
-
-            const result = await (stage as any).executeStage(context);
-
-            expect(mockOrchestrator.execute).not.toHaveBeenCalled();
-        });
-
         it('should skip when no changed files', async () => {
             const context = createBaseContext({ changedFiles: [] });
 

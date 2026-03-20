@@ -232,105 +232,22 @@ export class ProcessFilesPrLevelReviewStage extends BasePipelineStage<CodeReview
     }
 
     private async runKodyRulesAnalysis(
-        context: CodeReviewPipelineContext,
+        _context: CodeReviewPipelineContext,
     ): Promise<{ suggestions: ISuggestionByPR[]; error?: PipelineError }> {
-        try {
-            const prLevelRules = context?.codeReviewConfig?.kodyRules?.filter(
-                (rule) => rule.scope === KodyRulesScope.PULL_REQUEST,
-            );
-
-            if (prLevelRules?.length > 0) {
-                this.logger.log({
-                    message: `Starting PR-level Kody Rules analysis for PR#${context.pullRequest.number}`,
-                    context: this.stageName,
-                    metadata: {
-                        organizationAndTeamData:
-                            context.organizationAndTeamData,
-                        prNumber: context.pullRequest.number,
-                    },
-                });
-
-                const kodyRulesPrLevelAnalysis =
-                    await this.kodyRulesPrLevelAnalysisService.analyzeCodeWithAI(
-                        context.organizationAndTeamData,
-                        context.pullRequest.number,
-                        context.changedFiles,
-                        ReviewModeResponse.HEAVY_MODE,
-                        context,
-                    );
-
-                if (kodyRulesPrLevelAnalysis?.codeSuggestions?.length > 0) {
-                    this.logger.log({
-                        message: `PR-level analysis completed for PR#${context.pullRequest.number}`,
-                        context: this.stageName,
-                        metadata: {
-                            suggestionsCount:
-                                kodyRulesPrLevelAnalysis?.codeSuggestions
-                                    ?.length,
-                            organizationAndTeamData:
-                                context.organizationAndTeamData,
-                            prNumber: context.pullRequest.number,
-                        },
-                    });
-
-                    return {
-                        suggestions: kodyRulesPrLevelAnalysis.codeSuggestions,
-                    };
-                } else {
-                    this.logger.warn({
-                        message: `Analysis returned null for PR#${context.pullRequest.number}`,
-                        context: this.stageName,
-                        metadata: {
-                            organizationAndTeamData:
-                                context.organizationAndTeamData,
-                        },
-                    });
-                }
-            }
-
-            return { suggestions: [] };
-        } catch (error) {
-            this.logger.error({
-                message: `Error during PR-level Kody Rules analysis for PR#${context.pullRequest.number}`,
-                context: this.stageName,
-                error,
-                metadata: {
-                    organizationAndTeamData: context.organizationAndTeamData,
-                    prNumber: context.pullRequest.number,
-                },
-            });
-
-            return {
-                suggestions: [],
-                error: {
-                    stage: this.stageName,
-                    substage: 'KodyRulesAnalysis',
-                    error:
-                        error instanceof Error
-                            ? error
-                            : new Error(String(error)),
-                    metadata: {
-                        prNumber: context.pullRequest.number,
-                    },
-                },
-            };
-        }
+        // Kody Rules (file + PR level) are handled by the KodyRulesAgent
+        // in the AgentReviewStage. No longer needed here.
+        return { suggestions: [] };
     }
 
     private async runCrossFileAnalysis(
         context: CodeReviewPipelineContext,
     ): Promise<{ suggestions: CodeSuggestion[]; error?: PipelineError }> {
-        // V3: agents handle cross-file investigation via tools (grep, readFile)
-        if (
-            context.codeReviewConfig?.codeReviewVersion ===
-            CodeReviewVersion.V3_AGENT
-        ) {
-            this.logger.log({
-                message: `Skipping cross-file analysis for PR#${context.pullRequest.number}: v3-agent mode (agents investigate cross-file via tools)`,
-                context: this.stageName,
-            });
-            return { suggestions: [] };
-        }
+        // Agents handle cross-file investigation via tools (grep, readFile)
+        this.logger.log({
+            message: `Skipping cross-file analysis for PR#${context.pullRequest.number}: agents investigate cross-file via tools`,
+            context: this.stageName,
+        });
+        return { suggestions: [] };
 
         try {
             const preparedFilesData = context.changedFiles.map((file) => ({

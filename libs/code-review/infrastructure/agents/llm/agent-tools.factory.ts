@@ -34,6 +34,7 @@ export function buildAgentTools(
     remoteCommands: RemoteCommands,
     docSearchService?: DocumentationSearchAdapter,
     docSearchOptions?: Record<string, unknown>,
+    gitHubToken?: string,
 ): Record<string, any> {
     const tools: Record<string, any> = {
         grep: mkTool(
@@ -425,6 +426,65 @@ export function buildAgentTools(
                         .join('\n---\n');
                 } catch (e) {
                     return `Doc search error: ${e instanceof Error ? e.message : String(e)}`;
+                }
+            },
+        );
+    }
+
+    // Add readReference tool if GitHub token is available
+    // Fetches files from any repo the user has access to (for cross-repo rule references)
+    if (gitHubToken) {
+        tools.readReference = mkTool(
+            'Read a file from another repository. Use this to fetch reference files mentioned in rules (e.g., coding standards, patterns from other repos).',
+            {
+                type: 'object',
+                properties: {
+                    repo: {
+                        type: 'string',
+                        description:
+                            'Full repository name (e.g. "my-org/design-system")',
+                    },
+                    path: {
+                        type: 'string',
+                        description:
+                            'File path within the repository (e.g. "docs/standards.md")',
+                    },
+                    branch: {
+                        type: 'string',
+                        description:
+                            'Branch name (default: main)',
+                    },
+                },
+                required: ['repo', 'path'],
+            },
+            async ({ repo, path, branch }: any) => {
+                if (!repo || !path)
+                    return 'Error: repo and path are required';
+                const ref = branch || 'main';
+                const safePath = encodeURIComponent(path);
+                try {
+                    const response = await fetch(
+                        `https://api.github.com/repos/${repo}/contents/${safePath}?ref=${ref}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${gitHubToken}`,
+                                Accept: 'application/vnd.github.v3.raw',
+                            },
+                        },
+                    );
+                    if (!response.ok) {
+                        return `Error: Could not read ${path} from ${repo} (${response.status} ${response.statusText})`;
+                    }
+                    const content = await response.text();
+                    if (content.length > MAX_READ_LENGTH) {
+                        return (
+                            content.substring(0, MAX_READ_LENGTH) +
+                            `\n... (truncated — ${content.length} chars total)`
+                        );
+                    }
+                    return content;
+                } catch (err) {
+                    return `Error reading ${path} from ${repo}: ${err instanceof Error ? err.message : String(err)}`;
                 }
             },
         );

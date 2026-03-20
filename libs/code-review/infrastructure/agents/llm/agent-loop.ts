@@ -65,6 +65,7 @@ export interface AgentLoopInput {
     agentName?: string; // e.g. 'kodus-bug-review-agent' — used for LangSmith trace identification
     maxSteps?: number;
     onStepFinish?: (event: any) => void;
+    gitHubToken?: string; // For cross-repo reference reading
 }
 
 export interface AgentLoopOutput {
@@ -92,6 +93,7 @@ export async function runAgentLoop(
         input.remoteCommands,
         input.documentationSearchService,
         input.documentationSearchOptions,
+        input.gitHubToken,
     );
 
     const allToolCalls: AgentLoopOutput['toolCalls'] = [];

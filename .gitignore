@@ -167,3 +167,4 @@ apps/web/*.launch
 apps/web/.settings/
 apps/web/*.sublime-workspace
 apps/web/.vscode
+worktrees

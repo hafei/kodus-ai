@@ -229,6 +229,16 @@ class V2PromptOverridesGenerationDto {
     main?: string;
 }
 
+class V2PromptOverridesLevelDto {
+    @IsOptional()
+    @IsString()
+    issue?: string;
+
+    @IsOptional()
+    @IsString()
+    warning?: string;
+}
+
 class V2PromptOverridesDto {
     @IsOptional()
     @ValidateNested()
@@ -239,6 +249,11 @@ class V2PromptOverridesDto {
     @ValidateNested()
     @Type(() => V2PromptOverridesSeverityDto)
     severity?: V2PromptOverridesSeverityDto;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => V2PromptOverridesLevelDto)
+    level?: V2PromptOverridesLevelDto;
 
     @IsOptional()
     @ValidateNested()

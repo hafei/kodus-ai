@@ -402,6 +402,15 @@ export type CodeReviewConfig = {
         generation?: {
             main?: string;
         };
+        /**
+         * Custom definitions for issue/warning level classification.
+         * Used by the level classifier to understand what the team considers
+         * an "issue" vs a "warning". Overrides the default definitions.
+         */
+        level?: {
+            issue?: string;
+            warning?: string;
+        };
     };
     contextReferenceId?: string;
     contextRequirementsHash?: string;

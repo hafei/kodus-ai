@@ -60,6 +60,7 @@ export interface ReviewAgentInput {
     prTitle?: string;
     prBody?: string;
     onAgentProgress?: (event: AgentProgressEvent) => void;
+    gitHubToken?: string;
 }
 
 /**
@@ -162,6 +163,7 @@ export abstract class BaseCodeReviewAgentProvider {
                     byokConfig: byokConfig,
                 },
                 byokConfig: byokConfig,
+                gitHubToken: input.gitHubToken,
                 onStepFinish: (step: any) => {
                     stepCount++;
                     if (step.toolCalls) {

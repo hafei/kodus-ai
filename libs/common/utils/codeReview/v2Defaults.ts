@@ -76,9 +76,15 @@ export const V2_DEFAULT_SEVERITY_FLAGS_TEXT = {
     ].join('\n'),
 };
 
+export const V2_DEFAULT_LEVEL_TEXT = {
+    issue: 'The code produces WRONG results, crashes, loses data, or silently fails to perform its intended function in at least one scenario.',
+    warning: 'The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.',
+};
+
 export function getV2DefaultsText() {
     return {
         categories: { ...V2_DEFAULT_CATEGORY_DESCRIPTIONS_TEXT },
         severity: { ...V2_DEFAULT_SEVERITY_FLAGS_TEXT },
+        level: { ...V2_DEFAULT_LEVEL_TEXT },
     };
 }

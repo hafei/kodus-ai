@@ -200,6 +200,12 @@ v2PromptOverrides:
                 Rarely affecting few users
                 Edge-case issues unlikely to occur in practice
 
+    level:
+        issue: |
+            The code produces WRONG results, crashes, loses data, or silently fails to perform its intended function in at least one scenario.
+        warning: |
+            The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.
+
     generation:
         main: |
             Detailed and verifiable issue description
