@@ -130,24 +130,26 @@ You validate code against the team's custom rules listed below. Your ONLY job is
     }
 
     /**
-     * Override user prompt: send file list instead of full diffs.
-     * The agent uses readFile/grep to investigate — no need for diffs in prompt.
+     * Override user prompt: send full diffs + PR context.
+     * PR-level rules need to see the full picture (e.g., "every PR must have tests").
+     * File-level rules benefit from seeing the diff to understand what changed.
      */
     protected buildUserPrompt(input: ReviewAgentInput): string {
-        const fileList = input.changedFiles
-            .map((f) => `- ${f.filename}`)
-            .join('\n');
+        const diffsSection = input.changedFiles
+            ?.map((file) => {
+                const diff = (file as any).patchWithLinesStr ?? (file as any).patch ?? '';
+                return `### ${file.filename}\n\`\`\`diff\n${diff}\n\`\`\``;
+            })
+            .join('\n\n') || 'No changed files provided.';
 
         const prContextSection = input.prTitle
             ? `\n  <PRContext>Title: ${input.prTitle}${input.prBody ? '\n' + input.prBody.substring(0, 500) : ''}</PRContext>`
             : '';
 
         return `<ReviewTask>${prContextSection}
-  <ChangedFiles>
-The following files were changed in this PR. Use readFile and grep to investigate each file against the rules.
-
-${fileList}
-  </ChangedFiles>
+  <Diffs>
+${diffsSection}
+  </Diffs>
 
   <OutputFormat>
 After investigating with tools, respond with ONLY a JSON block:
@@ -175,8 +177,9 @@ If no violations found, respond with \`{"reasoning": "Checked all rules, no viol
   </OutputFormat>
 
   <Rules>
-    <Rule>Use readFile to read the changed files before checking rules.</Rule>
-    <Rule>Check EVERY rule against EVERY applicable file.</Rule>
+    <Rule>Check EVERY rule against the diffs and use tools to investigate further if needed.</Rule>
+    <Rule>For PR-level rules (e.g., "must have tests"), check the full list of changed files.</Rule>
+    <Rule>For file-level rules, check the diff of each applicable file.</Rule>
     <Rule>Only report actual violations — not code that follows the rules.</Rule>
     <Rule>Include the rule title in the suggestionContent so the team knows which rule was violated.</Rule>
   </Rules>
