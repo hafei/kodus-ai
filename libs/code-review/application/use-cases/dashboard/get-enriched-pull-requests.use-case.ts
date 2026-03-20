@@ -354,9 +354,8 @@ export class GetEnrichedPullRequestsUseCase implements IUseCase {
                         this.codeReviewExecutionService
                             .findManyByAutomationExecutionIds(
                                 filteredExecutionUuids,
-                                {
-                                    visibility: StageVisibility.PRIMARY,
-                                },
+                                // No visibility filter — return all entries (primary + secondary).
+                                // Frontend handles visibility filtering client-side via "Show Debug" toggle.
                             )
                             .catch((error) => {
                                 this.logger.error({
