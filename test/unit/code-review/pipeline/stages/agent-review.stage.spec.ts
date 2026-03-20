@@ -10,6 +10,16 @@ import { CodeReviewPipelineContext } from '@/code-review/pipeline/context/code-r
 import { PlatformType } from '@/core/domain/enums';
 import { CodeReviewVersion } from '@/core/domain/enums/code-review.enum';
 
+jest.mock('ai', () => ({
+    generateText: jest.fn().mockResolvedValue({
+        object: { classifications: [] },
+        output: { classifications: [] },
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    }),
+    Output: { object: jest.fn().mockReturnValue({}) },
+    jsonSchema: jest.fn().mockReturnValue({}),
+}));
+
 jest.mock('@kodus/flow', () => ({
     createLogger: () => ({
         log: jest.fn(),

@@ -382,7 +382,7 @@ ${memoryRulesSection}
 </CodeReviewAgent>`;
     }
 
-    private buildUserPrompt(input: ReviewAgentInput): string {
+    protected buildUserPrompt(input: ReviewAgentInput): string {
         const diffsSection = this.formatDiffs(input.changedFiles);
 
         const prContextSection = this.formatPRContext(input.prTitle, input.prBody);

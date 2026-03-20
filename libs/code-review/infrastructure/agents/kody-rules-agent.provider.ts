@@ -60,28 +60,8 @@ export class KodyRulesAgentProvider extends BaseCodeReviewAgentProvider {
         return 'kody_rules';
     }
 
-    protected getCategoryPrompt(): string {
-        return `## Focus: Team Rules & Conventions
-
-You validate code against the team's custom rules listed below. Your ONLY job is to check these rules — do not look for general bugs, security issues, or performance problems.
-
-### How to analyze:
-1. **Read each rule carefully**: Understand what the rule requires and what path patterns it applies to.
-2. **Check applicability**: Only check a rule if the changed files match its path pattern (if specified).
-3. **Investigate with tools**: Use readFile/grep to verify whether the changed code complies with each rule.
-4. **Use examples**: If a rule has examples, compare the changed code against them.
-5. **Report violations only**: Do NOT report code that correctly follows the rules.
-
-### What to report:
-- Code that violates a specific team rule
-- Include which rule was violated (by title)
-- Include evidence from the code showing the violation
-
-### Skip:
-- General bugs, security issues, performance problems (handled by other agents)
-- Code that follows the rules correctly
-- Rules whose path patterns don't match any changed file`;
-    }
+    // Store rules for injection into system prompt
+    private currentRules: string = '';
 
     /**
      * Override execute to inject rules into the prompt dynamically.
@@ -102,19 +82,105 @@ You validate code against the team's custom rules listed below. Your ONLY job is
             };
         }
 
-        // Inject rules into v2PromptOverrides so they appear in the system prompt
-        const rulesSection = this.formatKodyRules(rules, input.changedFiles);
+        // Store formatted rules — getCategoryPrompt() will include them
+        this.currentRules = this.formatKodyRules(rules, input.changedFiles);
 
-        const modifiedInput: ReviewAgentInput = {
-            ...input,
-            // Override the generation main to include rules
-            generationMain: [
-                input.generationMain || '',
-                rulesSection,
-            ].filter(Boolean).join('\n\n'),
-        };
+        if (!this.currentRules) {
+            return {
+                suggestions: [],
+                agentName: this.getIdentity().name,
+                turnsUsed: 0,
+                durationMs: 0,
+            };
+        }
 
-        return super.execute(modifiedInput);
+        return super.execute(input);
+    }
+
+    /**
+     * Override to include the current rules in the category prompt.
+     * This places rules inside <Expertise> in the system prompt.
+     */
+    protected getCategoryPrompt(): string {
+        const base = `## Focus: Team Rules & Conventions
+
+You validate code against the team's custom rules listed below. Your ONLY job is to check these rules — do not look for general bugs, security issues, or performance problems.
+
+### How to analyze:
+1. **Read each rule carefully**: Understand what the rule requires and what path patterns it applies to.
+2. **Check applicability**: Only check a rule if the changed files match its path pattern (if specified).
+3. **Investigate with tools**: Use readFile/grep to verify whether the changed code complies with each rule.
+4. **Use examples**: If a rule has examples, compare the changed code against them.
+5. **Report violations only**: Do NOT report code that correctly follows the rules.
+
+### What to report:
+- Code that violates a specific team rule
+- Include which rule was violated (by title)
+- Include evidence from the code showing the violation
+
+### Skip:
+- General bugs, security issues, performance problems (handled by other agents)
+- Code that follows the rules correctly
+- Rules whose path patterns don't match any changed file`;
+
+        if (this.currentRules) {
+            return `${base}\n\n${this.currentRules}`;
+        }
+        return base;
+    }
+
+    /**
+     * Override user prompt: send file list instead of full diffs.
+     * The agent uses readFile/grep to investigate — no need for diffs in prompt.
+     */
+    protected buildUserPrompt(input: ReviewAgentInput): string {
+        const fileList = input.changedFiles
+            .map((f) => `- ${f.filename}`)
+            .join('\n');
+
+        const prContextSection = input.prTitle
+            ? `\n  <PRContext>Title: ${input.prTitle}${input.prBody ? '\n' + input.prBody.substring(0, 500) : ''}</PRContext>`
+            : '';
+
+        return `<ReviewTask>${prContextSection}
+  <ChangedFiles>
+The following files were changed in this PR. Use readFile and grep to investigate each file against the rules.
+
+${fileList}
+  </ChangedFiles>
+
+  <OutputFormat>
+After investigating with tools, respond with ONLY a JSON block:
+
+\`\`\`json
+{
+  "reasoning": "Summary of which rules you checked and what you found",
+  "suggestions": [
+    {
+      "relevantFile": "path/to/file.ts",
+      "language": "typescript",
+      "suggestionContent": "Violates rule 'Rule Title': description of violation with evidence",
+      "existingCode": "code that violates the rule",
+      "improvedCode": "code that follows the rule",
+      "oneSentenceSummary": "Brief: violates 'Rule Title'",
+      "relevantLinesStart": 10,
+      "relevantLinesEnd": 15,
+      "severity": "critical|high|medium|low"
+    }
+  ]
+}
+\`\`\`
+
+If no violations found, respond with \`{"reasoning": "Checked all rules, no violations found", "suggestions": []}\`.
+  </OutputFormat>
+
+  <Rules>
+    <Rule>Use readFile to read the changed files before checking rules.</Rule>
+    <Rule>Check EVERY rule against EVERY applicable file.</Rule>
+    <Rule>Only report actual violations — not code that follows the rules.</Rule>
+    <Rule>Include the rule title in the suggestionContent so the team knows which rule was violated.</Rule>
+  </Rules>
+</ReviewTask>`;
     }
 
     /**
