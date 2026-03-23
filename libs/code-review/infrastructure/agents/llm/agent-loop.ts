@@ -51,6 +51,11 @@ const suggestionSchema = z.object({
 const findingsSchema = z.object({
     reasoning: z.string(),
     suggestions: z.array(suggestionSchema),
+    validationResults: z.array(z.object({
+        index: z.number(),
+        status: z.enum(['confirmed', 'rejected']),
+        reason: z.string(),
+    })).optional(),
 });
 
 export type FindingsOutput = z.infer<typeof findingsSchema>;
