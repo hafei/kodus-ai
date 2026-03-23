@@ -447,7 +447,11 @@ async function closeAndCreatePR(pr, token) {
  * Run targeted mode — create specific PRs from prs.json config.
  */
 async function runTargeted(targetedPRs) {
-    console.log(`🎯 Targeted mode: ${targetedPRs.length} PR(s) configured\n`);
+    const limit = CONFIG.totalPRs;
+    if (limit && limit < targetedPRs.length) {
+        targetedPRs = targetedPRs.slice(0, limit);
+    }
+    console.log(`🎯 Targeted mode: ${targetedPRs.length} PR(s) to create${limit ? ` (limit: ${limit})` : ''}\n`);
 
     // Detect platform and get token
     const token = CONFIG.githubToken || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;

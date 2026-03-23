@@ -371,13 +371,7 @@ export type CodeReviewConfig = {
     runOnDraft?: boolean;
     codeReviewVersion?: CodeReviewVersion;
     byokConfig?: BYOKConfig;
-    /**
-     * When enabled, a Reflection Agent runs after the main agents to:
-     * 1. Validate each finding by re-investigating the code
-     * 2. Remove hallucinations/false positives
-     * 3. Search for missed issues that no agent caught
-     * Only validates Bug/Security/Performance findings (not Kody Rules).
-     */
+    /** @deprecated Reflection/verify was removed — it hurt recall more than it helped precision. */
     enableReflection?: boolean;
     /**
      * Optional overrides for v2 prompts (categories and severity guidance only).

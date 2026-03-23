@@ -1,0 +1,781 @@
+{
+  "evaluated_at": "2026-03-23T16:48:28.261Z",
+  "tool": "kodus",
+  "summary": {
+    "total_prs": 50,
+    "total_golden": 137,
+    "tp": 11,
+    "fp": 38,
+    "fn": 126,
+    "precision": 0.224,
+    "recall": 0.08,
+    "f1": 0.118
+  },
+  "by_repo": {
+    "sentry": {
+      "tp": 1,
+      "fp": 8,
+      "fn": 31,
+      "golden": 32
+    },
+    "grafana-codex": {
+      "tp": 4,
+      "fp": 7,
+      "fn": 18,
+      "golden": 22
+    },
+    "discourse-cursor": {
+      "tp": 3,
+      "fp": 9,
+      "fn": 25,
+      "golden": 28
+    },
+    "cal.com": {
+      "tp": 3,
+      "fp": 13,
+      "fn": 28,
+      "golden": 31
+    },
+    "keycloak": {
+      "tp": 0,
+      "fp": 1,
+      "fn": 24,
+      "golden": 24
+    }
+  },
+  "by_severity": {
+    "Critical": {
+      "found": 3,
+      "total": 9
+    },
+    "High": {
+      "found": 3,
+      "total": 41
+    },
+    "Medium": {
+      "found": 2,
+      "total": 47
+    },
+    "Low": {
+      "found": 3,
+      "total": 40
+    }
+  },
+  "evaluations": [
+    {
+      "pr_title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+      "repo": "sentry",
+      "source_url": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/1",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Optimize spans buffer insertion with eviction during insert",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/92393",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0.5,
+      "recall": 0.333,
+      "f1": 0.4,
+      "matches": [
+        {
+          "golden_comment": "OptimizedCursorPaginator negative-offset branch slices QuerySet with a negative start index",
+          "candidate_comment": "The code incorrectly assumes that Django QuerySets support negative indexing for slicing, similar to",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "feat(upsampling) - Support upsampled error count with performance optimizations",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/94376",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "GitHub OAuth Security Enhancement",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/67876",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Replays Self-Serve Bulk Delete System",
+      "repo": "sentry",
+      "source_url": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/5",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Span Buffer Multiprocess Enhancement with Health Monitoring",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/93824",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 5,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "feat(ecosystem): Implement cross-system issue synchronization",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/77754",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "ref(crons): Reorganize incident creation / issue occurrence logic",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/80528",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "feat(uptime): Add ability to use queues to manage parallelism",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/95633",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "feat(workflow_engine): Add in hook for producing occurrences from the stateful detector",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/80168",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Anonymous: Add configurable device limit",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/79265",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 5,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "AuthZService: improve authz caching",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/103633",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/76186",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1,
+      "recall": 0.5,
+      "f1": 0.667,
+      "matches": [
+        {
+          "golden_comment": "The traceID is no longer logged for plugin requests. During a refactoring, the tracing import and th",
+          "candidate_comment": "The refactoring has removed the logic that adds the `traceID` to plugin request logs. This informati",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "Advanced Query Processing Architecture",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/107534",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Notification Rule Processing Engine",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/106778",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Dual Storage Architecture",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/90045",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0.333,
+      "recall": 0.333,
+      "f1": 0.333,
+      "matches": [
+        {
+          "golden_comment": "Bug: calling recordLegacyDuration when storage operation fails should be recordStorageDuration.",
+          "candidate_comment": "There are several places where the wrong metrics function is called, which will result in corrupted ",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "Database Performance Optimizations",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/80329",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Frontend Asset Optimization",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/90939",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Advanced SQL Analytics Framework",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/94942",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1,
+      "recall": 0.5,
+      "f1": 0.667,
+      "matches": [
+        {
+          "golden_comment": "The enableSqlExpressions function has flawed logic that always returns false, effectively disabling ",
+          "candidate_comment": "The current implementation of `enableSqlExpressions` incorrectly negates the feature flag check and ",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "Unified Storage Performance Optimizations",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/97529",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1,
+      "recall": 0.5,
+      "f1": 0.667,
+      "matches": [
+        {
+          "golden_comment": "A race condition in BuildIndex allows multiple goroutines to concurrently build the same expensive i",
+          "candidate_comment": "The lock within `BuildIndex` was moved to only protect the final cache write. However, this re-intro",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "FEATURE: automatically downsize large images",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/ffbaf8c54269df2ce510de91245760fddce09896",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "FEATURE: per-topic unsubscribe option in emails",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/6669a2d94d76eea3b99b8c476d12b1eb66726b07",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add comprehensive email validation for blocked users",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/5f8a130277dbddc95d133cd2832be639baf89213",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Enhance embed URL handling and validation system",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/4f8aed295a29954023b2849c060ef4fb299d1b5d",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 6,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Optimize header layout performance with flexbox mixins",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/5b229316ee4c661836ed1161139692a3e8527444",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "UX: show complete URL path if website domain is same as instance domain",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/267d8be1f556ed59639ced396c885bb44586da19",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "scale-color $lightness must use $secondary for dark themes",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/d38c4d5f7443223c81529c22470293771baf9f38",
+      "tool": "kodus",
+      "true_positives": 2,
+      "false_positives": 3,
+      "false_negatives": 1,
+      "precision": 0.4,
+      "recall": 0.667,
+      "f1": 0.5,
+      "matches": [
+        {
+          "golden_comment": "In topic-post.css the original code used $lightness: 70% but the replacement uses $lightness: 30% fo",
+          "candidate_comment": "The lightness values for the light and dark themes appear to have been swapped. The original code us",
+          "match": true
+        },
+        {
+          "golden_comment": "In .topic-meta-data h5 a, the original code had color: scale-color($primary, $lightness: 30%) but wa",
+          "candidate_comment": "The lightness values for the light and dark themes appear to have been swapped. The original code us",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "FIX: proper handling of group memberships",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/060cda77729cb1c4a827560e09e89a7b22078ba9",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0.5,
+      "recall": 0.333,
+      "f1": 0.4,
+      "matches": [
+        {
+          "golden_comment": "In the next action, capping the next offset at user_count can produce an empty page (e.g., total equ",
+          "candidate_comment": "The calculation for `totalPages` is incorrect. It fails when the number of members (`user_count`) is",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "FEATURE: Localization fallbacks (server-side)",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/ecfa17b5a79dfdc91e7a4d50b42ae78a35d0a293",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "FEATURE: Can edit category/host relationships for embedding",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/d1c69189f3c90ecf56013a8da904da9bff9a8e19",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Async import of the appStore packages",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/8087",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "matches": [
+        {
+          "golden_comment": "The code uses forEach with async callbacks, which causes asynchronous operations (e.g., calendar/vid",
+          "candidate_comment": "Violates rule 'Follow error handling conventions': Using an `async` callback with `Array.prototype.f",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "feat: 2fa backup codes",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/10600",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "fix: handle collective multiple host on destinationCalendar",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/10967",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0.333,
+      "recall": 0.2,
+      "f1": 0.25,
+      "matches": [
+        {
+          "golden_comment": "Logic error: when externalCalendarId is provided, you're searching for a calendar where externalId =",
+          "candidate_comment": "When `externalCalendarId` is not provided, the logic to find a calendar to update is flawed. The con",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/22345",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Comprehensive workflow reminder management for booking lifecycle events",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/7232",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Advanced date override handling and timezone compatibility improvements",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/8330",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "precision": 0.333,
+      "recall": 0.5,
+      "f1": 0.4,
+      "matches": [
+        {
+          "golden_comment": "Using === for dayjs object comparison will always return false as it compares object references, not",
+          "candidate_comment": "Day.js objects are being compared using strict equality (`===`), which checks if they are the same o",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pr_title": "OAuth credential sync and app integration enhancements",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/11059",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 5,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "SMS workflow reminder retry count tracking",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/14943",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add guest management functionality to existing bookings",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/14740",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 5,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "feat: add calendar cache status and actions (#22532)",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/22532",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Fixing Re-authentication with passkeys",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/41249",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/32918",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add AuthzClientCryptoProvider for authorization client cryptographic operations",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/33832",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add rolling-updates feature flag and compatibility framework",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/36882",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add Client resource type and scopes to authorization schema",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/36880",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add Groups resource type and scopes to authorization schema",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/37038",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Add HTML sanitizer for translated message resources",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/37429",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Implement access token context encoding framework",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/37634",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Implement recovery key support for user storage providers",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/38446",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    },
+    {
+      "pr_title": "Fix concurrent group access to prevent NullPointerException",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/40940",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0,
+      "matches": []
+    }
+  ]
+}

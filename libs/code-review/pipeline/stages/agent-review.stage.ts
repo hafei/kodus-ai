@@ -14,8 +14,7 @@ import {
     IAutomationExecutionService,
 } from '@libs/automation/domain/automationExecution/contracts/automation-execution.service';
 import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
-import { AgentProgressEvent, ReviewAgentInput } from '@libs/code-review/infrastructure/agents/base-code-review-agent.provider';
-import { ReflectionAgentProvider } from '@libs/code-review/infrastructure/agents/reflection-agent.provider';
+import { AgentProgressEvent } from '@libs/code-review/infrastructure/agents/base-code-review-agent.provider';
 import { resolveKodyRuleSeverityLevel, SeverityLevel } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 
@@ -169,7 +168,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
         @Inject(AUTOMATION_EXECUTION_SERVICE_TOKEN)
         private readonly automationExecutionService: IAutomationExecutionService,
         @Optional()
-        private readonly reflectionAgent?: ReflectionAgentProvider,
+        // ReflectionAgentProvider removed
         @Optional()
         @Inject(DOCUMENTATION_SEARCH_ADAPTER_TOKEN)
         private readonly documentationSearchService?: DocumentationSearchAdapter,
@@ -301,143 +300,9 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 return snapped;
             });
 
-            // Reflection: Sentry-inspired verify + discover pattern
-            // Phase 1 (VERIFY): One call per finding, in parallel — deep-dive into each hypothesis
-            // Phase 2 (DISCOVER): One call with the full diff — find issues nobody caught
-            let reflectedSuggestions = validatedSuggestions;
-            if (
-                context.codeReviewConfig?.enableReflection &&
-                this.reflectionAgent &&
-                validatedSuggestions.length > 0
-            ) {
-                try {
-                    // Only verify bug/security/performance findings, not kody_rules
-                    const toVerify = validatedSuggestions.filter(
-                        (s) => s.label !== 'kody_rules',
-                    );
-                    const rulesFindings = validatedSuggestions.filter(
-                        (s) => s.label === 'kody_rules',
-                    );
-
-                    if (toVerify.length > 0) {
-                        const baseInput: ReviewAgentInput = {
-                            organizationAndTeamData:
-                                context.organizationAndTeamData,
-                            changedFiles,
-                            remoteCommands:
-                                context.sandboxHandle.remoteCommands,
-                            prNumber,
-                            repositoryFullName:
-                                context.repository?.fullName ||
-                                context.pullRequest?.base?.repo
-                                    ?.fullName ||
-                                '',
-                            languageResultPrompt:
-                                context.codeReviewConfig
-                                    ?.languageResultPrompt || 'en-US',
-                            prTitle: context.pullRequest?.title,
-                            prBody: context.pullRequest?.body,
-                            onAgentProgress: onAgentProgress,
-                            gitHubToken:
-                                await this.resolveGitHubToken(context),
-                        };
-
-                        // ── Phase 1: VERIFY (parallel, 1 per finding) ──
-                        this.logger.log({
-                            message: `[VERIFY] PR#${prNumber}: verifying ${toVerify.length} findings in parallel`,
-                            context: this.stageName,
-                        });
-
-                        const verifyResults = await Promise.allSettled(
-                            toVerify.map((finding, index) =>
-                                this.reflectionAgent.verifySingle(
-                                    baseInput,
-                                    finding,
-                                    index,
-                                ),
-                            ),
-                        );
-
-                        const confirmedFindings: Partial<CodeSuggestion>[] = [];
-                        let rejectedCount = 0;
-                        let totalVerifyTools = 0;
-
-                        for (let i = 0; i < verifyResults.length; i++) {
-                            const result = verifyResults[i];
-                            if (result.status === 'rejected') {
-                                // Promise rejected (error) — keep original finding as precaution
-                                confirmedFindings.push(toVerify[i]);
-                                this.logger.warn({
-                                    message: `[VERIFY] PR#${prNumber} [${i}] verification error — keeping finding`,
-                                    context: this.stageName,
-                                });
-                                continue;
-                            }
-
-                            const vr = result.value;
-                            totalVerifyTools += vr.turnsUsed;
-
-                            if (vr.status === 'confirmed') {
-                                confirmedFindings.push(
-                                    vr.suggestion || toVerify[i],
-                                );
-                                this.logger.log({
-                                    message: `[VERIFY] PR#${prNumber} [${i}] CONFIRMED (${vr.turnsUsed} steps, ${vr.durationMs}ms): ${vr.reason.substring(0, 120)}`,
-                                    context: this.stageName,
-                                });
-                            } else {
-                                rejectedCount++;
-                                this.logger.log({
-                                    message: `[VERIFY-REJECTED] PR#${prNumber} [${i}] ${toVerify[i]?.relevantFile}:${toVerify[i]?.relevantLinesStart}-${toVerify[i]?.relevantLinesEnd} | ${toVerify[i]?.oneSentenceSummary?.substring(0, 80)} | Reason: ${vr.reason.substring(0, 120)}`,
-                                    context: this.stageName,
-                                });
-                            }
-                        }
-
-                        this.logger.log({
-                            message: `[VERIFY] PR#${prNumber}: ${confirmedFindings.length} confirmed, ${rejectedCount} rejected (${totalVerifyTools} total steps)`,
-                            context: this.stageName,
-                        });
-
-                        // ── Phase 2: DISCOVER (optional, single call) ──
-                        let discoveredFindings: Partial<CodeSuggestion>[] = [];
-                        try {
-                            this.logger.log({
-                                message: `[DISCOVER] PR#${prNumber}: searching for missed issues`,
-                                context: this.stageName,
-                            });
-                            const discoverResult =
-                                await this.reflectionAgent.discover(baseInput);
-
-                            discoveredFindings = discoverResult.suggestions;
-                            this.logger.log({
-                                message: `[DISCOVER] PR#${prNumber}: found ${discoveredFindings.length} new issues (${discoverResult.turnsUsed} steps, ${discoverResult.durationMs}ms)`,
-                                context: this.stageName,
-                            });
-                        } catch (discoverError) {
-                            this.logger.warn({
-                                message: `[DISCOVER] PR#${prNumber}: failed — continuing without new discoveries`,
-                                context: this.stageName,
-                                error: discoverError,
-                            });
-                        }
-
-                        // Merge: verified findings + discoveries + rules (untouched)
-                        reflectedSuggestions = [
-                            ...confirmedFindings,
-                            ...discoveredFindings,
-                            ...rulesFindings,
-                        ];
-                    }
-                } catch (reflectionError) {
-                    this.logger.warn({
-                        message: `[VERIFY] Failed for PR#${prNumber}, using original findings`,
-                        context: this.stageName,
-                        error: reflectionError,
-                    });
-                    // On failure, keep original findings
-                }
-            }
+            // Verify/Discover removed — was hurting recall across all models.
+            // Benchmark showed F1 drops of -5.7pp to -18.3pp with verify enabled.
+            const reflectedSuggestions = validatedSuggestions;
 
             // Classify level (issue/warning) using Gemini 3 Flash
             // Separated from agent generation for consistency — BYOK models

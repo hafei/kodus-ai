@@ -1,0 +1,1035 @@
+{
+  "evaluated_at": "2026-03-20T12:11:57.376Z",
+  "tool": "kodus",
+  "summary": {
+    "total_prs": 50,
+    "total_golden_comments": 137,
+    "total_true_positives": 32,
+    "total_false_positives": 89,
+    "total_false_negatives": 105,
+    "precision": 0.264,
+    "recall": 0.234,
+    "f1": 0.248
+  },
+  "by_repo": {
+    "sentry": {
+      "prs": 10,
+      "golden_comments": 32,
+      "true_positives": 7,
+      "false_positives": 10,
+      "false_negatives": 25,
+      "precision": 0.412,
+      "recall": 0.219,
+      "f1": 0.286
+    },
+    "grafana-codex": {
+      "prs": 10,
+      "golden_comments": 22,
+      "true_positives": 2,
+      "false_positives": 10,
+      "false_negatives": 20,
+      "precision": 0.167,
+      "recall": 0.091,
+      "f1": 0.118
+    },
+    "discourse-cursor": {
+      "prs": 10,
+      "golden_comments": 28,
+      "true_positives": 7,
+      "false_positives": 28,
+      "false_negatives": 21,
+      "precision": 0.2,
+      "recall": 0.25,
+      "f1": 0.222
+    },
+    "cal.com": {
+      "prs": 10,
+      "golden_comments": 31,
+      "true_positives": 13,
+      "false_positives": 25,
+      "false_negatives": 18,
+      "precision": 0.342,
+      "recall": 0.419,
+      "f1": 0.377
+    },
+    "keycloak": {
+      "prs": 10,
+      "golden_comments": 24,
+      "true_positives": 3,
+      "false_positives": 16,
+      "false_negatives": 21,
+      "precision": 0.158,
+      "recall": 0.125,
+      "f1": 0.14
+    }
+  },
+  "by_severity": {
+    "Critical": {
+      "total": 9,
+      "found": 4,
+      "recall": 0.444
+    },
+    "High": {
+      "total": 41,
+      "found": 18,
+      "recall": 0.439
+    },
+    "Medium": {
+      "total": 47,
+      "found": 7,
+      "recall": 0.149
+    },
+    "Low": {
+      "total": 40,
+      "found": 3,
+      "recall": 0.075
+    }
+  },
+  "evaluations": [
+    {
+      "pr_title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+      "repo": "sentry",
+      "source_url": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/1",
+      "tool": "kodus",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0.5,
+      "f1": 0.667,
+      "matches": [
+        {
+          "golden_comment": "Django querysets do not support negative slicing",
+          "candidate_comment": "Negative offset bypass in BasePaginator.get_result() allows accessing end of queryset. The code at line 182 uses `max(0, offset) if not cursor.is_prev else offset`, which bypasses sanitization when `cursor.is_prev` is True. A malicious user can craft a cursor like `0:-5:1` (offset=-5, is_prev=1) to execute `queryset[-5:]` which returns the last 5 items in Django ORM. Always validate offset >= 0 regardless of is_prev flag.         # Ensure offset is non-negative to prevent negative slicing attacks         if offset < 0:             raise BadPaginationError(\"Pagination offset cannot be negative\")         start_offset = offset         stop = start_offset + limit + extra         results = list(queryset[start_offset:stop]) <sub>Talk to Kody by mentioning @kody</sub>",
+          "reasoning": "Both comments identify the same core issue: Django querysets don't support negative slicing, and the code allows negative offsets to be passed to queryset slicing operations. The golden comment states this as a general principle, while the candidate provides specific implementation details about how this manifests in the BasePaginator code (line 182) and the security implications. They're addressing the exact same underlying problem.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "When requests are authenticated with API keys or org auth tokens (which have user_id=None), organization_context.member is None. Line 71 attempts to access organization_context.member.has_global_access without checking if member is None, causing an AttributeError crash when optimized_pagination=true is used, even though the request passed all permission checks with valid org:write scope.",
+          "candidate_comment": "The code accesses `organization_context.member.has_global_access` without checking if `member` is None. According to RpcUserOrganizationContext model definition (line 343 in model.py), 'member can be None when the given user_id does not have membership with the given organization.' This causes an AttributeError when superusers or users without organization membership access the endpoint.         enable_advanced = request.user.is_superuser or (organization_context.member is not None and organization_context.member.has_global_access) <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core issue: accessing `organization_context.member.has_global_access` without checking if `member` is None first, which causes an AttributeError. The golden comment specifically mentions API keys/org auth tokens with user_id=None as the trigger, while the candidate mentions superusers and users without organization membership. Both describe the same underlying bug - the lack of null check before accessing the member attribute.",
+          "match": true,
+          "confidence": 0.9
+        }
+      ],
+      "comment": "Found 2/4 bugs. 0 false positives. Missed: \"Importing non-existent OptimizedCursorPaginator...\", \"get_item_key assumes a numeric key, but the paginator is use...\""
+    },
+    {
+      "pr_title": "Optimize spans buffer insertion with eviction during insert",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/92393",
+      "tool": "kodus",
+      "true_positives": 2,
+      "false_positives": 3,
+      "false_negatives": 1,
+      "precision": 0.4,
+      "recall": 0.667,
+      "f1": 0.5,
+      "matches": [
+        {
+          "golden_comment": "OptimizedCursorPaginator negative-offset branch slices QuerySet with a negative start index",
+          "candidate_comment": "Inconsistent offset variable usage in BasePaginator.get_result(). The queryset slicing uses 'start_offset' (line 183) but the length check at line 192 uses 'offset'. When cursor.is_prev is True and offset is negative, start_offset becomes negative, causing Django to interpret it as 'from end' indexing. However, the length check 'offset + limit + extra' produces incorrect expected counts with negative offsets, breaking the extra-row detection logic. The fix should use 'start_offset' consistently in the length check.         start_offset = max(0, offset) if not cursor.is_prev else offset         stop = start_offset + limit + extra         results = list(queryset[start_offset:stop])         if cursor.is_prev and cursor.value:             # If the first result is equal to the cursor_value then it's safe to filter             # it out, since the value hasn't been updated             if results and self.get_item_key(results[0], for_prev=True) == cursor.value:",
+          "reasoning": "Both comments identify the same core issue: negative offset values in OptimizedCursorPaginator causing problems with QuerySet slicing. The golden comment focuses on the negative start index slicing issue, while the candidate provides more detailed analysis of the inconsistent variable usage (offset vs start_offset) and explains how negative offsets break the extra-row detection logic. Both are describing the same underlying bug where negative offsets cause incorrect behavior in the pagination logic.",
+          "match": true,
+          "confidence": 0.9
+        },
+        {
+          "golden_comment": "BasePaginator negative-offset branch slices QuerySet with a negative start index",
+          "candidate_comment": "Inconsistent offset variable usage in BasePaginator.get_result(). The queryset slicing uses 'start_offset' (line 183) but the length check at line 192 uses 'offset'. When cursor.is_prev is True and offset is negative, start_offset becomes negative, causing Django to interpret it as 'from end' indexing. However, the length check 'offset + limit + extra' produces incorrect expected counts with negative offsets, breaking the extra-row detection logic. The fix should use 'start_offset' consistently in the length check.         start_offset = max(0, offset) if not cursor.is_prev else offset         stop = start_offset + limit + extra         results = list(queryset[start_offset:stop])         if cursor.is_prev and cursor.value:             # If the first result is equal to the cursor_value then it's safe to filter             # it out, since the value hasn't been updated             if results and self.get_item_key(results[0], for_prev=True) == cursor.value:",
+          "reasoning": "Both comments identify the same core issue: BasePaginator uses negative offsets when cursor.is_prev is True, which causes Django QuerySet slicing to interpret negative indices as 'from end' indexing rather than the intended behavior. The golden comment focuses on the negative start index problem, while the candidate provides more technical detail about the inconsistent variable usage and its consequences, but they're describing the same underlying bug.",
+          "match": true,
+          "confidence": 0.9
+        }
+      ],
+      "comment": "Found 2/3 bugs. 3 false positives. Missed: \"OptimizedCursorPaginator.get_item_key uses floor/ceil on a d...\""
+    },
+    {
+      "pr_title": "feat(upsampling) - Support upsampled error count with performance optimizations",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/94376",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0.333,
+      "recall": 0.333,
+      "f1": 0.333,
+      "matches": [
+        {
+          "golden_comment": "Using Python's built-in hash() to build cache keys is non-deterministic across processes (hash randomization), so keys won't match across workers and invalidate_upsampling_cache may fail to delete them. Use a deterministic serialization of project_ids for the cache key.",
+          "candidate_comment": "Cache key collision vulnerability: Using Python's built-in `hash()` for cache keys is insecure and inconsistent. Python's `hash()` is randomized per process (Python 3.3+) and not cryptographically secure, leading to potential collisions where different project ID sets map to the same cache key. This can cause cache cross-contamination, allowing one set of projects to use cached eligibility results from a different set. The Sentry codebase standard is to use `md5_text` from `sentry.utils.hashlib` for deterministic, consistent hashing. from sentry import options from sentry.models.organization import Organization from sentry.search.events.types import SnubaParams from sentry.utils.cache import cache from sentry.utils.hashlib import md5_text     cache_key = f\"error_upsampling_eligible:{organization.id}:{md5_text(*sorted(snuba_params.project_ids)).hexdigest()}\" <sub>Talk to Kody by mentioning @kody</sub>",
+          "reasoning": "Both comments identify the same core issue: Python's built-in hash() function is non-deterministic across processes due to hash randomization, which causes problems with cache keys. The golden comment focuses on keys not matching across workers and invalidation failures, while the candidate expands on security concerns and cache contamination, but both are describing the same underlying technical problem and both suggest using deterministic serialization/hashing as the solution.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/3 bugs. 2 false positives. Missed: \"sample_rate = 0.0 is falsy and skipped...\", \"The upsampling eligibility check passes the outer dataset in...\""
+    },
+    {
+      "pr_title": "GitHub OAuth Security Enhancement",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/67876",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0.5,
+      "recall": 0.333,
+      "f1": 0.4,
+      "matches": [
+        {
+          "golden_comment": "The code attempts to access integration.metadata[sender][login] without checking for the existence of the sender key. This causes a KeyError for integrations where the sender metadata was not set during creation",
+          "candidate_comment": "Potential KeyError vulnerability when accessing nested dictionary keys. The code at lines 501-505 accesses `integration.metadata[\"sender\"][\"login\"]` without checking if these keys exist. If an integration exists but was created without sender metadata (e.g., through a different code path or corrupted data), this will raise an unhandled KeyError causing a 500 error. Use `.get()` methods with proper error handling to gracefully handle missing keys.         # Check that the authenticated GitHub user is the same as who installed the app.         sender_login = integration.metadata.get(\"sender\", {}).get(\"login\")         if not sender_login or pipeline.fetch_state(\"github_authenticated_user\") != sender_login:             return error(request, self.active_organization) <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same issue: accessing integration.metadata[sender][login] without checking if the 'sender' key exists, which causes a KeyError when sender metadata is missing. The candidate provides more detail about the consequences (500 error) and includes a code fix suggestion, but the core issue identified is identical.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/3 bugs. 1 false positives. Missed: \"Null reference if github_authenticated_user state is missing...\", \"OAuth state uses pipeline.signature (static) instead of a pe...\""
+    },
+    {
+      "pr_title": "Replays Self-Serve Bulk Delete System",
+      "repo": "sentry",
+      "source_url": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/5",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/3 bugs. 1 false positives. Missed: \"Breaking changes in error response format...\", \"Detector validator uses wrong key when updating type...\", \"Using zip(error_ids, events.values()) assumes the get_multi ...\""
+    },
+    {
+      "pr_title": "Span Buffer Multiprocess Enhancement with Health Monitoring",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/93824",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0.333,
+      "recall": 0.2,
+      "f1": 0.25,
+      "matches": [
+        {
+          "golden_comment": "Breaking out of the loop when the deadline has elapsed can skip terminating remaining flusher processes, potentially leaving them running after shutdown; consider ensuring termination is attempted even if the deadline is exceeded.",
+          "candidate_comment": "Resource leak in join() method. When the deadline expires, the `break` statement exits the for-loop without terminating remaining processes. This leaves child processes running as zombies. The break should be removed or replaced with logic that still terminates all remaining processes.         for process_index, process in self.processes.items():             while process.is_alive() and (deadline is None or deadline > time.time()):                 time.sleep(0.1)             if isinstance(process, multiprocessing.Process):                 process.terminate() <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub>",
+          "reasoning": "Both comments identify the exact same issue: when the deadline expires, the break statement causes the loop to exit early, leaving remaining processes unterminated. The golden comment mentions 'skipping terminating remaining flusher processes' while the candidate mentions 'exits the for-loop without terminating remaining processes' and 'leaves child processes running as zombies'. Both suggest ensuring all processes are terminated even after deadline expiration.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/5 bugs. 2 false positives. Missed: \"Inconsistent metric tagging with 'shard' and 'shards'...\", \"Fixed sleep in tests can be flaky; wait on condition instead...\", \"Because flusher processes are created via multiprocessing.ge...\", \"Sleep in test_consumer.py won't actually wait because time.s...\""
+    },
+    {
+      "pr_title": "feat(ecosystem): Implement cross-system issue synchronization",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/77754",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 4,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/4 bugs. 1 false positives. Missed: \"Shared mutable default in dataclass timestamp...\", \"The method name has a typo: test_from_dict_inalid_data shoul...\", \"Method name says 'empty_array' but tests empty dict - consid...\", \"to_dict() returns a datetime for queued; if this dict is pas...\""
+    },
+    {
+      "pr_title": "ref(crons): Reorganize incident creation / issue occurrence logic",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/80528",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
+    },
+    {
+      "pr_title": "feat(uptime): Add ability to use queues to manage parallelism",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/95633",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
+    },
+    {
+      "pr_title": "feat(workflow_engine): Add in hook for producing occurrences from the stateful detector",
+      "repo": "sentry",
+      "source_url": "https://github.com/getsentry/sentry/pull/80168",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
+    },
+    {
+      "pr_title": "Anonymous: Add configurable device limit",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/79265",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 4,
+      "precision": 0.5,
+      "recall": 0.2,
+      "f1": 0.286,
+      "matches": [
+        {
+          "golden_comment": "Returning ErrDeviceLimitReached when no rows were updated is misleading; the device might not exist.",
+          "candidate_comment": "Race condition in updateDevice BETWEEN clause logic. The WHERE clause checks `updated_at BETWEEN ? AND ?` using time windows calculated from `device.UpdatedAt` (which is time.Now() from the caller). This compares the DB record's timestamp against a window based on the incoming request time, not the stored record's actual time. If the device exists in DB but was last updated outside this window, the UPDATE affects 0 rows and incorrectly returns ErrDeviceLimitReached. The logic should check device existence with `SELECT 1 FROM anon_device WHERE device_id = ?` first, then UPDATE if found. \t// Check if device exists first, then update \targs := []interface{}{device.ClientIP, device.UserAgent, device.UpdatedAt.UTC(), device.DeviceID} <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core issue: when an UPDATE statement affects 0 rows, the code incorrectly returns ErrDeviceLimitReached, but this could happen when the device doesn't exist rather than due to a device limit being reached. The golden comment focuses on the misleading error message, while the candidate provides more technical detail about the race condition and time window logic, but they're describing the same fundamental problem.",
+          "match": true,
+          "confidence": 0.9
+        }
+      ],
+      "comment": "Found 1/5 bugs. 1 false positives. Missed: \"Race condition: Multiple concurrent requests could pass the ...\", \"Anonymous authentication now fails entirely if anonDeviceSer...\", \"This call won't compile: dbSession.Exec(args...) is given a ...\", \"Time window calculation inconsistency: Using device.UpdatedA...\""
+    },
+    {
+      "pr_title": "AuthZService: improve authz caching",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/103633",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"The Check operation exhibits asymmetric cache trust logic: c...\", \"The test comment says the cached permissions 'allow access',...\""
+    },
+    {
+      "pr_title": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/76186",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"The ContextualLoggerMiddleware methods (QueryData, CallResou...\", \"The traceID is no longer logged for plugin requests. During ...\""
+    },
+    {
+      "pr_title": "Advanced Query Processing Architecture",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/107534",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/1 bugs. 1 false positives. Missed: \"The applyTemplateVariables method is called with request.fil...\""
+    },
+    {
+      "pr_title": "Notification Rule Processing Engine",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/106778",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"The rendered GrafanaRuleListItem is missing the required key...\", \"RuleActionsButtons is invoked with only promRule, but Silenc...\""
+    },
+    {
+      "pr_title": "Dual Storage Architecture",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/90045",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/3 bugs. 1 false positives. Missed: \"The context is being created with d.Log instead of the log v...\", \"Bug: calling recordLegacyDuration when storage operation fai...\", \"Inconsistency: using name instead of options.Kind for metric...\""
+    },
+    {
+      "pr_title": "Database Performance Optimizations",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/80329",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/1 bugs. 1 false positives. Missed: \"The code uses Error log level for what appears to be debuggi...\""
+    },
+    {
+      "pr_title": "Frontend Asset Optimization",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/90939",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
+    },
+    {
+      "pr_title": "Advanced SQL Analytics Framework",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/94942",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"The enableSqlExpressions function has flawed logic that alwa...\", \"Several methods such as NewInMemoryDB().RunCommands and db.Q...\""
+    },
+    {
+      "pr_title": "Unified Storage Performance Optimizations",
+      "repo": "grafana-codex",
+      "source_url": "https://github.com/grafana/grafana/pull/97529",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "precision": 0.333,
+      "recall": 0.5,
+      "f1": 0.4,
+      "matches": [
+        {
+          "golden_comment": "A race condition in BuildIndex allows multiple goroutines to concurrently build the same expensive index for the same key. This is caused by moving the b.cacheMu lock from protecting the entire function to only protecting the final cache assignment.",
+          "candidate_comment": "Race condition in BuildIndex: Moving the lock to only protect the cache write allows concurrent goroutines to create duplicate indexes for the same key. Between checking if an index exists and writing to the cache, another goroutine can create an index for the same key, causing resource leaks and duplicate work. Need to either hold the lock for the entire function or check if key exists before writing. func (b *bleveBackend) BuildIndex(ctx context.Context, \tkey resource.NamespacedResource, \tsize int64, \tresourceVersion int64, \tfields resource.SearchableDocumentFields, \tbuilder func(index resource.ResourceIndex) (int64, error), ) (resource.ResourceIndex, error) {",
+          "reasoning": "Both comments identify the exact same race condition issue in BuildIndex. The golden comment describes how moving the lock from protecting the entire function to only the cache assignment allows multiple goroutines to build the same index concurrently. The candidate issue describes the same problem - that moving the lock to only protect the cache write allows concurrent goroutines to create duplicate indexes, explaining the specific timing issue between checking if an index exists and writing to the cache. Both identify the same root cause (lock scope reduction) and same consequence (duplicate expensive work).",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/2 bugs. 2 false positives. Missed: \"Calling s.search.TotalDocs() here may race with concurrent i...\""
+    },
+    {
+      "pr_title": "FEATURE: automatically downsize large images",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/ffbaf8c54269df2ce510de91245760fddce09896",
+      "tool": "kodus",
+      "true_positives": 2,
+      "false_positives": 4,
+      "false_negatives": 1,
+      "precision": 0.333,
+      "recall": 0.667,
+      "f1": 0.444,
+      "matches": [
+        {
+          "golden_comment": "The downsize method is defined twice. The second definition, which expects a single dimensions string parameter, overrides the first, which expected separate max_width and max_height parameters. This makes the original method unreachable and breaks existing code that calls it with separate width and height arguments.",
+          "candidate_comment": "Method redefinition bug: The second `downsize` method (line 149) overwrites the first (line 145) in Ruby. The existing caller in resize_emoji.rb calls `downsize(path, path, 100, 100, opts)` with width/height as separate parameters. After this change, the call will assign `dimensions=100` and `opts=100` (integer instead of hash), causing `opts[:allow_animation]` to fail. Remove the duplicate method definition and update the first to accept dimensions string, or rename the new method to avoid collision.   def self.downsize(from, to, dimensions, opts={})     optimize(\"downsize\", from, to, dimensions, opts) <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same issue: the downsize method is defined twice, with the second definition overriding the first, making the original method unreachable and breaking existing code that calls it with separate width/height parameters. The candidate provides more technical detail about the specific failure mode (opts becoming an integer instead of hash), but the core problem identified is identical.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "Hardcoding maxSizeKB = 10 * 1024 ignores Discourse.SiteSettings['max_' + type + '_size_kb'], so the client-side limit can diverge from server-side and per-type settings (also applies to the 413 handler below).",
+          "candidate_comment": "Client-side security control bypass: Hardcoded 10MB limit (10 * 1024 KB) replaces dynamic lookup of Discourse.SiteSettings['max_' + type + '_size_kb']. This client-side validation change bypasses the admin-configured upload size limits, allowing users to attempt uploads larger than the configured maximum before server-side rejection. ```javascript     var maxSizeKB = Discourse.SiteSettings['max_' + type + '_size_kb']; <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core issue: hardcoding maxSizeKB = 10 * 1024 bypasses the dynamic lookup of Discourse.SiteSettings['max_' + type + '_size_kb'], which can cause client-side and server-side limits to diverge. The candidate uses different terminology ('security control bypass') and provides more context about the implications, but fundamentally describes the same problem - the hardcoded value ignoring the configurable site settings.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 2/3 bugs. 4 false positives. Missed: \"Passing 80% as the dimensions can fail for animated GIFs whe...\""
+    },
+    {
+      "pr_title": "FEATURE: per-topic unsubscribe option in emails",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/6669a2d94d76eea3b99b8c476d12b1eb66726b07",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 4,
+      "false_negatives": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "f1": 0.286,
+      "matches": [
+        {
+          "golden_comment": "logic: Potential nil pointer exception - if no TopicUser record exists, tu will be nil and calling methods on it will crash",
+          "candidate_comment": "TopicUser.find_by() returns nil if no record exists for the user/topic pair. The code immediately accesses tu.notification_level without checking for nil, causing NoMethodError when users unsubscribe from topics they haven't interacted with. Need to handle the nil case by either creating a TopicUser record first or returning early with an error.     tu = TopicUser.find_by(user_id: current_user.id, topic_id: params[:topic_id])       # User hasn't interacted with this topic before, create a muted record       tu = TopicUser.new(user_id: current_user.id, topic_id: params[:topic_id], notification_level: TopicUser.notification_levels[:muted])     elsif tu.notification_level > TopicUser.notification_levels[:regular] <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same issue: TopicUser.find_by() can return nil when no record exists, and the code then tries to call methods on this nil object without checking, which will cause a crash/exception. The candidate provides more detailed explanation and solution suggestions, but the core issue identified is identical.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/2 bugs. 4 false positives. Missed: \"Typo in property name: 'stopNotificiationsText' should be 's...\""
+    },
+    {
+      "pr_title": "Add comprehensive email validation for blocked users",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/5f8a130277dbddc95d133cd2832be639baf89213",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 4,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 4 false positives. Missed: \"BlockedEmail.should_block_email? method has side effects dur...\", \"Regex pattern @(#{domains}) only matches domain suffixes, no...\""
+    },
+    {
+      "pr_title": "Enhance embed URL handling and validation system",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/4f8aed295a29954023b2849c060ef4fb299d1b5d",
+      "tool": "kodus",
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 4,
+      "precision": 0.2,
+      "recall": 0.333,
+      "f1": 0.25,
+      "matches": [
+        {
+          "golden_comment": "SSRF vulnerability using open(url) without validation",
+          "candidate_comment": "SSRF vulnerability: Kernel.open() fetches the feed_polling_url without restrictions. If an attacker can influence this setting, they can trigger requests to internal services. Use a restricted HTTP client with timeout and scheme validation. rss = SimpleRSS.parse fetch_with_restrictions(SiteSetting.feed_polling_url) <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same SSRF vulnerability issue with using open() or Kernel.open() on a URL without proper validation. The golden comment mentions 'open(url) without validation' and the candidate identifies 'Kernel.open() fetches the feed_polling_url without restrictions'. Both are pointing to the same underlying security vulnerability where an attacker could potentially make requests to internal services.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "The current origin validation using indexOf is insufficient and can be bypassed. An attacker could use a malicious domain like evil-discourseUrl.com to pass this check.",
+          "candidate_comment": "Host validation bypass: Same substring vulnerability as embed_controller. Simple string comparison allows attackers to use malicious subdomains that contain the allowed host as a substring. SiteSetting.embeddable_host.downcase != URI(@embed_url).host&.downcase <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core vulnerability: insufficient host/origin validation that can be bypassed using malicious domains containing the allowed domain as a substring. The golden comment mentions 'evil-discourseUrl.com' bypassing indexOf checks, while the candidate mentions 'malicious subdomains that contain the allowed host as a substring' and references string comparison issues. Both are describing the same substring-based validation bypass vulnerability.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 2/6 bugs. 8 false positives. Missed: \"postMessage targetOrigin should be the origin (scheme+host+p...\", \"The code sets X-Frame-Options: ALLOWALL which completely dis...\", \"The TopicEmbed.import method is susceptible to a NoMethodErr...\", \"The ERB block closes with end if, which is invalid Ruby/ERB ...\""
+    },
+    {
+      "pr_title": "Optimize header layout performance with flexbox mixins",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/5b229316ee4c661836ed1161139692a3e8527444",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"Mixing float: left with flexbox causes layout issues. Furthe...\", \"-ms-align-items never existed in any version of IE/Edge; the...\""
+    },
+    {
+      "pr_title": "UX: show complete URL path if website domain is same as instance domain",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/267d8be1f556ed59639ced396c885bb44586da19",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 1 golden comments."
+    },
+    {
+      "pr_title": "scale-color $lightness must use $secondary for dark themes",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/d38c4d5f7443223c81529c22470293771baf9f38",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
+    },
+    {
+      "pr_title": "FIX: proper handling of group memberships",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/060cda77729cb1c4a827560e09e89a7b22078ba9",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0.333,
+      "recall": 0.333,
+      "f1": 0.333,
+      "matches": [
+        {
+          "golden_comment": "HTTP method mismatch in .remove_member - test uses PUT but remove_member action expects DELETE",
+          "candidate_comment": "The test uses `xhr :put` but the route is defined as `delete \"members\"`. This test is not actually exercising the remove_member action because the HTTP method doesn't match. It should use `xhr :delete` to properly test the remove_member endpoint.     it \"cannot remove members from automatic groups\" do       xhr :delete, :remove_member, group_id: 1, user_id: 42       response.status.should == 422 <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same issue: the test uses PUT method while the remove_member action expects DELETE method, causing a mismatch that prevents proper testing. The candidate provides more detail and a specific fix, but the core problem identified is identical.",
+          "match": true,
+          "confidence": 1
+        }
+      ],
+      "comment": "Found 1/3 bugs. 2 false positives. Missed: \"The findMembers() call is now asynchronous and unhandled. Th...\", \"In the next action, capping the next offset at user_count ca...\""
+    },
+    {
+      "pr_title": "FEATURE: Localization fallbacks (server-side)",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/ecfa17b5a79dfdc91e7a4d50b42ae78a35d0a293",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"Thread-safety issue with lazy @loaded_locales...\", \"Consider normalizing the input locale (e.g., to a symbol) wh...\""
+    },
+    {
+      "pr_title": "FEATURE: Can edit category/host relationships for embedding",
+      "repo": "discourse-cursor",
+      "source_url": "https://github.com/discourse/discourse/commit/d1c69189f3c90ecf56013a8da904da9bff9a8e19",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 4,
+      "false_negatives": 3,
+      "precision": 0.2,
+      "recall": 0.25,
+      "f1": 0.222,
+      "matches": [
+        {
+          "golden_comment": "The update and destroy methods in Admin::EmbeddableHostsController do not validate the existence of the EmbeddableHost record retrieved by ID. If EmbeddableHost.where(id: params[:id]).first returns nil (i.e., the host does not exist), attempting to call methods on the nil object (e.g., save_host or destroy) will result in a NoMethodError.",
+          "candidate_comment": "Missing nil check in update action. If the host with the given ID doesn't exist, `host` will be nil and `save_host(host)` will fail with NoMethodError when trying to set attributes on nil.     host = EmbeddableHost.where(id: params[:id]).first     return render_json_error(I18n.t('not_found'), status: 404) unless host     save_host(host) <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same issue: missing nil validation for EmbeddableHost.where(id: params[:id]).first in the update method, which would cause NoMethodError when calling methods on nil. The candidate specifically mentions the update action and save_host method, while the golden comment mentions both update and destroy methods, but they're describing the same underlying bug pattern.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/4 bugs. 4 false positives. Missed: \"NoMethodError before_validation in EmbeddableHost...\", \"record_for_host compares lower(host) = ? but does not normal...\", \"Because this migration inserts embeddable_hosts rows with ra...\""
+    },
+    {
+      "pr_title": "Async import of the appStore packages",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/8087",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 5,
+      "false_negatives": 1,
+      "precision": 0.167,
+      "recall": 0.5,
+      "f1": 0.25,
+      "matches": [
+        {
+          "golden_comment": "The code uses forEach with async callbacks, which causes asynchronous operations (e.g., calendar/video event deletions, payment refunds) to run concurrently without being awaited. This 'fire-and-forget' behavior leads to unhandled promise rejections, race conditions, and incomplete cleanup, as surrounding try-catch blocks cannot properly handle errors from these unawaited promises. Replace forEach with for...of loops or Promise.all() with map() to ensure proper sequential execution and error handling.",
+          "candidate_comment": "Using `forEach` with an async callback creates a fire-and-forget pattern where promises are not awaited. The surrounding try-catch at line 124 won't catch errors from these async operations, and the function may return before all delete operations complete. Replace with `for...of` loop to properly await each async operation. ```typescript       for (const bookingRef of bookingRefsFiltered) {         if (bookingRef.uid) {           if (bookingRef.type.endsWith(\"_calendar\")) {             const calendar = await getCalendar(credentialsMap.get(bookingRef.type));             await calendar?.deleteEvent(bookingRef.uid, builder.calendarEvent);           } else if (bookingRef.type.endsWith(\"_video\")) {",
+          "reasoning": "Both comments identify the exact same issue: forEach with async callbacks creates fire-and-forget behavior where promises aren't awaited, leading to unhandled errors and incomplete operations. Both mention the try-catch won't catch errors from unawaited promises and both suggest the same solution (for...of loops). The candidate even provides a code example showing the fix.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/2 bugs. 5 false positives. Missed: \"Consider adding try-catch around the await to handle import ...\""
+    },
+    {
+      "pr_title": "feat: 2fa backup codes",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/10600",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/4 bugs. 2 false positives. Missed: \"The exported function TwoFactor handles backup codes and is ...\", \"Error message mentions 'backup code login' but this is a dis...\", \"Backup code validation is case-sensitive due to the use of i...\", \"Because backupCodes are decrypted and mutated in memory befo...\""
+    },
+    {
+      "pr_title": "fix: handle collective multiple host on destinationCalendar",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/10967",
+      "tool": "kodus",
+      "true_positives": 2,
+      "false_positives": 4,
+      "false_negatives": 3,
+      "precision": 0.333,
+      "recall": 0.4,
+      "f1": 0.363,
+      "matches": [
+        {
+          "golden_comment": "Potential null reference if mainHostDestinationCalendar is undefined if evt.destinationCalendar is null or an empty array",
+          "candidate_comment": "Potential null reference access: mainHostDestinationCalendar could be undefined when destinationCalendar is empty or undefined, but the code directly accesses `.integration` without checking existence first. This will throw a runtime error when trying to access a property of undefined. ```typescript     const [mainHostDestinationCalendar] = evt.destinationCalendar ?? [];     if (evt.location === MeetLocationType && mainHostDestinationCalendar?.integration !== \"google_calendar\") { <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same underlying issue: mainHostDestinationCalendar could be undefined when evt.destinationCalendar is null/empty, and the code accesses its properties without proper null checking. The candidate provides more technical detail about the runtime error and shows the specific code, while the golden comment is more concise, but they describe the identical problem.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "Logic error: when externalCalendarId is provided, you're searching for a calendar where externalId === externalCalendarId, but this will always fail since you're looking for a calendar that matches itself. Should likely find by credentialId or use different logic.",
+          "candidate_comment": "Same logic error in deleteEvent: the fallback condition searches for `cal.externalId === externalCalendarId` when externalCalendarId is already falsy, which will always be undefined. This makes the fallback useless and could cause calendar events to not be deleted from the correct calendar. ```typescript       const calendarId = externalCalendarId         ? externalCalendarId         : event.destinationCalendar?.[0]?.externalId; <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core logic error - a flawed conditional that searches for a calendar using externalCalendarId when it should use different logic. The golden comment points out the self-referential search issue, while the candidate identifies the same problem in a different context (deleteEvent) but describes the same fundamental flaw where the fallback condition is useless due to incorrect logic.",
+          "match": true,
+          "confidence": 0.85
+        }
+      ],
+      "comment": "Found 2/5 bugs. 4 false positives. Missed: \"The optional chaining on mainHostDestinationCalendar?.integr...\", \"Logic inversion in organization creation: The slug property ...\", \"The Calendar interface now requires createEvent(event, crede...\""
+    },
+    {
+      "pr_title": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/22345",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
+    },
+    {
+      "pr_title": "Comprehensive workflow reminder management for booking lifecycle events",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/7232",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 8,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 8 false positives. Missed: \"Asynchronous functions deleteScheduledEmailReminder and dele...\", \"When immediateDelete is true, the deleteScheduledEmailRemind...\""
+    },
+    {
+      "pr_title": "Advanced date override handling and timezone compatibility improvements",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/8330",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "matches": [
+        {
+          "golden_comment": "Using === for dayjs object comparison will always return false as it compares object references, not values. Use .isSame() method instead: dayjs(date.start).add(utcOffset, 'minutes').isSame(dayjs(date.end).add(utcOffset, minutes))",
+          "candidate_comment": "Dayjs object comparison with === always returns false because it compares object references, not date values. Two dayjs objects representing the same time will never be equal with ===. Should use .isSame() method for proper date comparison. ```typescript if (dayjs(date.start).add(utcOffset, \"minutes\").isSame(dayjs(date.end).add(utcOffset, \"minutes\"))) { <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same issue: using === to compare dayjs objects will always return false because it compares object references rather than date values, and both recommend using the .isSame() method as the solution. The candidate even provides the correct code fix with .isSame(). The core problem, cause, and solution are identical despite different wording.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/2 bugs. 1 false positives. Missed: \"Incorrect end time calculation using slotStartTime instead o...\""
+    },
+    {
+      "pr_title": "OAuth credential sync and app integration enhancements",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/11059",
+      "tool": "kodus",
+      "true_positives": 5,
+      "false_positives": 3,
+      "false_negatives": 0,
+      "precision": 0.625,
+      "recall": 1,
+      "f1": 0.769,
+      "matches": [
+        {
+          "golden_comment": "The parseRefreshTokenResponse function incorrectly sets refresh_token to the hardcoded string 'refresh_token' when it's missing from the OAuth refresh token response. This invalidates the token, breaking subsequent token refreshes and causing authentication failures.",
+          "candidate_comment": "Hardcoded placeholder refresh token creates security risk. When the response lacks a refresh_token, the code sets it to the literal string \"refresh_token\". This placeholder could be mistakenly used in subsequent OAuth flows, potentially causing credential confusion or leaks when the actual refresh token should be preserved or the operation should fail. ```typescript // Preserve existing refresh_token if not returned in refresh response   // Do not set placeholder values - missing refresh_token should be handled by caller <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core issue: the parseRefreshTokenResponse function incorrectly sets refresh_token to a hardcoded string 'refresh_token' when it's missing from the response, which causes problems with authentication flows. The golden comment focuses on how this breaks subsequent token refreshes, while the candidate emphasizes security risks and credential confusion, but they're describing the same underlying bug with the hardcoded placeholder value.",
+          "match": true,
+          "confidence": 0.9
+        },
+        {
+          "golden_comment": "Invalid Zod schema syntax. Computed property keys like [z.string().toString()] are not valid in Zod object schemas and will cause runtime errors.",
+          "candidate_comment": "Invalid Zod schema with computed properties. Using `[z.string().toString()]` creates a property key of '[object Object]' instead of a catch-all pattern. The `.toString()` method on Zod objects doesn't produce valid property keys. This schema will fail to validate any token response because it expects a literal '[object Object]' property instead of dynamic keys. Should use `z.record()` or `z.intersection()` with `z.object().passthrough()` for variable keys. ```typescript const minimumTokenResponseSchema = z.object({   access_token: z.string(), }).passthrough(); <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core issue: invalid Zod schema syntax using computed property keys like [z.string().toString()]. The golden comment focuses on the syntax being invalid and causing runtime errors, while the candidate provides more detailed explanation about why it fails (creates '[object Object]' key) and offers specific solutions. Both are addressing the identical underlying problem.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "parseRefreshTokenResponse returns a Zod safeParse result ({ success, data, error }), not the credential key object. Persisting that as key stores the wrapper instead of the token payload; we should store the parsed data or use schema parse.",
+          "candidate_comment": "The `parseRefreshTokenResponse` function returns a SafeParseReturnType object (containing `success`, `data`, `error` properties), but the code incorrectly uses this entire object as the credential key value. This stores the wrapper object instead of just the parsed data. The code should extract `key.data` or handle the success case properly. ```typescript const parsedKey = parseRefreshTokenResponse(googleCredentials, googleCredentialSchema); if (!parsedKey.success) {   throw new Error(\"Invalid credential format\"); await prisma.credential.update({   where: { id: credential.id },   data: { key: parsedKey.data },",
+          "reasoning": "Both comments identify the exact same issue: parseRefreshTokenResponse returns a Zod safeParse result object with success/data/error properties, but the code incorrectly stores this entire wrapper object instead of extracting the actual parsed data. The candidate even provides a code example showing the correct fix (using parsedKey.data). This is a perfect semantic match despite different wording.",
+          "match": true,
+          "confidence": 1
+        },
+        {
+          "golden_comment": "When APP_CREDENTIAL_SHARING_ENABLED and CALCOM_CREDENTIAL_SYNC_ENDPOINT are set, the refreshFunction helper returns the fetch Response, but several callers (for example GoogleCalendarService.refreshAccessToken expecting res.data, and HubspotCalendarService.refreshAccessToken expecting a HubspotToken) assume it returns the integration-specific token object. That mismatch will cause runtime errors in the sync-enabled path unless the return type or those call sites are adjusted.",
+          "candidate_comment": "Inconsistent return types: when credential sharing is enabled, returns a raw fetch Response object; when disabled, returns the result of refreshFunction(). Callers expect the same shape in both cases. The Response object needs to be parsed to extract the actual token data. ```typescript const response = await fetch(process.env.CALCOM_CREDENTIAL_SYNC_ENDPOINT, {       method: \"POST\",       body: new URLSearchParams({         calcomUserId: userId.toString(),     return await response.json(); <sub>Talk to Kody by mentioning @kody</sub>",
+          "reasoning": "Both comments identify the same core issue: when credential sharing is enabled, the function returns a raw fetch Response object, but callers expect integration-specific token objects (like res.data or HubspotToken). The candidate correctly identifies the inconsistent return types and mentions that the Response needs to be parsed to extract token data, which aligns with the golden comment's description of the type mismatch causing runtime errors.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "When the sync endpoint path is used, res is a fetch Response and has no .data; res?.data will be undefined and token.access_token will throw at runtime. This relies on a consistent return shape from refreshOAuthTokens, which isn't guaranteed currently.",
+          "candidate_comment": "Inconsistent return types: when credential sharing is enabled, returns a raw fetch Response object; when disabled, returns the result of refreshFunction(). Callers expect the same shape in both cases. The Response object needs to be parsed to extract the actual token data. ```typescript const response = await fetch(process.env.CALCOM_CREDENTIAL_SYNC_ENDPOINT, {       method: \"POST\",       body: new URLSearchParams({         calcomUserId: userId.toString(),     return await response.json(); <sub>Talk to Kody by mentioning @kody</sub>",
+          "reasoning": "Both comments identify the same core issue: inconsistent return types from the function that cause runtime problems. The golden comment specifically mentions that res?.data will be undefined when using the sync endpoint path because res is a fetch Response object, while the candidate identifies that credential sharing returns a raw fetch Response but callers expect consistent shape. Both point to the same underlying bug where the function returns different data structures in different code paths.",
+          "match": true,
+          "confidence": 0.9
+        }
+      ],
+      "comment": "Found 5/5 bugs. 3 false positives."
+    },
+    {
+      "pr_title": "SMS workflow reminder retry count tracking",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/14943",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1,
+      "recall": 0.5,
+      "f1": 0.667,
+      "matches": [
+        {
+          "golden_comment": "The deletion logic in scheduleSMSReminders.ts incorrectly deletes non-SMS workflow reminders (e.g., Email, WhatsApp) that have retryCount > 1. This occurs because the retryCount condition within the OR clause for deletion lacks a method: WorkflowMethods.SMS filter, causing it to apply to all reminder types instead of only SMS reminders, which is the intended scope of this function.",
+          "candidate_comment": "The deleteMany query's OR condition has a logic error. The second branch (retryCount > 1) lacks a method filter, causing it to delete ALL workflow reminder types (including EMAIL) with retryCount > 1, not just SMS reminders. This is inconsistent with the first branch which only targets SMS. The method filter should apply to both conditions in the OR clause. ```typescript   await prisma.workflowReminder.deleteMany({       method: WorkflowMethods.SMS,           scheduledDate: {             lte: dayjs().toISOString(),           retryCount: { <sub>Talk to Kody by mentioning @kody</sub>",
+          "reasoning": "Both comments identify the exact same underlying issue: the deleteMany query's OR condition lacks a method filter on the retryCount > 1 branch, causing it to delete all workflow reminder types (not just SMS) when retryCount > 1. Both correctly note this is inconsistent with the first branch that properly filters for SMS only, and both understand this violates the function's intended scope of only handling SMS reminders.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/2 bugs. 0 false positives. Missed: \"Using retryCount: reminder.retryCount + 1 reads a possibly s...\""
+    },
+    {
+      "pr_title": "Add guest management functionality to existing bookings",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/14740",
+      "tool": "kodus",
+      "true_positives": 3,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 1,
+      "recall": 0.6,
+      "f1": 0.75,
+      "matches": [
+        {
+          "golden_comment": "Case sensitivity bypass in email blacklist",
+          "candidate_comment": "Case-sensitivity bypass in email blacklist check. The blacklistedGuestEmails array contains lowercased emails from the environment variable, but the guest emails from user input are not lowercased before the includes() check. This allows attackers to bypass the blacklist by using different casing (e.g., 'ATTACKER@EXAMPLE.COM' vs 'attacker@example.com'). The codebase consistently normalizes emails with toLowerCase() before comparison elsewhere. ```typescript   const uniqueGuests = guests.filter(       !booking.attendees.some((attendee) => guest.toLowerCase() === attendee.email.toLowerCase()) &&       !blacklistedGuestEmails.includes(guest.toLowerCase()) <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both the golden comment and candidate issue identify the exact same security vulnerability: the email blacklist can be bypassed due to case sensitivity issues. The golden comment states 'Case sensitivity bypass in email blacklist' while the candidate provides a detailed explanation of how the blacklist contains lowercased emails but user input isn't lowercased before comparison, allowing attackers to bypass using different casing. They are describing the identical underlying bug.",
+          "match": true,
+          "confidence": 1
+        },
+        {
+          "golden_comment": "The logic for checking team admin/owner permissions is incorrect. This condition uses AND (&&) which requires both isTeamAdmin AND isTeamOwner to be true, but it should use OR (||) since a user needs to be either an admin OR an owner to have permission.",
+          "candidate_comment": "The isTeamAdminOrOwner permission check uses && (AND) instead of || (OR), requiring a user to be BOTH a team admin AND a team owner. Based on the variable name and logical intent, it should allow access if the user is either an admin OR an owner. This incorrectly denies access to legitimate team admins who are not owners, and team owners who are not explicitly marked as admins. ```typescript   const isTeamAdminOrOwner =     (await isTeamAdmin(user.id, booking.eventType?.teamId ?? 0)) ||     (await isTeamOwner(user.id, booking.eventType?.teamId ?? 0)); <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same logical error: using AND (&&) instead of OR (||) in a permission check that should allow access if a user is either a team admin OR a team owner. The candidate provides more detail and includes a code fix, but the core issue identified is identical.",
+          "match": true,
+          "confidence": 1
+        },
+        {
+          "golden_comment": "This calls the email sender with the original guests, so existing attendees included in the input will be treated as new when sending notifications, leading to incorrect emails.",
+          "candidate_comment": "The sendAddGuestsEmails function is called with the original 'guests' array from the input, but it should receive 'uniqueGuests' which has been filtered to remove existing attendees and blacklisted emails. The email-manager.ts uses this array to determine which attendees are 'new' (line 541: newGuests.includes(attendee.email)). Passing the original array causes incorrect email classification - already-existing attendees would receive 'AttendeeScheduledEmail' instead of 'AttendeeAddGuestsEmail', and blacklisted emails that weren't actually added would be incorrectly matched. ```typescript     await sendAddGuestsEmails(evt, uniqueGuests); <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same underlying issue: the sendAddGuestsEmails function is called with the original 'guests' array instead of the filtered 'uniqueGuests' array, causing existing attendees to be incorrectly treated as new attendees when sending email notifications. The candidate provides more technical detail about the specific consequences (wrong email types being sent), but the core problem is identical.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 3/5 bugs. 0 false positives. Missed: \"uniqueGuests filters out existing attendees and blacklisted ...\", \"Starting with an array containing an empty string may cause ...\""
+    },
+    {
+      "pr_title": "feat: add calendar cache status and actions (#22532)",
+      "repo": "cal.com",
+      "source_url": "https://github.com/calcom/cal.com/pull/22532",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 2 false positives. Missed: \"The updateManyByCredentialId call uses an empty data object,...\", \"logic: macOS-specific sed syntax with empty string after -i ...\""
+    },
+    {
+      "pr_title": "Fixing Re-authentication with passkeys",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/41249",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
+    },
+    {
+      "pr_title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/32918",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"Recursive caching call using session instead of delegate...\", \"Cleanup reference uses incorrect alias - should be 'idp-alia...\""
+    },
+    {
+      "pr_title": "Add AuthzClientCryptoProvider for authorization client cryptographic operations",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/33832",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 3,
+      "false_negatives": 1,
+      "precision": 0.25,
+      "recall": 0.5,
+      "f1": 0.333,
+      "matches": [
+        {
+          "golden_comment": "Returns wrong provider (default keystore instead of BouncyCastle)",
+          "candidate_comment": "Critical bug: The getKeyStore method was changed from using `KeyStore.getInstance(format.toString(), BouncyIntegration.PROVIDER)` to `KeyStore.getInstance(format.name())`. This removes the FIPS-compliant BouncyCastle provider from KeyStore instantiation, breaking FIPS 140-2 compliance. For FIPS compliance, the KeyStore must use the FIPS-validated BouncyCastle provider.     public KeyStore getKeyStore(KeystoreFormat format) throws KeyStoreException, NoSuchProviderException {         return KeyStore.getInstance(format.toString(), BouncyIntegration.PROVIDER); <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the same core issue: the code change removed the BouncyCastle provider from KeyStore instantiation, causing it to use the default provider instead. The golden comment states 'Returns wrong provider (default keystore instead of BouncyCastle)' and the candidate explains this same problem in detail, noting the change from using BouncyIntegration.PROVIDER to just format.name(), which removes the BouncyCastle provider.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/2 bugs. 3 false positives. Missed: \"Dead code exists where ASN1Encoder instances are created and...\""
+    },
+    {
+      "pr_title": "Add rolling-updates feature flag and compatibility framework",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/36882",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/1 bugs. 1 false positives. Missed: \"Incorrect method call for exit codes. The picocli.exit() met...\""
+    },
+    {
+      "pr_title": "Add Client resource type and scopes to authorization schema",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/36880",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/3 bugs. 1 false positives. Missed: \"Inconsistent feature flag bug causing orphaned permissions. ...\", \"In hasPermission(ClientModel client, String scope), the reso...\", \"In getClientsWithPermission(String scope), iterating resourc...\""
+    },
+    {
+      "pr_title": "Add Groups resource type and scopes to authorization schema",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/37038",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 4,
+      "false_negatives": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "f1": 0.286,
+      "matches": [
+        {
+          "golden_comment": "In getGroupIdsWithViewPermission, hasPermission is called with groupResource.getId() and the same groupResource.getId() is added to granted, but hasPermission resolves resources by name (treating the argument as a group id) and the GroupPermissionEvaluator contract says this method returns group IDs that are later used as UserModel.GROUPS and in getUsersCount group filters. This mismatch means per-group VIEW_MEMBERS/MANAGE_MEMBERS permissions may not yield the expected group IDs for filtering and counts, and evaluation may effectively only look at the type-level 'all-groups' resource; consider revisiting whether this should operate on the underlying group ids (resource names) instead so it aligns with the JPA queries and the interface contract.",
+          "candidate_comment": "Resource lookup in hasPermission() uses raw groupId but V1 resources are named 'group.resource.{groupId}'. This prevents V2 from finding V1 group-specific resources, causing fallback to 'all-groups' permission and ignoring granular group permissions.         Resource resource = null;         if (groupId != null) {             resource = resourceStore.findByName(server, groupId);             // Fallback to V1 naming convention for backward compatibility             if (resource == null) {                 resource = resourceStore.findByName(server, \"group.resource.\" + groupId); <sub>Talk to Kody by mentioning @kody</sub>",
+          "reasoning": "Both comments identify the same core issue: hasPermission() uses groupId to look up resources by name, but there's a mismatch between how resources are named/stored versus how they're being queried. The golden comment focuses on the broader impact on permission evaluation and filtering, while the candidate is more specific about V1/V2 resource naming conventions, but they're describing the same underlying bug where resource lookup fails due to naming mismatches.",
+          "match": true,
+          "confidence": 0.85
+        }
+      ],
+      "comment": "Found 1/2 bugs. 4 false positives. Missed: \"Incorrect permission check in canManage() method...\""
+    },
+    {
+      "pr_title": "Add HTML sanitizer for translated message resources",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/37429",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 4,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/4 bugs. 2 false positives. Missed: \"The translation is in Italian instead of Lithuanian. This sh...\", \"The totpStep1 value uses Traditional Chinese terms in the Si...\", \"The anchor sanitization logic has a potential issue where it...\", \"The method name 'santizeAnchors' should be 'sanitizeAnchors'...\""
+    },
+    {
+      "pr_title": "Implement access token context encoding framework",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/37634",
+      "tool": "kodus",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 3,
+      "precision": 0.5,
+      "recall": 0.25,
+      "f1": 0.333,
+      "matches": [
+        {
+          "golden_comment": "In isAccessTokenId, the substring for the grant shortcut and the equality check look inverted: the grant shortcut occupies indices 4–5 (substring(4,6)), and a match should return true (combined with UUID check), not false.",
+          "candidate_comment": "Two bugs in isAccessTokenId matcher: 1) substring(3, 5) extracts wrong characters - the grant shortcut is at positions 4-5, not 3-4. The token format is 6 chars (SSSSSS:UUID) where positions 0-1=sessionType, 2-3=tokenType, 4-5=grantType. 2) The equals().return false logic is inverted - it should return true when the grant matches the expected value.                 if (items[0].substring(4, 6).equals(expectedGrantShortcut)) return true; <sub>Talk to Kody by mentioning @kody</sub> <sub>Was this suggestion helpful? React with 👍 or 👎 to help Kody learn from this interaction.</sub> <!-- kody-codereview -->&#8203;",
+          "reasoning": "Both comments identify the exact same two bugs: (1) incorrect substring indices for extracting the grant shortcut (should be 4-6, not 3-5), and (2) inverted logic in the equality check (should return true when grant matches, not false). The candidate provides more detailed explanation of the token format but describes the identical underlying issues.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/4 bugs. 1 false positives. Missed: \"Wrong parameter in null check (grantType vs. rawTokenId)...\", \"Javadoc mentions \"usually like 3-letters shortcut\" but some ...\", \"Catching generic RuntimeException is too broad. The implemen...\""
+    },
+    {
+      "pr_title": "Implement recovery key support for user storage providers",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/38446",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 2 false positives. Missed: \"Unsafe raw List deserialization without type safety. Calling...\", \"After creating the RecoveryAuthnCodesCredentialModel, consid...\""
+    },
+    {
+      "pr_title": "Fix concurrent group access to prevent NullPointerException",
+      "repo": "keycloak",
+      "source_url": "https://github.com/keycloak/keycloak/pull/40940",
+      "tool": "kodus",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "Found 0/2 bugs. 1 false positives. Missed: \"Returning null from getSubGroupsCount() violates the GroupMo...\", \"The reader thread isn't waited for; flipping deletedAll to t...\""
+    }
+  ]
+}

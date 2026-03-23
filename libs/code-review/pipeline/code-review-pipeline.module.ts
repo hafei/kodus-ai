@@ -69,7 +69,7 @@ import { BugAgentProvider } from '../infrastructure/agents/bug-agent.provider';
 import { SecurityAgentProvider } from '../infrastructure/agents/security-agent.provider';
 import { PerformanceAgentProvider } from '../infrastructure/agents/performance-agent.provider';
 import { KodyRulesAgentProvider } from '../infrastructure/agents/kody-rules-agent.provider';
-import { ReflectionAgentProvider } from '../infrastructure/agents/reflection-agent.provider';
+// ReflectionAgentProvider removed — verify/discover was hurting recall
 import { ReviewOrchestratorService } from '../infrastructure/agents/review-orchestrator.service';
 import { DocumentationSearchExaService } from '../infrastructure/adapters/services/documentation-search-exa.service';
 
@@ -142,7 +142,7 @@ import { DocumentationSearchExaService } from '../infrastructure/adapters/servic
         SecurityAgentProvider,
         PerformanceAgentProvider,
         KodyRulesAgentProvider,
-        ReflectionAgentProvider,
+        // ReflectionAgentProvider removed
         ReviewOrchestratorService,
 
         // EE Stages
