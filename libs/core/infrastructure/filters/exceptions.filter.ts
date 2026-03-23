@@ -43,19 +43,23 @@ export class ExceptionsFilter implements ExceptionFilter {
                 : StatusCodes.INTERNAL_SERVER_ERROR;
 
         const requestId = request?.requestId || 'unknown-request-id';
+        const shouldReportToSentry =
+            !(exception instanceof HttpException) || status >= 500;
 
-        Sentry.withScope((scope) => {
-            scope.setTag('requestId', requestId);
-            scope.setExtra('path', request?.url);
-            scope.setExtra('method', request?.method);
+        if (shouldReportToSentry) {
+            Sentry.withScope((scope) => {
+                scope.setTag('requestId', requestId);
+                scope.setExtra('path', request?.url);
+                scope.setExtra('method', request?.method);
 
-            if (exception instanceof HttpException) {
-                scope.setTag('statusCode', exception?.getStatus());
-                scope.setExtra('response', exception?.getResponse());
-            }
+                if (exception instanceof HttpException) {
+                    scope.setTag('statusCode', exception?.getStatus());
+                    scope.setExtra('response', exception?.getResponse());
+                }
 
-            Sentry.captureException(exception);
-        });
+                Sentry.captureException(exception);
+            });
+        }
 
         const errorResponse =
             exception instanceof HttpException ? exception.getResponse() : {};

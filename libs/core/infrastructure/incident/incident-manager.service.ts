@@ -35,29 +35,15 @@ export class IncidentManagerService implements OnModuleDestroy {
     }
 
     async pingHeartbeat(envKey: string): Promise<void> {
-        const url = this.configService.get<string>(envKey);
-
-        if (!url) {
-            this.logger.debug({
-                message: `Heartbeat URL not configured for ${envKey}, skipping ping`,
-                context: IncidentManagerService.name,
-            });
-            return;
-        }
+        const url = this.resolveHeartbeat(envKey);
+        if (!url) return;
 
         await this.betterStackClient.pingHeartbeat(url);
     }
 
     async failHeartbeat(envKey: string, message: string): Promise<void> {
-        const url = this.configService.get<string>(envKey);
-
-        if (!url) {
-            this.logger.debug({
-                message: `Heartbeat URL not configured for ${envKey}, skipping fail report`,
-                context: IncidentManagerService.name,
-            });
-            return;
-        }
+        const url = this.resolveHeartbeat(envKey);
+        if (!url) return;
 
         await this.betterStackClient.failHeartbeat(url, message);
     }
@@ -142,5 +128,18 @@ export class IncidentManagerService implements OnModuleDestroy {
                 this.deduplicationMap.delete(key);
             }
         }
+    }
+
+    private resolveHeartbeat(envKey: string): string | null {
+        const url = this.configService.get<string>(envKey);
+        if (url) {
+            return url;
+        }
+
+        this.logger.debug({
+            message: `Heartbeat URL not configured for ${envKey}, skipping report`,
+            context: IncidentManagerService.name,
+        });
+        return null;
     }
 }
