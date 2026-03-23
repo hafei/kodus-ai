@@ -17,6 +17,7 @@ import {
 import {
     KodyRulesType,
     type KodyRuleWithInheritanceDetails,
+    type KodyRuleSeverityLevel,
 } from "@services/kodyRules/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
@@ -65,7 +66,12 @@ export const KodyRuleItem = ({
                 <div className="-mb-2 flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                         {!isMemory && (
-                            <IssueSeverityLevelBadge severity={rule.severity} />
+                            <IssueSeverityLevelBadge
+                                severity={
+                                    rule.severityLevel ??
+                                    (rule.severity === "critical" ? "critical" : "issue")
+                                }
+                            />
                         )}
 
                         {rule.sourcePath && (

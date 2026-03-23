@@ -8,7 +8,10 @@ export const severityLevelClassnames = {
     high: "bg-warning/10 text-warning ring-warning/64 [--button-foreground:var(--color-warning)]",
     medium: "bg-alert/10 text-alert ring-alert/64 [--button-foreground:var(--color-alert)]",
     low: "bg-info/10 text-info ring-info/64 [--button-foreground:var(--color-info)]",
-} as const satisfies Record<SeverityLevel, string>;
+    warning:
+        "bg-alert/10 text-alert ring-alert/64 [--button-foreground:var(--color-alert)]",
+    issue: "bg-warning/10 text-warning ring-warning/64 [--button-foreground:var(--color-warning)]",
+} as const;
 
 export const IssueSeverityLevelBadge = ({
     severity,
