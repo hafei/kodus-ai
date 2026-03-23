@@ -11,6 +11,8 @@ describe('setupSentry', () => {
         jest.clearAllMocks();
         delete process.env.SENTRY_RELEASE;
         process.env.API_NODE_ENV = 'production';
+        process.env.API_BETTERSTACK_DSN =
+            'https://fake-dsn@s2315144.eu-fsn-3.betterstackdata.com/2315144';
     });
 
     it('initializes Sentry with the Better Stack DSN only once', async () => {
@@ -29,7 +31,7 @@ describe('setupSentry', () => {
         expect(sentry.init).toHaveBeenCalledTimes(1);
         expect(sentry.init).toHaveBeenCalledWith(
             expect.objectContaining({
-                dsn: 'https://wooUr3mtGmvoG8Pt1pmrN78n@s2315144.eu-fsn-3.betterstackdata.com/2315144',
+                dsn: 'https://fake-dsn@s2315144.eu-fsn-3.betterstackdata.com/2315144',
                 environment: 'production',
                 release: 'kodus-orchestrator@production',
                 serverName: 'kodus-worker',

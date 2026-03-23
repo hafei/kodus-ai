@@ -10,9 +10,14 @@ export function setupSentry(componentType: 'api' | 'worker' | 'webhook'): void {
     const environment =
         process.env.API_NODE_ENV || process.env.NODE_ENV || 'development';
 
+    const dsn = process.env.API_BETTERSTACK_DSN;
+    if (!dsn) {
+        return;
+    }
+
     try {
         Sentry.init({
-            dsn: 'https://wooUr3mtGmvoG8Pt1pmrN78n@s2315144.eu-fsn-3.betterstackdata.com/2315144',
+            dsn,
             environment,
             release: `kodus-orchestrator@${
                 process.env.SENTRY_RELEASE || environment
