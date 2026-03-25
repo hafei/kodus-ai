@@ -38,40 +38,44 @@ describe('AgentReviewStage', () => {
         overrides: Partial<CodeReviewPipelineContext> = {},
     ): CodeReviewPipelineContext =>
         ({
-        dryRun: { enabled: false },
-        organizationAndTeamData: {
-            organizationId: 'org-123',
-            teamId: 'team-456',
-        } as any,
-        repository: { id: 'repo-1', name: 'test-repo', fullName: 'org/test-repo' } as any,
-        branch: 'main',
-        pullRequest: {
-            number: 42,
-            title: 'Test PR',
-            base: { repo: { fullName: 'org/repo' }, ref: 'main' },
-            repository: {} as any,
-            isDraft: false,
-            stats: {
-                total_additions: 10,
-                total_deletions: 5,
-                total_files: 2,
-                total_lines_changed: 15,
+            dryRun: { enabled: false },
+            organizationAndTeamData: {
+                organizationId: 'org-123',
+                teamId: 'team-456',
+            } as any,
+            repository: {
+                id: 'repo-1',
+                name: 'test-repo',
+                fullName: 'org/test-repo',
+            } as any,
+            branch: 'main',
+            pullRequest: {
+                number: 42,
+                title: 'Test PR',
+                base: { repo: { fullName: 'org/repo' }, ref: 'main' },
+                repository: {} as any,
+                isDraft: false,
+                stats: {
+                    total_additions: 10,
+                    total_deletions: 5,
+                    total_files: 2,
+                    total_lines_changed: 15,
+                },
             },
-        },
-        teamAutomationId: 'team-auto-1',
-        origin: 'github',
-        action: 'opened',
-        platformType: PlatformType.GITHUB,
-        codeReviewConfig: {
-            codeReviewVersion: CodeReviewVersion.V3_AGENT,
-            reviewOptions: { bug: true, security: true, performance: true },
-        } as any,
-        preparedFileContexts: [],
-        validSuggestions: [],
-        discardedSuggestions: [],
-        correlationId: 'test-correlation-id',
-        ...overrides,
-    } as CodeReviewPipelineContext);
+            teamAutomationId: 'team-auto-1',
+            origin: 'github',
+            action: 'opened',
+            platformType: PlatformType.GITHUB,
+            codeReviewConfig: {
+                codeReviewVersion: CodeReviewVersion.V3_AGENT,
+                reviewOptions: { bug: true, security: true, performance: true },
+            } as any,
+            preparedFileContexts: [],
+            validSuggestions: [],
+            discardedSuggestions: [],
+            correlationId: 'test-correlation-id',
+            ...overrides,
+        }) as CodeReviewPipelineContext;
 
     beforeEach(async () => {
         mockOrchestrator = {
@@ -95,8 +99,18 @@ describe('AgentReviewStage', () => {
                     },
                 ],
                 agentResults: [
-                    { agentName: 'bug-agent', suggestions: [{}], turnsUsed: 3, durationMs: 1000 },
-                    { agentName: 'security-agent', suggestions: [{}], turnsUsed: 5, durationMs: 2000 },
+                    {
+                        agentName: 'bug-agent',
+                        suggestions: [{}],
+                        turnsUsed: 3,
+                        durationMs: 1000,
+                    },
+                    {
+                        agentName: 'security-agent',
+                        suggestions: [{}],
+                        turnsUsed: 5,
+                        durationMs: 2000,
+                    },
                 ],
                 totalDurationMs: 2500,
             }),
@@ -105,10 +119,28 @@ describe('AgentReviewStage', () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 AgentReviewStage,
-                { provide: ReviewOrchestratorService, useValue: mockOrchestrator },
-                { provide: ObservabilityService, useValue: { runInSpan: jest.fn((_name: string, fn: any) => fn()) } },
-                { provide: AUTOMATION_EXECUTION_SERVICE_TOKEN, useValue: { updateCodeReview: jest.fn(), findLatestStageLog: jest.fn(), updateStageLog: jest.fn() } },
-                { provide: DOCUMENTATION_SEARCH_ADAPTER_TOKEN, useValue: undefined },
+                {
+                    provide: ReviewOrchestratorService,
+                    useValue: mockOrchestrator,
+                },
+                {
+                    provide: ObservabilityService,
+                    useValue: {
+                        runInSpan: jest.fn((_name: string, fn: any) => fn()),
+                    },
+                },
+                {
+                    provide: AUTOMATION_EXECUTION_SERVICE_TOKEN,
+                    useValue: {
+                        updateCodeReview: jest.fn(),
+                        findLatestStageLog: jest.fn(),
+                        updateStageLog: jest.fn(),
+                    },
+                },
+                {
+                    provide: DOCUMENTATION_SEARCH_ADAPTER_TOKEN,
+                    useValue: undefined,
+                },
             ],
         }).compile();
 
@@ -156,11 +188,16 @@ describe('AgentReviewStage', () => {
                         read: jest.fn(),
                         listDir: jest.fn(),
                     },
-                    cleanup: jest.fn(), type: 'e2b' as const,
+                    cleanup: jest.fn(),
+                    type: 'e2b' as const,
                 },
                 codeReviewConfig: {
                     codeReviewVersion: CodeReviewVersion.V3_AGENT,
-                    reviewOptions: { bug: true, security: true, performance: false },
+                    reviewOptions: {
+                        bug: true,
+                        security: true,
+                        performance: false,
+                    },
                     languageResultPrompt: 'pt-BR',
                 } as any,
             });
@@ -172,7 +209,11 @@ describe('AgentReviewStage', () => {
                     prNumber: 42,
                     changedFiles,
                     languageResultPrompt: 'pt-BR',
-                    reviewOptions: { bug: true, security: true, performance: false },
+                    reviewOptions: {
+                        bug: true,
+                        security: true,
+                        performance: false,
+                    },
                 }),
             );
         });
@@ -191,7 +232,8 @@ describe('AgentReviewStage', () => {
                         read: jest.fn(),
                         listDir: jest.fn(),
                     },
-                    cleanup: jest.fn(), type: 'e2b' as const,
+                    cleanup: jest.fn(),
+                    type: 'e2b' as const,
                 },
             });
 
@@ -209,7 +251,9 @@ describe('AgentReviewStage', () => {
                 (r: any) => r.file.filename === 'src/api.ts',
             );
             expect(apiResult.validSuggestionsToAnalyze).toHaveLength(1);
-            expect(apiResult.validSuggestionsToAnalyze[0].label).toBe('security');
+            expect(apiResult.validSuggestionsToAnalyze[0].label).toBe(
+                'security',
+            );
         });
 
         it('should set empty discardedSuggestions for each file', async () => {
@@ -221,7 +265,8 @@ describe('AgentReviewStage', () => {
                         read: jest.fn(),
                         listDir: jest.fn(),
                     },
-                    cleanup: jest.fn(), type: 'e2b' as const,
+                    cleanup: jest.fn(),
+                    type: 'e2b' as const,
                 },
             });
 
@@ -247,7 +292,8 @@ describe('AgentReviewStage', () => {
                         read: jest.fn(),
                         listDir: jest.fn(),
                     },
-                    cleanup: jest.fn(), type: 'e2b' as const,
+                    cleanup: jest.fn(),
+                    type: 'e2b' as const,
                 },
             });
 

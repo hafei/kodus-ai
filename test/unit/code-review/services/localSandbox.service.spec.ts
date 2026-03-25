@@ -26,8 +26,19 @@ function validateExecCommand(command: string): {
     args?: string[];
 } {
     const ALLOWED_PROGRAMS = new Set([
-        'sg', 'tsc', 'npx', 'eslint', 'python', 'python3',
-        'go', 'cargo', 'cat', 'wc', 'head', 'tail', 'file',
+        'sg',
+        'tsc',
+        'npx',
+        'eslint',
+        'python',
+        'python3',
+        'go',
+        'cargo',
+        'cat',
+        'wc',
+        'head',
+        'tail',
+        'file',
     ]);
 
     const parts = command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
@@ -35,9 +46,7 @@ function validateExecCommand(command: string): {
         return { allowed: false, reason: 'empty command' };
     }
 
-    const [program, ...args] = parts.map((p) =>
-        p.replace(/^['"]|['"]$/g, ''),
-    );
+    const [program, ...args] = parts.map((p) => p.replace(/^['"]|['"]$/g, ''));
 
     if (!ALLOWED_PROGRAMS.has(program)) {
         return {
@@ -56,9 +65,7 @@ function validateExecCommand(command: string): {
         positionalArgs.push(args[i]);
     }
     const hasTraversal = positionalArgs.some(
-        (a) =>
-            a.startsWith('/') ||
-            /(^|\/)\.\.($|\/)/.test(a),
+        (a) => a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
     );
     if (hasTraversal) {
         return {
@@ -75,7 +82,9 @@ function validateExecCommand(command: string): {
 describe('LocalSandboxService exec validation', () => {
     describe('program whitelist', () => {
         it('should allow sg (ast-grep)', () => {
-            const result = validateExecCommand("sg --pattern '$VAR.map($FN)' --lang typescript .");
+            const result = validateExecCommand(
+                "sg --pattern '$VAR.map($FN)' --lang typescript .",
+            );
             expect(result.allowed).toBe(true);
             expect(result.program).toBe('sg');
         });
@@ -163,7 +172,9 @@ describe('LocalSandboxService exec validation', () => {
         });
 
         it('should block .. in middle of path', () => {
-            const result = validateExecCommand('eslint src/../../../etc/shadow');
+            const result = validateExecCommand(
+                'eslint src/../../../etc/shadow',
+            );
             expect(result.allowed).toBe(false);
         });
 
@@ -173,22 +184,30 @@ describe('LocalSandboxService exec validation', () => {
         });
 
         it('should allow nested relative paths', () => {
-            const result = validateExecCommand('eslint src/services/auth/handler.ts');
+            const result = validateExecCommand(
+                'eslint src/services/auth/handler.ts',
+            );
             expect(result.allowed).toBe(true);
         });
 
         it('should allow flags containing slashes (not positional)', () => {
-            const result = validateExecCommand("sg --pattern 'import/export' --lang typescript .");
+            const result = validateExecCommand(
+                "sg --pattern 'import/export' --lang typescript .",
+            );
             expect(result.allowed).toBe(true);
         });
 
         it('should allow flags containing .. (not positional)', () => {
-            const result = validateExecCommand("sg --pattern '$A..$B' --lang ruby .");
+            const result = validateExecCommand(
+                "sg --pattern '$A..$B' --lang ruby .",
+            );
             expect(result.allowed).toBe(true);
         });
 
         it('should allow dot path', () => {
-            const result = validateExecCommand('sg --pattern test --lang typescript .');
+            const result = validateExecCommand(
+                'sg --pattern test --lang typescript .',
+            );
             expect(result.allowed).toBe(true);
         });
 
@@ -205,24 +224,32 @@ describe('LocalSandboxService exec validation', () => {
 
     describe('edge cases', () => {
         it('should handle quoted arguments correctly', () => {
-            const result = validateExecCommand("sg --pattern 'await $PROMISE' --lang typescript src");
+            const result = validateExecCommand(
+                "sg --pattern 'await $PROMISE' --lang typescript src",
+            );
             expect(result.allowed).toBe(true);
             expect(result.program).toBe('sg');
         });
 
         it('should handle double-quoted arguments', () => {
-            const result = validateExecCommand('sg --pattern "catch ($ERR) { }" --lang javascript .');
+            const result = validateExecCommand(
+                'sg --pattern "catch ($ERR) { }" --lang javascript .',
+            );
             expect(result.allowed).toBe(true);
         });
 
         it('should handle multiple positional args', () => {
-            const result = validateExecCommand('eslint src/a.ts src/b.ts src/c.ts');
+            const result = validateExecCommand(
+                'eslint src/a.ts src/b.ts src/c.ts',
+            );
             expect(result.allowed).toBe(true);
             expect(result.args).toHaveLength(3);
         });
 
         it('should block if ANY positional arg has traversal', () => {
-            const result = validateExecCommand('eslint src/ok.ts ../../bad.ts src/also-ok.ts');
+            const result = validateExecCommand(
+                'eslint src/ok.ts ../../bad.ts src/also-ok.ts',
+            );
             expect(result.allowed).toBe(false);
         });
     });

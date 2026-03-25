@@ -7,7 +7,10 @@ import {
     ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { KodyRulesScope, SeverityLevel } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import {
+    KodyRulesScope,
+    SeverityLevel,
+} from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { KodyRuleSeverity } from '@libs/ee/kodyRules/dtos/create-kody-rule.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 

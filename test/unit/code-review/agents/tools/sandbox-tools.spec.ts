@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { registerSandboxTools, registerSearchDocsTool } from '@/code-review/infrastructure/agents/tools/sandbox-tools';
+import {
+    registerSandboxTools,
+    registerSearchDocsTool,
+} from '@/code-review/infrastructure/agents/tools/sandbox-tools';
 import { RemoteCommands } from '@/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 
 jest.mock('@kodus/flow', () => ({
@@ -28,8 +31,12 @@ describe('registerSandboxTools', () => {
         mockRemoteCommands = {
             grep: jest.fn().mockResolvedValue('match1\nmatch2'),
             read: jest.fn().mockResolvedValue('file contents here'),
-            listDir: jest.fn().mockResolvedValue('src/\n  index.ts\n  utils.ts'),
-            exec: jest.fn().mockResolvedValue({ stdout: 'exec output', exitCode: 0 }),
+            listDir: jest
+                .fn()
+                .mockResolvedValue('src/\n  index.ts\n  utils.ts'),
+            exec: jest
+                .fn()
+                .mockResolvedValue({ stdout: 'exec output', exitCode: 0 }),
         };
     });
 
@@ -91,7 +98,10 @@ describe('registerSandboxTools', () => {
         });
 
         it('should truncate results exceeding MAX_GREP_MATCHES', async () => {
-            const manyLines = Array.from({ length: 50 }, (_, i) => `line ${i}`).join('\n');
+            const manyLines = Array.from(
+                { length: 50 },
+                (_, i) => `line ${i}`,
+            ).join('\n');
             (mockRemoteCommands.grep as jest.Mock).mockResolvedValue(manyLines);
 
             registerSandboxTools(mockOrchestration, mockRemoteCommands);
@@ -108,7 +118,11 @@ describe('registerSandboxTools', () => {
             registerSandboxTools(mockOrchestration, mockRemoteCommands);
             const readTool = registeredTools.get('readFile');
 
-            await readTool.execute({ path: 'src/index.ts', startLine: 10, endLine: 20 });
+            await readTool.execute({
+                path: 'src/index.ts',
+                startLine: 10,
+                endLine: 20,
+            });
 
             expect(mockRemoteCommands.read).toHaveBeenCalledWith(
                 'src/index.ts',
@@ -132,7 +146,9 @@ describe('registerSandboxTools', () => {
 
         it('should truncate results exceeding MAX_READ_LENGTH', async () => {
             const largeContent = 'x'.repeat(40_000);
-            (mockRemoteCommands.read as jest.Mock).mockResolvedValue(largeContent);
+            (mockRemoteCommands.read as jest.Mock).mockResolvedValue(
+                largeContent,
+            );
 
             registerSandboxTools(mockOrchestration, mockRemoteCommands);
             const readTool = registeredTools.get('readFile');
@@ -178,7 +194,9 @@ describe('registerSandboxTools', () => {
             registerSandboxTools(mockOrchestration, mockRemoteCommands);
             const shellTool = registeredTools.get('shell');
 
-            await shellTool.execute({ command: 'npx tsc --noEmit src/file.ts' });
+            await shellTool.execute({
+                command: 'npx tsc --noEmit src/file.ts',
+            });
 
             expect(mockRemoteCommands.exec).toHaveBeenCalledWith(
                 'npx tsc --noEmit src/file.ts',
@@ -189,7 +207,9 @@ describe('registerSandboxTools', () => {
             registerSandboxTools(mockOrchestration, mockRemoteCommands);
             const shellTool = registeredTools.get('shell');
 
-            const result = await shellTool.execute({ command: 'node malicious.js' });
+            const result = await shellTool.execute({
+                command: 'node malicious.js',
+            });
 
             expect(result.result).toContain('Command not allowed');
             // grep should NOT have been called for this

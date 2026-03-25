@@ -9,6 +9,8 @@ export interface CreateSandboxParams {
     /** Platform username for auth (required by Bitbucket App Passwords) */
     authUsername?: string;
     prNumber?: number;
+    /** Base branch of the PR (e.g. "main", "develop"). Used to fetch the base ref so git diff works in the sandbox. */
+    baseBranch?: string;
 }
 
 export interface SandboxInstance {
@@ -16,6 +18,8 @@ export interface SandboxInstance {
     cleanup: () => Promise<void>;
     /** Which sandbox provider created this instance */
     type: 'e2b' | 'local' | 'null';
+    /** Base branch fetched in the sandbox (e.g. "main"). Allows tools to run git diff origin/${baseBranch}...HEAD */
+    baseBranch?: string;
 }
 
 export interface ISandboxProvider {

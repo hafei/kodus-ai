@@ -368,7 +368,13 @@ export class ObservabilityService implements OnModuleInit {
         byokConfig?: BYOKConfig;
         exec: (callbacks: any[]) => Promise<T>;
     }): Promise<{ result: T; usage: any }> {
-        const { spanName, runName, attrs, byokConfig: spanByokConfig, exec } = params;
+        const {
+            spanName,
+            runName,
+            attrs,
+            byokConfig: spanByokConfig,
+            exec,
+        } = params;
         const obs = this.getObsInstance();
         const span = obs.startSpan(spanName);
 

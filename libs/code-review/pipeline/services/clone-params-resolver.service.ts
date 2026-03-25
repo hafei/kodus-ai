@@ -56,6 +56,7 @@ export class CloneParamsResolverService {
         authToken: string;
         authUsername?: string;
         branch: string;
+        baseBranch?: string;
         prNumber?: number;
         platform: PlatformType;
     } | null> {
@@ -73,6 +74,10 @@ export class CloneParamsResolverService {
                 authToken: cloneParams.auth?.token || '',
                 authUsername: cloneParams.auth?.username,
                 branch: context.branch,
+                baseBranch:
+                    context.pullRequest?.base?.ref ||
+                    context.repository?.defaultBranch ||
+                    'main',
                 prNumber: context.pullRequest.number,
                 platform: context.platformType,
             };

@@ -20,6 +20,7 @@ import { Action, ResourceType } from "@services/permissions/types";
 import { EyeIcon, RotateCcwIcon, Save } from "lucide-react";
 import { Controller, useFormContext } from "react-hook-form";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
+import { unformatConfig } from "src/core/utils/helpers";
 
 import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import GeneratingConfig from "../../_components/generating-config";
@@ -33,7 +34,6 @@ import {
     type AutomationCodeReviewConfigPageProps,
     type CodeReviewFormType,
 } from "../../_types";
-import { unformatConfig } from "src/core/utils/helpers";
 import {
     useCodeReviewConfig,
     usePlatformConfig,

@@ -56,7 +56,8 @@ export async function classifySeverity(
 
     if (!apiKey) {
         logger.warn({
-            message: 'No Google AI API key for severity classification, defaulting to medium',
+            message:
+                'No Google AI API key for severity classification, defaulting to medium',
             context: 'SeverityClassifier',
         });
         return new Map(suggestions.map((_, i) => [i, 'medium']));

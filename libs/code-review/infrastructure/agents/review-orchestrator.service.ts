@@ -72,11 +72,7 @@ export class ReviewOrchestratorService {
         }
 
         // Add Kody Rules agent if there are active standard rules
-        if (
-            this.kodyRulesAgent &&
-            kodyRules &&
-            kodyRules.length > 0
-        ) {
+        if (this.kodyRulesAgent && kodyRules && kodyRules.length > 0) {
             agentTasks.push({
                 name: 'kody-rules',
                 provider: {
@@ -121,7 +117,10 @@ export class ReviewOrchestratorService {
                         message: `[AGENT] ${task.name} agent failed for PR#${agentInput.prNumber}`,
                         context: ReviewOrchestratorService.name,
                         error,
-                        metadata: { agent: task.name, prNumber: agentInput.prNumber },
+                        metadata: {
+                            agent: task.name,
+                            prNumber: agentInput.prNumber,
+                        },
                     });
                     throw error;
                 }

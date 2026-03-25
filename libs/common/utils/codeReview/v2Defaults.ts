@@ -77,9 +77,11 @@ export const V2_DEFAULT_SEVERITY_FLAGS_TEXT = {
 };
 
 export const V2_DEFAULT_LEVEL_TEXT = {
-    critical: 'The code WILL crash, lose/corrupt data, or open a severe security breach in production. Immediate fix required before merge.',
+    critical:
+        'The code WILL crash, lose/corrupt data, or open a severe security breach in production. Immediate fix required before merge.',
     issue: 'The code produces WRONG results or fails to perform its intended function in at least one scenario, but does not cause catastrophic failure.',
-    warning: 'The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.',
+    warning:
+        'The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.',
 };
 
 export function getV2DefaultsText() {

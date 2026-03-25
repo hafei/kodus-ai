@@ -16,8 +16,8 @@ import {
 } from "@components/ui/tooltip";
 import {
     KodyRulesType,
-    type KodyRuleWithInheritanceDetails,
     type KodyRuleSeverityLevel,
+    type KodyRuleWithInheritanceDetails,
 } from "@services/kodyRules/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
@@ -69,7 +69,9 @@ export const KodyRuleItem = ({
                             <IssueSeverityLevelBadge
                                 severity={
                                     rule.severityLevel ??
-                                    (rule.severity === "critical" ? "critical" : "issue")
+                                    (rule.severity === "critical"
+                                        ? "critical"
+                                        : "issue")
                                 }
                             />
                         )}

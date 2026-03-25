@@ -47,6 +47,7 @@ export class E2BSandboxService implements ISandboxProvider {
             branch,
             prNumber,
             platform,
+            baseBranch,
         } = params;
         const apiKey = this.configService.get<string>('API_E2B_KEY');
 
@@ -86,6 +87,12 @@ export class E2BSandboxService implements ISandboxProvider {
 
             await this.cloneRepository(sandbox, params);
 
+            // Fetch base branch so git diff origin/${baseBranch}...HEAD works
+            const resolvedBaseBranch = await this.fetchBaseBranch(
+                sandbox,
+                params,
+            );
+
             const remoteCommands = this.buildRemoteCommands(sandbox);
 
             const cleanup = async () => {
@@ -100,7 +107,12 @@ export class E2BSandboxService implements ISandboxProvider {
                 }
             };
 
-            return { remoteCommands, cleanup, type: 'e2b' as const };
+            return {
+                remoteCommands,
+                cleanup,
+                type: 'e2b' as const,
+                baseBranch: resolvedBaseBranch,
+            };
         } catch (error) {
             // If setup fails, kill the sandbox before re-throwing
             try {
@@ -214,6 +226,63 @@ export class E2BSandboxService implements ISandboxProvider {
                 stdout: verifyResult.stdout?.slice(0, 500),
             },
         });
+    }
+
+    /**
+     * Fetch the base branch (e.g. main/develop) so that git diff origin/${baseBranch}...HEAD
+     * works inside the sandbox. Returns the branch name on success, undefined on failure.
+     * Failure is non-fatal — tools will fall back to the GitHub API.
+     */
+    private async fetchBaseBranch(
+        sandbox: Sandbox,
+        params: CreateSandboxParams,
+    ): Promise<string | undefined> {
+        const { cloneUrl, authToken, authUsername, platform, baseBranch } =
+            params;
+        if (!baseBranch) return undefined;
+
+        const authHeader = this.buildAuthHeader(
+            platform,
+            authToken,
+            authUsername,
+        );
+
+        this.logger.log({
+            message: `[DEBUG] Fetching base branch: ${baseBranch}`,
+            context: E2BSandboxService.name,
+            metadata: { baseBranch },
+        });
+
+        try {
+            const result = await sandbox.commands.run(
+                `cd ${REPO_DIR} && git -c http.extraHeader="$GIT_AUTH_HEADER" fetch --depth=1 ${cloneUrl} refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`,
+                {
+                    timeoutMs: TIMEOUTS.CLONE_MS,
+                    envs: { GIT_AUTH_HEADER: authHeader },
+                },
+            );
+
+            if (result.exitCode === 0) {
+                this.logger.log({
+                    message: `[DEBUG] Base branch fetched successfully: origin/${baseBranch}`,
+                    context: E2BSandboxService.name,
+                });
+                return baseBranch;
+            }
+
+            this.logger.warn({
+                message: `[DEBUG] Failed to fetch base branch ${baseBranch}: exitCode=${result.exitCode} stderr=${(result.stderr || '').slice(0, 300)}`,
+                context: E2BSandboxService.name,
+            });
+            return undefined;
+        } catch (error) {
+            this.logger.warn({
+                message: `[DEBUG] Error fetching base branch ${baseBranch}, tools will use API fallback`,
+                context: E2BSandboxService.name,
+                error,
+            });
+            return undefined;
+        }
     }
 
     private async createSandbox(

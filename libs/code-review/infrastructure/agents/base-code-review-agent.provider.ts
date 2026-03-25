@@ -12,9 +12,9 @@ import { RemoteCommands } from '@libs/code-review/infrastructure/adapters/servic
 import { ObservabilityService } from '@libs/core/log/observability.service';
 import { PermissionValidationService } from '@libs/ee/shared/services/permissionValidation.service';
 import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
-import { DocumentationSearchAdapter } from './tools/sandbox-tools';
 import { byokToVercelModel, getModelName } from './llm/byok-to-vercel';
 import { runAgentLoop } from './llm/agent-loop';
+import { DocumentationSearchAdapter } from './llm/agent-tools.factory';
 
 /**
  * Category-specific agent configuration provided by each concrete subclass.
@@ -61,6 +61,8 @@ export interface ReviewAgentInput {
     prBody?: string;
     onAgentProgress?: (event: AgentProgressEvent) => void;
     gitHubToken?: string;
+    /** Base branch of the PR (e.g. "main"). Passed to tools for git diff. */
+    baseBranch?: string;
 }
 
 /**
@@ -152,7 +154,7 @@ export abstract class BaseCodeReviewAgentProvider {
             let stepCount = 0;
             const PROGRESS_BATCH_SIZE = 5;
 
-            const agentResult = await runAgentLoop({
+            const loopParams = {
                 model,
                 systemPrompt,
                 userPrompt,
@@ -163,7 +165,13 @@ export abstract class BaseCodeReviewAgentProvider {
                     byokConfig: byokConfig,
                 },
                 byokConfig: byokConfig,
+                agentName: identity.name,
                 gitHubToken: input.gitHubToken,
+                changedFiles: input.changedFiles,
+                prNumber: input.prNumber,
+                repositoryFullName: input.repositoryFullName,
+                baseBranch: input.baseBranch,
+
                 onStepFinish: (step: any) => {
                     stepCount++;
                     if (step.toolCalls) {
@@ -194,7 +202,25 @@ export abstract class BaseCodeReviewAgentProvider {
                         recentToolCalls.length = 0; // Clear after sending
                     }
                 },
-            });
+            };
+
+            let agentResult;
+            if (process.env.LANGCHAIN_TRACING_V2 === 'true') {
+                const { traceable } = require('langsmith/traceable');
+                const tracedRun = traceable(runAgentLoop, {
+                    name: identity.name,
+                    metadata: {
+                        organizationId:
+                            input.organizationAndTeamData?.organizationId,
+                        teamId: input.organizationAndTeamData?.teamId,
+                        prNumber: input.prNumber,
+                        pullRequestId: input.prNumber,
+                    },
+                });
+                agentResult = await tracedRun(loopParams);
+            } else {
+                agentResult = await runAgentLoop(loopParams);
+            }
 
             const durationMs = Date.now() - startTime;
 
@@ -277,11 +303,12 @@ export abstract class BaseCodeReviewAgentProvider {
                 durationMs,
                 totalTokens: agentResult.usage.totalTokens,
                 step: agentResult.steps,
-                finishReason: agentResult.finishReason === 'timeout'
-                    ? 'timeout'
-                    : hitHardLimit
-                      ? 'max-steps'
-                      : 'stop',
+                finishReason:
+                    agentResult.finishReason === 'timeout'
+                        ? 'timeout'
+                        : hitHardLimit
+                          ? 'max-steps'
+                          : 'stop',
                 source: agentResult.source,
                 toolCalls: agentResult.toolCalls.map((tc) => ({
                     tool: tc.toolName || tc.tool,
@@ -330,7 +357,10 @@ export abstract class BaseCodeReviewAgentProvider {
                     prNumber: input.prNumber,
                     durationMs,
                     model: modelName,
-                    errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+                    errorStack:
+                        error instanceof Error
+                            ? error.stack?.substring(0, 500)
+                            : undefined,
                 },
             });
             return {
@@ -353,65 +383,106 @@ export abstract class BaseCodeReviewAgentProvider {
             : '';
 
         return `<CodeReviewAgent>
-  <Identity name="${identity.name}">${identity.description}</Identity>
-  <Date>${new Date().toLocaleDateString('en-GB')}</Date>${langSection}
+  <Date>${new Date().toLocaleDateString('en-GB')}</Date>
+  <Role>
+    You are ${identity.name}, ${identity.description}
+    ${categoryPrompt}${langSection}
+  </Role>
 
-  <Expertise>
-${categoryPrompt}
-  </Expertise>
+  <CriticalRule>
+    You MUST call grep at least once BEFORE writing your final response.
+    Responding without any tool call is NEVER acceptable — the diff alone is not enough evidence.
+  </CriticalRule>
+
+  <Workflow>
+    Your first action must be a tool call — not text.
+
+    Step 1 — READ DIFFS: Read the diffs in the user message. Identify every changed function, method, or logic path. Note @@ line numbers.
+
+    Step 2 — GREP CALLERS: For each changed function, grep for its callers:
+      grep("methodName\\(", excludeTests=true) → finds production call sites.
+      grep returns file:lineNumber:content — use that lineNumber in Step 3.
+      Also grep WITHOUT excludeTests to check test coverage. No tests = higher confidence in a finding.
+      For interfaces/abstract methods, grep "implements X" or "extends X" to find concrete implementations.
+
+    Step 3 — READ CONTEXT: For each grep result, read the caller context:
+      readFile(file, startLine=N-15, endLine=N+30) — never read the whole file unless &lt;150 lines.
+      Also read context around diff @@ lines if the diff doesn't show enough (parent class, full signature).
+
+    Step 4 — ANALYZE: Trace execution paths through changed code + callers.
+      Check: null/empty values, boundary conditions, error paths, state mutations, concurrency, wrong function called, inverted conditions.
+      Determine: regression (introduced by this PR) vs pre-existing. Report pre-existing only if this PR makes it worse or newly reachable.
+
+    Step 5 — RESPOND: Return JSON with findings. If no issues, return empty suggestions with reasoning explaining what you investigated.
+  </Workflow>
+
+  <Scope>
+    The root cause must be in lines added or modified by this PR.
+    relevantFile/relevantLinesStart/relevantLinesEnd must point to the changed lines.
+    You may trace impact through callers — the symptom can appear elsewhere, but the cause must be in the diff.
+  </Scope>
 
 ${overridesSection}
 
 ${memoryRulesSection}
 
-  <Scope>
-    <Rule id="changed-only">Review ONLY lines that changed in the diff (lines with + or -). Do NOT suggest improvements to unchanged code.</Rule>
-    <Rule id="context-via-tools">Use tools to read surrounding code for CONTEXT, but only report issues in CHANGED lines.</Rule>
-    <Rule id="worse-or-reachable">If unchanged code has a bug, only report it if the PR changes make it worse or newly reachable.</Rule>
-    <Rule id="line-numbers">relevantLinesStart/relevantLinesEnd MUST point to lines shown in the diff hunks.</Rule>
-  </Scope>
-
-  <Workflow>
-    <Step id="investigate">Use tools (readFile, grep, listDir) to understand the context around changed code. Read the full files, search for callers, check how changed functions are used, look at related tests.</Step>
-    <Step id="analyze">For each suspicious change, trace the execution path mentally. What happens with edge cases? Concurrent access? Null values? Error paths? Also check for: wrong function/method being called, missing null/nil guards, import errors, inverted conditions, typos in identifiers that break functionality.</Step>
-    <Step id="decide">Report issues you confirmed with evidence. Also report obvious issues visible directly in the diff (wrong imports, typos in function names, inverted boolean logic, missing required parameters) — these don't need deep investigation.</Step>
-    <Step id="respond">Respond with a JSON block containing your findings. Do NOT continue investigating once you have enough evidence — respond promptly.</Step>
-  </Workflow>
-
-  <ToolGuidelines>
-    <Guideline id="investigate-first">You MUST use tools to investigate before responding. Do not guess about code you haven't read.</Guideline>
-    <Guideline id="read-full-files">Use readFile to read the full content of changed files, not just the diff snippet. The diff shows what changed but you need the full file to understand the context.</Guideline>
-    <Guideline id="search-callers">Use grep to find callers, usages, and related code when you need to understand impact of a change.</Guideline>
-    <Guideline id="no-loops">Do not repeat the same tool call with the same arguments. If a search returns empty, that IS useful information — move on.</Guideline>
-    <Guideline id="be-decisive">Investigate what you need, then respond. Avoid exhaustive exploration — if you've read the relevant files and traced the issue, that's enough evidence. Respond with your findings rather than searching for more confirmation.</Guideline>
-  </ToolGuidelines>
-
 </CodeReviewAgent>`;
     }
 
     protected buildUserPrompt(input: ReviewAgentInput): string {
+        const prContextSection = this.formatPRContext(
+            input.prTitle,
+            input.prBody,
+        );
         const diffsSection = this.formatDiffs(input.changedFiles);
 
-        const prContextSection = this.formatPRContext(input.prTitle, input.prBody);
+        const categoryLabel = this.getCategoryLabel();
 
-        return `<ReviewTask>${prContextSection}
+        const taskDescriptions: Record<string, string> = {
+            bug: 'real bugs introduced, exposed, or made worse by these changes',
+            performance:
+                'real performance regressions introduced or worsened by these changes',
+            security:
+                'real security vulnerabilities introduced, exposed, or made worse by these changes',
+        };
+        const taskDescription =
+            taskDescriptions[categoryLabel] ??
+            'issues introduced by these changes';
+
+        return (
+            `<ReviewTask>
+  ${prContextSection}
+
   <Diffs>
 ${diffsSection}
   </Diffs>
 
-  <OutputFormat>
-After investigating with tools, respond with ONLY a JSON block:
+  <Task>
+    Review this Pull Request for ${taskDescription}.
+    Start by calling grep to find callers of each changed function — then read caller context with readFile.
+    Only report issues backed by evidence from the code (diff + callers + context).
+  </Task>
 
-\`\`\`json
+  <Rules>
+    - Root cause must be in lines added or modified by this PR.
+    - Pre-existing issues: report only if this PR makes them worse or newly reachable.
+    - Insufficient evidence after investigation → do not report.
+    - Return only the JSON object inside markdown fences, no extra text.
+  </Rules>
+
+  <OutputFormat>
+` +
+            '```' +
+            `json
 {
-  "reasoning": "Summary of what you investigated and found",
+  "reasoning": "What you grepped, which callers you read, what evidence confirmed or ruled out each issue. Example: 'Grepped updateUser(, found caller at service:142. Read lines 130-160. Caller passes null for optional param that the new code dereferences without guard.'",
   "suggestions": [
     {
-      "relevantFile": "path/to/file.ts",
-      "language": "typescript",
-      "suggestionContent": "Description of the issue with evidence from investigation",
-      "existingCode": "problematic code snippet",
-      "improvedCode": "fixed code snippet",
+      "relevantFile": "path/to/file.ext",
+      "language": "the file language",
+      "suggestionContent": "WHAT: one sentence naming the exact problem. WHY: one sentence on the real impact. HOW: concrete fix if clear from the code — omit if speculative.",
+      "existingCode": "problematic code snippet from the diff",
+      "improvedCode": "fixed code snippet (only if fix is clear from context)",
       "oneSentenceSummary": "Brief summary",
       "relevantLinesStart": 10,
       "relevantLinesEnd": 15,
@@ -419,18 +490,12 @@ After investigating with tools, respond with ONLY a JSON block:
     }
   ]
 }
-\`\`\`
-
-If no issues found, respond with \`{"reasoning": "...", "suggestions": []}\`.
+` +
+            '```' +
+            `
   </OutputFormat>
-
-  <Rules>
-    <Rule>You MUST use tools to investigate before responding.</Rule>
-    <Rule>ONLY report issues in code that was CHANGED in this PR (lines with + or - in the diff).</Rule>
-    <Rule>Use readFile/grep for context, but do NOT suggest fixes for unchanged code.</Rule>
-    <Rule>Every suggestion's relevantFile and line numbers MUST match a file and lines from the diff above.</Rule>
-  </Rules>
-</ReviewTask>`;
+</ReviewTask>`
+        );
     }
 
     private formatPRContext(prTitle?: string, prBody?: string): string {

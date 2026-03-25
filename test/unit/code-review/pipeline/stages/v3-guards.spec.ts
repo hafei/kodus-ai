@@ -18,7 +18,10 @@ jest.mock('@kodus/flow', () => ({
 jest.mock('exa-js', () => ({ default: jest.fn() }), { virtual: true });
 
 // Minimal context factory
-const makeContext = (version?: CodeReviewVersion, extras?: Record<string, any>) =>
+const makeContext = (
+    version?: CodeReviewVersion,
+    extras?: Record<string, any>,
+) =>
     ({
         codeReviewConfig: version ? { codeReviewVersion: version } : undefined,
         changedFiles: [{ filename: 'src/index.ts' }],
@@ -26,15 +29,14 @@ const makeContext = (version?: CodeReviewVersion, extras?: Record<string, any>) 
         organizationAndTeamData: { organizationId: 'o', teamId: 't' },
         origin: 'github',
         ...extras,
-    } as any);
+    }) as any;
 
 describe('V3 guards on existing stages', () => {
     describe('ProcessFilesReview', () => {
         it('should skip when V3_AGENT', async () => {
             // Dynamic import to avoid heavy dependency resolution at top level
-            const mod = await import(
-                '@/code-review/pipeline/stages/process-files-review.stage'
-            );
+            const mod =
+                await import('@/code-review/pipeline/stages/process-files-review.stage');
             const stage = Object.create(mod.ProcessFilesReview.prototype);
             // Minimal mocks for the stage to not crash on guard check
             stage.logger = {
@@ -55,9 +57,8 @@ describe('V3 guards on existing stages', () => {
         });
 
         it('should NOT skip when v2', async () => {
-            const mod = await import(
-                '@/code-review/pipeline/stages/process-files-review.stage'
-            );
+            const mod =
+                await import('@/code-review/pipeline/stages/process-files-review.stage');
             const stage = Object.create(mod.ProcessFilesReview.prototype);
             stage.logger = {
                 log: jest.fn(),
@@ -81,9 +82,8 @@ describe('V3 guards on existing stages', () => {
 
     describe('GatherDocumentationContextStage', () => {
         it('should skip when V3_AGENT', async () => {
-            const mod = await import(
-                '@/code-review/pipeline/stages/gather-documentation-context.stage'
-            );
+            const mod =
+                await import('@/code-review/pipeline/stages/gather-documentation-context.stage');
             const stage = Object.create(
                 mod.GatherDocumentationContextStage.prototype,
             );
@@ -107,9 +107,8 @@ describe('V3 guards on existing stages', () => {
 
     describe('CollectCrossFileContextStage', () => {
         it('should skip when V3_AGENT', async () => {
-            const mod = await import(
-                '@/code-review/pipeline/stages/collect-cross-file-context.stage'
-            );
+            const mod =
+                await import('@/code-review/pipeline/stages/collect-cross-file-context.stage');
             const stage = Object.create(
                 mod.CollectCrossFileContextStage.prototype,
             );
@@ -133,9 +132,8 @@ describe('V3 guards on existing stages', () => {
 
     describe('AgentReviewStage', () => {
         it('should skip when NOT V3_AGENT', async () => {
-            const mod = await import(
-                '@/code-review/pipeline/stages/agent-review.stage'
-            );
+            const mod =
+                await import('@/code-review/pipeline/stages/agent-review.stage');
             const stage = Object.create(mod.AgentReviewStage.prototype);
             stage.logger = {
                 log: jest.fn(),
@@ -150,9 +148,8 @@ describe('V3 guards on existing stages', () => {
         });
 
         it('should skip when no codeReviewConfig', async () => {
-            const mod = await import(
-                '@/code-review/pipeline/stages/agent-review.stage'
-            );
+            const mod =
+                await import('@/code-review/pipeline/stages/agent-review.stage');
             const stage = Object.create(mod.AgentReviewStage.prototype);
             stage.logger = {
                 log: jest.fn(),

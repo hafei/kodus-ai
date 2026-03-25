@@ -19,7 +19,10 @@ import {
 } from '@libs/code-review/domain/codeReviewFeedback/enums/codeReviewCommentReaction.enum';
 import { getCodeReviewBadge } from '@libs/common/utils/codeManagement/codeReviewBadge';
 import { getLabelShield } from '@libs/common/utils/codeManagement/labels';
-import { getSeverityLevelShield, getLevelShield } from '@libs/common/utils/codeManagement/severityLevel';
+import {
+    getSeverityLevelShield,
+    getLevelShield,
+} from '@libs/common/utils/codeManagement/severityLevel';
 import { decrypt, encrypt } from '@libs/common/utils/crypto';
 import { IntegrationServiceDecorator } from '@libs/common/utils/decorators/integration-service.decorator';
 import {
@@ -2827,9 +2830,9 @@ ${copyPrompt}
               repository?.language?.toLowerCase();
 
         const severityShield = lineComment?.suggestion
-            ? (lineComment.suggestion.level
+            ? lineComment.suggestion.level
                 ? getLevelShield(lineComment.suggestion.level)
-                : getSeverityLevelShield(lineComment.suggestion.severity))
+                : getSeverityLevelShield(lineComment.suggestion.severity)
             : '';
 
         const codeBlock = improvedCode
@@ -5684,8 +5687,8 @@ This is an experimental feature that generates committable changes. Review the d
             const severityShield = suggestion?.level
                 ? getLevelShield(suggestion.level)
                 : suggestion?.severity
-                    ? getSeverityLevelShield(suggestion.severity)
-                    : '';
+                  ? getSeverityLevelShield(suggestion.severity)
+                  : '';
 
             const badges = [
                 getCodeReviewBadge(),

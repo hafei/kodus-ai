@@ -122,6 +122,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                 authToken: cloneInfo.authToken,
                 authUsername: cloneInfo.authUsername,
                 branch: cloneInfo.branch,
+                baseBranch: cloneInfo.baseBranch,
                 prNumber: cloneInfo.prNumber,
                 platform: cloneInfo.platform,
             });
@@ -129,9 +130,9 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
             cleanup = sandbox.cleanup;
 
             this.logger.log({
-                message: `Sandbox created successfully for ${label} (type=${sandbox.type})`,
+                message: `Sandbox created successfully for ${label} (type=${sandbox.type}, baseBranch=${sandbox.baseBranch || 'none'})`,
                 context: this.stageName,
-                metadata: { sandboxType: sandbox.type },
+                metadata: { sandboxType: sandbox.type, baseBranch: sandbox.baseBranch },
             });
 
             return this.updateContext(context, (draft) => {
@@ -139,6 +140,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                     remoteCommands: sandbox.remoteCommands,
                     cleanup: sandbox.cleanup,
                     type: sandbox.type,
+                    baseBranch: sandbox.baseBranch,
                 };
                 draft.getFreshCloneParams = async () => {
                     const freshCloneInfo =
@@ -156,6 +158,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                         authToken: freshCloneInfo.authToken,
                         authUsername: freshCloneInfo.authUsername,
                         branch: freshCloneInfo.branch,
+                        baseBranch: freshCloneInfo.baseBranch,
                         prNumber: freshCloneInfo.prNumber,
                         platform: freshCloneInfo.platform,
                     };
@@ -179,23 +182,27 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                 }
 
                 // Second attempt with same params
-                const cliCtxRetry = context.origin === 'cli'
-                    ? (context as unknown as CliReviewPipelineContext)
-                    : undefined;
+                const cliCtxRetry =
+                    context.origin === 'cli'
+                        ? (context as unknown as CliReviewPipelineContext)
+                        : undefined;
                 const cloneInfoRetry = await this.cloneParamsResolver.resolve(
                     context,
                     cliCtxRetry,
                 );
-                if (!cloneInfoRetry) throw new Error('Could not resolve clone params on retry');
+                if (!cloneInfoRetry)
+                    throw new Error('Could not resolve clone params on retry');
 
-                const retryResult = await this.sandboxProvider.createSandboxWithRepo({
-                    cloneUrl: cloneInfoRetry.url,
-                    authToken: cloneInfoRetry.authToken,
-                    authUsername: cloneInfoRetry.authUsername,
-                    branch: cloneInfoRetry.branch,
-                    prNumber: cloneInfoRetry.prNumber,
-                    platform: cloneInfoRetry.platform,
-                });
+                const retryResult =
+                    await this.sandboxProvider.createSandboxWithRepo({
+                        cloneUrl: cloneInfoRetry.url,
+                        authToken: cloneInfoRetry.authToken,
+                        authUsername: cloneInfoRetry.authUsername,
+                        branch: cloneInfoRetry.branch,
+                        baseBranch: cloneInfoRetry.baseBranch,
+                        prNumber: cloneInfoRetry.prNumber,
+                        platform: cloneInfoRetry.platform,
+                    });
                 cleanup = retryResult.cleanup;
 
                 return this.updateContext(context, (draft) => {
@@ -203,6 +210,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                         remoteCommands: retryResult.remoteCommands,
                         cleanup: retryResult.cleanup,
                         type: retryResult.type,
+                        baseBranch: retryResult.baseBranch,
                     };
                 });
             } catch (retryError) {

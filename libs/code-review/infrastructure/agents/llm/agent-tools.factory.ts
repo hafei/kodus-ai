@@ -1,11 +1,35 @@
 import { jsonSchema } from 'ai';
 import { RemoteCommands } from '../../adapters/services/collectCrossFileContexts.service';
-import { DocumentationSearchAdapter } from '../tools/sandbox-tools';
 
-export const MAX_GREP_MATCHES = 30;
-export const MAX_READ_LENGTH = 30_000;
-export const MAX_LIST_LENGTH = 15_000;
-export const MAX_SHELL_OUTPUT = 15_000;
+export const MAX_GREP_MATCHES = 100;
+export const MAX_READ_LENGTH = 12_000;
+export const MAX_LIST_LENGTH = 8_000;
+export const MAX_SHELL_OUTPUT = 10_000;
+
+/**
+ * Minimal interface for the documentation search capability.
+ * Avoids importing DocumentationSearchExaService directly (which pulls in exa-js).
+ */
+export interface DocumentationSearchAdapter {
+    searchByFilePlan(
+        planByFile: Record<
+            string,
+            { queryTasks: Array<{ packageName: string; query: string }> }
+        >,
+        options?: Record<string, unknown>,
+    ): Promise<
+        Record<
+            string,
+            Array<{
+                query: string;
+                title: string;
+                url: string;
+                snippet: string;
+                source: string;
+            }>
+        >
+    >;
+}
 
 /**
  * Create a tool definition compatible with all AI SDK providers (including Anthropic).
@@ -38,23 +62,38 @@ export function buildAgentTools(
 ): Record<string, any> {
     const tools: Record<string, any> = {
         grep: mkTool(
-            'Search the repository for a regex pattern. Returns matching lines with file paths.',
+            'Search the repository for a regex pattern. Returns results as "file:lineNumber:content" with context lines around each match. ' +
+                'Primary use: find callers of a changed function — search for the method name followed by "(" (e.g. grep("processItem\\(") finds every call site). ' +
+                'The returned lineNumber is the exact line to use in readFile — call readFile(file, startLine=N-15, endLine=N+30) to read caller context. Do NOT read the whole file. ' +
+                'Also use to find implementations of a changed interface or all usages of a changed constant. ' +
+                'Use namesOnly=true to get only file paths. ' +
+                'Use excludeTests=true to skip test/spec files and focus on production code.',
             {
                 type: 'object',
                 properties: {
                     pattern: {
                         type: 'string',
-                        description: 'Regex pattern to search for',
+                        description:
+                            'Regex pattern to search for. To find callers of a method, use "methodName\\(" (escaping the parenthesis). To find usages of a constant, use the constant name.',
                     },
                     glob: {
                         type: 'string',
                         description:
-                            'Optional glob to filter files (e.g. "*.ts")',
+                            'Optional glob to filter files (e.g. "*.ts", "*.java")',
                     },
                     path: {
                         type: 'string',
+                        description: 'Optional directory to scope the search',
+                    },
+                    namesOnly: {
+                        type: 'boolean',
                         description:
-                            'Optional directory to scope the search',
+                            'Return only file paths instead of matching lines. Useful for blast-radius checks.',
+                    },
+                    excludeTests: {
+                        type: 'boolean',
+                        description:
+                            'Exclude test and spec files from results. Use this when tracing production callers to avoid noise from test fixtures.',
                     },
                 },
                 required: ['pattern'],
@@ -63,13 +102,48 @@ export function buildAgentTools(
                 const pattern = args.pattern || args.regex || '';
                 const glob = args.glob || args.include || undefined;
                 const searchPath =
-                    (
-                        args.path ||
-                        args.directory ||
-                        args.dir ||
-                        '.'
-                    ).replace(/^\/+/, '') || '.';
+                    (args.path || args.directory || args.dir || '.').replace(
+                        /^\/+/,
+                        '',
+                    ) || '.';
+                const namesOnly = args.namesOnly ?? false;
+                const excludeTests = args.excludeTests ?? false;
                 if (!pattern) return 'Error: pattern is required';
+
+                // Use rg directly in sandbox for richer output (--heading, -n, -C 3)
+                if (remoteCommands.exec) {
+                    try {
+                        const safePattern = pattern.replace(/'/g, "'\\''");
+                        const safePath = searchPath.replace(/'/g, "'\\''");
+                        const globArg = glob ? ` --glob '${glob}'` : '';
+                        const excludeTestsArgs = excludeTests
+                            ? ` --glob '!*test*' --glob '!*Test*' --glob '!*spec*' --glob '!*Spec*' --glob '!*__tests__*'`
+                            : '';
+                        const modeArg = namesOnly ? ' -l' : ' -n -C 3';
+                        const cmd = `rg '${safePattern}'${globArg}${excludeTestsArgs}${modeArg} '${safePath}'`;
+                        const { stdout, exitCode } =
+                            await remoteCommands.exec(cmd);
+                        // exit code 1 = no matches (not an error)
+                        if (exitCode === 1 || !stdout.trim())
+                            return 'No matches found.';
+                        if (exitCode === 0) {
+                            const lines = stdout.trim().split('\n');
+                            if (lines.length > MAX_GREP_MATCHES) {
+                                return (
+                                    lines
+                                        .slice(0, MAX_GREP_MATCHES)
+                                        .join('\n') +
+                                    `\n... (${lines.length - MAX_GREP_MATCHES} more lines)`
+                                );
+                            }
+                            return stdout.trim();
+                        }
+                    } catch {
+                        // rg not available, fall through to remoteCommands.grep
+                    }
+                }
+
+                // Fallback: remoteCommands.grep (no context lines)
                 let result: string;
                 try {
                     result = await remoteCommands.grep(
@@ -79,6 +153,17 @@ export function buildAgentTools(
                     );
                 } catch (err) {
                     return `Error searching for "${pattern}": ${err instanceof Error ? err.message : String(err)}`;
+                }
+                if (namesOnly) {
+                    const files = [
+                        ...new Set(
+                            result
+                                .split('\n')
+                                .map((line) => line.split(':')[0])
+                                .filter(Boolean),
+                        ),
+                    ];
+                    return files.slice(0, MAX_GREP_MATCHES).join('\n');
                 }
                 const lines = result.split('\n');
                 if (lines.length > MAX_GREP_MATCHES) {
@@ -91,7 +176,7 @@ export function buildAgentTools(
         ),
 
         readFile: mkTool(
-            'Read file contents. Prefer reading specific sections with startLine/endLine to save context. Only read entire file if you need to understand the full structure.',
+            'Read file contents with injected line numbers. Always use startLine/endLine — line numbers come from two sources: (1) diff @@ markers for changed code, (2) grep results ("file:lineNumber:content") for callers and other files. Only read the full file when it is small (<150 lines). Never read a whole file to find a specific method — grep first to get the line number.',
             {
                 type: 'object',
                 properties: {
@@ -133,11 +218,17 @@ export function buildAgentTools(
                 if (!result && result !== '') {
                     return `Error: readFile returned ${typeof result} for ${filePath}`;
                 }
+                // Inject line numbers — LLMs need visual anchors to reference lines accurately
+                const baseLineNumber = startLine > 0 ? startLine : 1;
+                result = result
+                    .split('\n')
+                    .map((line, i) => `${baseLineNumber + i}: ${line}`)
+                    .join('\n');
                 if (result.length > MAX_READ_LENGTH) {
                     const lines = result.split('\n');
                     result =
                         result.substring(0, MAX_READ_LENGTH) +
-                        `\n... (truncated — showing ${MAX_READ_LENGTH} chars of ${result.length}. File has ~${lines.length} lines. Use startLine/endLine to read specific sections.)`;
+                        `\n... (truncated — file has ~${lines.length} lines, call readFile again with startLine/endLine to read the rest)`;
                 }
                 return result;
             },
@@ -154,24 +245,38 @@ export function buildAgentTools(
                     },
                     maxDepth: {
                         type: 'number',
-                        description:
-                            'Max recursion depth (default: 2, max: 4)',
+                        description: 'Max recursion depth (default: 2, max: 4)',
                     },
                 },
             },
             async (args: any) => {
                 const dirPath =
-                    (
-                        args.path ||
-                        args.directory ||
-                        args.dir ||
-                        '.'
-                    ).replace(/^\/+/, '') || '.';
-                const depth = Math.min(
-                    args.maxDepth || args.max_depth || 2,
-                    4,
-                );
+                    (args.path || args.directory || args.dir || '.').replace(
+                        /^\/+/,
+                        '',
+                    ) || '.';
+                const depth = Math.min(args.maxDepth || args.max_depth || 2, 4);
                 let result = await remoteCommands.listDir(dirPath, depth);
+                // Filter out common noise directories
+                const IGNORE_DIRS = [
+                    'node_modules',
+                    '.git',
+                    'dist',
+                    'build',
+                    '.next',
+                    '__pycache__',
+                    'coverage',
+                    '.turbo',
+                    'vendor',
+                    '.cache',
+                ];
+                result = result
+                    .split('\n')
+                    .filter(
+                        (line) =>
+                            !IGNORE_DIRS.some((dir) => line.includes(dir)),
+                    )
+                    .join('\n');
                 if (result.length > MAX_LIST_LENGTH) {
                     result =
                         result.substring(0, MAX_LIST_LENGTH) +
@@ -193,8 +298,7 @@ export function buildAgentTools(
                     },
                     path: {
                         type: 'string',
-                        description:
-                            'Directory to search in (default: ".")',
+                        description: 'Directory to search in (default: ".")',
                     },
                     extension: {
                         type: 'string',
@@ -217,9 +321,14 @@ export function buildAgentTools(
                 try {
                     // Try fd first (fast, .gitignore aware), then find as fallback
                     if (remoteCommands.exec) {
-                        // Try fd
+                        // Try fd with --glob for precise matching
                         try {
-                            const fdCmd = `fd ${safePattern}${extArg} ${safePath} --type f --max-results 30`;
+                            const globPattern =
+                                safePattern.includes('*') ||
+                                safePattern.includes('?')
+                                    ? safePattern
+                                    : `*${safePattern}*`;
+                            const fdCmd = `fd --glob '${globPattern}'${extArg} '${safePath}' --type f --max-results 30`;
                             const { stdout } = await remoteCommands.exec(fdCmd);
                             if (stdout && stdout.trim()) return stdout.trim();
                         } catch {
@@ -227,9 +336,13 @@ export function buildAgentTools(
                         }
                         // Fallback to find
                         try {
-                            const cleanPattern = safePattern.replace(/[*?[\]]/g, '');
+                            const cleanPattern = safePattern.replace(
+                                /[*?[\]]/g,
+                                '',
+                            );
                             const findCmd = `find ${safePath} -type f -iname *${cleanPattern}*`;
-                            const { stdout } = await remoteCommands.exec(findCmd);
+                            const { stdout } =
+                                await remoteCommands.exec(findCmd);
                             if (stdout && stdout.trim()) {
                                 const lines = stdout.trim().split('\n');
                                 return lines.slice(0, 30).join('\n');
@@ -249,9 +362,9 @@ export function buildAgentTools(
                         .filter(
                             (f: string) =>
                                 f.trim() &&
-                                f.toLowerCase().includes(
-                                    pattern.toLowerCase(),
-                                ) &&
+                                f
+                                    .toLowerCase()
+                                    .includes(pattern.toLowerCase()) &&
                                 (!ext || f.endsWith(`.${ext}`)),
                         );
                     if (matching.length === 0)
@@ -337,8 +450,7 @@ export function buildAgentTools(
                     },
                     path: {
                         type: 'string',
-                        description:
-                            "Directory to search in (default: '.')",
+                        description: "Directory to search in (default: '.')",
                     },
                 },
                 required: ['pattern'],
@@ -346,6 +458,22 @@ export function buildAgentTools(
             async (args: any) => {
                 const pattern = args.pattern || '';
                 if (!pattern) return 'Error: pattern is required';
+
+                const EXT_MAP: Record<string, string> = {
+                    typescript: 'ts',
+                    javascript: 'js',
+                    python: 'py',
+                    go: 'go',
+                    rust: 'rs',
+                    java: 'java',
+                    ruby: 'rb',
+                    cpp: 'cpp',
+                    c: 'c',
+                    csharp: 'cs',
+                    kotlin: 'kt',
+                    swift: 'swift',
+                    php: 'php',
+                };
 
                 // Sanitize pattern to prevent command injection
                 const safePattern = pattern.replace(/'/g, "'\\''");
@@ -364,7 +492,27 @@ export function buildAgentTools(
                 cmd += ` '${safePath}'`;
 
                 try {
-                    const { stdout } = await exec(cmd);
+                    const { stdout, exitCode } = await exec(cmd);
+                    if (
+                        exitCode !== 0 &&
+                        (stdout.includes('command not found') ||
+                            stdout.includes('not found') ||
+                            stdout.includes('ENOENT'))
+                    ) {
+                        // ast-grep not installed — fallback to regex grep
+                        const lang = args.lang || '';
+                        const ext = EXT_MAP[lang.toLowerCase()] || lang;
+                        const fallbackPattern = pattern
+                            .replace(/\$[A-Z_]+/g, '.*')
+                            .replace(/[{}()]/g, '\\$&');
+                        const glob = ext ? `*.${ext}` : undefined;
+                        return remoteCommands
+                            .grep(fallbackPattern, searchPath, glob)
+                            .then(
+                                (r) =>
+                                    `[ast-grep not available, used regex fallback]\n${r}`,
+                            );
+                    }
                     const output = stdout || 'No matches found.';
                     return output.length > MAX_SHELL_OUTPUT
                         ? output.substring(0, MAX_SHELL_OUTPUT) +
@@ -372,9 +520,7 @@ export function buildAgentTools(
                         : output;
                 } catch (err) {
                     const msg =
-                        err instanceof Error
-                            ? err.message
-                            : String(err);
+                        err instanceof Error ? err.message : String(err);
                     if (
                         msg.includes('not found') ||
                         msg.includes('No such file') ||
@@ -387,6 +533,7 @@ export function buildAgentTools(
                 }
             },
         );
+
     }
 
     // Add searchDocs if available
@@ -451,15 +598,13 @@ export function buildAgentTools(
                     },
                     branch: {
                         type: 'string',
-                        description:
-                            'Branch name (default: main)',
+                        description: 'Branch name (default: main)',
                     },
                 },
                 required: ['repo', 'path'],
             },
             async ({ repo, path, branch }: any) => {
-                if (!repo || !path)
-                    return 'Error: repo and path are required';
+                if (!repo || !path) return 'Error: repo and path are required';
                 const ref = branch || 'main';
                 const safePath = encodeURIComponent(path);
                 try {

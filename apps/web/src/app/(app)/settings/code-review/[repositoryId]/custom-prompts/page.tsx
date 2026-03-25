@@ -117,32 +117,42 @@ function buildPromptSections(defaults: PromptDefaults): PromptSectionConfig[] {
         {
             fieldName: "v2PromptOverrides.level",
             title: "Level Classification",
-            description: "Define how Kody classifies findings as Critical, Issue, or Warning.",
+            description:
+                "Define how Kody classifies findings as Critical, Issue, or Warning.",
             contentClassName: "grid grid-cols-1 gap-6 md:grid-cols-3",
             fields: [
                 {
                     name: "v2PromptOverrides.level.critical.value",
                     fieldName: "v2PromptOverrides.level.critical",
                     label: "Critical",
-                    helperText: "Define what constitutes a Critical finding (max 2000). Critical findings trigger Request Changes on the PR.",
+                    helperText:
+                        "Define what constitutes a Critical finding (max 2000). Critical findings trigger Request Changes on the PR.",
                     placeholder: "Type the prompt for Critical",
-                    defaultValue: (defaults as any)?.level?.critical ?? "The code WILL crash, lose/corrupt data, or open a severe security breach in production. Immediate fix required before merge.",
+                    defaultValue:
+                        (defaults as any)?.level?.critical ??
+                        "The code WILL crash, lose/corrupt data, or open a severe security breach in production. Immediate fix required before merge.",
                 },
                 {
                     name: "v2PromptOverrides.level.issue.value",
                     fieldName: "v2PromptOverrides.level.issue",
                     label: "Issue",
-                    helperText: "Define what constitutes an Issue (max 2000). Issues are findings that should be fixed but don't block merge.",
+                    helperText:
+                        "Define what constitutes an Issue (max 2000). Issues are findings that should be fixed but don't block merge.",
                     placeholder: "Type the prompt for Issue",
-                    defaultValue: (defaults as any)?.level?.issue ?? "The code produces WRONG results or fails to perform its intended function in at least one scenario, but does not cause catastrophic failure.",
+                    defaultValue:
+                        (defaults as any)?.level?.issue ??
+                        "The code produces WRONG results or fails to perform its intended function in at least one scenario, but does not cause catastrophic failure.",
                 },
                 {
                     name: "v2PromptOverrides.level.warning.value",
                     fieldName: "v2PromptOverrides.level.warning",
                     label: "Warning",
-                    helperText: "Define what constitutes a Warning (max 2000). Warnings are suggestions for improvement, not bugs.",
+                    helperText:
+                        "Define what constitutes a Warning (max 2000). Warnings are suggestions for improvement, not bugs.",
                     placeholder: "Type the prompt for Warning",
-                    defaultValue: (defaults as any)?.level?.warning ?? "The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.",
+                    defaultValue:
+                        (defaults as any)?.level?.warning ??
+                        "The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal in style, performance, or maintainability.",
                 },
             ],
         },
@@ -180,10 +190,8 @@ function CustomPromptsContent() {
         () => promptFieldConfigs.map((field) => field.name) as string[],
         [promptFieldConfigs],
     );
-    const {
-        isValid: formIsValid,
-        isSubmitting: formIsSubmitting,
-    } = form.formState;
+    const { isValid: formIsValid, isSubmitting: formIsSubmitting } =
+        form.formState;
 
     const watchedPromptValues = useWatch({
         control: form.control,
@@ -247,9 +255,7 @@ function CustomPromptsContent() {
     });
 
     const scrollToDirtyPrompt = useCallback(() => {
-        const dirtyField = promptFields.find(
-            (field) => dirtyFields[field],
-        );
+        const dirtyField = promptFields.find((field) => dirtyFields[field]);
 
         if (dirtyField) {
             let fieldElement: Element | null = null;

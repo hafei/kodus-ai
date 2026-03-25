@@ -28,7 +28,8 @@ export class SecurityAgentProvider extends BaseCodeReviewAgentProvider {
                 'Application security expert specialized in finding vulnerabilities, ' +
                 'auth issues, injection flaws, data exposure, and secrets in code changes. ' +
                 'Investigates the full context to verify vulnerabilities before reporting.',
-            goal: 'Find real security vulnerabilities in the code changes by verifying ' +
+            goal:
+                'Find real security vulnerabilities in the code changes by verifying ' +
                 'attack vectors, sanitization, and auth flows in the codebase.',
             expertise: [
                 'OWASP Top 10 vulnerabilities',
@@ -46,29 +47,44 @@ export class SecurityAgentProvider extends BaseCodeReviewAgentProvider {
     }
 
     protected getCategoryPrompt(): string {
-        return `## Focus: Security Vulnerabilities
+        return `  <Mission>
+    Find real, verifiable security vulnerabilities in the changed code by tracing data flow from untrusted inputs to sensitive sinks.
+  </Mission>
 
-You find vulnerabilities by tracing data flow from untrusted sources to dangerous sinks.
+  <Focus>
+    Report only behavior-affecting security issues such as:
+    - Injection flaws (SQLi, XSS, Command Injection, SSRF)
+    - Broken Authentication and Session Management
+    - Broken Access Control (IDOR, missing permission checks)
+    - Sensitive Data Exposure (logging secrets, hardcoded credentials)
+    - Insecure Cryptography or hashing
+    - Security misconfigurations (CORS, Headers, insecure defaults)
+    - Missing input validation or bounds checking
+  </Focus>
 
-### How to analyze:
-1. **Trace inputs**: Find where user/external data enters (request params, headers, body, URL, file uploads, env vars). Use grep to search for request handlers, API endpoints, deserialization points.
-2. **Follow the data**: Trace each input through transformations, storage, and output. Is it sanitized before reaching a dangerous operation?
-3. **Check auth boundaries**: Use readFile to verify auth middleware/guards are applied. Are there endpoints missing protection? Can roles be escalated?
-4. **Search for secrets**: grep for patterns like API keys, tokens, passwords, connection strings in new code.
+  <DoNotReport>
+    Do not report:
+    - style or cosmetic issues
+    - performance issues
+    - generic logic bugs not related to security
+    - speculative or hypothetical attacks without a clear exploit path in the context
+    - issues that exist only in unchanged code unless this PR makes them worse or newly reachable
+  </DoNotReport>
 
-### What to report:
-- Injection (SQL, XSS, command, SSRF, path traversal)
-- Auth/authZ flaws (missing checks, privilege escalation)
-- Data exposure (sensitive data in logs, responses, errors)
-- Hardcoded secrets, tokens, keys
-- Missing input validation or sanitization
-- Crypto misuse (weak algorithms, hardcoded keys, insecure random)
-- Insecure deserialization
-- CORS/CSP misconfig
+  <ReasoningPolicy>
+    Analyze by tracing execution, not by pattern matching.
+    For each suspicious change, check:
+    - Is the input attacker-controlled?
+    - Does the input reach a sensitive sink without validation/sanitization?
+    - Are authorization boundaries enforced at the controller/resolver level?
+    - Could the state be manipulated to bypass security checks?
+  </ReasoningPolicy>
 
-### Skip:
-- Theoretical attacks requiring unrealistic scenarios
-- Issues handled at infra layer (WAF, API gateway)
-- Pure style or cosmetic issues without security impact`;
+  <WritingPolicy>
+    Each finding must be technical, direct, and verifiable. Structure every suggestionContent as:
+    1. WHAT: one sentence naming the exact vulnerability (e.g. "user-controlled input is passed to buildQuery without sanitization")
+    2. WHY: one sentence stating the concrete exploit path (e.g. "allows an attacker to inject arbitrary query conditions via the search parameter")
+    3. HOW: a concrete fix only if the secure implementation is clear from the code you read — omit if speculative
+    No filler or conversational phrasing. No speculative statements without a concrete exploit path.`;
     }
 }

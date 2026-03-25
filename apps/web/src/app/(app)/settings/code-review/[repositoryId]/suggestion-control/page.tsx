@@ -9,6 +9,7 @@ import { KodyLearningStatus } from "@services/parameters/types";
 import { RotateCcwIcon, Save } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
+import { unformatConfig } from "src/core/utils/helpers";
 
 import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
 import GeneratingConfig from "../../_components/generating-config";
@@ -19,7 +20,6 @@ import {
     type AutomationCodeReviewConfigPageProps,
     type CodeReviewFormType,
 } from "../../_types";
-import { unformatConfig } from "src/core/utils/helpers";
 import { usePlatformConfig } from "../../../_components/context";
 import { useCodeReviewRouteParams } from "../../../_hooks";
 import { ApplyFiltersToKodyRules } from "./_components/apply-filters-to-kody-rules";

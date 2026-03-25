@@ -17,7 +17,10 @@ describe('ReviewOrchestratorService', () => {
     let mockSecurityAgent: any;
     let mockPerformanceAgent: any;
 
-    const makeOutput = (agentName: string, suggestions: Partial<CodeSuggestion>[]) => ({
+    const makeOutput = (
+        agentName: string,
+        suggestions: Partial<CodeSuggestion>[],
+    ) => ({
         suggestions,
         agentName,
         turnsUsed: 3,
@@ -25,9 +28,16 @@ describe('ReviewOrchestratorService', () => {
     });
 
     const baseInput = {
-        organizationAndTeamData: { organizationId: 'org-1', teamId: 'team-1' } as any,
+        organizationAndTeamData: {
+            organizationId: 'org-1',
+            teamId: 'team-1',
+        } as any,
         changedFiles: [{ filename: 'src/index.ts', patch: '+code' } as any],
-        remoteCommands: { grep: jest.fn(), read: jest.fn(), listDir: jest.fn() },
+        remoteCommands: {
+            grep: jest.fn(),
+            read: jest.fn(),
+            listDir: jest.fn(),
+        },
         prNumber: 42,
         repositoryFullName: 'org/repo',
         languageResultPrompt: 'en-US',
@@ -103,7 +113,11 @@ describe('ReviewOrchestratorService', () => {
         it('should skip disabled categories', async () => {
             const result = await orchestrator.execute({
                 ...baseInput,
-                reviewOptions: { bug: true, security: false, performance: false },
+                reviewOptions: {
+                    bug: true,
+                    security: false,
+                    performance: false,
+                },
             });
 
             expect(mockBugAgent.execute).toHaveBeenCalledTimes(1);
@@ -115,7 +129,11 @@ describe('ReviewOrchestratorService', () => {
         it('should return empty results when no categories enabled', async () => {
             const result = await orchestrator.execute({
                 ...baseInput,
-                reviewOptions: { bug: false, security: false, performance: false },
+                reviewOptions: {
+                    bug: false,
+                    security: false,
+                    performance: false,
+                },
             });
 
             expect(result.suggestions).toHaveLength(0);
@@ -123,7 +141,9 @@ describe('ReviewOrchestratorService', () => {
         });
 
         it('should handle agent failures gracefully', async () => {
-            mockSecurityAgent.execute.mockRejectedValue(new Error('LLM timeout'));
+            mockSecurityAgent.execute.mockRejectedValue(
+                new Error('LLM timeout'),
+            );
 
             const result = await orchestrator.execute({
                 ...baseInput,

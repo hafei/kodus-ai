@@ -102,7 +102,6 @@ export class SafeguardPipelineService {
             byokConfig,
         );
 
-
         const pipelineStart = Date.now();
         const fileLabel = file?.filename || 'unknown';
 

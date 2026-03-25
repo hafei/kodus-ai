@@ -87,8 +87,7 @@ export class RequestChangesOrApproveStage extends BasePipelineStage<CodeReviewPi
             }
 
             const criticalComments = lineComments.filter(
-                (comment) =>
-                    comment.comment.suggestion?.level === 'critical',
+                (comment) => comment.comment.suggestion?.level === 'critical',
             );
 
             if (criticalComments.length === 0) {

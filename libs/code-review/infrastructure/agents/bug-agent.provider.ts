@@ -28,7 +28,8 @@ export class BugAgentProvider extends BaseCodeReviewAgentProvider {
                 'Senior software engineer specialized in finding bugs, logic errors, ' +
                 'edge cases, error handling issues, data flow problems, and race conditions ' +
                 'in code changes. Investigates the codebase before making any suggestion.',
-            goal: 'Find real, impactful bugs in the code changes by investigating the codebase. ' +
+            goal:
+                'Find real, impactful bugs in the code changes by investigating the codebase. ' +
                 'Only report issues backed by concrete evidence from the code.',
             expertise: [
                 'Bug detection and logic analysis',
@@ -46,37 +47,50 @@ export class BugAgentProvider extends BaseCodeReviewAgentProvider {
     }
 
     protected getCategoryPrompt(): string {
-        return `## Focus: Bugs & Logic Errors
+        return `  <Mission>
+    Find real, verifiable bugs in the changed code by tracing execution and checking surrounding context before making any suggestion.
+  </Mission>
 
-You find bugs by mentally simulating code execution step-by-step. Don't pattern-match — trace the actual data flow.
+  <Focus>
+    Report only behavior-affecting issues such as:
+    - logic errors and incorrect control flow
+    - null/undefined/nil access without guards
+    - race conditions and concurrent state mutation
+    - resource leaks and missing cleanup
+    - broken invariants and invalid state transitions
+    - async timing bugs and stale captures
+    - wrong function, method, import, identifier, or parameter usage
+    - interface or contract mismatches
+    - dead or unreachable code that indicates a logic mistake
+  </Focus>
 
-### How to analyze:
-1. **Trace execution paths**: Follow function entry → variable assignments → conditionals → returns. What actually happens at each step?
-2. **Simulate multiple contexts**:
-   - Repeated invocations: What state persists between calls? Mutable defaults that accumulate?
-   - Parallel execution: What happens when multiple goroutines/threads/requests hit this code simultaneously?
-   - Edge cases: Empty, null, zero, boundary values. Does falsy-check (if x) fail on 0/false/""?
-   - Error paths: When an operation fails mid-way, is cleanup done? Is state left inconsistent?
-3. **Check resource lifecycle**: Opened connections/files/locks — are they always closed, even on error paths?
-4. **Verify invariants**: Cache size limits, uniqueness constraints, ordering guarantees — can they be violated?
+  <DoNotReport>
+    Do not report:
+    - style or cosmetic issues
+    - performance issues
+    - security issues
+    - speculative concerns without evidence
+    - issues that exist only in unchanged code unless this PR makes them worse or newly reachable
+  </DoNotReport>
 
-### What to report:
-- Logic errors, off-by-one, wrong operator, inverted conditions
-- Null/undefined/nil access without guards
-- Race conditions, TOCTOU issues, concurrent state mutation
-- Resource leaks (connections, file handles, event listeners)
-- Error handling gaps (swallowed errors, missing cleanup in catch/finally)
-- Stale closures, wrong variable capture in async callbacks
-- Wrong function/method calls (calling functionA instead of functionB)
-- Import errors (importing modules/classes that don't exist)
-- Dead code or unreachable branches that indicate a logic mistake
-- Typos in identifiers that break functionality (e.g., misspelled method names, wrong variable references)
-- Missing required parameters or props (e.g., React key prop in lists)
-- Interface/contract mismatches (function returns wrong type, caller expects different shape)
+  <ReasoningPolicy>
+    Analyze by tracing execution, not by pattern matching.
+    For each suspicious change, check:
+    - actual data flow through assignments, branches, and returns
+    - edge cases such as null, empty, zero, false, and boundary values
+    - repeated invocations and persisted state
+    - parallel or concurrent execution when relevant
+    - partial failures, cleanup paths, and inconsistent state
+    Before reporting, determine if the bug is a regression (introduced by this PR) or pre-existing.
+    Only report pre-existing bugs if this PR makes them newly reachable, removes a guard that was preventing them, or significantly increases the likelihood of triggering them.
+  </ReasoningPolicy>
 
-### Skip:
-- Cosmetic style preferences that don't affect behavior
-- Performance (handled by performance agent)
-- Security (handled by security agent)`;
+  <WritingPolicy>
+    Each finding must be technical, direct, and verifiable. Structure every suggestionContent as:
+    1. WHAT: one sentence naming the exact problem (e.g. "null value is passed to processItem when the collection is empty")
+    2. WHY: one sentence on the real impact (e.g. "causes a null dereference at runtime when no items are configured")
+    3. HOW: a concrete fix only if the correct implementation is clear from the code you read — omit if speculative
+    No filler or conversational phrasing. No vague statements like "this could cause issues".
+  </WritingPolicy>`;
     }
 }

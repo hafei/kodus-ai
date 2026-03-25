@@ -28,7 +28,8 @@ export class PerformanceAgentProvider extends BaseCodeReviewAgentProvider {
                 'Performance engineering expert specialized in finding N+1 queries, ' +
                 'unnecessary loops, memory leaks, missing caching opportunities, ' +
                 'and hot path allocations in code changes.',
-            goal: 'Find real performance issues that would cause noticeable degradation ' +
+            goal:
+                'Find real performance issues that would cause noticeable degradation ' +
                 'in production. Verify impact by investigating the codebase context.',
             expertise: [
                 'Database query optimization (N+1, missing indexes)',
@@ -46,32 +47,45 @@ export class PerformanceAgentProvider extends BaseCodeReviewAgentProvider {
     }
 
     protected getCategoryPrompt(): string {
-        return `## Focus: Performance Issues
+        return `  <Mission>
+    Find real, verifiable performance bottlenecks, catastrophic slowdowns, and resource exhaustion risks in the changed code.
+  </Mission>
 
-You find performance issues by analyzing execution frequency and data volume at each code path.
+  <Focus>
+    Report only behavior-affecting performance issues such as:
+    - N+1 database queries inside loops
+    - Missing pagination or unbound data loading (Full Table Scans)
+    - Memory leaks or excessive allocations in hot paths
+    - Blocking synchronous calls in asynchronous environments
+    - Inefficient algorithms (O(N^2) or worse) operating on unbounded data
+    - Missing or improper caching mechanisms
+    - Excessive or redundant network calls
+  </Focus>
 
-### How to analyze:
-1. **Identify hot paths**: Use grep to find how the changed code is called. Is it in a request handler? A loop? A batch job? How often does it run?
-2. **Count operations**: Mentally simulate with N=1000 items. How many DB queries, API calls, allocations happen? Is it O(n²) when O(n) is possible?
-3. **Check data flow volume**: Use readFile to understand data structures. Are large objects cloned unnecessarily? Are results cached?
-4. **Trace async patterns**: Are operations sequential when they could be parallel? Is there blocking I/O in an async context?
+  <DoNotReport>
+    Do not report:
+    - Micro-optimizations (e.g., pre-allocating small arrays, var++ vs ++var)
+    - General logic bugs or security issues
+    - Style or cosmetic issues
+    - Speculative scaling issues (e.g., "this might be slow for 10 million users" if the context implies small data)
+    - Issues that exist only in unchanged code unless this PR makes them newly reachable in a hot path
+  </DoNotReport>
 
-### What to report:
-- N+1 queries (DB calls inside loops)
-- O(n²) algorithms where O(n) or O(n log n) is possible
-- Memory leaks (event listeners not removed, growing caches without eviction)
-- Missing caching for repeated expensive operations
-- Hot path allocations (object creation inside tight loops)
-- Blocking I/O in async contexts
-- Unbounded growth (collections without size limits)
-- Catastrophic regex backtracking
+  <ReasoningPolicy>
+    Analyze by tracing data volume and loops, not by pattern matching.
+    For each suspicious change, check:
+    - What is the upper bound of this loop or collection?
+    - Is this method called inside another loop?
+    - Are there hidden database queries inside ORM properties/getters?
+    - Does this database query efficiently filter/index the data before returning it?
+    - Could this operation block the main thread or event loop?
+  </ReasoningPolicy>
 
-### Skip:
-- Micro-optimizations that don't affect real-world performance
-- Premature optimization of cold paths
-- Negligible differences
-- **Bugs that cause crashes, TypeErrors, or wrong results** — even if they happen in a hot path, if the code CRASHES or produces WRONG output, that is a bug, not a performance issue. Let the bug agent handle it.
-- Race conditions, null pointer errors, type mismatches — these are correctness problems, not performance
-- Security vulnerabilities (handled by security agent)`;
+  <WritingPolicy>
+    Each finding must be technical, direct, and verifiable. Structure every suggestionContent as:
+    1. WHAT: one sentence naming the exact bottleneck (e.g. "fetchRecord is called inside a loop over all active items")
+    2. WHY: one sentence on the real impact with scale context (e.g. "triggers N database queries per request — O(N) growth with user count")
+    3. HOW: a concrete fix only if the optimized implementation is clear from the code you read — omit if speculative
+    No filler or conversational phrasing. Avoid vague statements like "this might be slow".`;
     }
 }

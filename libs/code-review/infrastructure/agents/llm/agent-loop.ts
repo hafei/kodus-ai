@@ -1,4 +1,7 @@
-import { buildAgentTools } from './agent-tools.factory';
+import {
+    buildAgentTools,
+    DocumentationSearchAdapter,
+} from './agent-tools.factory';
 /**
  * Simple agent loop using Vercel AI SDK with native function calling.
  *
@@ -26,7 +29,6 @@ import { EnhancedJSONParser } from '@kodus/flow';
 import { BYOKConfig } from '@kodus/kodus-common/llm';
 import { getInternalModel } from './byok-to-vercel';
 import { RemoteCommands } from '../../adapters/services/collectCrossFileContexts.service';
-import { DocumentationSearchAdapter } from '../tools/sandbox-tools';
 
 const logger = createLogger('AgentLoop');
 
@@ -48,12 +50,12 @@ const suggestionSchema = z.object({
     ruleUuid: z.string().optional(), // Kody Rules: UUID of the violated rule
 });
 
-const findingsSchema = z.object({
+const _findingsSchema = z.object({
     reasoning: z.string(),
     suggestions: z.array(suggestionSchema),
 });
 
-export type FindingsOutput = z.infer<typeof findingsSchema>;
+export type FindingsOutput = z.infer<typeof _findingsSchema>;
 
 export interface AgentLoopInput {
     model: LanguageModel;
@@ -67,13 +69,23 @@ export interface AgentLoopInput {
     maxSteps?: number;
     onStepFinish?: (event: any) => void;
     gitHubToken?: string; // For cross-repo reference reading
+    changedFiles?: any[];
+    prNumber?: number;
+    repositoryFullName?: string;
+    /** Base branch of the PR (e.g. "main"). Used by git diff tools. */
+    baseBranch?: string;
 }
 
 export interface AgentLoopOutput {
     findings: FindingsOutput;
     text: string;
     steps: number;
-    toolCalls: Array<{ tool: string; toolName?: string; args: Record<string, unknown>; result?: string }>;
+    toolCalls: Array<{
+        tool: string;
+        toolName?: string;
+        args: Record<string, unknown>;
+        result?: string;
+    }>;
     finishReason: string;
     /** Whether findings came from direct JSON parse or fallback generateObject */
     source: 'json-parse' | 'generate-object' | 'empty';
@@ -134,10 +146,28 @@ export async function runAgentLoop(
 
                 if (stepNumber >= forceTextAfter) {
                     logger.log({
-                        message: `[AGENT-FORCE-TEXT] step=${stepNumber}/${maxSteps} — removing tools, forcing text response`,
+                        message: `[AGENT-FORCE-TEXT] step=${stepNumber}/${maxSteps} — removing tools, forcing JSON response`,
                         context: 'AgentLoop',
                     });
-                    return { toolChoice: 'none' as const, activeTools: [] };
+                    return {
+                        toolChoice: 'none' as const,
+                        activeTools: [],
+                        // Override system prompt to remind the model to output JSON, not prose.
+                        // Without this, some models produce free-text which triggers the
+                        // expensive generate-object fallback to re-structure the output.
+                        system:
+                            input.systemPrompt +
+                            '\n\nIMPORTANT: You have reached the final response step. ' +
+                            'Do NOT call any more tools. ' +
+                            'Respond ONLY with a JSON object inside a markdown code block:\n' +
+                            '```json\n' +
+                            '{\n' +
+                            '  "reasoning": "what you investigated and found",\n' +
+                            '  "suggestions": []\n' +
+                            '}\n' +
+                            '```\n' +
+                            'If you found no issues, return an empty suggestions array. No prose, no explanation outside the JSON.',
+                    };
                 }
                 return {};
             },
@@ -246,10 +276,15 @@ export async function runAgentLoop(
                             bestText,
                             input.byokConfig,
                         );
-                        if (fallbackResult && fallbackResult.findings.suggestions.length > 0) {
+                        if (
+                            fallbackResult &&
+                            fallbackResult.findings.suggestions.length > 0
+                        ) {
                             findings = fallbackResult.findings;
-                            totalInputTokens += fallbackResult.usage.inputTokens;
-                            totalOutputTokens += fallbackResult.usage.outputTokens;
+                            totalInputTokens +=
+                                fallbackResult.usage.inputTokens;
+                            totalOutputTokens +=
+                                fallbackResult.usage.outputTokens;
                             source = 'generate-object';
                             logger.log({
                                 message: `[AGENT-TIMEOUT-RECOVERY] Recovered ${findings.suggestions.length} suggestions via fallback model (${bestText.length} chars)`,
@@ -459,7 +494,10 @@ If no issues were found during investigation, respond with \`{"reasoning": "..."
     // and baseInputTokens is the SDK's own total, use whichever is larger.
     const finalInputTokens = Math.max(baseInputTokens, totalInputTokens);
     const finalOutputTokens = Math.max(baseOutputTokens, totalOutputTokens);
-    const finalReasoningTokens = Math.max(baseReasoningTokens, totalReasoningTokens);
+    const finalReasoningTokens = Math.max(
+        baseReasoningTokens,
+        totalReasoningTokens,
+    );
 
     return {
         findings,
@@ -564,7 +602,15 @@ function looksLikeFindings(text: string): boolean {
 async function structureWithFallbackModel(
     reviewText: string,
     byokConfig?: BYOKConfig,
-): Promise<{ findings: FindingsOutput; usage: { inputTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number } } | null> {
+): Promise<{
+    findings: FindingsOutput;
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+    };
+} | null> {
     try {
         const internalModel = getInternalModel(byokConfig);
 
@@ -597,10 +643,26 @@ async function structureWithFallbackModel(
                                     oneSentenceSummary: { type: 'string' },
                                     relevantLinesStart: { type: 'number' },
                                     relevantLinesEnd: { type: 'number' },
-                                    severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
-                                    level: { type: 'string', enum: ['issue', 'warning'] },
+                                    severity: {
+                                        type: 'string',
+                                        enum: [
+                                            'critical',
+                                            'high',
+                                            'medium',
+                                            'low',
+                                        ],
+                                    },
+                                    level: {
+                                        type: 'string',
+                                        enum: ['issue', 'warning'],
+                                    },
                                 },
-                                required: ['relevantFile', 'suggestionContent', 'existingCode', 'improvedCode'],
+                                required: [
+                                    'relevantFile',
+                                    'suggestionContent',
+                                    'existingCode',
+                                    'improvedCode',
+                                ],
                             },
                         },
                     },
@@ -640,7 +702,10 @@ For each issue found, extract: relevantFile, language, suggestionContent (full d
                 inputTokens: fallbackUsage?.inputTokens ?? 0,
                 outputTokens: fallbackUsage?.outputTokens ?? 0,
                 reasoningTokens: fallbackUsage?.reasoningTokens ?? 0,
-                totalTokens: fallbackUsage?.totalTokens ?? (fallbackUsage?.inputTokens ?? 0) + (fallbackUsage?.outputTokens ?? 0),
+                totalTokens:
+                    fallbackUsage?.totalTokens ??
+                    (fallbackUsage?.inputTokens ?? 0) +
+                        (fallbackUsage?.outputTokens ?? 0),
             },
         };
     } catch (error) {

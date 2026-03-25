@@ -45,7 +45,8 @@ export class KodyRulesAgentProvider extends BaseCodeReviewAgentProvider {
                 'Code review agent specialized in validating code changes against ' +
                 'team-defined rules and conventions. Investigates code to check ' +
                 'compliance with each rule before reporting violations.',
-            goal: 'Check every applicable rule against the changed code. ' +
+            goal:
+                'Check every applicable rule against the changed code. ' +
                 'Only report violations you confirmed with evidence from the code.',
             expertise: [
                 'Custom team rule validation',
@@ -66,11 +67,11 @@ export class KodyRulesAgentProvider extends BaseCodeReviewAgentProvider {
     /**
      * Override execute to inject rules into the prompt dynamically.
      */
-    async execute(input: ReviewAgentInput & { kodyRules?: Partial<IKodyRule>[] }): Promise<ReviewAgentOutput> {
+    async execute(
+        input: ReviewAgentInput & { kodyRules?: Partial<IKodyRule>[] },
+    ): Promise<ReviewAgentOutput> {
         const rules = (input.kodyRules || []).filter(
-            (r) =>
-                r.type !== KodyRulesType.MEMORY &&
-                r.status === 'active',
+            (r) => r.type !== KodyRulesType.MEMORY && r.status === 'active',
         );
 
         if (rules.length === 0) {
@@ -135,12 +136,16 @@ You validate code against the team's custom rules listed below. Your ONLY job is
      * File-level rules benefit from seeing the diff to understand what changed.
      */
     protected buildUserPrompt(input: ReviewAgentInput): string {
-        const diffsSection = input.changedFiles
-            ?.map((file) => {
-                const diff = (file as any).patchWithLinesStr ?? (file as any).patch ?? '';
-                return `### ${file.filename}\n\`\`\`diff\n${diff}\n\`\`\``;
-            })
-            .join('\n\n') || 'No changed files provided.';
+        const diffsSection =
+            input.changedFiles
+                ?.map((file) => {
+                    const diff =
+                        (file as any).patchWithLinesStr ??
+                        (file as any).patch ??
+                        '';
+                    return `### ${file.filename}\n\`\`\`diff\n${diff}\n\`\`\``;
+                })
+                .join('\n\n') || 'No changed files provided.';
 
         const prContextSection = input.prTitle
             ? `\n  <PRContext>Title: ${input.prTitle}${input.prBody ? '\n' + input.prBody.substring(0, 500) : ''}</PRContext>`
@@ -248,7 +253,9 @@ If no violations found, respond with \`{"reasoning": "Checked all rules, no viol
             }
 
             if (rule.extendedContext?.todo) {
-                parts.push(`**Additional context**: ${rule.extendedContext.todo}`);
+                parts.push(
+                    `**Additional context**: ${rule.extendedContext.todo}`,
+                );
             }
 
             return parts.join('\n');

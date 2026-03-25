@@ -7,7 +7,6 @@ import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/
 import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import { CodeSuggestion } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { ReviewOrchestratorService } from '@libs/code-review/infrastructure/agents/review-orchestrator.service';
-import { DocumentationSearchAdapter } from '@libs/code-review/infrastructure/agents/tools/sandbox-tools';
 import { ObservabilityService } from '@libs/core/log/observability.service';
 import {
     AUTOMATION_EXECUTION_SERVICE_TOKEN,
@@ -15,8 +14,12 @@ import {
 } from '@libs/automation/domain/automationExecution/contracts/automation-execution.service';
 import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
 import { AgentProgressEvent } from '@libs/code-review/infrastructure/agents/base-code-review-agent.provider';
-import { resolveKodyRuleSeverityLevel, SeverityLevel } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import {
+    resolveKodyRuleSeverityLevel,
+    SeverityLevel,
+} from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
+import { DocumentationSearchAdapter } from '@libs/code-review/infrastructure/agents/llm/agent-tools.factory';
 
 /**
  * Extract valid line ranges from a unified diff patch.
@@ -259,6 +262,10 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 reviewOptions,
                 onAgentProgress,
                 gitHubToken: await this.resolveGitHubToken(context),
+                baseBranch:
+                    context.sandboxHandle?.baseBranch ||
+                    context.pullRequest?.base?.ref ||
+                    context.repository?.defaultBranch,
             });
 
             const durationMs = Date.now() - startTime;
@@ -346,7 +353,8 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 .filter(Boolean)
                 .join('\n');
 
-            const levelOverrides = context.codeReviewConfig?.v2PromptOverrides?.level;
+            const levelOverrides =
+                context.codeReviewConfig?.v2PromptOverrides?.level;
             const classifiedNonRules = await this.classifyLevels(
                 nonKodyRulesSuggestions,
                 prNumber,
@@ -433,7 +441,11 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
         suggestions: Partial<CodeSuggestion>[],
         prNumber: number,
         prContext?: string,
-        levelOverrides?: { critical?: string; issue?: string; warning?: string },
+        levelOverrides?: {
+            critical?: string;
+            issue?: string;
+            warning?: string;
+        },
     ): Promise<Partial<CodeSuggestion>[]> {
         if (suggestions.length === 0) return suggestions;
 
@@ -441,8 +453,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
         // Falls back to getInternalModel() if Google key not available
         let model: any;
         const googleKey =
-            process.env.API_GOOGLE_AI_API_KEY ||
-            process.env.GOOGLE_API_KEY;
+            process.env.API_GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
         if (googleKey) {
             const { createGoogleGenerativeAI } = require('@ai-sdk/google');
             model = createGoogleGenerativeAI({ apiKey: googleKey })(
@@ -531,16 +542,24 @@ ${summaries}
 
             // Track token usage for classification LLM call
             try {
-                const classifyUsage = classifyResult.usage ?? classifyResult.totalUsage;
+                const classifyUsage =
+                    classifyResult.usage ?? classifyResult.totalUsage;
                 if (classifyUsage) {
-                    const classifyModelName = googleKey ? 'gemini-3-flash' : 'gpt-5.4-mini';
+                    const classifyModelName = googleKey
+                        ? 'gemini-3-flash'
+                        : 'gpt-5.4-mini';
                     await this.observabilityService.runInSpan(
                         'classify-levels',
                         async () => classifyResult,
                         {
-                            'gen_ai.usage.input_tokens': classifyUsage.inputTokens ?? 0,
-                            'gen_ai.usage.output_tokens': classifyUsage.outputTokens ?? 0,
-                            'gen_ai.usage.total_tokens': classifyUsage.totalTokens ?? (classifyUsage.inputTokens ?? 0) + (classifyUsage.outputTokens ?? 0),
+                            'gen_ai.usage.input_tokens':
+                                classifyUsage.inputTokens ?? 0,
+                            'gen_ai.usage.output_tokens':
+                                classifyUsage.outputTokens ?? 0,
+                            'gen_ai.usage.total_tokens':
+                                classifyUsage.totalTokens ??
+                                (classifyUsage.inputTokens ?? 0) +
+                                    (classifyUsage.outputTokens ?? 0),
                             'gen_ai.response.model': classifyModelName,
                             'gen_ai.run.name': 'code-review-classify',
                             'type': 'system',
@@ -557,7 +576,10 @@ ${summaries}
                 (classifyResult as any).output;
             const classifications = output?.classifications || [];
 
-            const levelMap = new Map<number, 'critical' | 'issue' | 'warning'>();
+            const levelMap = new Map<
+                number,
+                'critical' | 'issue' | 'warning'
+            >();
             for (const c of classifications) {
                 if (c.index != null && c.level) {
                     levelMap.set(c.index, c.level);
@@ -572,9 +594,7 @@ ${summaries}
             const criticalCount = result.filter(
                 (s) => s.level === 'critical',
             ).length;
-            const issueCount = result.filter(
-                (s) => s.level === 'issue',
-            ).length;
+            const issueCount = result.filter((s) => s.level === 'issue').length;
             const warningCount = result.filter(
                 (s) => s.level === 'warning',
             ).length;
@@ -652,7 +672,8 @@ ${summaries}
                                 keep: {
                                     type: 'array',
                                     items: { type: 'number' },
-                                    description: 'Indices of suggestions to keep',
+                                    description:
+                                        'Indices of suggestions to keep',
                                 },
                             },
                             required: ['keep'],
@@ -679,15 +700,21 @@ ${summaries}`,
 
                 // Track token usage for dedup LLM call
                 try {
-                    const dedupUsage = dedupResult.usage ?? dedupResult.totalUsage;
+                    const dedupUsage =
+                        dedupResult.usage ?? dedupResult.totalUsage;
                     if (dedupUsage) {
                         await this.observabilityService.runInSpan(
                             'dedup-suggestions',
                             async () => dedupResult,
                             {
-                                'gen_ai.usage.input_tokens': dedupUsage.inputTokens ?? 0,
-                                'gen_ai.usage.output_tokens': dedupUsage.outputTokens ?? 0,
-                                'gen_ai.usage.total_tokens': dedupUsage.totalTokens ?? (dedupUsage.inputTokens ?? 0) + (dedupUsage.outputTokens ?? 0),
+                                'gen_ai.usage.input_tokens':
+                                    dedupUsage.inputTokens ?? 0,
+                                'gen_ai.usage.output_tokens':
+                                    dedupUsage.outputTokens ?? 0,
+                                'gen_ai.usage.total_tokens':
+                                    dedupUsage.totalTokens ??
+                                    (dedupUsage.inputTokens ?? 0) +
+                                        (dedupUsage.outputTokens ?? 0),
                                 'gen_ai.response.model': 'gpt-5.4-mini',
                                 'gen_ai.run.name': 'code-review-dedup',
                                 'type': 'system',
@@ -841,10 +868,7 @@ ${summaries}`,
         stageName: string,
         event: AgentProgressEvent,
         label: string,
-        agentToolCalls: Map<
-            string,
-            Array<{ tool: string; args: string }>
-        >,
+        agentToolCalls: Map<string, Array<{ tool: string; args: string }>>,
     ): Promise<void> {
         if (!executionUuid && !prNumber) return;
 
@@ -868,10 +892,7 @@ ${summaries}`,
         };
 
         // On completion/error, include full tool trace summary
-        if (
-            event.status === 'completed' ||
-            event.status === 'error'
-        ) {
+        if (event.status === 'completed' || event.status === 'error') {
             const allCalls = agentToolCalls.get(event.agentName) || [];
             metadata.agentTrace = {
                 steps: event.step,
@@ -899,13 +920,12 @@ ${summaries}`,
                 );
             } else {
                 // Find existing entry and update it (don't create duplicates)
-                const existing =
-                    executionUuid
-                        ? await this.automationExecutionService.findLatestStageLog(
-                              executionUuid,
-                              stageName,
-                          )
-                        : null;
+                const existing = executionUuid
+                    ? await this.automationExecutionService.findLatestStageLog(
+                          executionUuid,
+                          stageName,
+                      )
+                    : null;
 
                 if (existing) {
                     const updateData: any = {

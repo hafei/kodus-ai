@@ -109,7 +109,8 @@ const severityLevelOptions: {
     {
         value: "critical",
         label: "Critical",
-        description: "Severe bugs, security vulnerabilities, or data loss risks",
+        description:
+            "Severe bugs, security vulnerabilities, or data loss risks",
         textColor: "text-red-500",
         borderColor: "border-red-500",
     },
@@ -519,7 +520,11 @@ export const KodyRuleAddOrUpdateItemModal = ({
                         : "",
             rule: rule?.rule ?? "",
             title: rule?.title ?? "",
-            severityLevel: rule?.severityLevel ?? (rule?.severity ? legacySeverityToLevel(rule.severity) : "issue"),
+            severityLevel:
+                rule?.severityLevel ??
+                (rule?.severity
+                    ? legacySeverityToLevel(rule.severity)
+                    : "issue"),
             scope: initialScope,
             badExample:
                 rule?.examples?.find(({ isCorrect }) => !isCorrect)?.snippet ??
@@ -1415,9 +1420,10 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                     className="flex max-w-prose flex-col gap-1 text-xs">
                                                     <p>
                                                         Severity level defines
-                                                        how this rule&apos;s violations
-                                                        will be classified in
-                                                        code reviews.
+                                                        how this rule&apos;s
+                                                        violations will be
+                                                        classified in code
+                                                        reviews.
                                                     </p>
 
                                                     <ul className="flex flex-col gap-1">
@@ -1433,13 +1439,15 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                                 Issue:
                                                             </strong>{" "}
                                                             Functional problems
-                                                            that should be fixed.
+                                                            that should be
+                                                            fixed.
                                                         </li>
                                                         <li>
                                                             <strong className="text-red-500">
                                                                 Critical:
                                                             </strong>{" "}
-                                                            Severe bugs, security
+                                                            Severe bugs,
+                                                            security
                                                             vulnerabilities, or
                                                             data loss risks.
                                                         </li>
@@ -1448,7 +1456,8 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                             </Tooltip>
                                         </FormControl.Label>
                                         <FormControl.Helper>
-                                            Choose how violations will be classified
+                                            Choose how violations will be
+                                            classified
                                         </FormControl.Helper>
                                     </FormControl.Root>
 
@@ -1469,7 +1478,11 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                                 "flex-1 rounded-md border-2 px-3 py-2 text-sm font-medium transition-colors",
                                                                 field.value ===
                                                                     option.value
-                                                                    ? cn(option.borderColor, "bg-background", option.textColor)
+                                                                    ? cn(
+                                                                          option.borderColor,
+                                                                          "bg-background",
+                                                                          option.textColor,
+                                                                      )
                                                                     : "border-border bg-background text-muted-foreground hover:bg-accent",
                                                             )}>
                                                             {option.label}
