@@ -648,6 +648,313 @@ export class GithubService
         return githubAuthDetail.org;
     }
 
+    async findRepositoryByName(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        name: string;
+    }): Promise<Partial<Repository> | null> {
+        const repositories = await this.getRepositories({
+            organizationAndTeamData: params.organizationAndTeamData,
+        });
+
+        const foundRepo = repositories.find(
+            (repo) => repo.name === params.name,
+        );
+
+        return foundRepo || null;
+    }
+
+    async createPullRequestWithFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        sourceBranch?: string;
+        targetBranch?: string;
+        title: string;
+        description?: string;
+        commitMessage?: string;
+        files: { path: string; content: string }[];
+    }): Promise<Partial<PullRequest> | null> {
+        const {
+            organizationAndTeamData,
+            repository,
+            sourceBranch = `kodus-pr-${Date.now()}`,
+            targetBranch = await this.getDefaultBranch({
+                organizationAndTeamData,
+                repository,
+            }),
+            title,
+            description = '',
+            commitMessage = 'Update files',
+            files,
+        } = params;
+
+        try {
+            const uploadResult = await this.uploadFiles({
+                organizationAndTeamData,
+                repository,
+                branchName: sourceBranch,
+                files,
+                message: commitMessage,
+            });
+
+            if (!uploadResult) {
+                this.logger.error({
+                    message: 'Failed to upload files for pull request creation',
+                    context: GithubService.name,
+                    metadata: {
+                        repository: repository.name,
+                        sourceBranch,
+                        targetBranch,
+                        title,
+                        files: files.map((f) => f.path),
+                    },
+                });
+                return null;
+            }
+
+            const githubAuthDetail = await this.getGithubAuthDetails(
+                organizationAndTeamData,
+            );
+
+            const octokit = await this.instanceOctokit(
+                organizationAndTeamData,
+                githubAuthDetail,
+            );
+
+            const owner = await this.getCorrectOwner(githubAuthDetail, octokit);
+
+            const prResponse = await octokit.rest.pulls.create({
+                owner,
+                repo: repository.name,
+                title,
+                head: sourceBranch,
+                base: targetBranch,
+                body: description,
+            });
+
+            if (prResponse.status === 201) {
+                const prData = prResponse.data;
+
+                return {
+                    id: prData.id.toString(),
+                    number: prData.number,
+                    title: prData.title,
+                };
+            } else {
+                this.logger.error({
+                    message: 'Failed to create pull request',
+                    context: GithubService.name,
+                    metadata: {
+                        repository: repository.name,
+                        sourceBranch,
+                        targetBranch,
+                        title,
+                        files: files.map((f) => f.path),
+                        status: prResponse.status,
+                    },
+                });
+
+                return null;
+            }
+        } catch (error) {
+            this.logger.error({
+                message: 'Error creating pull request with files',
+                context: GithubService.name,
+                error,
+                metadata: {
+                    repository: repository.name,
+                    sourceBranch,
+                    targetBranch,
+                    title,
+                    files: files.map((f) => f.path),
+                },
+            });
+
+            return null;
+        }
+    }
+
+    async uploadFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        branchName: string;
+        files: { path: string; content: string }[];
+        message: string;
+    }): Promise<boolean> {
+        const {
+            organizationAndTeamData,
+            repository,
+            branchName,
+            files,
+            message,
+        } = params;
+
+        try {
+            const createdBranch = await this.createBranch({
+                organizationAndTeamData,
+                repository,
+                branchName,
+                sourceBranch: await this.getDefaultBranch({
+                    organizationAndTeamData,
+                    repository,
+                }),
+            });
+
+            if (!createdBranch) {
+                this.logger.error({
+                    message: 'Failed to create branch for uploading files',
+                    context: GithubService.name,
+                    metadata: {
+                        repository: repository.name,
+                        branchName,
+                    },
+                });
+
+                return false;
+            }
+
+            const githubAuthDetail = await this.getGithubAuthDetails(
+                organizationAndTeamData,
+            );
+
+            const octokit = await this.instanceOctokit(
+                organizationAndTeamData,
+                githubAuthDetail,
+            );
+
+            const owner = await this.getCorrectOwner(githubAuthDetail, octokit);
+
+            const uploadPromises = files.map((file) =>
+                octokit.rest.repos.createOrUpdateFileContents({
+                    owner,
+                    repo: repository.name,
+                    path: file.path,
+                    message,
+                    content: Buffer.from(file.content).toString('base64'),
+                    branch: createdBranch.name,
+                }),
+            );
+
+            const results = await Promise.allSettled(uploadPromises);
+
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    this.logger.error({
+                        message: `Failed to upload file ${files[index].path}`,
+                        context: GithubService.name,
+                        error: result.reason,
+                        metadata: {
+                            repository: repository.name,
+                            branchName,
+                            filePath: files[index].path,
+                        },
+                    });
+                }
+            });
+
+            return true;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error uploading files to GitHub',
+                context: GithubService.name,
+                error,
+                metadata: {
+                    repository: repository.name,
+                    branchName,
+                    files: files.map((f) => f.path),
+                },
+            });
+
+            return false;
+        }
+    }
+
+    private async createBranch(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        branchName: string;
+        sourceBranch: string;
+    }): Promise<{
+        name: string;
+        sha: string;
+    } | null> {
+        const {
+            organizationAndTeamData,
+            repository,
+            branchName,
+            sourceBranch,
+        } = params;
+
+        try {
+            const githubAuthDetail = await this.getGithubAuthDetails(
+                organizationAndTeamData,
+            );
+
+            const octokit = await this.instanceOctokit(
+                organizationAndTeamData,
+                githubAuthDetail,
+            );
+
+            const owner = await this.getCorrectOwner(githubAuthDetail, octokit);
+
+            const sourceBranchRef = await octokit.rest.git.getRef({
+                owner,
+                repo: repository.name,
+                ref: `heads/${sourceBranch}`,
+            });
+
+            if (sourceBranchRef.status !== 200) {
+                this.logger.error({
+                    message: `Source branch ${sourceBranch} not found`,
+                    context: GithubService.name,
+                    metadata: {
+                        repository: repository.name,
+                        sourceBranch,
+                        status: sourceBranchRef.status,
+                    },
+                });
+                return null;
+            }
+
+            const newBranchRef = await octokit.rest.git.createRef({
+                owner,
+                repo: repository.name,
+                ref: `refs/heads/${branchName}`,
+                sha: sourceBranchRef.data.object.sha,
+            });
+
+            if (newBranchRef.status === 201) {
+                return {
+                    name: branchName,
+                    sha: sourceBranchRef.data.object.sha,
+                };
+            } else {
+                this.logger.error({
+                    message: `Failed to create branch ${branchName}`,
+                    context: GithubService.name,
+                    metadata: {
+                        repository: repository.name,
+                        branchName,
+                        sourceBranch,
+                        status: newBranchRef.status,
+                    },
+                });
+                return null;
+            }
+        } catch (error) {
+            this.logger.error({
+                message: `Error creating branch ${branchName}`,
+                context: GithubService.name,
+                error,
+                metadata: {
+                    repository: repository.name,
+                    branchName,
+                    sourceBranch,
+                },
+            });
+            return null;
+        }
+    }
+
     private async checkRepositoryPermissions(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         org: string;

@@ -75,6 +75,76 @@ export class CodeManagementService implements ICodeManagementService {
         }
     }
 
+    async findRepositoryByName(
+        params: {
+            organizationAndTeamData: OrganizationAndTeamData;
+            name: string;
+        },
+        type?: PlatformType,
+    ): Promise<Partial<Repository> | null> {
+        if (!type) {
+            type = await this.getTypeIntegration(
+                extractOrganizationAndTeamData(params),
+            );
+        }
+
+        if (!type) {
+            return null;
+        }
+
+        const codeManagementService =
+            this.platformIntegrationFactory.getCodeManagementService(type);
+
+        return codeManagementService.findRepositoryByName(params);
+    }
+
+    async createPullRequestWithFiles(
+        params: {
+            organizationAndTeamData: OrganizationAndTeamData;
+            repository: Repository;
+            sourceBranch?: string;
+            targetBranch?: string;
+            title: string;
+            description?: string;
+            commitMessage?: string;
+            files: { path: string; content: string }[];
+        },
+        type?: PlatformType,
+    ): Promise<Partial<PullRequest> | null> {
+        if (!type) {
+            type = await this.getTypeIntegration(
+                extractOrganizationAndTeamData(params),
+            );
+        }
+
+        const codeManagementService =
+            this.platformIntegrationFactory.getCodeManagementService(type);
+
+        return codeManagementService.createPullRequestWithFiles(params);
+    }
+
+    async uploadFiles(
+        params: {
+            organizationAndTeamData: OrganizationAndTeamData;
+            repository: Repository;
+            branchName: string;
+            files: { path: string; content: string }[];
+            message: string;
+        },
+        type?: PlatformType,
+    ): Promise<void> {
+        if (!type) {
+            type = await this.getTypeIntegration(
+                extractOrganizationAndTeamData(params),
+            );
+        }
+
+        const codeManagementService =
+            this.platformIntegrationFactory.getCodeManagementService(type);
+
+        return codeManagementService.uploadFiles(params);
+    }
+
     async getCommits(
         params: {
             organizationAndTeamData: OrganizationAndTeamData;

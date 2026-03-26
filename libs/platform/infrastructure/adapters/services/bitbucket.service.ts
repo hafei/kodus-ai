@@ -99,6 +99,222 @@ export class BitbucketService implements Omit<
         private readonly mcpManagerService?: MCPManagerService,
     ) {}
 
+    async findRepositoryByName(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        name: string;
+    }) {
+        const { organizationAndTeamData, name } = params;
+
+        try {
+            const repositories = await this.getRepositories({
+                organizationAndTeamData: organizationAndTeamData,
+            });
+
+            const wanted = name.toLowerCase();
+            const repository = repositories.find(
+                (repo) =>
+                    repo.name.toLowerCase() === wanted ||
+                    `${repo.organizationName}/${repo.name}`.toLowerCase() ===
+                        wanted,
+            );
+
+            if (!repository) {
+                return null;
+            }
+
+            return {
+                id: repository.id,
+                name: repository.name,
+                fullName: `${repository.organizationName}/${repository.name}`,
+                url: repository.http_url,
+                organizationName: repository.organizationName,
+                defaultBranch: repository.default_branch,
+                visibility: repository.visibility,
+                workspaceId: repository.workspaceId,
+                project: repository.project,
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Error finding repository by name in Bitbucket',
+                context: BitbucketService.name,
+                error,
+                metadata: { params },
+            });
+            throw new BadRequestException(error);
+        }
+    }
+
+    async createPullRequestWithFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: Repository;
+        sourceBranch?: string;
+        targetBranch?: string;
+        title: string;
+        description?: string;
+        commitMessage?: string;
+        files: { path: string; content: string }[];
+    }): Promise<Partial<PullRequest> | null> {
+        const {
+            organizationAndTeamData,
+            repository,
+            sourceBranch = `kodus-pr-${Date.now()}`,
+            targetBranch,
+            title,
+            description,
+            commitMessage,
+            files,
+        } = params;
+
+        try {
+            const bitbucketAuthDetail = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            if (!bitbucketAuthDetail) {
+                throw new BadRequestException(
+                    'Failed to get Bitbucket authentication details',
+                );
+            }
+
+            const bitbucketAPI = this.instanceBitbucketApi(bitbucketAuthDetail);
+
+            const workspace = await this.getWorkspaceFromRepository(
+                organizationAndTeamData,
+                repository.id,
+            );
+
+            if (!workspace) {
+                throw new BadRequestException(
+                    'Failed to get workspace from repository',
+                );
+            }
+
+            const uploadResult = await this.uploadFiles({
+                organizationAndTeamData,
+                branchName: sourceBranch,
+                repository,
+                files,
+                message: commitMessage || `Initial commit for PR: ${title}`,
+            });
+
+            if (!uploadResult) {
+                throw new BadRequestException(
+                    'Failed to upload files to Bitbucket',
+                );
+            }
+
+            const pr = await bitbucketAPI.pullrequests.create({
+                workspace: `{${workspace}}`,
+                repo_slug: `{${repository.id}}`,
+                // @ts-expect-error: library type definition is incorrect for the body of this endpoint
+                _body: {
+                    title,
+                    summary: {
+                        raw: description || '',
+                    },
+                    source: {
+                        branch: {
+                            name: sourceBranch,
+                        },
+                    },
+                    ...(targetBranch
+                        ? {
+                              destination: {
+                                  branch: {
+                                      name: targetBranch,
+                                  },
+                              },
+                          }
+                        : {}),
+                },
+            });
+
+            return {
+                id: pr.data.id.toString(),
+                number: pr.data.id,
+                title: pr.data.title,
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Error creating pull request with files in Bitbucket',
+                context: BitbucketService.name,
+                error,
+                metadata: { params },
+            });
+            throw new BadRequestException(error);
+        }
+    }
+
+    async uploadFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: Repository;
+        branchName: string;
+        files: { path: string; content: string }[];
+        message: string;
+    }): Promise<boolean> {
+        const {
+            organizationAndTeamData,
+            repository,
+            branchName,
+            files,
+            message,
+        } = params;
+
+        try {
+            const bitbucketAuthDetail = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            if (!bitbucketAuthDetail) {
+                throw new BadRequestException(
+                    'Failed to get Bitbucket authentication details',
+                );
+            }
+
+            const bitbucketAPI = this.instanceBitbucketApi(bitbucketAuthDetail);
+
+            const workspace = await this.getWorkspaceFromRepository(
+                organizationAndTeamData,
+                repository.id,
+            );
+
+            if (!workspace) {
+                throw new BadRequestException(
+                    'Failed to get workspace from repository',
+                );
+            }
+
+            const form = new FormData();
+
+            form.append('branch', branchName);
+            form.append('message', message);
+
+            files.forEach((file) => {
+                const repoPath = file.path.startsWith('/')
+                    ? file.path
+                    : `/${file.path}`;
+                form.append(repoPath, file.content);
+            });
+
+            await bitbucketAPI.source.createFileCommit({
+                workspace: `{${workspace}}`,
+                repo_slug: `{${repository.id}}`,
+                _body: form,
+            });
+
+            return true;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error uploading files to Bitbucket',
+                context: BitbucketService.name,
+                error,
+                metadata: { params },
+            });
+
+            return false;
+        }
+    }
+
     getWorkflows(params: any): Promise<Workflow[]> {
         throw new Error('Method not implemented.');
     }

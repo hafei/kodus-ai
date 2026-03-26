@@ -31,6 +31,28 @@ export type CodeManagementConnectionStatus = {
 };
 
 export interface ICodeManagementService extends ICommonPlatformIntegrationService {
+    findRepositoryByName(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        name: string;
+    }): Promise<Partial<Repository> | null>;
+    createPullRequestWithFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        sourceBranch?: string;
+        targetBranch?: string;
+        title: string;
+        description?: string;
+        commitMessage?: string;
+        files: { path: string; content: string }[];
+    }): Promise<Partial<PullRequest> | null>;
+    uploadFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        branchName: string;
+        files: { path: string; content: string }[];
+        message: string;
+    }): Promise<boolean>;
+
     getPullRequests(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         repository?: {

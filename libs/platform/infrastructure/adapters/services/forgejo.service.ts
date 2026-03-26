@@ -111,6 +111,8 @@ import {
     userGet,
     userGetCurrent,
     userSearch,
+    repoChangeFiles,
+    repoCreatePullRequest,
 } from '@llamaduck/forgejo-ts';
 import { Client, createClient } from '@llamaduck/forgejo-ts/client';
 
@@ -196,6 +198,195 @@ export class ForgejoService implements Omit<
                 error,
             });
             return null;
+        }
+    }
+
+    async findRepositoryByName(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        name: string;
+    }): Promise<Partial<Repository> | null> {
+        try {
+            const repositories = await this.getRepositories({
+                organizationAndTeamData: params.organizationAndTeamData,
+            });
+            const repo = repositories.find((r) => r.name === params.name);
+            if (!repo) {
+                this.logger.warn({
+                    message: 'Repository not found by name',
+                    context: ForgejoService.name,
+                    metadata: { repositoryName: params.name },
+                });
+                return null;
+            }
+            return repo;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error finding repository by name',
+                context: ForgejoService.name,
+                error,
+                metadata: { repositoryName: params.name },
+            });
+            return null;
+        }
+    }
+
+    async createPullRequestWithFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        sourceBranch?: string;
+        targetBranch?: string;
+        title: string;
+        description?: string;
+        commitMessage?: string;
+        files: { path: string; content: string }[];
+    }): Promise<Partial<PullRequest> | null> {
+        const {
+            organizationAndTeamData,
+            repository,
+            sourceBranch = `kodus-pr-${Date.now()}`,
+            targetBranch = await this.getDefaultBranch({
+                organizationAndTeamData,
+                repository,
+            }),
+            title,
+            description = '',
+            commitMessage = 'Update files',
+            files,
+        } = params;
+
+        try {
+            const authDetail = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            if (!authDetail) {
+                throw new Error('Authentication details not found');
+            }
+
+            const repoInfo = this.extractRepoInfo(
+                repository.name,
+                'createPullRequestWithFiles',
+            );
+
+            if (!repoInfo) {
+                throw new Error('Invalid repository name format');
+            }
+
+            const client = this.createForgejoClient(authDetail);
+
+            const uploadResult = await this.uploadFiles({
+                organizationAndTeamData,
+                repository,
+                branchName: sourceBranch,
+                files,
+                message: commitMessage || `Add files for PR: ${title}`,
+            });
+
+            if (!uploadResult) {
+                throw new BadRequestException(
+                    'Failed to upload files to Forgejo',
+                );
+            }
+
+            const pr = await repoCreatePullRequest({
+                client,
+                path: repoInfo,
+                body: {
+                    base: targetBranch,
+                    head: sourceBranch,
+                    title,
+                    body: description,
+                },
+            });
+
+            if (!pr || pr.status >= 300) {
+                throw new Error(`Failed to create pull request: ${pr.status}`);
+            }
+
+            return {
+                id: pr.data?.id?.toString() ?? '',
+                number: pr.data?.number ?? -1,
+                title: pr.data?.title ?? '',
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Error creating pull request with files',
+                context: ForgejoService.name,
+                error,
+                metadata: { params },
+            });
+            return null;
+        }
+    }
+
+    async uploadFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        branchName: string;
+        files: { path: string; content: string }[];
+        message: string;
+    }): Promise<boolean> {
+        const {
+            organizationAndTeamData,
+            repository,
+            branchName,
+            files,
+            message,
+        } = params;
+
+        try {
+            const authDetail = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+            if (!authDetail) {
+                throw new Error('Authentication details not found');
+            }
+
+            const repoInfo = this.extractRepoInfo(
+                repository.name,
+                'uploadFiles',
+            );
+
+            if (!repoInfo) {
+                throw new Error('Invalid repository name format');
+            }
+
+            const client = this.createForgejoClient(authDetail);
+
+            const defaultBranch = await this.getDefaultBranch({
+                organizationAndTeamData,
+                repository,
+            });
+
+            const res = await repoChangeFiles({
+                client,
+                path: repoInfo,
+                body: {
+                    files: files.map((f) => ({
+                        operation: 'create',
+                        path: f.path,
+                        content: f.content,
+                    })),
+                    message:
+                        message || `Add files via API on branch ${branchName}`,
+                    branch: defaultBranch,
+                    new_branch: branchName,
+                },
+            });
+
+            if (!res || res.status >= 300) {
+                throw new Error(`Failed to upload files: ${res.status}`);
+            }
+
+            return true;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error uploading files to Forgejo',
+                context: ForgejoService.name,
+                error,
+                metadata: { params },
+            });
+            return false;
         }
     }
 

@@ -112,6 +112,172 @@ export class AzureReposService implements Omit<
         private readonly mcpManagerService?: MCPManagerService,
     ) {}
 
+    async findRepositoryByName(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        name: string;
+    }): Promise<Partial<Repository> | null> {
+        try {
+            const repositories = await this.getRepositories({
+                organizationAndTeamData: params.organizationAndTeamData,
+            });
+
+            const wanted = params.name.toLowerCase();
+            const repository = repositories.find(
+                (repo) =>
+                    repo.name.toLowerCase() === wanted ||
+                    `${repo.organizationName}/${repo.name}`.toLowerCase() ===
+                        wanted,
+            );
+
+            if (!repository) {
+                return null;
+            }
+
+            return {
+                id: repository.id,
+                name: repository.name,
+                fullName: `${repository.organizationName}/${repository.name}`,
+                defaultBranch: repository.default_branch,
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Error finding repository by name in Azure Repos',
+                context: AzureReposService.name,
+                error,
+                metadata: { params },
+            });
+            throw new BadRequestException(error);
+        }
+    }
+
+    async createPullRequestWithFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        sourceBranch?: string;
+        targetBranch?: string;
+        title: string;
+        description?: string;
+        commitMessage?: string;
+        files: { path: string; content: string }[];
+    }): Promise<Partial<PullRequest> | null> {
+        const {
+            organizationAndTeamData,
+            repository,
+            sourceBranch = `kodus-pr-${Date.now()}`,
+            targetBranch = await this.getDefaultBranch({
+                organizationAndTeamData,
+                repository,
+            }),
+            title,
+            description,
+            commitMessage,
+            files,
+        } = params;
+
+        try {
+            const { orgName, token } = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            const projectId = await this.getProjectIdFromRepository(
+                organizationAndTeamData,
+                repository.id,
+            );
+
+            const uploadResult = await this.uploadFiles({
+                organizationAndTeamData,
+                repository,
+                branchName: sourceBranch,
+                files,
+                message: commitMessage || `Add files for PR: ${title}`,
+            });
+
+            if (!uploadResult) {
+                throw new BadRequestException(
+                    'Failed to upload files to Azure Repos',
+                );
+            }
+
+            const pr = await this.azureReposRequestHelper.createPullRequest({
+                orgName,
+                token,
+                projectId,
+                repositoryId: repository.id,
+                sourceBranch,
+                targetBranch,
+                title,
+                description,
+            });
+
+            return {
+                id: pr.pullRequestId.toString(),
+                number: pr.pullRequestId,
+                title: pr.title,
+            };
+        } catch (error) {
+            this.logger.error({
+                message:
+                    'Error creating pull request with files in Azure Repos',
+                context: AzureReposService.name,
+                error,
+                metadata: { params },
+            });
+            return null;
+        }
+    }
+
+    async uploadFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        branchName: string;
+        files: { path: string; content: string }[];
+        message: string;
+    }): Promise<boolean> {
+        const {
+            organizationAndTeamData,
+            repository,
+            branchName,
+            files,
+            message,
+        } = params;
+
+        try {
+            const { orgName, token } = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            const projectId = await this.getProjectIdFromRepository(
+                organizationAndTeamData,
+                repository.id,
+            );
+
+            await this.azureReposRequestHelper.uploadFilesToNewBranch({
+                orgName,
+                branchName,
+                changes: files.map((file) => ({
+                    changeType: 'add',
+                    filePath: file.path,
+                    content: file.content,
+                })),
+                commitMessage: message,
+                projectId,
+                repositoryId: repository.id,
+                token,
+            });
+
+            return true;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error uploading files to Azure Repos',
+                context: AzureReposService.name,
+                error,
+                metadata: { params },
+            });
+
+            return false;
+        }
+    }
+
     async getPullRequestAuthors(params: {
         organizationAndTeamData: OrganizationAndTeamData;
     }): Promise<PullRequestAuthor[]> {

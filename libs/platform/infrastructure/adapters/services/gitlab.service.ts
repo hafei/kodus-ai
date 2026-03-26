@@ -289,6 +289,177 @@ export class GitlabService implements Omit<
         });
     }
 
+    async findRepositoryByName(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        name: string;
+    }): Promise<Partial<Repository> | null> {
+        try {
+            const repositories = await this.getRepositories({
+                organizationAndTeamData: params.organizationAndTeamData,
+            });
+
+            const foundRepo = repositories.find(
+                (repo) => repo.name === params.name,
+            );
+
+            if (!foundRepo) {
+                this.logger.warn({
+                    message: `Repository with name ${params.name} not found.`,
+                    context: GitlabService.name,
+                    metadata: params,
+                });
+                return null;
+            }
+
+            return foundRepo;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error finding repository by name',
+                context: GitlabService.name,
+                error,
+                metadata: params,
+            });
+            return null;
+        }
+    }
+
+    async createPullRequestWithFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        sourceBranch?: string;
+        targetBranch?: string;
+        title: string;
+        description?: string;
+        commitMessage?: string;
+        files: { path: string; content: string }[];
+    }): Promise<Partial<PullRequest> | null> {
+        const {
+            organizationAndTeamData,
+            repository,
+            sourceBranch = `kody-pr-${uuidv4()}`,
+            targetBranch = await this.getDefaultBranch({
+                organizationAndTeamData,
+                repository,
+            }),
+            title,
+            description = '',
+            commitMessage,
+            files,
+        } = params;
+
+        try {
+            const gitlabAuthDetail = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            if (!gitlabAuthDetail) {
+                throw new Error('GitLab authentication details not found');
+            }
+
+            const gitlabAPI = this.instanceGitlabApi(gitlabAuthDetail);
+
+            const uploadResult = await this.uploadFiles({
+                organizationAndTeamData,
+                repository,
+                branchName: sourceBranch,
+                files,
+                message: commitMessage || `Add files for PR: ${title}`,
+            });
+
+            if (!uploadResult) {
+                throw new BadRequestException(
+                    'Failed to upload files to GitLab',
+                );
+            }
+
+            const newMergeRequest = await gitlabAPI.MergeRequests.create(
+                repository.id,
+                sourceBranch,
+                targetBranch,
+                title,
+                {
+                    description,
+                },
+            );
+
+            return {
+                id: newMergeRequest.iid.toString(),
+                number: newMergeRequest.iid,
+                title: newMergeRequest.title,
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Error creating pull request with files in GitLab',
+                context: GitlabService.name,
+                error,
+                metadata: params,
+            });
+            return null;
+        }
+    }
+
+    async uploadFiles(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { id: string; name: string };
+        branchName: string;
+        files: { path: string; content: string }[];
+        message: string;
+    }): Promise<boolean> {
+        const {
+            organizationAndTeamData,
+            repository,
+            branchName,
+            files,
+            message,
+        } = params;
+
+        try {
+            const gitlabAuthDetail = await this.getAuthDetails(
+                organizationAndTeamData,
+            );
+
+            if (!gitlabAuthDetail) {
+                throw new Error('GitLab authentication details not found');
+            }
+
+            const gitlabAPI = this.instanceGitlabApi(gitlabAuthDetail);
+
+            const defaultBranch = await this.getDefaultBranch({
+                organizationAndTeamData,
+                repository,
+            });
+
+            const res = await gitlabAPI.Commits.create(
+                repository.id,
+                branchName,
+                message,
+                files.map((f) => ({
+                    action: 'create',
+                    filePath: f.path,
+                    content: f.content,
+                    encoding: 'text',
+                })),
+                {
+                    startBranch: defaultBranch,
+                },
+            );
+
+            if (!res || !res.id) {
+                throw new Error('Failed to create commit with files');
+            }
+
+            return true;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error uploading files to GitLab',
+                context: GitlabService.name,
+                error,
+                metadata: params,
+            });
+            return false;
+        }
+    }
+
     private async handleIntegration(
         integration: any,
         authDetails: any,
@@ -390,7 +561,10 @@ export class GitlabService implements Omit<
                 tokenType: tokenResponse?.data?.token_type,
                 scope: tokenResponse?.data?.scope,
                 authMode: params?.authMode || AuthMode.OAUTH,
-                ...(gitlabHost && gitlabHost !== 'https://gitlab.com' && { host: gitlabHost }),
+                ...(gitlabHost &&
+                    gitlabHost !== 'https://gitlab.com' && {
+                        host: gitlabHost,
+                    }),
             };
 
             const checkRepos = await this.checkRepositoryPermissions({

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 
+import { decrypt } from '@libs/common/utils/crypto';
 import { FileChange } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import {
     AzureRepoChange,
@@ -19,7 +20,6 @@ import {
 } from '@libs/platform/domain/azure/entities/azureRepoPullRequest.type';
 import { AzureReposProject } from '@libs/platform/domain/azure/entities/azureReposProject.type';
 import { AzureReposRepository } from '@libs/platform/domain/azure/entities/azureReposRepository.type';
-import { decrypt } from '@libs/common/utils/crypto';
 
 @Injectable()
 export class AzureReposRequestHelper {
@@ -1190,5 +1190,77 @@ export class AzureReposRequestHelper {
                 objectId: v?.objectId,
                 size: v?.size,
             }));
+    }
+
+    async uploadFilesToNewBranch(params: {
+        orgName: string;
+        token: string;
+        projectId: string;
+        repositoryId: string;
+        branchName: string;
+        commitMessage: string;
+        changes: Array<{
+            changeType: 'add' | 'edit' | 'delete';
+            filePath: string;
+            content?: string;
+        }>;
+    }): Promise<any> {
+        const instance = await this.azureRequest(params);
+
+        const url = `/${params.projectId}/_apis/git/repositories/${params.repositoryId}/pushes?api-version=7.1`;
+
+        const payload = {
+            refUpdates: [
+                {
+                    name: `refs/heads/${params.branchName}`,
+                    oldObjectId: '0000000000000000000000000000000000000000', // New Branch
+                },
+            ],
+            commits: [
+                {
+                    comment: params.commitMessage,
+                    changes: params.changes.map((change) => ({
+                        changeType: change.changeType,
+                        item: {
+                            path: change.filePath,
+                        },
+                        newContent: change.content
+                            ? {
+                                  content: change.content,
+                                  contentType: 'rawtext',
+                              }
+                            : undefined,
+                    })),
+                },
+            ],
+        };
+
+        const { data } = await instance.post(url, payload);
+        return data;
+    }
+
+    async createPullRequest(params: {
+        orgName: string;
+        token: string;
+        projectId: string;
+        repositoryId: string;
+        sourceBranch: string;
+        targetBranch: string;
+        title: string;
+        description?: string;
+    }): Promise<AzureRepoPullRequest> {
+        const instance = await this.azureRequest(params);
+
+        const url = `/${params.projectId}/_apis/git/repositories/${params.repositoryId}/pullrequests?api-version=7.1`;
+
+        const payload = {
+            sourceRefName: `refs/heads/${params.sourceBranch}`,
+            targetRefName: `refs/heads/${params.targetBranch}`,
+            title: params.title,
+            description: params.description || '',
+        };
+
+        const { data } = await instance.post(url, payload);
+        return data;
     }
 }
