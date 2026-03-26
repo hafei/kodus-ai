@@ -40,7 +40,7 @@ export class GetCodeManagementMemberListUseCase implements IUseCase {
                 { name: string; id: string | number }[]
             >(cacheKey);
 
-            if (cached !== null && cached !== undefined) {
+            if (cached?.length > 0) {
                 return cached;
             }
         } catch {
@@ -65,13 +65,15 @@ export class GetCodeManagementMemberListUseCase implements IUseCase {
         const prMembers =
             await this.fetchMembersFromPullRequests(organizationAndTeamData);
 
-        await this.cacheService
-            .addToCache(
-                cacheKey,
-                prMembers,
-                GetCodeManagementMemberListUseCase.CACHE_TTL,
-            )
-            .catch(() => {});
+        if (prMembers.length > 0) {
+            await this.cacheService
+                .addToCache(
+                    cacheKey,
+                    prMembers,
+                    GetCodeManagementMemberListUseCase.CACHE_TTL,
+                )
+                .catch(() => {});
+        }
 
         return prMembers;
     }

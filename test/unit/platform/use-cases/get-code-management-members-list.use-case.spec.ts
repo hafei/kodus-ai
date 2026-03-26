@@ -90,13 +90,14 @@ describe('GetCodeManagementMemberListUseCase', () => {
             expect(mockCodeManagementService.getListMembers).not.toHaveBeenCalled();
         });
 
-        it('should return cached empty array on cache hit', async () => {
+        it('should not treat cached empty array as a hit', async () => {
             mockCacheService.getFromCache.mockResolvedValue([]);
+            mockCodeManagementService.getListMembers.mockResolvedValue(mockMembers);
 
             const result = await useCase.execute();
 
-            expect(result).toEqual([]);
-            expect(mockCodeManagementService.getListMembers).not.toHaveBeenCalled();
+            expect(result).toEqual(mockMembers);
+            expect(mockCodeManagementService.getListMembers).toHaveBeenCalled();
         });
 
         it('should fetch from code integration on cache miss', async () => {
@@ -145,7 +146,7 @@ describe('GetCodeManagementMemberListUseCase', () => {
             expect(result).toEqual(mockMembers);
         });
 
-        it('should cache empty results from fallback source', async () => {
+        it('should not cache empty results to avoid caching transient errors', async () => {
             mockCacheService.getFromCache.mockResolvedValue(null);
             mockCodeManagementService.getListMembers.mockResolvedValue([]);
             mockPullRequestHandlerService.getPullRequestAuthorsWithCache.mockResolvedValue(
@@ -154,11 +155,7 @@ describe('GetCodeManagementMemberListUseCase', () => {
 
             await useCase.execute();
 
-            expect(mockCacheService.addToCache).toHaveBeenCalledWith(
-                'org_members_org-uuid-123',
-                [],
-                10 * 60 * 1000,
-            );
+            expect(mockCacheService.addToCache).not.toHaveBeenCalled();
         });
     });
 
