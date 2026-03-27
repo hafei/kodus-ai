@@ -219,10 +219,9 @@ export async function runAgentLoop(
                     };
                 }
 
-                // Force tool usage in early steps — prevent premature text responses
-                if (stepNumber < MIN_INVESTIGATION_STEPS) {
-                    return { toolChoice: 'required' as const };
-                }
+                // Note: toolChoice: 'required' was removed because some providers
+                // (e.g. Moonshot) reject it with "incompatible with thinking enabled".
+                // The prompt already instructs "Your first action must be a tool call".
 
                 return {};
             },
@@ -444,16 +443,23 @@ export async function runAgentLoop(
 ${investigationSummary.substring(0, 8000)}
 </InvestigationLog>
 
-Based on your investigation above, respond NOW with your findings as a JSON block. Do NOT call any tools. Respond with ONLY the JSON:
+Based on your investigation above, respond NOW with your findings as a JSON block. Do NOT call any tools.
+
+IMPORTANT: Your investigation log shows what you looked at. Re-read it carefully.
+- If you found ANY suspicious patterns, null risks, type mismatches, race conditions, or missing validations — report them.
+- If a tool call returned evidence of a problem (error output, missing checks, wrong types) — report it even if you're not 100% certain.
+- "I didn't find issues" is only valid if you can explain WHY each changed function is safe.
+
+Respond with ONLY the JSON:
 
 \`\`\`json
 {
-  "reasoning": "Summary of what you investigated and found",
+  "reasoning": "For each changed function: what you challenged, what evidence you found, why you reported or dismissed",
   "suggestions": [
     {
       "relevantFile": "path/to/file",
       "language": "java",
-      "suggestionContent": "Description of the issue with evidence",
+      "suggestionContent": "Description of the issue with evidence from your investigation",
       "existingCode": "problematic code",
       "improvedCode": "fixed code",
       "oneSentenceSummary": "Brief summary",
@@ -463,9 +469,7 @@ Based on your investigation above, respond NOW with your findings as a JSON bloc
     }
   ]
 }
-\`\`\`
-
-If no issues were found during investigation, respond with \`{"reasoning": "...", "suggestions": []}\`.`,
+\`\`\``,
                 stopWhen: stepCountIs(1), // No tools, just respond
             });
 

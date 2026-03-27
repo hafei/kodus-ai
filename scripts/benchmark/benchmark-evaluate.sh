@@ -216,17 +216,13 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
 fi
 
 echo ""
-echo "▸ Judging with Sonnet..."
+echo "▸ Judging with Sonnet (single pass, both levels derived)..."
 echo "  Key: ${ANTHROPIC_API_KEY:0:15}... (len=${#ANTHROPIC_API_KEY})"
 
-for LEVEL in "issue-critical" "with-warning"; do
-  echo "  ▸ $LEVEL..."
-  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" node "$SCRIPT_DIR/judge-sonnet.js" \
-    "$RESULTS_DIR/golden.json" \
-    "$RESULTS_DIR/candidates-${LEVEL}.json" \
-    "$RESULTS_DIR/results-${LEVEL}.json" \
-    "$LEVEL" 2>&1
-done
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" node "$SCRIPT_DIR/judge-sonnet.js" \
+  "$RESULTS_DIR/golden.json" \
+  "$RESULTS_DIR/candidates-with-warning.json" \
+  "$RESULTS_DIR" 2>&1
 
 # ── Print Results ────────────────────────────────────────────────
 echo ""
