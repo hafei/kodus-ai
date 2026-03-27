@@ -30,7 +30,10 @@ import { ParametersKey } from '@libs/core/domain/enums/parameters-key.enum';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { PullRequestState } from '@libs/core/domain/enums/pullRequestState.enum';
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
-import { CodeReviewConfig } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import {
+    CodeReviewConfig,
+    ReviewCadenceType,
+} from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { ConfigLevel } from '@libs/core/infrastructure/config/types/general/pullRequestMessages.type';
 import {
@@ -416,6 +419,69 @@ export class CheckIfPRCanBeApprovedCronProvider {
             },
             prNumber: prNumber,
         };
+
+        const isAutomaticReview =
+            !codeReviewConfig?.reviewCadence ||
+            codeReviewConfig.reviewCadence.type === ReviewCadenceType.AUTOMATIC;
+
+        if (isAutomaticReview) {
+            const lastExecution =
+                await this.automationExecutionService.findLatestExecutionByFilters(
+                    {
+                        status: AutomationStatus.SUCCESS,
+                        teamAutomation: { uuid: teamAutomationId },
+                        pullRequestNumber: prNumber,
+                        repositoryId: repository?.id,
+                    },
+                );
+
+            const lastAnalyzedCommitSha = this.getLastAnalyzedCommitSha(
+                lastExecution?.dataExecution?.lastAnalyzedCommit,
+            );
+
+            if (lastAnalyzedCommitSha) {
+                const currentPullRequest =
+                    await this.codeManagementService.getPullRequest(
+                        {
+                            organizationAndTeamData,
+                            repository: {
+                                id: repository?.id,
+                                name: repository?.name,
+                            },
+                            prNumber: prNumber,
+                        },
+                        platformType,
+                    );
+
+                const currentHeadSha =
+                    currentPullRequest?.head?.sha ||
+                    (currentPullRequest as any)?.headSha ||
+                    (currentPullRequest as any)?.head?.commit?.sha;
+
+                if (
+                    currentHeadSha &&
+                    currentHeadSha !== lastAnalyzedCommitSha
+                ) {
+                    this.logger.log({
+                        message: `Skipping approval for PR#${prNumber} due to new commit since last reviewed commit`,
+                        context: CheckIfPRCanBeApprovedCronProvider.name,
+                        metadata: {
+                            organizationAndTeamData,
+                            repository: {
+                                id: repository?.id,
+                                name: repository?.name,
+                            },
+                            prNumber,
+                            lastAnalyzedCommitSha,
+                            currentHeadSha,
+                        },
+                    });
+
+                    return false;
+                }
+            }
+        }
+
         try {
             let reviewComments: any[];
 
@@ -642,6 +708,30 @@ export class CheckIfPRCanBeApprovedCronProvider {
             Array.isArray(inProgressExecutions) &&
             inProgressExecutions.length > 0
         );
+    }
+
+    private getLastAnalyzedCommitSha(lastAnalyzedCommit?: any): string | null {
+        if (!lastAnalyzedCommit) {
+            return null;
+        }
+
+        if (typeof lastAnalyzedCommit === 'string') {
+            return lastAnalyzedCommit;
+        }
+
+        if (typeof lastAnalyzedCommit === 'object') {
+            if (lastAnalyzedCommit.sha) {
+                return lastAnalyzedCommit.sha;
+            }
+            if (lastAnalyzedCommit.commitSha) {
+                return lastAnalyzedCommit.commitSha;
+            }
+            if (lastAnalyzedCommit.commit?.sha) {
+                return lastAnalyzedCommit.commit.sha;
+            }
+        }
+
+        return null;
     }
 
     private async setPullRequestMessagesConfig(
