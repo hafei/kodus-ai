@@ -1,0 +1,67 @@
+{
+  "name": "gemini-3flash-deep",
+  "created": "2026-03-27T16:28:44.059Z",
+  "totalPrs": 10,
+  "prs": [
+    {
+      "repo": "sentry",
+      "head": "performance-enhancement-complete",
+      "title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+      "prNumber": 59
+    },
+    {
+      "repo": "sentry",
+      "head": "performance-enhancement-complete",
+      "title": "Optimize spans buffer insertion with eviction during insert",
+      "prNumber": 59
+    },
+    {
+      "repo": "grafana-codex",
+      "head": "implement-device-limits",
+      "title": "Anonymous: Add configurable device limit",
+      "prNumber": 50
+    },
+    {
+      "repo": "grafana-codex",
+      "head": "authz-service-improve-caching-pr",
+      "title": "AuthZService: improve authz caching",
+      "prNumber": 51
+    },
+    {
+      "repo": "discourse-cursor",
+      "head": "large-image-processing",
+      "title": "FEATURE: automatically downsize large images",
+      "prNumber": 50
+    },
+    {
+      "repo": "discourse-cursor",
+      "head": "topic-email-management",
+      "title": "FEATURE: per-topic unsubscribe option in emails",
+      "prNumber": 51
+    },
+    {
+      "repo": "cal.com",
+      "head": "appstore-async-improvements",
+      "title": "Async import of the appStore packages",
+      "prNumber": 49
+    },
+    {
+      "repo": "cal.com",
+      "head": "improve-two-factor-authentication-features",
+      "title": "feat: 2fa backup codes",
+      "prNumber": 50
+    },
+    {
+      "repo": "keycloak",
+      "head": "passkey-integration-buggy",
+      "title": "Fixing Re-authentication with passkeys",
+      "prNumber": 49
+    },
+    {
+      "repo": "keycloak",
+      "head": "feature-idp-cache-implementation",
+      "title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
+      "prNumber": 50
+    }
+  ]
+}

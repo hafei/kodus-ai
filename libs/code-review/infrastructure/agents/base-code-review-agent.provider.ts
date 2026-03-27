@@ -414,10 +414,12 @@ export abstract class BaseCodeReviewAgentProvider {
 
       Step 1: Read the diffs. For each changed function/method, list what it does differently now.
 
-      Step 2: For each changed function, grep callers:
-        grep("methodName\\(", excludeTests=true) → production call sites.
-        Use the returned lineNumber in readFile(file, startLine=N-20, endLine=N+30).
-        For interfaces/abstract methods, grep "implements X" or "extends X".
+      Step 2: For each method CHANGED in the diff, trace the call chain:
+        a) grep("exactMethodName\\(", excludeTests=true) → find who calls it
+        b) readFile the caller — what does it pass? What does it expect back?
+        c) If the changed method calls ANOTHER method, grep for THAT method too — read it. What does it actually return? Is it the right target?
+        d) Keep following calls until you hit a concrete implementation or return value. Do NOT stop at the first layer.
+        For interfaces/abstract methods, grep "implements X" or "extends X" to find concrete implementations.
 
       Step 3: Read caller context. Understand HOW the changed code is used in production.
         If available, use checkTypes to run the language's type checker on changed files.
@@ -431,6 +433,7 @@ export abstract class BaseCodeReviewAgentProvider {
         - "What if this function is called from a path I haven't seen?" → grep again if unsure
         - "Does this change break any existing caller?" → did the signature, return type, or side effect change?
         - "Does this affect caching/invalidation?" → changed predicate = stale cache risk
+        - "Does this code delegate to another layer (cache, proxy, adapter)?" → is it calling the right target — delegate vs self, concrete vs default?
 
       If you cannot confidently answer "this is safe" for any question, investigate more or report it.
 
