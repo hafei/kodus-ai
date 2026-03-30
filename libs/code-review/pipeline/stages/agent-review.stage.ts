@@ -19,6 +19,7 @@ import {
 } from '@libs/automation/domain/automationExecution/contracts/automation-execution.service';
 import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
 import { AgentProgressEvent } from '@libs/code-review/infrastructure/agents/base-code-review-agent.provider';
+import { generateCallGraph } from '@libs/code-review/infrastructure/agents/call-graph.helper';
 import {
     resolveKodyRuleSeverityLevel,
     SeverityLevel,
@@ -252,6 +253,30 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 repositoryId,
             );
 
+            // Generate call graph once — shared across all agents
+            let callGraph = '';
+            try {
+                callGraph = await generateCallGraph(
+                    context.sandboxHandle.remoteCommands,
+                    changedFiles,
+                    context.repository?.fullName ||
+                        context.pullRequest?.base?.repo?.fullName ||
+                        '',
+                );
+                if (callGraph) {
+                    this.logger.log({
+                        message: `[AGENT] Call graph generated: ${callGraph.length} chars for PR#${prNumber}`,
+                        context: this.stageName,
+                    });
+                }
+            } catch (err) {
+                this.logger.warn({
+                    message: `[AGENT] Call graph generation failed for PR#${prNumber}, proceeding without it`,
+                    context: this.stageName,
+                    error: err,
+                });
+            }
+
             const result = await this.reviewOrchestrator.execute({
                 organizationAndTeamData: context.organizationAndTeamData,
                 changedFiles,
@@ -281,6 +306,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     context.sandboxHandle?.baseBranch ||
                     context.pullRequest?.base?.ref ||
                     context.repository?.defaultBranch,
+                callGraph,
             });
 
             const durationMs = Date.now() - startTime;

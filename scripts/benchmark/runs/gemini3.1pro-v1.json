@@ -1,0 +1,127 @@
+{
+  "name": "gemini3.1pro-v1",
+  "created": "2026-03-26T13:24:00.000Z",
+  "totalPrs": 20,
+  "prs": [
+    {
+      "repo": "sentry-greptile",
+      "head": "performance-enhancement-complete",
+      "title": "Optimize spans buffer insertion with eviction during insert",
+      "prNumber": 165
+    },
+    {
+      "repo": "sentry-greptile",
+      "head": "performance-enhancement-complete",
+      "title": "Optimize spans buffer insertion with eviction during insert",
+      "prNumber": 166
+    },
+    {
+      "repo": "sentry-greptile",
+      "head": "error-upsampling-race-condition",
+      "title": "feat(upsampling) - Support upsampled error count with performance optimizations",
+      "prNumber": 167
+    },
+    {
+      "repo": "sentry-greptile",
+      "head": "oauth-state-secure",
+      "title": "GitHub OAuth Security Enhancement",
+      "prNumber": 168
+    },
+    {
+      "repo": "grafana-greptile",
+      "head": "implement-device-limits",
+      "title": "Anonymous: Add configurable device limit",
+      "prNumber": 153
+    },
+    {
+      "repo": "grafana-greptile",
+      "head": "authz-service-improve-caching-pr",
+      "title": "AuthZService: improve authz caching",
+      "prNumber": 154
+    },
+    {
+      "repo": "grafana-greptile",
+      "head": "plugins/rename-instrumentation-middleware-to-metrics-middleware",
+      "title": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
+      "prNumber": 155
+    },
+    {
+      "repo": "grafana-greptile",
+      "head": "query-splitting-enhancements",
+      "title": "Advanced Query Processing Architecture",
+      "prNumber": 156
+    },
+    {
+      "repo": "discourse-greptile",
+      "head": "large-image-processing",
+      "title": "FEATURE: automatically downsize large images",
+      "prNumber": 153
+    },
+    {
+      "repo": "discourse-greptile",
+      "head": "topic-email-management",
+      "title": "FEATURE: per-topic unsubscribe option in emails",
+      "prNumber": 154
+    },
+    {
+      "repo": "discourse-greptile",
+      "head": "blocked-email-validation-post",
+      "title": "Add comprehensive email validation for blocked users",
+      "prNumber": 155
+    },
+    {
+      "repo": "discourse-greptile",
+      "head": "embed-url-handling-post",
+      "title": "Enhance embed URL handling and validation system",
+      "prNumber": 156
+    },
+    {
+      "repo": "cal.com-greptile",
+      "head": "appstore-async-improvements",
+      "title": "Async import of the appStore packages",
+      "prNumber": 167
+    },
+    {
+      "repo": "cal.com-greptile",
+      "head": "improve-two-factor-authentication-features",
+      "title": "feat: 2fa backup codes",
+      "prNumber": 168
+    },
+    {
+      "repo": "cal.com-greptile",
+      "head": "fix/handle-collective-multiple-host-destinations",
+      "title": "fix: handle collective multiple host on destinationCalendar",
+      "prNumber": 169
+    },
+    {
+      "repo": "cal.com-greptile",
+      "head": "insights-performance-optimization",
+      "title": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
+      "prNumber": 170
+    },
+    {
+      "repo": "keycloak-greptile",
+      "head": "passkey-integration-buggy",
+      "title": "Fixing Re-authentication with passkeys",
+      "prNumber": 153
+    },
+    {
+      "repo": "keycloak-greptile",
+      "head": "feature-idp-cache-implementation",
+      "title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
+      "prNumber": 154
+    },
+    {
+      "repo": "keycloak-greptile",
+      "head": "feature-authz-crypto-implementation",
+      "title": "Add Client resource type and scopes to authorization schema",
+      "prNumber": 155
+    },
+    {
+      "repo": "keycloak-greptile",
+      "head": "feature-rolling-updates-implementation",
+      "title": "Add rolling-updates feature flag and compatibility framework",
+      "prNumber": 156
+    }
+  ]
+}

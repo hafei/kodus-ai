@@ -94,61 +94,58 @@ echo "$RESULT" | grep "✅"
 echo ""
 echo "  ✓ Created $CREATED PRs"
 
-# Save run manifest — maps repo/branch to PR number
+# Save run manifest — use prs.json (source of truth for repo names) + benchmark golden
 cd "$REPO_DIR"
 echo "▸ Building run manifest..."
 node -e "
 const fs = require('fs');
-const { execSync } = require('child_process');
+const prsConfig = JSON.parse(fs.readFileSync('scripts/pr-creator/prs.json', 'utf8'));
 const benchmark = JSON.parse(fs.readFileSync('scripts/benchmark/prs-benchmark.json', 'utf8'));
-const owner = 'ai-code-review-benchmark';
-const repos = ['sentry', 'grafana-codex', 'discourse-cursor', 'cal.com', 'keycloak'];
+const totalPrs = $TOTAL_PRS;
+
+// prs.json has the actual repos (Wellington01/sentry-greptile)
+const sourcePrs = Array.isArray(prsConfig) ? prsConfig : prsConfig.prs;
+
+// Group by repo and distribute evenly (same logic as create-test-prs.mjs)
 const byRepo = {};
-for (const pr of benchmark.prs) {
-  const repo = pr.repo.split('/').pop();
+for (const pr of sourcePrs) {
+  const repo = pr.repo;
   if (!byRepo[repo]) byRepo[repo] = [];
   byRepo[repo].push(pr);
 }
-
-const perRepo = Math.ceil($TOTAL_PRS / repos.length);
-const prs = [];
-
-// For each benchmark PR, find the actual GitHub PR by head branch
+const repos = Object.keys(byRepo);
+const perRepo = Math.ceil(totalPrs / repos.length);
+const selected = [];
 for (const repo of repos) {
-  const benchPrs = (byRepo[repo] || []).slice(0, perRepo);
-  // Get all open+closed PRs from this repo
-  let ghPrs = [];
-  try {
-    ghPrs = JSON.parse(execSync(
-      'gh api \"repos/' + owner + '/' + repo + '/pulls?state=all&per_page=50&sort=created&direction=desc\" --jq \"[.[] | {number, head: .head.ref}]\"',
-      { encoding: 'utf8', timeout: 30000 }
-    ));
-  } catch {}
+  selected.push(...byRepo[repo].slice(0, perRepo));
+}
+// Trim to exact totalPrs
+selected.splice(totalPrs);
 
-  for (const bpr of benchPrs) {
-    const match = ghPrs.find(p => p.head === bpr.head);
-    prs.push({
-      repo,
-      head: bpr.head,
-      title: bpr.title,
-      prNumber: match ? match.number : null,
-    });
-    const status = match ? 'PR#' + match.number : 'NOT FOUND';
-    console.log('  ' + repo.padEnd(18) + bpr.head.substring(0,35).padEnd(37) + status);
-  }
+const prs = [];
+for (const pr of selected) {
+  // Find golden comments by matching branch name
+  const golden = benchmark.prs.find(b => b.head === pr.head);
+  prs.push({
+    head: pr.head,
+    base: pr.base || 'main',
+    title: pr.title || golden?.title || pr.head,
+    goldenCount: golden ? golden.golden_comments.length : 0,
+  });
+  const gInfo = golden ? golden.golden_comments.length + ' golden' : 'NO GOLDEN';
+  console.log('  ' + pr.head.substring(0,45).padEnd(47) + gInfo);
 }
 
 const manifest = {
   name: '$RUN_NAME',
   created: new Date().toISOString(),
-  totalPrs: $TOTAL_PRS,
+  totalPrs: totalPrs,
   prs,
 };
 
 fs.writeFileSync('$RUNS_DIR/$RUN_NAME.json', JSON.stringify(manifest, null, 2));
-const mapped = prs.filter(p => p.prNumber).length;
 console.log('');
-console.log('Manifest: scripts/benchmark/runs/$RUN_NAME.json (' + mapped + '/' + prs.length + ' mapped)');
+console.log('Manifest: scripts/benchmark/runs/$RUN_NAME.json (' + prs.length + ' PRs)');
 "
 
 echo ""

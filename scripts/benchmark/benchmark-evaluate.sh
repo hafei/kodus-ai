@@ -86,10 +86,11 @@ const mongoCmd = (query) => {
   ).trim();
 };
 
-// Build golden lookup by head branch
+// Build golden lookup by head branch — collect ALL goldens per branch (some branches have multiple PRs)
 const goldenByHead = {};
 for (const pr of benchmark.prs) {
-  goldenByHead[pr.head] = pr;
+  if (!goldenByHead[pr.head]) goldenByHead[pr.head] = [];
+  goldenByHead[pr.head].push(pr);
 }
 
 const results = { issueCritical: [], withWarning: [] };
@@ -97,28 +98,19 @@ const golden = [];
 const skippedPrs = [];
 
 for (const entry of manifest.prs) {
-  const bpr = goldenByHead[entry.head];
-  if (!bpr) { console.log(entry.repo.padEnd(18) + ' ⚠ No golden for branch ' + entry.head); continue; }
+  const goldenPrs = goldenByHead[entry.head];
+  if (!goldenPrs || goldenPrs.length === 0) {
+    console.log('  ⚠ No golden for branch ' + entry.head);
+    continue;
+  }
 
+  // Find PR in MongoDB by branch (most recent with suggestions)
   let prData = null;
-
-  if (entry.prNumber) {
-    // Use exact PR number + repo name from manifest
-    try {
-      const query = 'JSON.stringify(db.pullRequests.findOne({number: ' + entry.prNumber + ', \"repository.name\": \"' + entry.repo + '\"}, {number: 1, files: 1, createdAt: 1, updatedAt: 1}))';
-      const raw = mongoCmd(query);
-      prData = JSON.parse(raw);
-    } catch {}
-  }
-
-  if (!prData) {
-    // Fallback: find by branch + repo (most recent with suggestions)
-    try {
-      const query = 'var pr = db.pullRequests.find({headBranchRef: \"' + entry.head + '\", \"repository.name\": \"' + entry.repo + '\", \"files.suggestions.0\": {\"\$exists\": true}}).sort({updatedAt: -1}).limit(1).toArray()[0]; pr = pr || db.pullRequests.find({headBranchRef: \"' + entry.head + '\", \"repository.name\": \"' + entry.repo + '\"}).sort({updatedAt: -1}).limit(1).toArray()[0]; JSON.stringify(pr)';
-      const raw = mongoCmd(query);
-      prData = JSON.parse(raw);
-    } catch {}
-  }
+  try {
+    const query = 'var pr = db.pullRequests.find({headBranchRef: \"' + entry.head + '\", \"files.suggestions.0\": {\"\$exists\": true}}).sort({createdAt: -1}).limit(1).toArray()[0]; pr = pr || db.pullRequests.find({headBranchRef: \"' + entry.head + '\"}).sort({createdAt: -1}).limit(1).toArray()[0]; JSON.stringify(pr)';
+    const raw = mongoCmd(query);
+    prData = JSON.parse(raw);
+  } catch {}
 
   // Count suggestions
   let totalSugg = 0;
@@ -128,20 +120,15 @@ for (const entry of manifest.prs) {
     }
   }
 
-  const prNum = prData ? prData.number : (entry.prNumber || '?');
+  const prNum = prData ? prData.number : '?';
+  const repoName = prData && prData.repository ? prData.repository.name : '?';
 
-  // Check if review actually completed by querying automation_execution in Postgres
-  let wasProcessed = false;
-  if (entry.prNumber) {
-    try {
-      const result = execSync('node $SCRIPT_DIR/check-processed.js ' + entry.prNumber, { encoding: 'utf8', timeout: 15000 }).trim();
-      wasProcessed = result === 'true';
-    } catch {}
-  }
+  // Use the first golden PR for this branch (they share the same golden comments in most cases)
+  const bpr = goldenPrs[0];
 
-  if (!prData && !wasProcessed) {
-    skippedPrs.push({ repo: entry.repo, title: bpr.title.substring(0, 50), head: entry.head, prNum });
-    console.log(entry.repo.padEnd(18) + ' PR#' + String(prNum).padEnd(5) + ' ⚠ NOT PROCESSED (skipped)');
+  if (!prData) {
+    skippedPrs.push({ repo: repoName, title: bpr.title.substring(0, 50), head: entry.head, prNum });
+    console.log(repoName.padEnd(20) + ' PR#' + String(prNum).padEnd(5) + ' ⚠ NOT IN DB (skipped)');
     continue;
   }
   if (!prData) {
@@ -175,11 +162,11 @@ for (const entry of manifest.prs) {
     }
   }
 
-  const prInfo = { pr_title: bpr.title, head: entry.head, repo: entry.repo, tool: 'kodus' };
+  const prInfo = { pr_title: bpr.title, head: entry.head, repo: repoName, tool: 'kodus' };
   results.issueCritical.push({ ...prInfo, issues: suggestions.issueCritical });
   results.withWarning.push({ ...prInfo, issues: suggestions.withWarning });
 
-  console.log(entry.repo.padEnd(18) + ' PR#' + String(prNum).padEnd(5) + ' issue+critical=' + String(suggestions.issueCritical.length).padStart(2) + '  +warning=' + String(suggestions.withWarning.length).padStart(2));
+  console.log(repoName.padEnd(20) + ' PR#' + String(prNum).padEnd(5) + ' issue+critical=' + String(suggestions.issueCritical.length).padStart(2) + '  +warning=' + String(suggestions.withWarning.length).padStart(2));
 }
 
 fs.writeFileSync('$RESULTS_DIR/golden.json', JSON.stringify(golden, null, 2));

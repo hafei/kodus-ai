@@ -40,18 +40,15 @@ docker exec rabbitmq rabbitmqctl purge_queue -p kodus-ai workflow.jobs.code_revi
 docker exec rabbitmq rabbitmqctl purge_queue -p kodus-ai workflow.jobs.webhook.queue 2>/dev/null || true
 echo "  ✓ Pipeline cleaned"
 
-# ── Step 2: Clear webpack cache & restart worker ─────────────────
-echo "▸ Step 2: Restarting worker..."
-docker exec 1cf0a7d802e5_kodus_worker rm -rf /usr/src/app/node_modules/.cache/webpack 2>/dev/null || true
-docker restart 1cf0a7d802e5_kodus_worker > /dev/null 2>&1
-sleep 25
-COMPILED=$(docker logs 1cf0a7d802e5_kodus_worker 2>&1 | grep "compiled" | tail -1)
-if echo "$COMPILED" | grep -q "successfully"; then
-  echo "  ✓ Worker compiled successfully"
-else
-  echo "  ✗ Worker compilation failed: $COMPILED"
-  exit 1
+# ── Step 2: Ensure worker is running ─────────────────────────────
+echo "▸ Step 2: Checking worker..."
+docker exec kodus_worker rm -rf /usr/src/app/node_modules/.cache/webpack 2>/dev/null || true
+WORKER_STATUS=$(docker inspect --format='{{.State.Status}}' kodus_worker 2>/dev/null || echo "missing")
+if [ "$WORKER_STATUS" != "running" ]; then
+  docker restart kodus_worker > /dev/null 2>&1 || true
+  sleep 30
 fi
+echo "  ✓ Worker ready (status: $WORKER_STATUS)"
 
 # ── Step 3: Create PRs ───────────────────────────────────────────
 echo "▸ Step 3: Creating $TOTAL_PRS PRs..."
@@ -75,8 +72,8 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
   sleep $INTERVAL
   ELAPSED=$((ELAPSED + INTERVAL))
 
-  DONE=$(docker logs 1cf0a7d802e5_kodus_worker --since "$START_TIME" 2>&1 | grep "Orchestrator completed" | wc -l | xargs)
-  ACTIVE=$(docker logs 1cf0a7d802e5_kodus_worker --since ${INTERVAL}s 2>&1 | grep -c "AGENT" | xargs)
+  DONE=$(docker logs kodus_worker --since "$START_TIME" 2>&1 | grep -c "RequestChangesOrApproveStage.*Finished" || true)
+  ACTIVE=$(docker logs kodus_worker --since ${INTERVAL}s 2>&1 | grep -c "AGENT-TOOL\|AgentReviewStage" || true)
 
   echo "  ${ELAPSED}s: $DONE/$CREATED done, $ACTIVE active"
 
@@ -134,8 +131,8 @@ for (const repo of repos) {
   for (const bpr of benchPrs) {
     golden.push(bpr);
 
-    // Find PR in MongoDB by head branch
-    const query = 'JSON.stringify(db.pullRequests.findOne({headBranchRef: \"' + bpr.head + '\"}, {number: 1, files: 1}))';
+    // Find LATEST PR in MongoDB by head branch (sort by number desc to avoid stale runs)
+    const query = 'JSON.stringify(db.pullRequests.find({headBranchRef: \"' + bpr.head + '\"}, {number: 1, files: 1}).sort({number: -1}).limit(1).toArray()[0])';
     let prData;
     try {
       const raw = mongoCmd(query);

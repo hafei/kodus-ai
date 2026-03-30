@@ -1,0 +1,127 @@
+{
+  "name": "gemini3.1flash-v6",
+  "created": "2026-03-26T18:45:41.294Z",
+  "totalPrs": 20,
+  "prs": [
+    {
+      "head": "performance-enhancement-complete",
+      "base": "master",
+      "title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+      "goldenCount": 3
+    },
+    {
+      "head": "performance-enhancement-complete",
+      "base": "performance-optimization-baseline",
+      "title": "Optimize spans buffer insertion with eviction during insert",
+      "goldenCount": 3
+    },
+    {
+      "head": "error-upsampling-race-condition",
+      "base": "feature-stats-enhancement",
+      "title": "feat(upsampling) - Support upsampled error count with performance optimizations",
+      "goldenCount": 3
+    },
+    {
+      "head": "oauth-state-secure",
+      "base": "oauth-state-vulnerable",
+      "title": "GitHub OAuth Security Enhancement",
+      "goldenCount": 3
+    },
+    {
+      "head": "implement-device-limits",
+      "base": "enhance-anonymous-access",
+      "title": "Anonymous: Add configurable device limit",
+      "goldenCount": 5
+    },
+    {
+      "head": "authz-service-improve-caching-pr",
+      "base": "cache-optimization-baseline",
+      "title": "AuthZService: improve authz caching",
+      "goldenCount": 2
+    },
+    {
+      "head": "plugins/rename-instrumentation-middleware-to-metrics-middleware",
+      "base": "plugin-loading-baseline",
+      "title": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
+      "goldenCount": 2
+    },
+    {
+      "head": "query-splitting-enhancements",
+      "base": "query-splitting-baseline",
+      "title": "Advanced Query Processing Architecture",
+      "goldenCount": 1
+    },
+    {
+      "head": "large-image-processing",
+      "base": "image-processing-optimization",
+      "title": "FEATURE: automatically downsize large images",
+      "goldenCount": 3
+    },
+    {
+      "head": "topic-email-management",
+      "base": "email-notifications-enhancement",
+      "title": "FEATURE: per-topic unsubscribe option in emails",
+      "goldenCount": 2
+    },
+    {
+      "head": "blocked-email-validation-post",
+      "base": "blocked-email-validation-pre",
+      "title": "Add comprehensive email validation for blocked users",
+      "goldenCount": 2
+    },
+    {
+      "head": "embed-url-handling-post",
+      "base": "embed-url-handling-pre",
+      "title": "Enhance embed URL handling and validation system",
+      "goldenCount": 6
+    },
+    {
+      "head": "appstore-async-improvements",
+      "base": "appstore-sync-refactor-base",
+      "title": "Async import of the appStore packages",
+      "goldenCount": 2
+    },
+    {
+      "head": "improve-two-factor-authentication-features",
+      "base": "enhance-two-factor-security-foundation",
+      "title": "feat: 2fa backup codes",
+      "goldenCount": 4
+    },
+    {
+      "head": "fix/handle-collective-multiple-host-destinations",
+      "base": "enhance-collective-scheduling-foundation",
+      "title": "fix: handle collective multiple host on destinationCalendar",
+      "goldenCount": 5
+    },
+    {
+      "head": "insights-performance-optimization",
+      "base": "insights-query-foundation",
+      "title": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
+      "goldenCount": 2
+    },
+    {
+      "head": "passkey-integration-buggy",
+      "base": "passkey-auth-baseline",
+      "title": "Fixing Re-authentication with passkeys",
+      "goldenCount": 2
+    },
+    {
+      "head": "feature-idp-cache-implementation",
+      "base": "feature-idp-cache-baseline",
+      "title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
+      "goldenCount": 2
+    },
+    {
+      "head": "feature-authz-crypto-implementation",
+      "base": "feature-authz-crypto-baseline",
+      "title": "Add AuthzClientCryptoProvider for authorization client cryptographic operations",
+      "goldenCount": 2
+    },
+    {
+      "head": "feature-rolling-updates-implementation",
+      "base": "feature-rolling-updates-baseline",
+      "title": "Add rolling-updates feature flag and compatibility framework",
+      "goldenCount": 1
+    }
+  ]
+}

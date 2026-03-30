@@ -72,7 +72,7 @@ import { RemoteCommands } from '../../adapters/services/collectCrossFileContexts
 
 const logger = createLogger('AgentLoop');
 
-const MAX_STEPS = 35;
+const MAX_STEPS = 50;
 const AGENT_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutes max per agent — some models need 30+ tool calls
 
 /** Schema for structured output */
@@ -154,6 +154,7 @@ export async function runAgentLoop(
         input.documentationSearchService,
         input.documentationSearchOptions,
         gitHubToken,
+        input.repositoryFullName,
     );
 
     const allToolCalls: AgentLoopOutput['toolCalls'] = [];
@@ -546,6 +547,44 @@ Respond with ONLY the JSON:
     if (!findings) {
         findings = { reasoning: finalText || 'No findings', suggestions: [] };
         source = 'empty';
+    }
+
+    // Evidence filter: drop suggestions for files the agent never actually touched
+    // (neither readFile nor grep returned results from that file).
+    if (findings.suggestions.length > 0) {
+        const filesTouched = new Set<string>();
+        for (const tc of allToolCalls) {
+            // Count explicit readFile calls
+            if (tc.tool === 'readFile') {
+                const p = ((tc.args.path || tc.args.filePath || tc.args.file || '') as string)
+                    .replace(/^\/+/, '')
+                    .toLowerCase();
+                if (p) filesTouched.add(p);
+            }
+            // Also count files that appeared in grep results (format: "file:line:content")
+            if (tc.tool === 'grep' && typeof tc.result === 'string') {
+                for (const line of tc.result.split('\n')) {
+                    const match = line.match(/^([^:]+):\d+:/);
+                    if (match) {
+                        filesTouched.add(match[1].replace(/^\/+/, '').toLowerCase());
+                    }
+                }
+            }
+        }
+        if (filesTouched.size > 0) {
+            const before = findings.suggestions.length;
+            findings.suggestions = findings.suggestions.filter((s) => {
+                const f = (s.relevantFile || '').replace(/^\/+/, '').toLowerCase();
+                return filesTouched.has(f);
+            });
+            const dropped = before - findings.suggestions.length;
+            if (dropped > 0) {
+                logger.warn({
+                    message: `[EVIDENCE-FILTER] Dropped ${dropped}/${before} suggestions — file never touched (no readFile or grep hit)`,
+                    context: 'AgentLoop',
+                });
+            }
+        }
     }
 
     // Base usage from the main agent loop

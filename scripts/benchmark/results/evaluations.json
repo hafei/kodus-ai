@@ -1,64 +1,88 @@
 {
-  "evaluated_at": "2026-03-23T16:48:28.261Z",
+  "evaluated_at": "2026-03-29T13:35:07.048Z",
   "tool": "kodus",
   "summary": {
     "total_prs": 50,
-    "total_golden": 137,
-    "tp": 11,
-    "fp": 38,
-    "fn": 126,
-    "precision": 0.224,
-    "recall": 0.08,
-    "f1": 0.118
+    "total_golden_comments": 136,
+    "total_true_positives": 6,
+    "total_false_positives": 18,
+    "total_false_negatives": 130,
+    "precision": 0.25,
+    "recall": 0.044,
+    "f1": 0.075
   },
   "by_repo": {
     "sentry": {
-      "tp": 1,
-      "fp": 8,
-      "fn": 31,
-      "golden": 32
+      "prs": 10,
+      "golden_comments": 31,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 31,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
     },
     "grafana-codex": {
-      "tp": 4,
-      "fp": 7,
-      "fn": 18,
-      "golden": 22
+      "prs": 10,
+      "golden_comments": 22,
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 22,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0
     },
     "discourse-cursor": {
-      "tp": 3,
-      "fp": 9,
-      "fn": 25,
-      "golden": 28
+      "prs": 10,
+      "golden_comments": 28,
+      "true_positives": 3,
+      "false_positives": 11,
+      "false_negatives": 25,
+      "precision": 0.214,
+      "recall": 0.107,
+      "f1": 0.143
     },
     "cal.com": {
-      "tp": 3,
-      "fp": 13,
-      "fn": 28,
-      "golden": 31
+      "prs": 10,
+      "golden_comments": 31,
+      "true_positives": 3,
+      "false_positives": 5,
+      "false_negatives": 28,
+      "precision": 0.375,
+      "recall": 0.097,
+      "f1": 0.154
     },
     "keycloak": {
-      "tp": 0,
-      "fp": 1,
-      "fn": 24,
-      "golden": 24
+      "prs": 10,
+      "golden_comments": 24,
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 24,
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
     }
   },
   "by_severity": {
     "Critical": {
-      "found": 3,
-      "total": 9
+      "total": 9,
+      "found": 1,
+      "recall": 0.111
     },
     "High": {
-      "found": 3,
-      "total": 41
+      "total": 41,
+      "found": 2,
+      "recall": 0.049
     },
     "Medium": {
+      "total": 47,
       "found": 2,
-      "total": 47
+      "recall": 0.043
     },
     "Low": {
-      "found": 3,
-      "total": 40
+      "total": 39,
+      "found": 1,
+      "recall": 0.026
     }
   },
   "evaluations": [
@@ -69,30 +93,26 @@
       "tool": "kodus",
       "true_positives": 0,
       "false_positives": 0,
-      "false_negatives": 4,
-      "precision": 1,
+      "false_negatives": 3,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "Optimize spans buffer insertion with eviction during insert",
       "repo": "sentry",
       "source_url": "https://github.com/getsentry/sentry/pull/92393",
       "tool": "kodus",
-      "true_positives": 1,
-      "false_positives": 1,
-      "false_negatives": 2,
-      "precision": 0.5,
-      "recall": 0.333,
-      "f1": 0.4,
-      "matches": [
-        {
-          "golden_comment": "OptimizedCursorPaginator negative-offset branch slices QuerySet with a negative start index",
-          "candidate_comment": "The code incorrectly assumes that Django QuerySets support negative indexing for slicing, similar to",
-          "match": true
-        }
-      ]
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "feat(upsampling) - Support upsampled error count with performance optimizations",
@@ -102,10 +122,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 3,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "GitHub OAuth Security Enhancement",
@@ -113,12 +134,13 @@
       "source_url": "https://github.com/getsentry/sentry/pull/67876",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 3,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "Replays Self-Serve Bulk Delete System",
@@ -126,12 +148,13 @@
       "source_url": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/5",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 3,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "Span Buffer Multiprocess Enhancement with Health Monitoring",
@@ -139,12 +162,13 @@
       "source_url": "https://github.com/getsentry/sentry/pull/93824",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 5,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 5 golden comments."
     },
     {
       "pr_title": "feat(ecosystem): Implement cross-system issue synchronization",
@@ -154,10 +178,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 4,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 4 golden comments."
     },
     {
       "pr_title": "ref(crons): Reorganize incident creation / issue occurrence logic",
@@ -165,12 +190,13 @@
       "source_url": "https://github.com/getsentry/sentry/pull/80528",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "feat(uptime): Add ability to use queues to manage parallelism",
@@ -180,10 +206,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 3,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "feat(workflow_engine): Add in hook for producing occurrences from the stateful detector",
@@ -191,12 +218,13 @@
       "source_url": "https://github.com/getsentry/sentry/pull/80168",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Anonymous: Add configurable device limit",
@@ -204,12 +232,13 @@
       "source_url": "https://github.com/grafana/grafana/pull/79265",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 5,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 5 golden comments."
     },
     {
       "pr_title": "AuthZService: improve authz caching",
@@ -219,29 +248,25 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
       "repo": "grafana-codex",
       "source_url": "https://github.com/grafana/grafana/pull/76186",
       "tool": "kodus",
-      "true_positives": 1,
+      "true_positives": 0,
       "false_positives": 0,
-      "false_negatives": 1,
-      "precision": 1,
-      "recall": 0.5,
-      "f1": 0.667,
-      "matches": [
-        {
-          "golden_comment": "The traceID is no longer logged for plugin requests. During a refactoring, the tracing import and th",
-          "candidate_comment": "The refactoring has removed the logic that adds the `traceID` to plugin request logs. This informati",
-          "match": true
-        }
-      ]
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Advanced Query Processing Architecture",
@@ -254,7 +279,8 @@
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "Found 0/1 bugs. 2 false positives. Missed: \"The applyTemplateVariables method is called with request.fil...\""
     },
     {
       "pr_title": "Notification Rule Processing Engine",
@@ -264,29 +290,25 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Dual Storage Architecture",
       "repo": "grafana-codex",
       "source_url": "https://github.com/grafana/grafana/pull/90045",
       "tool": "kodus",
-      "true_positives": 1,
-      "false_positives": 2,
-      "false_negatives": 2,
-      "precision": 0.333,
-      "recall": 0.333,
-      "f1": 0.333,
-      "matches": [
-        {
-          "golden_comment": "Bug: calling recordLegacyDuration when storage operation fails should be recordStorageDuration.",
-          "candidate_comment": "There are several places where the wrong metrics function is called, which will result in corrupted ",
-          "match": true
-        }
-      ]
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "Database Performance Optimizations",
@@ -294,12 +316,13 @@
       "source_url": "https://github.com/grafana/grafana/pull/80329",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 1,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 1 golden comments."
     },
     {
       "pr_title": "Frontend Asset Optimization",
@@ -309,61 +332,68 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Advanced SQL Analytics Framework",
       "repo": "grafana-codex",
       "source_url": "https://github.com/grafana/grafana/pull/94942",
       "tool": "kodus",
-      "true_positives": 1,
+      "true_positives": 0,
       "false_positives": 0,
-      "false_negatives": 1,
-      "precision": 1,
-      "recall": 0.5,
-      "f1": 0.667,
-      "matches": [
-        {
-          "golden_comment": "The enableSqlExpressions function has flawed logic that always returns false, effectively disabling ",
-          "candidate_comment": "The current implementation of `enableSqlExpressions` incorrectly negates the feature flag check and ",
-          "match": true
-        }
-      ]
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Unified Storage Performance Optimizations",
       "repo": "grafana-codex",
       "source_url": "https://github.com/grafana/grafana/pull/97529",
       "tool": "kodus",
-      "true_positives": 1,
+      "true_positives": 0,
       "false_positives": 0,
-      "false_negatives": 1,
-      "precision": 1,
-      "recall": 0.5,
-      "f1": 0.667,
-      "matches": [
-        {
-          "golden_comment": "A race condition in BuildIndex allows multiple goroutines to concurrently build the same expensive i",
-          "candidate_comment": "The lock within `BuildIndex` was moved to only protect the final cache write. However, this re-intro",
-          "match": true
-        }
-      ]
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "FEATURE: automatically downsize large images",
       "repo": "discourse-cursor",
       "source_url": "https://github.com/discourse/discourse/commit/ffbaf8c54269df2ce510de91245760fddce09896",
       "tool": "kodus",
-      "true_positives": 0,
-      "false_positives": 2,
-      "false_negatives": 3,
-      "precision": 0,
-      "recall": 0,
-      "f1": 0,
-      "matches": []
+      "true_positives": 2,
+      "false_positives": 4,
+      "false_negatives": 1,
+      "precision": 0.333,
+      "recall": 0.667,
+      "f1": 0.444,
+      "matches": [
+        {
+          "golden_comment": "The downsize method is defined twice. The second definition, which expects a single dimensions string parameter, overrides the first, which expected separate max_width and max_height parameters. This makes the original method unreachable and breaks existing code that calls it with separate width and height arguments.",
+          "candidate_comment": "WHAT: The `self.downsize` method is defined twice, with the second definition reducing the expected arguments from 5 to 4. WHY: The second definition overwrites the first, causing existing callers (like `app/jobs/regular/resize_emoji.rb` which passes 5 arguments) to crash with an `ArgumentError`. HOW: Merge the definitions to handle both arities or use a single signature that supports passing discrete dimensions.",
+          "reasoning": "Both comments identify the exact same issue: the downsize method is defined twice, with the second definition overriding the first and changing the parameter signature. Both note this breaks existing code that calls the method with the original parameters. The candidate provides more specific details about the parameter count and mentions a specific file that would be affected, but the core issue is identical.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "Hardcoding maxSizeKB = 10 * 1024 ignores Discourse.SiteSettings['max_' + type + '_size_kb'], so the client-side limit can diverge from server-side and per-type settings (also applies to the 413 handler below).",
+          "candidate_comment": "WHAT: The maximum file size check is hardcoded to 10MB for all file types, bypassing the specific `max_attachment_size_kb` setting. WHY: Attachments are not downsized by the server, so users will successfully upload attachments larger than the allowed limit, wasting bandwidth, only for the server to reject them with an opaque error. HOW: Use the 10MB limit only for images, and fallback to the specific site setting for other types.",
+          "reasoning": "Both comments identify the same core issue: hardcoded 10MB limit ignores site-specific settings. The golden comment mentions 'max_' + type + '_size_kb' settings being bypassed, while the candidate specifically mentions 'max_attachment_size_kb' setting being bypassed. Both recognize that this causes client-side limits to diverge from server-side configuration. The candidate provides more context about the consequences (bandwidth waste, server rejection) but identifies the same fundamental problem.",
+          "match": true,
+          "confidence": 0.9
+        }
+      ],
+      "comment": "Found 2/3 bugs. 4 false positives. Missed: \"Passing 80% as the dimensions can fail for animated GIFs whe...\""
     },
     {
       "pr_title": "FEATURE: per-topic unsubscribe option in emails",
@@ -373,10 +403,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Add comprehensive email validation for blocked users",
@@ -386,23 +417,33 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Enhance embed URL handling and validation system",
       "repo": "discourse-cursor",
       "source_url": "https://github.com/discourse/discourse/commit/4f8aed295a29954023b2849c060ef4fb299d1b5d",
       "tool": "kodus",
-      "true_positives": 0,
-      "false_positives": 0,
-      "false_negatives": 6,
-      "precision": 1,
-      "recall": 0,
-      "f1": 0,
-      "matches": []
+      "true_positives": 1,
+      "false_positives": 7,
+      "false_negatives": 5,
+      "precision": 0.125,
+      "recall": 0.167,
+      "f1": 0.143,
+      "matches": [
+        {
+          "golden_comment": "SSRF vulnerability using open(url) without validation",
+          "candidate_comment": "WHAT: The import_remote method uses open() to fetch remote URLs, which automatically follows HTTP redirects without host validation. WHY: An attacker can bypass the initial host check by providing a URL to an open redirect on the allowed embeddable_host, causing Discourse to fetch internal resources (SSRF) and leak them into public topics. HOW: Use a secure HTTP client (like FinalDestination or a customized Net::HTTP) that strictly restricts or validates redirect targets.",
+          "reasoning": "Both comments identify the same SSRF vulnerability. The golden comment points to using open(url) without validation, while the candidate provides more detail about how open() follows redirects without host validation, enabling SSRF attacks. They're describing the same underlying security issue with the same root cause.",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "comment": "Found 1/6 bugs. 7 false positives. Missed: \"The current origin validation using indexOf is insufficient ...\", \"postMessage targetOrigin should be the origin (scheme+host+p...\", \"The code sets X-Frame-Options: ALLOWALL which completely dis...\", \"The TopicEmbed.import method is susceptible to a NoMethodErr...\", \"The ERB block closes with end if, which is invalid Ruby/ERB ...\""
     },
     {
       "pr_title": "Optimize header layout performance with flexbox mixins",
@@ -410,12 +451,13 @@
       "source_url": "https://github.com/discourse/discourse/commit/5b229316ee4c661836ed1161139692a3e8527444",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "UX: show complete URL path if website domain is same as instance domain",
@@ -425,53 +467,39 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 1,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 1 golden comments."
     },
     {
       "pr_title": "scale-color $lightness must use $secondary for dark themes",
       "repo": "discourse-cursor",
       "source_url": "https://github.com/discourse/discourse/commit/d38c4d5f7443223c81529c22470293771baf9f38",
       "tool": "kodus",
-      "true_positives": 2,
-      "false_positives": 3,
-      "false_negatives": 1,
-      "precision": 0.4,
-      "recall": 0.667,
-      "f1": 0.5,
-      "matches": [
-        {
-          "golden_comment": "In topic-post.css the original code used $lightness: 70% but the replacement uses $lightness: 30% fo",
-          "candidate_comment": "The lightness values for the light and dark themes appear to have been swapped. The original code us",
-          "match": true
-        },
-        {
-          "golden_comment": "In .topic-meta-data h5 a, the original code had color: scale-color($primary, $lightness: 30%) but wa",
-          "candidate_comment": "The lightness values for the light and dark themes appear to have been swapped. The original code us",
-          "match": true
-        }
-      ]
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "FIX: proper handling of group memberships",
       "repo": "discourse-cursor",
       "source_url": "https://github.com/discourse/discourse/commit/060cda77729cb1c4a827560e09e89a7b22078ba9",
       "tool": "kodus",
-      "true_positives": 1,
-      "false_positives": 1,
-      "false_negatives": 2,
-      "precision": 0.5,
-      "recall": 0.333,
-      "f1": 0.4,
-      "matches": [
-        {
-          "golden_comment": "In the next action, capping the next offset at user_count can produce an empty page (e.g., total equ",
-          "candidate_comment": "The calculation for `totalPages` is incorrect. It fails when the number of members (`user_count`) is",
-          "match": true
-        }
-      ]
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "FEATURE: Localization fallbacks (server-side)",
@@ -481,10 +509,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "FEATURE: Can edit category/host relationships for embedding",
@@ -492,31 +521,27 @@
       "source_url": "https://github.com/discourse/discourse/commit/d1c69189f3c90ecf56013a8da904da9bff9a8e19",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 4,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 4 golden comments."
     },
     {
       "pr_title": "Async import of the appStore packages",
       "repo": "cal.com",
       "source_url": "https://github.com/calcom/cal.com/pull/8087",
       "tool": "kodus",
-      "true_positives": 1,
-      "false_positives": 1,
-      "false_negatives": 1,
-      "precision": 0.5,
-      "recall": 0.5,
-      "f1": 0.5,
-      "matches": [
-        {
-          "golden_comment": "The code uses forEach with async callbacks, which causes asynchronous operations (e.g., calendar/vid",
-          "candidate_comment": "Violates rule 'Follow error handling conventions': Using an `async` callback with `Array.prototype.f",
-          "match": true
-        }
-      ]
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "feat: 2fa backup codes",
@@ -524,31 +549,49 @@
       "source_url": "https://github.com/calcom/cal.com/pull/10600",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 4,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 4 golden comments."
     },
     {
       "pr_title": "fix: handle collective multiple host on destinationCalendar",
       "repo": "cal.com",
       "source_url": "https://github.com/calcom/cal.com/pull/10967",
       "tool": "kodus",
-      "true_positives": 1,
-      "false_positives": 2,
-      "false_negatives": 4,
-      "precision": 0.333,
-      "recall": 0.2,
-      "f1": 0.25,
+      "true_positives": 3,
+      "false_positives": 5,
+      "false_negatives": 2,
+      "precision": 0.375,
+      "recall": 0.6,
+      "f1": 0.462,
       "matches": [
         {
-          "golden_comment": "Logic error: when externalCalendarId is provided, you're searching for a calendar where externalId =",
-          "candidate_comment": "When `externalCalendarId` is not provided, the logic to find a calendar to update is flawed. The con",
-          "match": true
+          "golden_comment": "Potential null reference if mainHostDestinationCalendar is undefined if evt.destinationCalendar is null or an empty array ",
+          "candidate_comment": "WHAT: Accessing `.integration` on `mainHostDestinationCalendar` without checking if it exists. WHY: If an organizer has no destination calendar configured (`evt.destinationCalendar` is empty/null), booking a Google Meet event throws a `TypeError`. This crashes the API route and blocks the booking from succeeding (localized DoS). HOW: Use optional chaining when checking the integration type.\n\n**Also found in:**\n- `packages/core/EventManager.ts:116-121`",
+          "reasoning": "Both comments identify the same underlying issue: accessing properties on `mainHostDestinationCalendar` without checking if it exists first. The golden comment mentions potential null reference when `mainHostDestinationCalendar` is undefined, while the candidate specifically identifies accessing `.integration` property without existence check. Both trace the root cause to `evt.destinationCalendar` being null/empty. The candidate provides more technical detail about the TypeError and crash, but it's fundamentally the same null reference vulnerability.",
+          "match": true,
+          "confidence": 0.95
+        },
+        {
+          "golden_comment": "Logic error: when externalCalendarId is provided, you're searching for a calendar where externalId === externalCalendarId, but this will always fail since you're looking for a calendar that matches itself. Should likely find by credentialId or use different logic.",
+          "candidate_comment": "WHAT: The same invalid fallback logic `event.destinationCalendar?.find((cal) => cal.externalId === externalCalendarId)` is used when deleting an event.\nWHY: For bookings missing a saved `externalCalendarId`, this strictly fails to locate a match and incorrectly defaults to the string `\"primary\"`, causing deletions to fail if the event was actually created on a different configured Google calendar.\nHOW: Fallback to the main host's destination calendar external ID.",
+          "reasoning": "Both comments identify the same core logic error in the calendar lookup code. The golden comment points out that searching for a calendar where externalId === externalCalendarId will always fail because it's looking for a calendar that matches itself. The candidate issue describes the exact same problematic code pattern `cal.externalId === externalCalendarId` and explains how this logic fails to find matches and causes incorrect fallback behavior. While the candidate focuses more on the consequences (deletion failures) and the golden comment focuses more on the logical flaw, they are identifying the same underlying bug in the same piece of code.",
+          "match": true,
+          "confidence": 0.9
+        },
+        {
+          "golden_comment": "Logic inversion in organization creation: The slug property is now conditionally set when IS_TEAM_BILLING_ENABLED is true, instead of when it's false as originally intended. This change, combined with requestedSlug still being set when IS_TEAM_BILLING_ENABLED is true, results in both properties being set when billing is enabled, and neither when disabled",
+          "candidate_comment": "WHAT: The logic for conditionally assigning an organization `slug` based on `IS_TEAM_BILLING_ENABLED` was inverted. WHY: This bypasses the organization billing requirement by instantly granting the `slug` when billing is enabled (making the org active without payment), and causes a denial-of-service for free self-hosted instances by never assigning a slug. HOW: Restore the correct logic: `...(!IS_TEAM_BILLING_ENABLED ? { slug } : {})` and `...(IS_TEAM_BILLING_ENABLED ? { requestedSlug: slug } : ",
+          "reasoning": "Both comments identify the exact same core issue: the logic for setting the organization slug based on IS_TEAM_BILLING_ENABLED was inverted. The golden comment describes how the slug is now set when billing is enabled instead of disabled, while the candidate explains the same inversion and its consequences (bypassing billing requirements and causing issues for free instances). Both recognize that this results in incorrect behavior for both billing scenarios.",
+          "match": true,
+          "confidence": 0.95
         }
-      ]
+      ],
+      "comment": "Found 3/5 bugs. 5 false positives. Missed: \"The optional chaining on mainHostDestinationCalendar?.integr...\", \"The Calendar interface now requires createEvent(event, crede...\""
     },
     {
       "pr_title": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
@@ -558,10 +601,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Comprehensive workflow reminder management for booking lifecycle events",
@@ -569,31 +613,27 @@
       "source_url": "https://github.com/calcom/cal.com/pull/7232",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Advanced date override handling and timezone compatibility improvements",
       "repo": "cal.com",
       "source_url": "https://github.com/calcom/cal.com/pull/8330",
       "tool": "kodus",
-      "true_positives": 1,
-      "false_positives": 2,
-      "false_negatives": 1,
-      "precision": 0.333,
-      "recall": 0.5,
-      "f1": 0.4,
-      "matches": [
-        {
-          "golden_comment": "Using === for dayjs object comparison will always return false as it compares object references, not",
-          "candidate_comment": "Day.js objects are being compared using strict equality (`===`), which checks if they are the same o",
-          "match": true
-        }
-      ]
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "OAuth credential sync and app integration enhancements",
@@ -603,10 +643,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 5,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 5 golden comments."
     },
     {
       "pr_title": "SMS workflow reminder retry count tracking",
@@ -614,12 +655,13 @@
       "source_url": "https://github.com/calcom/cal.com/pull/14943",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Add guest management functionality to existing bookings",
@@ -627,12 +669,13 @@
       "source_url": "https://github.com/calcom/cal.com/pull/14740",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 5,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 5 golden comments."
     },
     {
       "pr_title": "feat: add calendar cache status and actions (#22532)",
@@ -640,12 +683,13 @@
       "source_url": "https://github.com/calcom/cal.com/pull/22532",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Fixing Re-authentication with passkeys",
@@ -653,12 +697,13 @@
       "source_url": "https://github.com/keycloak/keycloak/pull/41249",
       "tool": "kodus",
       "true_positives": 0,
-      "false_positives": 1,
+      "false_positives": 0,
       "false_negatives": 2,
       "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
@@ -668,10 +713,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Add AuthzClientCryptoProvider for authorization client cryptographic operations",
@@ -681,10 +727,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Add rolling-updates feature flag and compatibility framework",
@@ -694,10 +741,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 1,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 1 golden comments."
     },
     {
       "pr_title": "Add Client resource type and scopes to authorization schema",
@@ -707,10 +755,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 3,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 3 golden comments."
     },
     {
       "pr_title": "Add Groups resource type and scopes to authorization schema",
@@ -720,10 +769,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Add HTML sanitizer for translated message resources",
@@ -733,10 +783,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 4,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 4 golden comments."
     },
     {
       "pr_title": "Implement access token context encoding framework",
@@ -746,10 +797,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 4,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 4 golden comments."
     },
     {
       "pr_title": "Implement recovery key support for user storage providers",
@@ -759,10 +811,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     },
     {
       "pr_title": "Fix concurrent group access to prevent NullPointerException",
@@ -772,10 +825,11 @@
       "true_positives": 0,
       "false_positives": 0,
       "false_negatives": 2,
-      "precision": 1,
+      "precision": 0,
       "recall": 0,
       "f1": 0,
-      "matches": []
+      "matches": [],
+      "comment": "No candidates. Missed all 2 golden comments."
     }
   ]
 }

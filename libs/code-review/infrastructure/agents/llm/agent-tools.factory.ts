@@ -59,6 +59,7 @@ export function buildAgentTools(
     docSearchService?: DocumentationSearchAdapter,
     docSearchOptions?: Record<string, unknown>,
     gitHubToken?: string,
+    repositoryFullName?: string,
 ): Record<string, any> {
     const tools: Record<string, any> = {
         grep: mkTool(
@@ -388,52 +389,6 @@ export function buildAgentTools(
     // Add exec-based tools if available
     if (remoteCommands.exec) {
         const exec = remoteCommands.exec;
-
-        tools.shell = mkTool(
-            'Execute a read-only shell command. Allowed: tsc, eslint, npx, python, go vet, cargo check.',
-            {
-                type: 'object',
-                properties: {
-                    command: {
-                        type: 'string',
-                        description:
-                            'Command to run (e.g. "npx tsc --noEmit src/file.ts")',
-                    },
-                },
-                required: ['command'],
-            },
-            async ({ command }: any) => {
-                const ALLOWED = [
-                    'tsc ',
-                    'npx ',
-                    'eslint ',
-                    'python ',
-                    'python3 ',
-                    'go ',
-                    'cargo ',
-                    'cat ',
-                    'wc ',
-                    'head ',
-                    'tail ',
-                    'file ',
-                    'sg ',
-                ];
-                const isAllowed = ALLOWED.some((p) =>
-                    command.trimStart().startsWith(p),
-                );
-                if (!isAllowed) {
-                    return `Command not allowed. Allowed prefixes: ${ALLOWED.join(', ')}`;
-                }
-                if (/[;&|`$>]|\brm\b|\bsudo\b/.test(command)) {
-                    return 'Command contains blocked patterns.';
-                }
-                const { stdout } = await exec(command);
-                return stdout.length > MAX_SHELL_OUTPUT
-                    ? stdout.substring(0, MAX_SHELL_OUTPUT) +
-                          '\n... (truncated)'
-                    : stdout;
-            },
-        );
 
         tools.astGrep = mkTool(
             'Structural code search using ast-grep. Finds code patterns based on AST structure, not just text. More precise than regex grep for code patterns.',
@@ -776,6 +731,75 @@ export function buildAgentTools(
                 }
             },
         );
+    }
+
+    // ── Call Graph lookup tool (AST-based) ──────────────────────────
+    if (repositoryFullName) {
+        const { loadCallGraphForTool } = require('../call-graph.helper');
+        const callGraphData = loadCallGraphForTool(repositoryFullName);
+
+        if (callGraphData) {
+            tools.getCallers = mkTool(
+                'Look up production callers of a function using the pre-computed AST call graph. ' +
+                    'Returns who calls this function and from where. Use this when you see a function in the diff ' +
+                    'and need to understand its impact — who depends on it, what breaks if it changes. ' +
+                    'Pass the function name (e.g. "get_result") and optionally the file path for disambiguation. ' +
+                    'Much faster and more accurate than grep for finding callers.',
+                {
+                    type: 'object',
+                    properties: {
+                        functionName: {
+                            type: 'string',
+                            description: 'Function or method name to look up callers for',
+                        },
+                        filePath: {
+                            type: 'string',
+                            description: 'Optional file path to disambiguate (e.g. "src/sentry/api/paginator.py")',
+                        },
+                    },
+                    required: ['functionName'],
+                },
+                async (args: { functionName: string; filePath?: string }) => {
+                    const byShortName = new Map<string, any[]>();
+                    for (const entry of Object.values(callGraphData) as any[]) {
+                        const sn = entry.short_name || entry.name;
+                        const list = byShortName.get(sn) || [];
+                        list.push(entry);
+                        byShortName.set(sn, list);
+                    }
+
+                    const candidates = byShortName.get(args.functionName) || [];
+                    let matches = candidates;
+
+                    if (args.filePath) {
+                        const fileMatch = candidates.filter((c: any) =>
+                            args.filePath!.endsWith(c.file) || c.file.endsWith(args.filePath!),
+                        );
+                        if (fileMatch.length > 0) matches = fileMatch;
+                    }
+
+                    if (matches.length === 0) {
+                        return `No call graph data found for "${args.functionName}"${args.filePath ? ` in ${args.filePath}` : ''}`;
+                    }
+
+                    const lines: string[] = [];
+                    for (const entry of matches.slice(0, 3)) {
+                        const shortFile = entry.file.split('/').slice(-2).join('/');
+                        lines.push(`${entry.name} (${shortFile}:${entry.line})`);
+                        if (entry.callers.length === 0) {
+                            lines.push('  (no production callers found)');
+                        } else {
+                            for (const c of entry.callers.slice(0, 8)) {
+                                const callerShort = c.file.split('/').slice(-2).join('/');
+                                lines.push(`  ← ${callerShort}:${c.line}${c.name ? ` (${c.name})` : ''}`);
+                            }
+                        }
+                        lines.push('');
+                    }
+                    return lines.join('\n');
+                },
+            );
+        }
     }
 
     return tools;

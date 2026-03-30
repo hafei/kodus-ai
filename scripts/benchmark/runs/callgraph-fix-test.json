@@ -1,0 +1,37 @@
+{
+  "name": "callgraph-fix-test",
+  "created": "2026-03-26T23:53:47.610Z",
+  "totalPrs": 5,
+  "prs": [
+    {
+      "head": "performance-enhancement-complete",
+      "base": "master",
+      "title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+      "goldenCount": 3
+    },
+    {
+      "head": "implement-device-limits",
+      "base": "enhance-anonymous-access",
+      "title": "Anonymous: Add configurable device limit",
+      "goldenCount": 5
+    },
+    {
+      "head": "large-image-processing",
+      "base": "image-processing-optimization",
+      "title": "FEATURE: automatically downsize large images",
+      "goldenCount": 3
+    },
+    {
+      "head": "appstore-async-improvements",
+      "base": "appstore-sync-refactor-base",
+      "title": "Async import of the appStore packages",
+      "goldenCount": 2
+    },
+    {
+      "head": "passkey-integration-buggy",
+      "base": "passkey-auth-baseline",
+      "title": "Fixing Re-authentication with passkeys",
+      "goldenCount": 2
+    }
+  ]
+}

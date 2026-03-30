@@ -64,6 +64,8 @@ export interface ReviewAgentInput {
     gitHubToken?: string;
     /** Base branch of the PR (e.g. "main"). Passed to tools for git diff. */
     baseBranch?: string;
+    /** Pre-computed call graph for changed functions. Generated once, shared across agents. */
+    callGraph?: string;
 }
 
 /**
@@ -402,9 +404,10 @@ export abstract class BaseCodeReviewAgentProvider {
   </Role>
 
   <Mindset>
-    Assume every change is broken until you prove it is safe.
-    Your default is to report — you need evidence to DISMISS, not evidence to report.
-    "Looks correct" is not enough to dismiss. You must explain WHY it cannot fail.
+    Treat every change as suspicious — but only report what you can PROVE from code you actually read.
+    You need concrete evidence BOTH to report AND to dismiss.
+    "Looks risky" is not enough to report — you must show the exact code path that triggers the failure.
+    "Looks correct" is not enough to dismiss — you must explain WHY the failure case cannot occur.
   </Mindset>
 
   <Workflow>
@@ -414,11 +417,18 @@ export abstract class BaseCodeReviewAgentProvider {
 
       Step 1: Read the diffs. For each changed function/method, list what it does differently now.
 
-      Step 2: For each method CHANGED in the diff, trace the call chain:
-        a) grep("exactMethodName\\(", excludeTests=true) → find who calls it
-        b) readFile the caller — what does it pass? What does it expect back?
-        c) If the changed method calls ANOTHER method, grep for THAT method too — read it. What does it actually return? Is it the right target?
-        d) Keep following calls until you hit a concrete implementation or return value. Do NOT stop at the first layer.
+      Step 2: For each method CHANGED in the diff, trace BOTH directions:
+
+        OUTBOUND — what the changed method calls (callees):
+        a) For every method/function call INSIDE the changed code, grep for it and read the target.
+           Ask: Is this calling the RIGHT object? (delegate vs self, concrete vs proxy, correct field vs wrong field)
+           Ask: Can the return value be null/nil? Does the caller check?
+           Ask: Was anything REMOVED from the diff? A deleted call or import may have silently broken a dependency.
+
+        INBOUND — who calls the changed method (callers):
+        b) grep("exactMethodName\\(", excludeTests=true) → find callers
+        c) readFile the caller — what does it pass? What does it expect back?
+        d) Keep following until you hit a concrete implementation or return value.
         For interfaces/abstract methods, grep "implements X" or "extends X" to find concrete implementations.
 
       Step 3: Read caller context. Understand HOW the changed code is used in production.
@@ -435,7 +445,8 @@ export abstract class BaseCodeReviewAgentProvider {
         - "Does this affect caching/invalidation?" → changed predicate = stale cache risk
         - "Does this code delegate to another layer (cache, proxy, adapter)?" → is it calling the right target — delegate vs self, concrete vs default?
 
-      If you cannot confidently answer "this is safe" for any question, investigate more or report it.
+      If you cannot confidently answer "this is safe" for any question, investigate more.
+      Only report if you find the specific code path that triggers the failure — not merely because you cannot rule it out.
 
     PHASE 3 — RESPOND
 
@@ -444,6 +455,8 @@ export abstract class BaseCodeReviewAgentProvider {
         BAD reasoning: "The code looks correct."
         GOOD reasoning: "Challenged CreateDevice: what if two requests pass count check simultaneously? Grepped TagDevice(, found caller at impl.go:155. No lock or unique constraint — race condition. Reported."
 
+      MANDATORY: Investigate EVERY changed function in the diff before responding — even if you have already found a critical bug.
+      A PR with 5 changed functions requires investigating all 5. Finding one critical bug does NOT mean the rest are safe.
       Do not stop after finding the first issue — investigate ALL changed code before responding.
   </Workflow>
 
@@ -452,6 +465,17 @@ export abstract class BaseCodeReviewAgentProvider {
     relevantFile/relevantLinesStart/relevantLinesEnd must point to the changed lines.
     Trace impact through callers — symptom can appear elsewhere, but the cause must be in the diff.
   </Scope>
+
+  <EvidenceBar>
+    Before adding any finding to your suggestions list, you must pass ALL three gates:
+      1. READ — You read the specific file and line where the bug manifests (not just assumed from the diff)
+      2. TRIGGER — You can state the exact condition that causes the failure (e.g. "when X is null and caller does Y without checking")
+      3. REACHABLE — The trigger condition is reachable in real usage based on callers or inputs you actually saw
+
+    If you cannot pass all three, DISMISS the finding and note it in your reasoning.
+    It is better to miss a speculative bug than to report unverified concerns.
+    "This could fail if..." is NOT a valid report unless you verified the code path exists.
+  </EvidenceBar>
 
 ${overridesSection}
 
@@ -466,6 +490,9 @@ ${memoryRulesSection}
             input.prBody,
         );
         const diffsSection = this.formatDiffs(input.changedFiles);
+        const callGraphSection = input.callGraph
+            ? `\n  <CallGraph>\n${input.callGraph}\n  </CallGraph>\n`
+            : '';
 
         const categoryLabel = this.getCategoryLabel();
 
@@ -487,10 +514,10 @@ ${memoryRulesSection}
   <Diffs>
 ${diffsSection}
   </Diffs>
-
+${callGraphSection}
   <Task>
-    Review this Pull Request for ${taskDescription}.
-    For each changed function: grep callers → read context → challenge with adversarial questions.
+    Review this Pull Request for ${taskDescription}.${input.callGraph ? '\n    The call graph above shows who calls each changed function and where — use it to trace impact.' : ''}
+    For each changed function: challenge with adversarial questions.
     Report anything you cannot prove safe. Dismiss only what you can explain WHY it cannot fail.
   </Task>
 

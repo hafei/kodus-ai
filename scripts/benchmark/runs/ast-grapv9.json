@@ -1,0 +1,67 @@
+{
+  "name": "ast-grapv9",
+  "created": "2026-03-28T18:17:50.075Z",
+  "totalPrs": 10,
+  "prs": [
+    {
+      "head": "performance-enhancement-complete",
+      "base": "master",
+      "title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+      "goldenCount": 3
+    },
+    {
+      "head": "performance-enhancement-complete",
+      "base": "performance-optimization-baseline",
+      "title": "Optimize spans buffer insertion with eviction during insert",
+      "goldenCount": 3
+    },
+    {
+      "head": "implement-device-limits",
+      "base": "enhance-anonymous-access",
+      "title": "Anonymous: Add configurable device limit",
+      "goldenCount": 5
+    },
+    {
+      "head": "authz-service-improve-caching-pr",
+      "base": "cache-optimization-baseline",
+      "title": "AuthZService: improve authz caching",
+      "goldenCount": 2
+    },
+    {
+      "head": "large-image-processing",
+      "base": "image-processing-optimization",
+      "title": "FEATURE: automatically downsize large images",
+      "goldenCount": 3
+    },
+    {
+      "head": "topic-email-management",
+      "base": "email-notifications-enhancement",
+      "title": "FEATURE: per-topic unsubscribe option in emails",
+      "goldenCount": 2
+    },
+    {
+      "head": "appstore-async-improvements",
+      "base": "appstore-sync-refactor-base",
+      "title": "Async import of the appStore packages",
+      "goldenCount": 2
+    },
+    {
+      "head": "improve-two-factor-authentication-features",
+      "base": "enhance-two-factor-security-foundation",
+      "title": "feat: 2fa backup codes",
+      "goldenCount": 4
+    },
+    {
+      "head": "passkey-integration-buggy",
+      "base": "passkey-auth-baseline",
+      "title": "Fixing Re-authentication with passkeys",
+      "goldenCount": 2
+    },
+    {
+      "head": "feature-idp-cache-implementation",
+      "base": "feature-idp-cache-baseline",
+      "title": "Add caching support for IdentityProviderStorageProvider.getForLogin operations",
+      "goldenCount": 2
+    }
+  ]
+}
