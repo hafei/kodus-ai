@@ -22,6 +22,7 @@ import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { unformatConfig } from "src/core/utils/helpers";
 
 import { CodeReviewPagesBreadcrumb } from "../../_components/breadcrumb";
+import { CentralizedConfigReadOnlyAlert } from "../../_components/centralized-config-readonly-alert";
 import GeneratingConfig from "../../_components/generating-config";
 import { CodeReviewSaveButton } from "../../_components/save-button";
 import { useCodeReviewSettingsMutation } from "../../_hooks/use-code-review-settings-mutation";
@@ -348,6 +349,7 @@ function CustomPromptsContent() {
             </Page.Header>
 
             <Page.Content className="gap-8">
+                <CentralizedConfigReadOnlyAlert />
                 {promptSections.map((section) => (
                     <Card
                         key={section.fieldName}
