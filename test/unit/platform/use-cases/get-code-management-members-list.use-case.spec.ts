@@ -119,7 +119,7 @@ describe('GetCodeManagementMemberListUseCase', () => {
             expect(mockCacheService.addToCache).toHaveBeenCalledWith(
                 'org_members_org-uuid-123',
                 mockMembers,
-                10 * 60 * 1000,
+                30 * 60 * 1000,
             );
         });
 
@@ -207,7 +207,7 @@ describe('GetCodeManagementMemberListUseCase', () => {
             expect(mockCacheService.addToCache).toHaveBeenCalledWith(
                 'org_members_org-uuid-123',
                 prAuthors,
-                10 * 60 * 1000,
+                30 * 60 * 1000,
             );
         });
     });

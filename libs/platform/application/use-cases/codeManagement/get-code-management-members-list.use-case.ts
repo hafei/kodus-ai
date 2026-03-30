@@ -15,7 +15,7 @@ export class GetCodeManagementMemberListUseCase implements IUseCase {
     private readonly logger = createLogger(
         GetCodeManagementMemberListUseCase.name,
     );
-    private static readonly CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+    private static readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
     constructor(
         private readonly codeManagementService: CodeManagementService,
@@ -76,6 +76,16 @@ export class GetCodeManagementMemberListUseCase implements IUseCase {
         }
 
         return prMembers;
+    }
+
+    public async refreshMembers(): Promise<
+        { name: string; id: string | number }[]
+    > {
+        const cacheKey = `org_members_${this.request.user.organization.uuid}`;
+
+        await this.cacheService.removeFromCache(cacheKey);
+
+        return this.execute();
     }
 
     private async fetchMembersFromCodeIntegration(
