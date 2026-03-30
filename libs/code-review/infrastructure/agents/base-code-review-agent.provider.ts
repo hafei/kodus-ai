@@ -13,8 +13,16 @@ import { ObservabilityService } from '@libs/core/log/observability.service';
 import { PermissionValidationService } from '@libs/ee/shared/services/permissionValidation.service';
 import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { byokToVercelModel, getModelName } from './llm/byok-to-vercel';
-import { runAgentLoop } from './llm/agent-loop';
+import {
+    runAgentLoop,
+    type VerificationTraceSummary,
+    type AgentAnomalySummary,
+} from './llm/agent-loop';
 import { DocumentationSearchAdapter } from './llm/agent-tools.factory';
+import {
+    CoverageSummary,
+    formatCoverageTargetsForPrompt,
+} from './llm/coverage-ledger';
 
 /**
  * Category-specific agent configuration provided by each concrete subclass.
@@ -44,6 +52,9 @@ export interface AgentProgressEvent {
     finishReason?: 'stop' | 'timeout' | 'max-steps' | 'error';
     /** How findings were obtained — 'json-parse' (normal), 'second-chance', 'generate-object' (fallback LLM), 'empty' */
     source?: string;
+    coverage?: CoverageSummary;
+    verification?: VerificationTraceSummary | null;
+    anomalies?: AgentAnomalySummary;
 }
 
 export interface ReviewAgentInput {
@@ -182,6 +193,7 @@ export abstract class BaseCodeReviewAgentProvider {
                 prNumber: input.prNumber,
                 repositoryFullName: input.repositoryFullName,
                 baseBranch: input.baseBranch,
+                callGraph: input.callGraph,
 
                 onStepFinish: (step: any) => {
                     stepCount++;
@@ -324,6 +336,9 @@ export abstract class BaseCodeReviewAgentProvider {
                           ? 'max-steps'
                           : 'stop',
                 source: agentResult.source,
+                coverage: agentResult.coverage,
+                verification: agentResult.verification,
+                anomalies: agentResult.anomalies,
                 toolCalls: agentResult.toolCalls.map((tc) => ({
                     tool: tc.toolName || tc.tool,
                     args: JSON.stringify(tc.args).substring(0, 100),
@@ -347,6 +362,9 @@ export abstract class BaseCodeReviewAgentProvider {
                     totalTokens: agentResult.usage.totalTokens,
                     finishReason: agentResult.finishReason,
                     model: modelName,
+                    coverage: agentResult.coverage,
+                    verification: agentResult.verification,
+                    anomalies: agentResult.anomalies,
                 },
             });
 
@@ -404,10 +422,10 @@ export abstract class BaseCodeReviewAgentProvider {
   </Role>
 
   <Mindset>
-    Treat every change as suspicious — but only report what you can PROVE from code you actually read.
-    You need concrete evidence BOTH to report AND to dismiss.
-    "Looks risky" is not enough to report — you must show the exact code path that triggers the failure.
-    "Looks correct" is not enough to dismiss — you must explain WHY the failure case cannot occur.
+    Assume every change is broken until you prove it is safe.
+    Your default is to report — you need evidence to DISMISS, not evidence to report.
+    "Looks correct" is not enough to dismiss. You must explain WHY it cannot fail.
+    High-recall mode: if the visible code gives you concrete, code-backed suspicion of a defect, emit the finding instead of self-censoring it. A later verifier will filter unsupported claims.
   </Mindset>
 
   <Workflow>
@@ -417,18 +435,11 @@ export abstract class BaseCodeReviewAgentProvider {
 
       Step 1: Read the diffs. For each changed function/method, list what it does differently now.
 
-      Step 2: For each method CHANGED in the diff, trace BOTH directions:
-
-        OUTBOUND — what the changed method calls (callees):
-        a) For every method/function call INSIDE the changed code, grep for it and read the target.
-           Ask: Is this calling the RIGHT object? (delegate vs self, concrete vs proxy, correct field vs wrong field)
-           Ask: Can the return value be null/nil? Does the caller check?
-           Ask: Was anything REMOVED from the diff? A deleted call or import may have silently broken a dependency.
-
-        INBOUND — who calls the changed method (callers):
-        b) grep("exactMethodName\\(", excludeTests=true) → find callers
-        c) readFile the caller — what does it pass? What does it expect back?
-        d) Keep following until you hit a concrete implementation or return value.
+      Step 2: For each method CHANGED in the diff, trace the call chain:
+        a) grep("exactMethodName\\(", excludeTests=true) → find who calls it
+        b) readFile the caller — what does it pass? What does it expect back?
+        c) If the changed method calls ANOTHER method, grep for THAT method too — read it. What does it actually return? Is it the right target?
+        d) Keep following calls until you hit a concrete implementation or return value. Do NOT stop at the first layer.
         For interfaces/abstract methods, grep "implements X" or "extends X" to find concrete implementations.
 
       Step 3: Read caller context. Understand HOW the changed code is used in production.
@@ -445,8 +456,7 @@ export abstract class BaseCodeReviewAgentProvider {
         - "Does this affect caching/invalidation?" → changed predicate = stale cache risk
         - "Does this code delegate to another layer (cache, proxy, adapter)?" → is it calling the right target — delegate vs self, concrete vs default?
 
-      If you cannot confidently answer "this is safe" for any question, investigate more.
-      Only report if you find the specific code path that triggers the failure — not merely because you cannot rule it out.
+      If you cannot confidently answer "this is safe" for any question, investigate more or report it.
 
     PHASE 3 — RESPOND
 
@@ -455,8 +465,6 @@ export abstract class BaseCodeReviewAgentProvider {
         BAD reasoning: "The code looks correct."
         GOOD reasoning: "Challenged CreateDevice: what if two requests pass count check simultaneously? Grepped TagDevice(, found caller at impl.go:155. No lock or unique constraint — race condition. Reported."
 
-      MANDATORY: Investigate EVERY changed function in the diff before responding — even if you have already found a critical bug.
-      A PR with 5 changed functions requires investigating all 5. Finding one critical bug does NOT mean the rest are safe.
       Do not stop after finding the first issue — investigate ALL changed code before responding.
   </Workflow>
 
@@ -465,17 +473,6 @@ export abstract class BaseCodeReviewAgentProvider {
     relevantFile/relevantLinesStart/relevantLinesEnd must point to the changed lines.
     Trace impact through callers — symptom can appear elsewhere, but the cause must be in the diff.
   </Scope>
-
-  <EvidenceBar>
-    Before adding any finding to your suggestions list, you must pass ALL three gates:
-      1. READ — You read the specific file and line where the bug manifests (not just assumed from the diff)
-      2. TRIGGER — You can state the exact condition that causes the failure (e.g. "when X is null and caller does Y without checking")
-      3. REACHABLE — The trigger condition is reachable in real usage based on callers or inputs you actually saw
-
-    If you cannot pass all three, DISMISS the finding and note it in your reasoning.
-    It is better to miss a speculative bug than to report unverified concerns.
-    "This could fail if..." is NOT a valid report unless you verified the code path exists.
-  </EvidenceBar>
 
 ${overridesSection}
 
@@ -491,8 +488,11 @@ ${memoryRulesSection}
         );
         const diffsSection = this.formatDiffs(input.changedFiles);
         const callGraphSection = input.callGraph
-            ? `\n  <CallGraph>\n${input.callGraph}\n  </CallGraph>\n`
+            ? `\n  <CallGraph>\n${input.callGraph}\n  </CallGraph>`
             : '';
+        const coverageTargets = formatCoverageTargetsForPrompt(
+            input.changedFiles,
+        );
 
         const categoryLabel = this.getCategoryLabel();
 
@@ -515,16 +515,29 @@ ${memoryRulesSection}
 ${diffsSection}
   </Diffs>
 ${callGraphSection}
+
   <Task>
-    Review this Pull Request for ${taskDescription}.${input.callGraph ? '\n    The call graph above shows who calls each changed function and where — use it to trace impact.' : ''}
-    For each changed function: challenge with adversarial questions.
-    Report anything you cannot prove safe. Dismiss only what you can explain WHY it cannot fail.
+    Review this Pull Request for ${taskDescription}.
+    For each changed function: grep callers → read context → challenge with adversarial questions.${input.callGraph ? '\n    Use the call graph above as a fast map of production callers/callees, but still verify with tools before reporting.' : ''}
+    Promote a finding only when you can point to a concrete failure path, broken contract, wrong branch behavior, unsafe state transition, or caller/callee incompatibility introduced by the diff.
+    Prefer concrete bugs over speculative theories. Dismiss only what you can explain WHY it cannot fail.
   </Task>
+
+  <CoverageContract>
+    You must inspect every changed file below with readFile or checkTypes before finalizing.
+    grep, findFile, and listDir help navigation, but they do not count as coverage.
+${coverageTargets ? `${coverageTargets}\n` : ''}
+  </CoverageContract>
 
   <Rules>
     - Root cause must be in lines added or modified by this PR.
     - Pre-existing issues: report only if this PR makes them worse or newly reachable.
     - "Looks correct" is not a valid reason to dismiss — explain the specific reason it is safe.
+    - Before finalizing, make sure you have inspected every changed file listed above.
+    - Before reporting, be able to answer at least one of these: which changed line creates the risk, what concrete failing path follows, which caller/callee assumption is broken, or what observable bad behavior would happen.
+    - Do not promote a finding from a mere possibility. The changed code plus one or two concrete references must make the failure mode plausible and specific.
+    - Do not report generic resource exhaustion, shell injection, bypass, or performance theories unless the modified code directly creates or worsens that path.
+    - Clear local defects in the diff should still be reported immediately. Cross-file claims require at least one confirming reference from a caller, callee, test, or nearby state transition.
     - Return only the JSON object inside markdown fences, no extra text.
   </Rules>
 

@@ -67,12 +67,20 @@ import { z } from 'zod';
 import { createLogger } from '@kodus/flow';
 import { EnhancedJSONParser } from '@kodus/flow';
 import { BYOKConfig } from '@kodus/kodus-common/llm';
+import { FileChange } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { getInternalModel } from './byok-to-vercel';
 import { RemoteCommands } from '../../adapters/services/collectCrossFileContexts.service';
+import {
+    buildCoverageLedger,
+    CoverageSummary,
+    formatCoverageDebt,
+    getCoverageSummary,
+    markCoverageFromToolCall,
+} from './coverage-ledger';
 
 const logger = createLogger('AgentLoop');
 
-const MAX_STEPS = 50;
+const MAX_STEPS = 35;
 const AGENT_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutes max per agent — some models need 30+ tool calls
 
 /** Schema for structured output */
@@ -116,6 +124,8 @@ export interface AgentLoopInput {
     repositoryFullName?: string;
     /** Base branch of the PR (e.g. "main"). Used by git diff tools. */
     baseBranch?: string;
+    /** Pre-computed call graph shared by reviewers and verifier. */
+    callGraph?: string;
 }
 
 export interface AgentLoopOutput {
@@ -137,6 +147,56 @@ export interface AgentLoopOutput {
         reasoningTokens: number;
         totalTokens: number;
     };
+    coverage: CoverageSummary;
+    verification?: VerificationTraceSummary | null;
+    anomalies: AgentAnomalySummary;
+}
+
+interface SuggestionVerificationDecision {
+    index: number;
+    keep: boolean;
+    rationale: string;
+    confidence?: 'high' | 'medium' | 'low';
+}
+
+interface ToolEvidenceSummary {
+    strongFiles: string[];
+    weakFiles: string[];
+}
+
+interface VerificationDecisionTrace {
+    index: number;
+    relevantFile: string;
+    action: 'keep' | 'drop' | 'refine';
+    parseMode: 'direct' | 'fallback-llm' | 'default-keep';
+    rationale: string;
+    confidence?: 'high' | 'medium' | 'low';
+    verifierEvidence: ToolEvidenceSummary;
+    rawTextPreview?: string;
+}
+
+interface SuggestionEvidenceBundle {
+    bundle: string;
+    relevantInvestigationLog: string;
+    relevantInvestigationCount: number;
+    callGraphHint: string;
+}
+
+export interface VerificationTraceSummary {
+    beforeCount: number;
+    afterCount: number;
+    droppedByVerifier: number;
+    droppedByEvidenceFilter: number;
+    decisions: VerificationDecisionTrace[];
+}
+
+export interface AgentAnomalySummary {
+    stepsLe2: boolean;
+    zeroToolCalls: boolean;
+    zeroStrongEvidenceFiles: boolean;
+    zeroCoverage: boolean;
+    lowCoverage: boolean;
+    lowStrongEvidenceFiles: boolean;
 }
 
 /**
@@ -154,8 +214,8 @@ export async function runAgentLoop(
         input.documentationSearchService,
         input.documentationSearchOptions,
         gitHubToken,
-        input.repositoryFullName,
     );
+    const coverageTargets = buildCoverageLedger(input.changedFiles);
 
     const allToolCalls: AgentLoopOutput['toolCalls'] = [];
     let stepCount = 0;
@@ -164,6 +224,7 @@ export async function runAgentLoop(
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let totalReasoningTokens = 0;
+    let verificationTrace: VerificationTraceSummary | null = null;
 
     // Timeout: 8 minutes max per agent — some models need many tool calls
     const abortController = new AbortController();
@@ -182,7 +243,10 @@ export async function runAgentLoop(
             abortSignal: abortController.signal,
             system: input.systemPrompt,
             prompt: input.userPrompt,
-            experimental_telemetry: { isEnabled: true, functionId: input.agentName ?? 'agent-loop' },
+            experimental_telemetry: {
+                isEnabled: true,
+                functionId: input.agentName ?? 'agent-loop',
+            },
             providerOptions: buildLangSmithProviderOptions(
                 input.agentName ?? 'agent-loop',
                 input.telemetryMetadata,
@@ -195,7 +259,24 @@ export async function runAgentLoop(
             prepareStep: ({ stepNumber }: any) => {
                 const maxSteps = input.maxSteps || MAX_STEPS;
                 const forceTextAfter = maxSteps - 2;
-                const MIN_INVESTIGATION_STEPS = 3;
+                const coverageDebt = formatCoverageDebt(coverageTargets);
+
+                if (coverageDebt) {
+                    if (stepNumber >= forceTextAfter) {
+                        logger.log({
+                            message: `[AGENT-COVERAGE-DEBT] step=${stepNumber}/${maxSteps} pending=${getCoverageSummary(coverageTargets).pendingTargets} — prioritizing uncovered changed files`,
+                            context: 'AgentLoop',
+                        });
+                    }
+
+                    return {
+                        system:
+                            input.systemPrompt +
+                            '\n\nIMPORTANT: Coverage debt is still open.\n' +
+                            coverageDebt +
+                            '\nPrioritize the uncovered changed files before exploring anything else.',
+                    };
+                }
 
                 if (stepNumber >= forceTextAfter) {
                     logger.log({
@@ -236,7 +317,8 @@ export async function runAgentLoop(
 
                     for (const tr of toolResults) {
                         const id = tr?.toolCallId || tr?.id || '';
-                        const val = tr?.result ?? tr?.output ?? tr?.content ?? '';
+                        const val =
+                            tr?.result ?? tr?.output ?? tr?.content ?? '';
                         if (id) resultLookup.set(id, String(val));
                     }
 
@@ -249,11 +331,19 @@ export async function runAgentLoop(
                         let resultStr = resultLookup.get(callId) || '';
 
                         // Fallback: if toolResults has same count as toolCalls, match by index
-                        if (!resultStr && toolResults.length === event.toolCalls.length) {
+                        if (
+                            !resultStr &&
+                            toolResults.length === event.toolCalls.length
+                        ) {
                             const idx = event.toolCalls.indexOf(tc);
                             if (idx >= 0 && toolResults[idx]) {
                                 const tr = toolResults[idx];
-                                resultStr = String(tr?.result ?? tr?.output ?? tr?.content ?? '');
+                                resultStr = String(
+                                    tr?.result ??
+                                        tr?.output ??
+                                        tr?.content ??
+                                        '',
+                                );
                             }
                         }
 
@@ -263,6 +353,27 @@ export async function runAgentLoop(
                             args,
                             result: resultStr.substring(0, 500),
                         });
+
+                        const newlyTouched = markCoverageFromToolCall(
+                            coverageTargets,
+                            tc.toolName,
+                            args,
+                            stepCount,
+                        );
+                        if (newlyTouched.length > 0) {
+                            logger.log({
+                                message: `[AGENT-COVERAGE] step=${stepCount} touched ${newlyTouched.map((target) => target.file).join(', ')}`,
+                                context: 'AgentLoop',
+                                metadata: {
+                                    step: stepCount,
+                                    touchedFiles: newlyTouched.map(
+                                        (target) => target.file,
+                                    ),
+                                    coverage:
+                                        getCoverageSummary(coverageTargets),
+                                },
+                            });
+                        }
 
                         logger.log({
                             message: `[AGENT-TOOL] step=${stepCount} ${tc.toolName}(${JSON.stringify(args).substring(0, 200)}) → ${resultStr ? resultStr.substring(0, 150) : '(empty)'}${resultStr.length > 150 ? '...' : ''}`,
@@ -389,6 +500,13 @@ export async function runAgentLoop(
                     reasoningTokens: totalReasoningTokens,
                     totalTokens: totalInputTokens + totalOutputTokens,
                 },
+                coverage: getCoverageSummary(coverageTargets),
+                verification: null,
+                anomalies: buildAgentAnomalies({
+                    steps: stepCount,
+                    toolCalls: allToolCalls,
+                    coverage: getCoverageSummary(coverageTargets),
+                }),
             };
         }
         throw error;
@@ -545,46 +663,116 @@ Respond with ONLY the JSON:
     }
 
     if (!findings) {
-        findings = { reasoning: finalText || 'No findings', suggestions: [] };
+        findings = {
+            reasoning: finalText || 'No findings',
+            suggestions: [],
+        };
         source = 'empty';
     }
 
-    // Evidence filter: drop suggestions for files the agent never actually touched
-    // (neither readFile nor grep returned results from that file).
-    if (findings.suggestions.length > 0) {
-        const filesTouched = new Set<string>();
-        for (const tc of allToolCalls) {
-            // Count explicit readFile calls
-            if (tc.tool === 'readFile') {
-                const p = ((tc.args.path || tc.args.filePath || tc.args.file || '') as string)
-                    .replace(/^\/+/, '')
-                    .toLowerCase();
-                if (p) filesTouched.add(p);
-            }
-            // Also count files that appeared in grep results (format: "file:line:content")
-            if (tc.tool === 'grep' && typeof tc.result === 'string') {
-                for (const line of tc.result.split('\n')) {
-                    const match = line.match(/^([^:]+):\d+:/);
-                    if (match) {
-                        filesTouched.add(match[1].replace(/^\/+/, '').toLowerCase());
-                    }
+    const coverageSummaryBeforeRecovery = getCoverageSummary(coverageTargets);
+    if (
+        coverageSummaryBeforeRecovery.pendingTargets > 0 &&
+        allToolCalls.length > 0
+    ) {
+        logger.warn({
+            message: `[AGENT-COVERAGE-GAP] ${coverageSummaryBeforeRecovery.pendingTargets}/${coverageSummaryBeforeRecovery.totalTargets} changed files still uncovered after main pass`,
+            context: 'AgentLoop',
+            metadata: {
+                coverage: coverageSummaryBeforeRecovery,
+            },
+        });
+
+        const coverageRecovery = await runCoverageRecoveryPass({
+            input,
+            tools,
+            coverageTargets,
+            allToolCalls,
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        });
+
+        totalInputTokens = coverageRecovery.totalInputTokens;
+        totalOutputTokens = coverageRecovery.totalOutputTokens;
+        totalReasoningTokens = coverageRecovery.totalReasoningTokens;
+
+        if (coverageRecovery.text) {
+            const extraFindings = tryParseFindings(coverageRecovery.text);
+            if (extraFindings) {
+                findings = mergeFindings(findings, extraFindings);
+                if (source === 'empty') {
+                    source = 'json-parse';
                 }
             }
         }
-        if (filesTouched.size > 0) {
-            const before = findings.suggestions.length;
-            findings.suggestions = findings.suggestions.filter((s) => {
-                const f = (s.relevantFile || '').replace(/^\/+/, '').toLowerCase();
-                return filesTouched.has(f);
-            });
-            const dropped = before - findings.suggestions.length;
-            if (dropped > 0) {
-                logger.warn({
-                    message: `[EVIDENCE-FILTER] Dropped ${dropped}/${before} suggestions — file never touched (no readFile or grep hit)`,
-                    context: 'AgentLoop',
-                });
+    }
+    let coverageSummary = getCoverageSummary(coverageTargets);
+
+    if (shouldRunLowCoverageSecondChance(coverageSummary)) {
+        logger.warn({
+            message: `[AGENT-COVERAGE-SECOND-CHANCE] Coverage still low after recovery (${coverageSummary.touchedTargets}/${coverageSummary.totalTargets}). Running one more focused inspection pass.`,
+            context: 'AgentLoop',
+            metadata: {
+                coverage: coverageSummary,
+            },
+        });
+
+        const coverageSecondChance = await runLowCoverageSecondChance({
+            input,
+            tools,
+            coverageTargets,
+            allToolCalls,
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        });
+
+        totalInputTokens = coverageSecondChance.totalInputTokens;
+        totalOutputTokens = coverageSecondChance.totalOutputTokens;
+        totalReasoningTokens = coverageSecondChance.totalReasoningTokens;
+
+        if (coverageSecondChance.text) {
+            let extraFindings = tryParseFindings(coverageSecondChance.text);
+
+            if (!extraFindings && coverageSecondChance.text.length > 50) {
+                const fallbackResult = await structureWithFallbackModel(
+                    coverageSecondChance.text,
+                    input.byokConfig,
+                );
+                if (fallbackResult) {
+                    extraFindings = fallbackResult.findings;
+                    totalInputTokens += fallbackResult.usage.inputTokens;
+                    totalOutputTokens += fallbackResult.usage.outputTokens;
+                    totalReasoningTokens +=
+                        fallbackResult.usage.reasoningTokens;
+                }
+            }
+
+            if (extraFindings) {
+                findings = mergeFindings(findings, extraFindings);
+                if (source === 'empty') {
+                    source = 'json-parse';
+                }
             }
         }
+
+        coverageSummary = getCoverageSummary(coverageTargets);
+    }
+
+    if (findings.suggestions.length > 0) {
+        const verificationResult = await verifyFindingsWithTools({
+            findings,
+            input,
+            allToolCalls,
+            tools: pickVerificationTools(tools),
+        });
+
+        findings = verificationResult.findings;
+        totalInputTokens += verificationResult.usage.inputTokens;
+        totalOutputTokens += verificationResult.usage.outputTokens;
+        totalReasoningTokens += verificationResult.usage.reasoningTokens;
+        verificationTrace = verificationResult.trace;
     }
 
     // Base usage from the main agent loop
@@ -626,7 +814,1441 @@ Respond with ONLY the JSON:
             reasoningTokens: finalReasoningTokens,
             totalTokens: finalInputTokens + finalOutputTokens,
         },
+        coverage: coverageSummary,
+        verification: verificationTrace,
+        anomalies: buildAgentAnomalies({
+            steps: result.steps?.length ?? 0,
+            toolCalls: allToolCalls,
+            coverage: coverageSummary,
+        }),
     };
+}
+
+async function runCoverageRecoveryPass(params: {
+    input: AgentLoopInput;
+    tools: Record<string, any>;
+    coverageTargets: ReturnType<typeof buildCoverageLedger>;
+    allToolCalls: AgentLoopOutput['toolCalls'];
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalReasoningTokens: number;
+}): Promise<{
+    text: string;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalReasoningTokens: number;
+}> {
+    const {
+        input,
+        tools,
+        coverageTargets,
+        allToolCalls,
+        totalInputTokens,
+        totalOutputTokens,
+        totalReasoningTokens,
+    } = params;
+    const remainingCoverageDebt = formatCoverageDebt(coverageTargets, 12);
+    if (!remainingCoverageDebt) {
+        return {
+            text: '',
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        };
+    }
+
+    const investigationSummary = allToolCalls
+        .slice(-20)
+        .map((toolCall) => {
+            const args =
+                typeof toolCall.args === 'string'
+                    ? toolCall.args
+                    : JSON.stringify(toolCall.args);
+            return `${toolCall.toolName || toolCall.tool}(${args.substring(0, 150)})`;
+        })
+        .join('\n');
+
+    let recoveryStep = 0;
+    let recoveryText = '';
+
+    try {
+        const recoveryResult = await generateText({
+            model: input.model,
+            system:
+                input.systemPrompt +
+                '\n\nIMPORTANT: This is a coverage recovery pass. You must inspect the remaining changed files before responding.',
+            prompt: `You already investigated this review, but some changed files are still uncovered.
+
+<RecentInvestigation>
+${investigationSummary || 'No prior tool calls captured.'}
+</RecentInvestigation>
+
+<RemainingCoverage>
+${remainingCoverageDebt}
+</RemainingCoverage>
+
+Investigate the remaining changed files now.
+- Use tools.
+- Prefer readFile on each remaining file.
+- After inspecting them, return ONLY JSON with ADDITIONAL findings discovered from this recovery pass.
+- If no new findings appear, return an empty suggestions array.
+`,
+            tools,
+            stopWhen: stepCountIs(6),
+            prepareStep: ({ stepNumber }: any) => {
+                recoveryStep = stepNumber;
+                if (stepNumber >= 5) {
+                    return {
+                        toolChoice: 'none' as const,
+                        activeTools: [],
+                        system:
+                            input.systemPrompt +
+                            '\n\nIMPORTANT: This is the final step of the coverage recovery pass. Do NOT call tools. Respond with JSON only.',
+                    };
+                }
+
+                return {
+                    system:
+                        input.systemPrompt +
+                        '\n\nIMPORTANT: Coverage recovery is in progress.\n' +
+                        formatCoverageDebt(coverageTargets, 12),
+                };
+            },
+            onStepFinish: (event: any) => {
+                if (event.toolCalls) {
+                    for (const toolCall of event.toolCalls) {
+                        const args =
+                            (toolCall as any).args ||
+                            (toolCall as any).input ||
+                            {};
+
+                        allToolCalls.push({
+                            tool: toolCall.toolName,
+                            toolName: toolCall.toolName,
+                            args,
+                            result: '',
+                        });
+
+                        markCoverageFromToolCall(
+                            coverageTargets,
+                            toolCall.toolName,
+                            args,
+                            recoveryStep,
+                        );
+                    }
+                }
+
+                if (event.text) {
+                    recoveryText = event.text;
+                }
+            },
+        });
+
+        recoveryText = recoveryResult.text || recoveryText;
+
+        return {
+            text: recoveryText,
+            totalInputTokens:
+                totalInputTokens +
+                ((recoveryResult as any).totalUsage?.inputTokens ??
+                    recoveryResult.usage?.inputTokens ??
+                    0),
+            totalOutputTokens:
+                totalOutputTokens +
+                ((recoveryResult as any).totalUsage?.outputTokens ??
+                    recoveryResult.usage?.outputTokens ??
+                    0),
+            totalReasoningTokens:
+                totalReasoningTokens +
+                ((recoveryResult as any).totalUsage?.reasoningTokens ??
+                    recoveryResult.usage?.reasoningTokens ??
+                    0),
+        };
+    } catch (error) {
+        logger.warn({
+            message: `[AGENT-COVERAGE-GAP] Recovery pass failed: ${error instanceof Error ? error.message : String(error)}`,
+            context: 'AgentLoop',
+        });
+
+        return {
+            text: '',
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        };
+    }
+}
+
+function shouldRunLowCoverageSecondChance(
+    coverage: CoverageSummary | null | undefined,
+): boolean {
+    if (!coverage || coverage.totalTargets < 2) return false;
+    const coveragePct =
+        coverage.totalTargets > 0
+            ? coverage.touchedTargets / coverage.totalTargets
+            : 0;
+
+    return coverage.pendingTargets > 0 && coveragePct < 0.7;
+}
+
+async function runLowCoverageSecondChance(params: {
+    input: AgentLoopInput;
+    tools: Record<string, any>;
+    coverageTargets: ReturnType<typeof buildCoverageLedger>;
+    allToolCalls: AgentLoopOutput['toolCalls'];
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalReasoningTokens: number;
+}): Promise<{
+    text: string;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalReasoningTokens: number;
+}> {
+    const {
+        input,
+        tools,
+        coverageTargets,
+        allToolCalls,
+        totalInputTokens,
+        totalOutputTokens,
+        totalReasoningTokens,
+    } = params;
+    const remainingCoverageDebt = formatCoverageDebt(coverageTargets, 12);
+    if (!remainingCoverageDebt) {
+        return {
+            text: '',
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        };
+    }
+
+    const investigationSummary = allToolCalls
+        .slice(-24)
+        .map((toolCall) => {
+            const args =
+                typeof toolCall.args === 'string'
+                    ? toolCall.args
+                    : JSON.stringify(toolCall.args);
+            return `${toolCall.toolName || toolCall.tool}(${args.substring(0, 180)})`;
+        })
+        .join('\n');
+
+    let secondChanceStep = 0;
+    let secondChanceText = '';
+
+    try {
+        const secondChanceResult = await generateText({
+            model: input.model,
+            system:
+                input.systemPrompt +
+                '\n\nIMPORTANT: Coverage is still too low. This is a final targeted inspection pass. You must inspect the remaining changed files with readFile or checkTypes before responding.',
+            prompt: `Your previous review finished with low changed-file coverage.
+
+<RecentInvestigation>
+${investigationSummary || 'No prior tool calls captured.'}
+</RecentInvestigation>
+
+<RemainingCoverage>
+${remainingCoverageDebt}
+</RemainingCoverage>
+
+Instructions:
+- Focus only on the remaining uncovered changed files.
+- Use readFile or checkTypes on those files before responding.
+- Be surgical: inspect remaining files, then return ONLY JSON with ADDITIONAL findings.
+- If the remaining files are safe, return an empty suggestions array.`,
+            tools,
+            stopWhen: stepCountIs(5),
+            prepareStep: ({ stepNumber }: any) => {
+                secondChanceStep = stepNumber;
+                if (stepNumber >= 4) {
+                    return {
+                        toolChoice: 'none' as const,
+                        activeTools: [],
+                        system:
+                            input.systemPrompt +
+                            '\n\nIMPORTANT: Final step of the low-coverage second chance. Do NOT call tools. Return JSON only.',
+                    };
+                }
+
+                return {
+                    system:
+                        input.systemPrompt +
+                        '\n\nIMPORTANT: Low-coverage second chance in progress.\n' +
+                        formatCoverageDebt(coverageTargets, 12),
+                };
+            },
+            onStepFinish: (event: any) => {
+                if (event.toolCalls) {
+                    for (const toolCall of event.toolCalls) {
+                        const args =
+                            (toolCall as any).args ||
+                            (toolCall as any).input ||
+                            {};
+
+                        allToolCalls.push({
+                            tool: toolCall.toolName,
+                            toolName: toolCall.toolName,
+                            args,
+                            result: '',
+                        });
+
+                        markCoverageFromToolCall(
+                            coverageTargets,
+                            toolCall.toolName,
+                            args,
+                            secondChanceStep,
+                        );
+                    }
+                }
+
+                if (event.text) {
+                    secondChanceText = event.text;
+                }
+            },
+        });
+
+        secondChanceText = secondChanceResult.text || secondChanceText;
+
+        return {
+            text: secondChanceText,
+            totalInputTokens:
+                totalInputTokens +
+                ((secondChanceResult as any).totalUsage?.inputTokens ??
+                    secondChanceResult.usage?.inputTokens ??
+                    0),
+            totalOutputTokens:
+                totalOutputTokens +
+                ((secondChanceResult as any).totalUsage?.outputTokens ??
+                    secondChanceResult.usage?.outputTokens ??
+                    0),
+            totalReasoningTokens:
+                totalReasoningTokens +
+                ((secondChanceResult as any).totalUsage?.reasoningTokens ??
+                    secondChanceResult.usage?.reasoningTokens ??
+                    0),
+        };
+    } catch (error) {
+        logger.warn({
+            message: `[AGENT-COVERAGE-SECOND-CHANCE] Focused inspection pass failed: ${error instanceof Error ? error.message : String(error)}`,
+            context: 'AgentLoop',
+        });
+
+        return {
+            text: '',
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        };
+    }
+}
+
+function mergeFindings(
+    base: FindingsOutput,
+    extra: FindingsOutput,
+): FindingsOutput {
+    const seen = new Set(
+        base.suggestions.map((suggestion) =>
+            [
+                suggestion.relevantFile,
+                suggestion.relevantLinesStart ?? '',
+                suggestion.relevantLinesEnd ?? '',
+                suggestion.suggestionContent,
+            ].join('::'),
+        ),
+    );
+
+    const additionalSuggestions = extra.suggestions.filter((suggestion) => {
+        const key = [
+            suggestion.relevantFile,
+            suggestion.relevantLinesStart ?? '',
+            suggestion.relevantLinesEnd ?? '',
+            suggestion.suggestionContent,
+        ].join('::');
+
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    return {
+        reasoning: [base.reasoning, extra.reasoning]
+            .filter(Boolean)
+            .join('\n\n'),
+        suggestions: [...base.suggestions, ...additionalSuggestions],
+    };
+}
+
+async function verifyFindingsWithTools(params: {
+    findings: FindingsOutput;
+    input: AgentLoopInput;
+    allToolCalls: AgentLoopOutput['toolCalls'];
+    tools: Record<string, any>;
+}): Promise<{
+    findings: FindingsOutput;
+    trace: VerificationTraceSummary | null;
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+    };
+}> {
+    const { findings, input, allToolCalls, tools } = params;
+    const internalModel = getInternalModel(input.byokConfig);
+    const reviewerEvidence = buildToolEvidenceSummary(allToolCalls);
+
+    if (!internalModel || findings.suggestions.length === 0) {
+        return {
+            findings,
+            trace: null,
+            usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                reasoningTokens: 0,
+                totalTokens: 0,
+            },
+        };
+    }
+
+    try {
+        const decisions = new Map<number, SuggestionVerificationDecision>();
+        const verifierEvidenceByIndex = new Map<number, ToolEvidenceSummary>();
+        const verifierParseModeByIndex = new Map<
+            number,
+            'direct' | 'fallback-llm' | 'default-keep'
+        >();
+        const verifierRawTextByIndex = new Map<number, string>();
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
+        let totalReasoningTokens = 0;
+        const decisionTraces: VerificationDecisionTrace[] = [];
+
+        for (let index = 0; index < findings.suggestions.length; index++) {
+            const suggestion = findings.suggestions[index];
+            const verificationResult = await verifySingleFindingWithTools({
+                index,
+                suggestion,
+                input,
+                allToolCalls,
+                tools,
+            });
+
+            decisions.set(index, verificationResult.decision);
+            verifierEvidenceByIndex.set(index, verificationResult.evidence);
+            verifierParseModeByIndex.set(index, verificationResult.parseMode);
+            verifierRawTextByIndex.set(
+                index,
+                verificationResult.rawTextPreview,
+            );
+            totalInputTokens += verificationResult.usage.inputTokens;
+            totalOutputTokens += verificationResult.usage.outputTokens;
+            totalReasoningTokens += verificationResult.usage.reasoningTokens;
+        }
+
+        let droppedByVerifier = 0;
+        let droppedByEvidenceFilter = 0;
+
+        const verifiedSuggestions = findings.suggestions
+            .map((suggestion, index) => {
+                const decision = decisions.get(index);
+                if (!decision) return suggestion;
+                if (!decision.keep) {
+                    droppedByVerifier++;
+                    decisionTraces.push({
+                        index,
+                        relevantFile: suggestion.relevantFile,
+                        action: 'drop',
+                        parseMode:
+                            verifierParseModeByIndex.get(index) ||
+                            'default-keep',
+                        rationale: truncateText(decision.rationale || '', 400),
+                        confidence: decision.confidence,
+                        verifierEvidence:
+                            verifierEvidenceByIndex.get(index) ||
+                            buildToolEvidenceSummary([]),
+                        rawTextPreview: verifierRawTextByIndex.get(index) || '',
+                    });
+                    return null;
+                }
+
+                const passesEvidenceFilter = hasEvidenceForRelevantFile(
+                    reviewerEvidence,
+                    suggestion.relevantFile,
+                )
+                    ? true
+                    : hasEvidenceForRelevantFile(
+                          verifierEvidenceByIndex.get(index),
+                          suggestion.relevantFile,
+                      );
+
+                if (!passesEvidenceFilter) {
+                    droppedByEvidenceFilter++;
+                    decisionTraces.push({
+                        index,
+                        relevantFile: suggestion.relevantFile,
+                        action: 'drop',
+                        parseMode:
+                            verifierParseModeByIndex.get(index) ||
+                            'default-keep',
+                        rationale: truncateText(
+                            `Dropped by evidence filter. ${decision.rationale || ''}`.trim(),
+                            400,
+                        ),
+                        confidence: decision.confidence,
+                        verifierEvidence:
+                            verifierEvidenceByIndex.get(index) ||
+                            buildToolEvidenceSummary([]),
+                        rawTextPreview: verifierRawTextByIndex.get(index) || '',
+                    });
+                    logger.warn({
+                        message: `[EVIDENCE-FILTER] Dropping finding ${index} for ${suggestion.relevantFile} — neither reviewer nor verifier touched the file`,
+                        context: 'AgentLoop',
+                        metadata: {
+                            index,
+                            relevantFile: suggestion.relevantFile,
+                            reviewerEvidence,
+                            verifierEvidence:
+                                verifierEvidenceByIndex.get(index) || null,
+                            verifierRationale: decision.rationale,
+                        },
+                    });
+                    return null;
+                }
+
+                decisionTraces.push({
+                    index,
+                    relevantFile: suggestion.relevantFile,
+                    action: 'keep',
+                    parseMode:
+                        verifierParseModeByIndex.get(index) || 'default-keep',
+                    rationale: truncateText(decision.rationale || '', 400),
+                    confidence: decision.confidence,
+                    verifierEvidence:
+                        verifierEvidenceByIndex.get(index) ||
+                        buildToolEvidenceSummary([]),
+                    rawTextPreview: verifierRawTextByIndex.get(index) || '',
+                });
+
+                return suggestion;
+            })
+            .filter(Boolean) as FindingsOutput['suggestions'];
+
+        const droppedCount = droppedByVerifier + droppedByEvidenceFilter;
+
+        logger.log({
+            message: `[AGENT-VERIFY] Verified ${findings.suggestions.length} candidate findings, kept ${verifiedSuggestions.length}, dropped ${droppedCount}`,
+            context: 'AgentLoop',
+            metadata: {
+                suggestionsBefore: findings.suggestions.length,
+                suggestionsAfter: verifiedSuggestions.length,
+                droppedCount,
+                droppedByVerifier,
+                droppedByEvidenceFilter,
+            },
+        });
+
+        return {
+            findings: {
+                reasoning:
+                    droppedCount > 0
+                        ? `${findings.reasoning}\n\nFinal verifier kept ${verifiedSuggestions.length}/${findings.suggestions.length} candidate findings after tool-based verification and evidence filtering.`
+                        : findings.reasoning,
+                suggestions: verifiedSuggestions,
+            },
+            trace: {
+                beforeCount: findings.suggestions.length,
+                afterCount: verifiedSuggestions.length,
+                droppedByVerifier,
+                droppedByEvidenceFilter,
+                decisions: decisionTraces,
+            },
+            usage: {
+                inputTokens: totalInputTokens,
+                outputTokens: totalOutputTokens,
+                reasoningTokens: totalReasoningTokens,
+                totalTokens: totalInputTokens + totalOutputTokens,
+            },
+        };
+    } catch (error) {
+        logger.warn({
+            message: `[AGENT-VERIFY] Final finding verification failed: ${error instanceof Error ? error.message : String(error)}`,
+            context: 'AgentLoop',
+        });
+
+        return {
+            findings,
+            trace: null,
+            usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                reasoningTokens: 0,
+                totalTokens: 0,
+            },
+        };
+    }
+}
+
+async function verifySingleFindingWithTools(params: {
+    index: number;
+    suggestion: FindingsOutput['suggestions'][number];
+    input: AgentLoopInput;
+    allToolCalls: AgentLoopOutput['toolCalls'];
+    tools: Record<string, any>;
+}): Promise<{
+    decision: SuggestionVerificationDecision;
+    evidence: ToolEvidenceSummary;
+    parseMode: 'direct' | 'fallback-llm' | 'default-keep';
+    rawTextPreview: string;
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+    };
+}> {
+    const { index, suggestion, input, allToolCalls, tools } = params;
+    const internalModel = getInternalModel(input.byokConfig);
+    const evidenceBundle = buildSuggestionEvidenceBundle(
+        index,
+        suggestion,
+        input.changedFiles,
+        allToolCalls,
+        input.callGraph,
+    );
+
+    logger.log({
+        message: `[AGENT-VERIFY-CONTEXT] finding=${index} file=${suggestion.relevantFile} investigationLines=${evidenceBundle.relevantInvestigationCount} callGraphHintChars=${evidenceBundle.callGraphHint === 'N/A' ? 0 : evidenceBundle.callGraphHint.length}`,
+        context: 'AgentLoop',
+        metadata: {
+            index,
+            relevantFile: suggestion.relevantFile,
+            relevantLinesStart: suggestion.relevantLinesStart,
+            relevantLinesEnd: suggestion.relevantLinesEnd,
+            investigationLines: evidenceBundle.relevantInvestigationCount,
+            investigationLogPreview: truncateText(
+                evidenceBundle.relevantInvestigationLog,
+                320,
+            ),
+            callGraphHintChars:
+                evidenceBundle.callGraphHint === 'N/A'
+                    ? 0
+                    : evidenceBundle.callGraphHint.length,
+            callGraphHintPreview: truncateText(
+                evidenceBundle.callGraphHint,
+                320,
+            ),
+        },
+    });
+
+    if (!internalModel) {
+        return {
+            decision: {
+                index,
+                keep: true,
+                rationale:
+                    'No verifier model available; keeping finding by default.',
+            },
+            evidence: buildToolEvidenceSummary([]),
+            parseMode: 'default-keep',
+            rawTextPreview: '',
+            usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                reasoningTokens: 0,
+                totalTokens: 0,
+            },
+        };
+    }
+
+    let finalText = '';
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalReasoningTokens = 0;
+    let verifierSteps = 0;
+    const verifierToolCalls: AgentLoopOutput['toolCalls'] = [];
+    const verifierStepTexts: string[] = [];
+
+    const verificationRun: any = await generateText({
+        model: internalModel as any,
+        experimental_telemetry: {
+            isEnabled: true,
+            functionId: `${input.agentName ?? 'agent-loop'}-verify-finding`,
+        },
+        providerOptions: buildLangSmithProviderOptions(
+            `${input.agentName ?? 'agent-loop'}-verify-finding`,
+            input.telemetryMetadata,
+        ),
+        system: `You are a surgical code review verifier.
+
+Your task is to verify ONE candidate finding.
+
+Rules:
+- You may use only a few tool calls. Be surgical.
+- Use tools to confirm or refute the candidate finding.
+- Treat call graph hints as fast navigation hints, not as final proof.
+- You must NOT create a new finding unrelated to the candidate.
+- Drop a finding only if you found concrete evidence against it.
+- If you confirm it, or if you cannot refute it within the budget, keep it.
+- "I couldn't prove it" is NOT enough to drop.
+- Do NOT rewrite the finding text, summary, severity, or suggested fix.
+
+Return JSON only at the end.`,
+        prompt: `${evidenceBundle.bundle}
+
+You may use up to 4 tool-call steps.
+
+Recommended approach:
+1. Read the cited file/range if needed.
+2. Search for the key symbol or caller if the claim depends on flow.
+3. Read one relevant caller/callee file if needed.
+4. Return a final JSON verdict.
+
+Output JSON:
+\`\`\`json
+{
+  "index": ${index},
+  "keep": true,
+  "rationale": "why the evidence supports keep/drop",
+  "confidence": "high|medium|low"
+}
+\`\`\`
+`,
+        tools,
+        stopWhen: stepCountIs(5),
+        prepareStep: ({ stepNumber }: any) => {
+            verifierSteps = stepNumber;
+            if (stepNumber >= 4) {
+                return {
+                    toolChoice: 'none' as const,
+                    activeTools: [],
+                    system: 'You are a surgical code review verifier.\n\nIMPORTANT: Final step. Do NOT call tools. Return JSON only.',
+                };
+            }
+            return {};
+        },
+        onStepFinish: (event: any) => {
+            if (event.text) {
+                finalText = event.text;
+                verifierStepTexts.push(event.text);
+            }
+            if (event.usage) {
+                totalInputTokens += event.usage.inputTokens ?? 0;
+                totalOutputTokens += event.usage.outputTokens ?? 0;
+                totalReasoningTokens += event.usage.reasoningTokens ?? 0;
+            }
+            if (event.toolCalls) {
+                const resultLookup = new Map<string, string>();
+                const toolResults: any[] = event.toolResults || [];
+
+                for (const tr of toolResults) {
+                    const id = tr?.toolCallId || tr?.id || '';
+                    const val = tr?.result ?? tr?.output ?? tr?.content ?? '';
+                    if (id) resultLookup.set(id, String(val));
+                }
+
+                for (const toolCall of event.toolCalls) {
+                    const args =
+                        (toolCall as any).args || (toolCall as any).input || {};
+                    const callId =
+                        (toolCall as any).toolCallId ||
+                        (toolCall as any).id ||
+                        '';
+                    let resultStr = resultLookup.get(callId) || '';
+
+                    if (
+                        !resultStr &&
+                        toolResults.length === event.toolCalls.length
+                    ) {
+                        const idx = event.toolCalls.indexOf(toolCall);
+                        if (idx >= 0 && toolResults[idx]) {
+                            const tr = toolResults[idx];
+                            resultStr = String(
+                                tr?.result ?? tr?.output ?? tr?.content ?? '',
+                            );
+                        }
+                    }
+
+                    verifierToolCalls.push({
+                        tool: toolCall.toolName,
+                        toolName: toolCall.toolName,
+                        args,
+                        result: resultStr.substring(0, 500),
+                    });
+
+                    logger.log({
+                        message: `[AGENT-VERIFY-TOOL] finding=${index} step=${verifierSteps} ${toolCall.toolName}(${JSON.stringify((toolCall as any).args || (toolCall as any).input || {}).substring(0, 180)})`,
+                        context: 'AgentLoop',
+                    });
+                }
+            }
+        },
+    });
+
+    let verificationText =
+        verificationRun.text ||
+        finalText ||
+        verifierStepTexts[verifierStepTexts.length - 1] ||
+        verifierStepTexts.join('\n\n');
+
+    if (!verificationText && verifierToolCalls.length > 0) {
+        const investigationSummary = verifierToolCalls
+            .map((toolCall) => {
+                const args =
+                    typeof toolCall.args === 'string'
+                        ? toolCall.args
+                        : JSON.stringify(toolCall.args);
+                const resultStr =
+                    typeof toolCall.result === 'string'
+                        ? toolCall.result.substring(0, 320)
+                        : '';
+                return `${toolCall.toolName || toolCall.tool}(${args.substring(0, 180)}) => ${resultStr || '(empty)'}`;
+            })
+            .join('\n');
+
+        try {
+            const secondChanceResult: any = await generateText({
+                model: internalModel as any,
+                experimental_telemetry: {
+                    isEnabled: true,
+                    functionId: `${input.agentName ?? 'agent-loop'}-verify-finding-second-chance`,
+                },
+                providerOptions: buildLangSmithProviderOptions(
+                    `${input.agentName ?? 'agent-loop'}-verify-finding-second-chance`,
+                    input.telemetryMetadata,
+                ),
+                system: `You are a surgical code review verifier.
+
+You already investigated the candidate finding with tools. Do NOT call any more tools.
+
+Your job now is only to return the final verdict as JSON.`,
+                prompt: `${evidenceBundle.bundle}
+
+<VerifierInvestigation>
+${investigationSummary}
+</VerifierInvestigation>
+
+Based on the investigation above, return ONLY JSON:
+\`\`\`json
+{
+  "index": ${index},
+  "keep": true,
+  "rationale": "why the evidence supports keep/drop",
+  "confidence": "high|medium|low"
+}
+\`\`\`
+
+Rules:
+- Drop only if you found concrete evidence against the candidate.
+- If you cannot refute it, keep it.
+- No prose outside JSON.`,
+                stopWhen: stepCountIs(1),
+            });
+
+            verificationText = secondChanceResult.text || verificationText;
+            totalInputTokens +=
+                (secondChanceResult as any).totalUsage?.inputTokens ??
+                secondChanceResult.usage?.inputTokens ??
+                0;
+            totalOutputTokens +=
+                (secondChanceResult as any).totalUsage?.outputTokens ??
+                secondChanceResult.usage?.outputTokens ??
+                0;
+            totalReasoningTokens +=
+                (secondChanceResult as any).totalUsage?.reasoningTokens ??
+                secondChanceResult.usage?.reasoningTokens ??
+                0;
+
+            if (verificationText) {
+                logger.log({
+                    message: `[AGENT-VERIFY-SECOND-CHANCE] finding=${index} recovered text response after tool-only verifier run`,
+                    context: 'AgentLoop',
+                });
+            }
+        } catch (error) {
+            logger.warn({
+                message: `[AGENT-VERIFY-SECOND-CHANCE] finding=${index} failed: ${error instanceof Error ? error.message : String(error)}`,
+                context: 'AgentLoop',
+            });
+        }
+    }
+
+    let decision = parseVerificationDecision(verificationText, index);
+    let parseMode: 'direct' | 'fallback-llm' | 'default-keep' = 'direct';
+
+    if (!decision && verificationText?.trim()) {
+        const fallbackDecision =
+            await structureVerificationDecisionWithFallbackModel(
+                verificationText,
+                index,
+                input.byokConfig,
+            );
+
+        if (fallbackDecision) {
+            decision = fallbackDecision.decision;
+            parseMode = 'fallback-llm';
+            totalInputTokens += fallbackDecision.usage.inputTokens;
+            totalOutputTokens += fallbackDecision.usage.outputTokens;
+            totalReasoningTokens += fallbackDecision.usage.reasoningTokens;
+
+            logger.log({
+                message: `[AGENT-VERIFY-FALLBACK] finding=${index} recovered verifier decision via LLM fallback`,
+                context: 'AgentLoop',
+            });
+        }
+    }
+
+    const rawTextPreview = truncateText(verificationText || '', 600);
+    if (!decision) {
+        logger.warn({
+            message: `[AGENT-VERIFY-DEFAULT-KEEP] finding=${index} verifier output was not parseable; keeping by default`,
+            context: 'AgentLoop',
+            metadata: {
+                index,
+                relevantFile: suggestion.relevantFile,
+                rawTextPreview,
+                verifierToolCalls: verifierToolCalls.length,
+            },
+        });
+    }
+
+    const baseUsage = verificationRun.usage ?? verificationRun.totalUsage ?? {};
+
+    return {
+        decision:
+            decision ||
+            ({
+                index,
+                keep: true,
+                rationale:
+                    'Verifier did not return a parseable verdict; keeping finding by default.',
+            } satisfies SuggestionVerificationDecision),
+        evidence: buildToolEvidenceSummary(verifierToolCalls),
+        parseMode: decision ? parseMode : 'default-keep',
+        rawTextPreview,
+        usage: {
+            inputTokens: Math.max(baseUsage.inputTokens ?? 0, totalInputTokens),
+            outputTokens: Math.max(
+                baseUsage.outputTokens ?? 0,
+                totalOutputTokens,
+            ),
+            reasoningTokens: Math.max(
+                baseUsage.reasoningTokens ?? 0,
+                totalReasoningTokens,
+            ),
+            totalTokens:
+                Math.max(baseUsage.inputTokens ?? 0, totalInputTokens) +
+                Math.max(baseUsage.outputTokens ?? 0, totalOutputTokens),
+        },
+    };
+}
+
+function pickVerificationTools(
+    tools: Record<string, any>,
+): Record<string, any> {
+    const allowed = ['grep', 'readFile', 'checkTypes'];
+    return Object.fromEntries(
+        Object.entries(tools).filter(([name]) => allowed.includes(name)),
+    );
+}
+
+function buildSuggestionEvidenceBundle(
+    index: number,
+    suggestion: FindingsOutput['suggestions'][number],
+    changedFiles: FileChange[] = [],
+    allToolCalls: AgentLoopOutput['toolCalls'],
+    callGraph?: string,
+): SuggestionEvidenceBundle {
+    const file = changedFiles.find(
+        (changedFile) => changedFile.filename === suggestion.relevantFile,
+    );
+    const basename =
+        suggestion.relevantFile.split('/').pop() || suggestion.relevantFile;
+    const relevantToolCalls = allToolCalls
+        .filter((toolCall) => {
+            const args = JSON.stringify(toolCall.args || {});
+            const result = toolCall.result || '';
+            return (
+                args.includes(suggestion.relevantFile) ||
+                args.includes(basename) ||
+                result.includes(suggestion.relevantFile) ||
+                result.includes(basename)
+            );
+        })
+        .slice(-8)
+        .map((toolCall) => {
+            const args =
+                typeof toolCall.args === 'string'
+                    ? toolCall.args
+                    : JSON.stringify(toolCall.args);
+            return `- ${toolCall.toolName || toolCall.tool}(${truncateText(args, 180)}) => ${truncateText(toolCall.result || '(empty)', 280)}`;
+        });
+
+    const diffSnippet = truncateText(
+        file?.patchWithLinesStr || file?.patch || '',
+        1800,
+    );
+    const fileSnippet = truncateText(
+        extractFileWindow(
+            file?.fileContent || '',
+            suggestion.relevantLinesStart,
+            suggestion.relevantLinesEnd,
+        ),
+        1600,
+    );
+    const callGraphSnippet = truncateText(
+        extractRelevantCallGraphContext(callGraph, suggestion),
+        1400,
+    );
+
+    const relevantInvestigationLog =
+        relevantToolCalls.length > 0
+            ? relevantToolCalls.join('\n')
+            : '- No file-specific tool log found';
+    const callGraphHint = callGraphSnippet || 'N/A';
+
+    return {
+        relevantInvestigationLog,
+        relevantInvestigationCount: relevantToolCalls.length,
+        callGraphHint,
+        bundle: `<Finding index="${index}">
+File: ${suggestion.relevantFile}
+Lines: ${suggestion.relevantLinesStart ?? 'unknown'}-${suggestion.relevantLinesEnd ?? 'unknown'}
+Candidate hypothesis (may be wrong):
+Summary: ${suggestion.oneSentenceSummary || 'N/A'}
+${suggestion.suggestionContent}
+
+Existing code:
+\`\`\`
+${truncateText(suggestion.existingCode || '', 800)}
+\`\`\`
+
+Diff snippet:
+\`\`\`diff
+${diffSnippet || 'N/A'}
+\`\`\`
+
+File snippet:
+\`\`\`
+${fileSnippet || 'N/A'}
+\`\`\`
+
+Relevant investigation log:
+${relevantInvestigationLog}
+
+Call graph hints:
+\`\`\`text
+${callGraphHint}
+\`\`\`
+</Finding>`,
+    };
+}
+
+function buildToolEvidenceSummary(
+    toolCalls: AgentLoopOutput['toolCalls'],
+): ToolEvidenceSummary {
+    const strongFiles = new Set<string>();
+    const weakFiles = new Set<string>();
+
+    for (const toolCall of toolCalls) {
+        const normalizedTool = (toolCall.toolName || toolCall.tool || '')
+            .trim()
+            .toLowerCase();
+        const args = (toolCall.args || {}) as Record<string, unknown>;
+
+        if (normalizedTool === 'readfile' || normalizedTool === 'checktypes') {
+            const explicitPath =
+                (args.path as string) ||
+                (args.filePath as string) ||
+                (args.file as string) ||
+                '';
+            const normalizedPath = normalizeFilePath(explicitPath);
+            if (normalizedPath) {
+                strongFiles.add(normalizedPath);
+            }
+        }
+
+        if (normalizedTool === 'grep' && typeof toolCall.result === 'string') {
+            for (const resultLine of toolCall.result.split('\n')) {
+                const match = resultLine.match(/^([^:]+):\d+:/);
+                if (!match?.[1]) continue;
+                const normalizedPath = normalizeFilePath(match[1]);
+                if (normalizedPath) {
+                    weakFiles.add(normalizedPath);
+                }
+            }
+        }
+    }
+
+    return {
+        strongFiles: [...strongFiles],
+        weakFiles: [...weakFiles],
+    };
+}
+
+function buildAgentAnomalies(params: {
+    steps: number;
+    toolCalls: AgentLoopOutput['toolCalls'];
+    coverage: CoverageSummary;
+}): AgentAnomalySummary {
+    const { steps, toolCalls, coverage } = params;
+    const evidence = buildToolEvidenceSummary(toolCalls);
+    const touchedTargets = coverage?.touchedTargets || 0;
+    const totalTargets = coverage?.totalTargets || 0;
+    const coveragePct = totalTargets > 0 ? touchedTargets / totalTargets : 0;
+
+    return {
+        stepsLe2: steps <= 2,
+        zeroToolCalls: toolCalls.length === 0,
+        zeroStrongEvidenceFiles: evidence.strongFiles.length === 0,
+        zeroCoverage: touchedTargets === 0,
+        lowCoverage: totalTargets > 0 && coveragePct < 0.7,
+        lowStrongEvidenceFiles:
+            totalTargets >= 2 && evidence.strongFiles.length < 2,
+    };
+}
+
+function hasEvidenceForRelevantFile(
+    evidence: ToolEvidenceSummary | undefined,
+    relevantFile: string,
+): boolean {
+    if (!evidence || !relevantFile) return false;
+
+    return [...evidence.strongFiles, ...evidence.weakFiles].some((candidate) =>
+        pathsReferToSameFile(candidate, relevantFile),
+    );
+}
+
+function normalizeFilePath(filePath: string): string {
+    if (!filePath) return '';
+    return filePath
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .replace(/^\/+/, '')
+        .trim()
+        .toLowerCase();
+}
+
+function pathsReferToSameFile(
+    candidate: string,
+    relevantFile: string,
+): boolean {
+    const normalizedCandidate = normalizeFilePath(candidate);
+    const normalizedRelevant = normalizeFilePath(relevantFile);
+
+    if (!normalizedCandidate || !normalizedRelevant) return false;
+    if (normalizedCandidate === normalizedRelevant) return true;
+
+    return (
+        normalizedCandidate.endsWith(`/${normalizedRelevant}`) ||
+        normalizedRelevant.endsWith(`/${normalizedCandidate}`)
+    );
+}
+
+function extractRelevantCallGraphContext(
+    callGraph: string | undefined,
+    suggestion: FindingsOutput['suggestions'][number],
+): string {
+    if (!callGraph?.trim()) return '';
+
+    const normalizedRelevantFile = normalizeFilePath(suggestion.relevantFile);
+    const basename = normalizedRelevantFile.split('/').pop() || '';
+    const shortPath = normalizedRelevantFile.split('/').slice(-2).join('/');
+    const symbolHints = extractSuggestionHintTokens(suggestion);
+
+    const rawSections = callGraph
+        .split(/\n{2,}/)
+        .map((section) => section.trim())
+        .filter(Boolean);
+
+    if (rawSections.length === 0) return '';
+
+    const heading = rawSections[0].toLowerCase().startsWith('changed functions')
+        ? rawSections[0]
+        : '';
+    const sections = heading ? rawSections.slice(1) : rawSections;
+
+    const rankedSections = sections
+        .map((section) => {
+            const lower = section.toLowerCase();
+            let score = 0;
+
+            if (shortPath && lower.includes(shortPath)) score += 5;
+            if (basename && lower.includes(basename)) score += 4;
+
+            for (const token of symbolHints) {
+                if (lower.includes(token)) score += 1;
+            }
+
+            return { section, score };
+        })
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+    if (rankedSections.length === 0) {
+        return '';
+    }
+
+    return [
+        heading,
+        ...rankedSections.slice(0, 3).map((entry) => entry.section),
+    ]
+        .filter(Boolean)
+        .join('\n\n');
+}
+
+function extractSuggestionHintTokens(
+    suggestion: FindingsOutput['suggestions'][number],
+): string[] {
+    const commonNoise = new Set([
+        'what',
+        'why',
+        'how',
+        'this',
+        'that',
+        'with',
+        'from',
+        'into',
+        'when',
+        'where',
+        'null',
+        'true',
+        'false',
+        'return',
+        'const',
+        'class',
+        'function',
+        'async',
+        'await',
+        'string',
+        'number',
+        'error',
+        'value',
+        'result',
+        'line',
+        'code',
+    ]);
+
+    const text = [
+        suggestion.oneSentenceSummary,
+        suggestion.suggestionContent,
+        suggestion.existingCode,
+        suggestion.improvedCode,
+    ]
+        .filter(Boolean)
+        .join('\n');
+
+    const tokens =
+        text
+            .match(/[A-Za-z_][A-Za-z0-9_]{3,}/g)
+            ?.map((token) => token.toLowerCase()) || [];
+
+    return [...new Set(tokens)]
+        .filter((token) => !commonNoise.has(token))
+        .slice(0, 10);
+}
+
+function parseVerificationDecision(
+    text: string,
+    index: number,
+): SuggestionVerificationDecision | null {
+    if (!text) return null;
+
+    const tryParse = (raw: string): SuggestionVerificationDecision | null => {
+        try {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed?.keep !== 'boolean') return null;
+            return {
+                index: typeof parsed.index === 'number' ? parsed.index : index,
+                keep: parsed.keep,
+                rationale: parsed.rationale || '',
+                confidence: parsed.confidence,
+            };
+        } catch {
+            return null;
+        }
+    };
+
+    try {
+        const parsed: any = EnhancedJSONParser.parse(text);
+        if (parsed && typeof parsed.keep === 'boolean') {
+            return {
+                index: typeof parsed.index === 'number' ? parsed.index : index,
+                keep: parsed.keep,
+                rationale: parsed.rationale || '',
+                confidence: parsed.confidence,
+            };
+        }
+    } catch {
+        // fall through
+    }
+
+    const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+    if (codeBlockMatch?.[1]) {
+        const parsed = tryParse(codeBlockMatch[1].trim());
+        if (parsed) return parsed;
+    }
+
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+        const parsed = tryParse(text.substring(firstBrace, lastBrace + 1));
+        if (parsed) return parsed;
+    }
+
+    return null;
+}
+
+async function structureVerificationDecisionWithFallbackModel(
+    verificationText: string,
+    index: number,
+    byokConfig?: BYOKConfig,
+): Promise<{
+    decision: SuggestionVerificationDecision;
+    usage: {
+        inputTokens: number;
+        outputTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+    };
+} | null> {
+    try {
+        const internalModel = getInternalModel(byokConfig);
+
+        if (!internalModel) {
+            logger.warn({
+                message:
+                    '[AGENT-VERIFY-FALLBACK] No internal model available for verifier fallback',
+                context: 'AgentLoop',
+            });
+            return null;
+        }
+
+        const result: any = await generateText({
+            model: internalModel as any,
+            output: Output.object({
+                schema: jsonSchema({
+                    type: 'object',
+                    properties: {
+                        index: { type: 'number' },
+                        keep: { type: 'boolean' },
+                        rationale: { type: 'string' },
+                        confidence: {
+                            type: 'string',
+                            enum: ['high', 'medium', 'low'],
+                        },
+                    },
+                    required: ['keep', 'rationale'],
+                }),
+            }) as any,
+            system: `You are a JSON extraction assistant.
+
+You receive the raw text output of a code-review verifier and must extract only its final verdict.
+
+Rules:
+- Recover the verifier's intended keep/drop decision exactly when possible.
+- Do not invent a new bug or a new rationale not supported by the text.
+- Preserve refined suggestion text only if the verifier clearly provided it.
+- If the text contains uncertainty, keep the rationale faithful to that uncertainty.
+- Output only the structured decision object.`,
+            prompt: `Extract the verifier verdict from this text:
+
+---
+${verificationText}
+---
+
+Return:
+- index
+- keep
+- rationale
+- confidence (if present)`,
+        });
+
+        const output: any = (result as any).object ?? (result as any).output;
+        const coerceKeep = (value: unknown): boolean | null => {
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'string') {
+                const normalized = value.trim().toLowerCase();
+                if (normalized === 'true') return true;
+                if (normalized === 'false') return false;
+            }
+            return null;
+        };
+
+        let keep = coerceKeep(output?.keep);
+        let rationale = output?.rationale || '';
+        let confidence = output?.confidence;
+
+        if (keep === null && typeof result?.text === 'string') {
+            const parsedFromText = parseVerificationDecision(
+                result.text,
+                index,
+            );
+            if (parsedFromText) {
+                keep = parsedFromText.keep;
+                rationale = parsedFromText.rationale || '';
+                confidence = parsedFromText.confidence;
+            }
+        }
+
+        if (keep === null) {
+            return null;
+        }
+
+        const fallbackUsage = result.usage ?? (result as any).totalUsage;
+
+        return {
+            decision: {
+                index: typeof output?.index === 'number' ? output.index : index,
+                keep,
+                rationale,
+                confidence,
+            },
+            usage: {
+                inputTokens: fallbackUsage?.inputTokens ?? 0,
+                outputTokens: fallbackUsage?.outputTokens ?? 0,
+                reasoningTokens: fallbackUsage?.reasoningTokens ?? 0,
+                totalTokens:
+                    fallbackUsage?.totalTokens ??
+                    (fallbackUsage?.inputTokens ?? 0) +
+                        (fallbackUsage?.outputTokens ?? 0),
+            },
+        };
+    } catch (error) {
+        logger.warn({
+            message: `[AGENT-VERIFY-FALLBACK] Failed to structure verifier output: ${error instanceof Error ? error.message : String(error)}`,
+            context: 'AgentLoop',
+        });
+        return null;
+    }
+}
+
+function extractFileWindow(
+    fileContent: string,
+    startLine?: number,
+    endLine?: number,
+    padding = 12,
+): string {
+    if (!fileContent) return '';
+    if (!startLine || startLine <= 0) {
+        return fileContent.split('\n').slice(0, 80).join('\n');
+    }
+
+    const lines = fileContent.split('\n');
+    const start = Math.max(0, startLine - padding - 1);
+    const end = Math.min(lines.length, (endLine || startLine) + padding);
+    return lines
+        .slice(start, end)
+        .map((line, index) => `${start + index + 1}: ${line}`)
+        .join('\n');
+}
+
+function truncateText(text: string, maxChars: number): string {
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    return `${text.substring(0, maxChars)}...`;
 }
 
 /**

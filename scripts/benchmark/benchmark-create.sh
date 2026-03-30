@@ -37,6 +37,7 @@ TOTAL_PRS=${2:-20}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RUNS_DIR="$SCRIPT_DIR/runs"
+BENCHMARK_OWNER="${BENCHMARK_OWNER:-ai-code-review-benchmark}"
 mkdir -p "$RUNS_DIR"
 WORKER=$(docker ps --format '{{.Names}}' | grep worker | head -1)
 
@@ -44,6 +45,7 @@ echo "============================================================"
 echo "Benchmark — Create PRs"
 echo "============================================================"
 echo "Run: $RUN_NAME | PRs: $TOTAL_PRS"
+echo "Owner: $BENCHMARK_OWNER"
 echo ""
 
 # Clean pipeline + MongoDB benchmark PRs
@@ -64,23 +66,38 @@ echo "  ✓ Pipeline cleaned (removed $DELETED PRs from MongoDB)"
 echo "▸ Restarting worker..."
 docker exec $WORKER rm -rf /usr/src/app/node_modules/.cache/webpack 2>/dev/null || true
 docker restart $WORKER > /dev/null 2>&1
-sleep 25
-COMPILED=$(docker logs $WORKER 2>&1 | grep "compiled" | tail -1)
-if echo "$COMPILED" | grep -q "successfully"; then
-  echo "  ✓ Worker compiled successfully"
+
+READY=0
+for _ in $(seq 1 18); do
+  INSPECT=$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$WORKER" 2>/dev/null || true)
+  STATE=$(echo "$INSPECT" | awk '{print $1}')
+  HEALTH=$(echo "$INSPECT" | awk '{print $2}')
+
+  if [ "$STATE" = "running" ] && { [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "no-healthcheck" ]; }; then
+    READY=1
+    break
+  fi
+
+  sleep 5
+done
+
+if [ "$READY" -eq 1 ]; then
+  echo "  ✓ Worker restarted and is healthy"
 else
-  echo "  ✗ Worker compilation failed"
+  echo "  ✗ Worker failed to become healthy after restart"
+  docker logs --since 2m $WORKER 2>&1 | tail -n 120
   exit 1
 fi
 
 # Close ALL open PRs in benchmark repos first
 echo "▸ Closing all open PRs..."
 for repo in sentry grafana-codex discourse-cursor cal.com keycloak; do
-  OPEN_PRS=$(gh api "repos/ai-code-review-benchmark/$repo/pulls?state=open&per_page=100" --jq '.[].number' 2>/dev/null || true)
+  OPEN_PRS=$(gh api "repos/$BENCHMARK_OWNER/$repo/pulls?state=open&per_page=100" --jq '.[].number' 2>/dev/null || true)
   for pr in $OPEN_PRS; do
-    gh api "repos/ai-code-review-benchmark/$repo/pulls/$pr" -X PATCH -f state=closed --silent 2>/dev/null || true
+    gh api "repos/$BENCHMARK_OWNER/$repo/pulls/$pr" -X PATCH -f state=closed --silent 2>/dev/null || true
   done
-  COUNT=$(echo "$OPEN_PRS" | grep -c '[0-9]' 2>/dev/null || echo 0)
+  COUNT=$(printf '%s' "$OPEN_PRS" | grep -c '[0-9]' 2>/dev/null || true)
+  COUNT=${COUNT:-0}
   [ "$COUNT" -gt 0 ] && echo "  $repo: closed $COUNT PRs"
 done
 echo "  ✓ All PRs closed"
@@ -89,68 +106,87 @@ echo "  ✓ All PRs closed"
 echo "▸ Creating $TOTAL_PRS PRs..."
 cd "$REPO_DIR/scripts/pr-creator"
 RESULT=$(GITHUB_TOKEN=$(gh auth token) TOTAL_PRS=$TOTAL_PRS node create-test-prs.mjs 2>&1)
-CREATED=$(echo "$RESULT" | grep "Total:" | grep -o "[0-9]*")
-echo "$RESULT" | grep "✅"
+CREATED=$(printf '%s\n' "$RESULT" | sed -n 's/.*Total: \([0-9][0-9]*\).*/\1/p' | tail -n 1)
+echo "$RESULT" | grep "✅" || true
+echo "$RESULT" | grep "❌" || true
 echo ""
-echo "  ✓ Created $CREATED PRs"
+if [ -n "$CREATED" ]; then
+  echo "  ✓ PR creator reported $CREATED successful create actions"
+else
+  echo "  ⚠️ Could not determine PR creator summary from output"
+fi
 
-# Save run manifest — use prs.json (source of truth for repo names) + benchmark golden
+if [ -n "$CREATED" ] && [ "$CREATED" -ne "$TOTAL_PRS" ]; then
+  echo "  ⚠️ PR creator summary differs from requested total ($CREATED vs $TOTAL_PRS)."
+  echo "  Continuing to manifest validation because duplicated benchmark heads can collapse into fewer active PRs."
+fi
+
+# Save run manifest — maps repo/branch to PR number
 cd "$REPO_DIR"
 echo "▸ Building run manifest..."
 node -e "
 const fs = require('fs');
-const prsConfig = JSON.parse(fs.readFileSync('scripts/pr-creator/prs.json', 'utf8'));
+const { execSync } = require('child_process');
 const benchmark = JSON.parse(fs.readFileSync('scripts/benchmark/prs-benchmark.json', 'utf8'));
-const totalPrs = $TOTAL_PRS;
-
-// prs.json has the actual repos (Wellington01/sentry-greptile)
-const sourcePrs = Array.isArray(prsConfig) ? prsConfig : prsConfig.prs;
-
-// Group by repo and distribute evenly (same logic as create-test-prs.mjs)
+const owner = '$BENCHMARK_OWNER';
+const repos = ['sentry', 'grafana-codex', 'discourse-cursor', 'cal.com', 'keycloak'];
 const byRepo = {};
-for (const pr of sourcePrs) {
-  const repo = pr.repo;
+for (const pr of benchmark.prs) {
+  const repo = pr.repo.split('/').pop();
   if (!byRepo[repo]) byRepo[repo] = [];
   byRepo[repo].push(pr);
 }
-const repos = Object.keys(byRepo);
-const perRepo = Math.ceil(totalPrs / repos.length);
-const selected = [];
-for (const repo of repos) {
-  selected.push(...byRepo[repo].slice(0, perRepo));
-}
-// Trim to exact totalPrs
-selected.splice(totalPrs);
 
+const perRepo = Math.ceil($TOTAL_PRS / repos.length);
 const prs = [];
-for (const pr of selected) {
-  // Find golden comments by matching branch name
-  const golden = benchmark.prs.find(b => b.head === pr.head);
-  prs.push({
-    head: pr.head,
-    base: pr.base || 'main',
-    title: pr.title || golden?.title || pr.head,
-    goldenCount: golden ? golden.golden_comments.length : 0,
-  });
-  const gInfo = golden ? golden.golden_comments.length + ' golden' : 'NO GOLDEN';
-  console.log('  ' + pr.head.substring(0,45).padEnd(47) + gInfo);
+
+// For each benchmark PR, find the actual GitHub PR by head branch
+for (const repo of repos) {
+  const benchPrs = (byRepo[repo] || []).slice(0, perRepo);
+  // Get all open+closed PRs from this repo
+  let ghPrs = [];
+  try {
+    ghPrs = JSON.parse(execSync(
+      'gh api \"repos/' + owner + '/' + repo + '/pulls?state=all&per_page=50&sort=created&direction=desc\" --jq \"[.[] | {number, head: .head.ref}]\"',
+      { encoding: 'utf8', timeout: 30000 }
+    ));
+  } catch {}
+
+  for (const bpr of benchPrs) {
+    const match = ghPrs.find(p => p.head === bpr.head);
+    prs.push({
+      repo,
+      head: bpr.head,
+      title: bpr.title,
+      prNumber: match ? match.number : null,
+    });
+    const status = match ? 'PR#' + match.number : 'NOT FOUND';
+    console.log('  ' + repo.padEnd(18) + bpr.head.substring(0,35).padEnd(37) + status);
+  }
 }
 
 const manifest = {
   name: '$RUN_NAME',
   created: new Date().toISOString(),
-  totalPrs: totalPrs,
+  totalPrs: $TOTAL_PRS,
   prs,
 };
 
 fs.writeFileSync('$RUNS_DIR/$RUN_NAME.json', JSON.stringify(manifest, null, 2));
+const mapped = prs.filter(p => p.prNumber).length;
+const uniqueHeads = new Set(prs.map(p => p.repo + '::' + p.head)).size;
 console.log('');
-console.log('Manifest: scripts/benchmark/runs/$RUN_NAME.json (' + prs.length + ' PRs)');
+console.log('Manifest: scripts/benchmark/runs/$RUN_NAME.json (' + mapped + '/' + prs.length + ' mapped, ' + uniqueHeads + ' unique repo/head pairs)');
+if (mapped !== prs.length) {
+  console.error('');
+  console.error('✗ Manifest validation failed: not all benchmark entries were mapped to PR numbers.');
+  process.exit(2);
+}
 "
 
 echo ""
 echo "Wait for reviews to finish, then run:"
 echo "  ./scripts/benchmark/benchmark-evaluate.sh $RUN_NAME"
 echo ""
-echo "Check progress with:"
-echo "  docker logs $WORKER --since 30s 2>&1 | grep -c AGENT"
+echo "Or wait programmatically with:"
+echo "  node scripts/benchmark/wait-for-run.js $RUN_NAME"

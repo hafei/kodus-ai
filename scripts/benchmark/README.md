@@ -22,6 +22,54 @@ Evaluates Kodus code review quality against golden comments from the [withmartia
 
 ## Scripts
 
+### benchmark-suite.sh — Repeat the same run sequentially
+
+Runs `benchmark-create.sh` + waits until all mapped PRs finish + `benchmark-evaluate.sh`, one run at a time.
+Before each repeat, it validates that the benchmark-critical containers are up (`api`, `worker`, `webhooks`, `mongodb`, `db_postgres`, `rabbitmq`).
+
+```bash
+./scripts/benchmark/benchmark-suite.sh gemini-control 10 5
+```
+
+Outputs:
+- `results/suites/<base>-<timestamp>/suite-summary.json`
+- `results/suites/<base>-<timestamp>/suite-summary.md`
+- optional per-run trace exports
+
+### benchmark-preflight.sh — Validate services before the next batch
+
+Checks that the benchmark-critical containers exist and are `running`/`healthy`.
+
+```bash
+./scripts/benchmark/benchmark-preflight.sh
+```
+
+### wait-for-run.js — Know when the run is done
+
+The run is considered finished when every mapped `prNumber` in `runs/<name>.json` reaches:
+- `code_review_execution.stage_name = 'Kody Review Finished'`
+- `code_review_execution.status = 'success'`
+
+```bash
+node scripts/benchmark/wait-for-run.js gemini-control-r01
+```
+
+### analyze-runs.js — Aggregate replicates
+
+Computes mean, standard deviation, min/max/range, and per-PR instability across multiple runs.
+
+```bash
+node scripts/benchmark/analyze-runs.js gemini-control-r01 gemini-control-r02 gemini-control-r03
+```
+
+### export-trace-metrics.js — Export process metrics
+
+Exports per-PR/per-agent execution metrics from `automation_execution` + `code_review_execution.metadata.agentTrace`.
+
+```bash
+node scripts/benchmark/export-trace-metrics.js gemini-control-r01
+```
+
 ### extract.ts — Extract review comments
 
 Pulls review comments from GitHub PRs and normalizes them into atomic issues using an LLM.

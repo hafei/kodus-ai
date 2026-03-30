@@ -8,17 +8,77 @@ const MAX_CALLGRAPH_CHARS = 6000;
 const MAX_CHANGED_FILES = 15;
 const MAX_FUNCTIONS_PER_FILE = 15;
 const MAX_CALLERS_PER_FUNCTION = 4;
+const MAX_ASSEMBLED_CONTEXT_CHARS = 9000;
+const MAX_ASSEMBLED_FUNCTIONS = 8;
+const MAX_ASSEMBLED_CALLERS = 3;
+const MAX_ASSEMBLED_CALLEES = 2;
+const CHANGED_SNIPPET_RADIUS = 10;
+const RELATED_SNIPPET_RADIUS = 8;
 
 const NOISE_NAMES = new Set([
-    'if', 'for', 'while', 'return', 'new', 'var', 'let', 'const',
-    'get', 'set', 'run', 'main', 'init', 'test', 'string', 'bool',
-    'int', 'uint', 'error', 'nil', 'null', 'void', 'self', 'this',
-    'super', 'type', 'interface', 'struct', 'enum', 'module', 'package',
-    'import', 'from', 'with', 'True', 'False', 'action', 'create',
-    'delete', 'update', 'read', 'write', 'close', 'open', 'start',
-    'stop', 'send', 'handle', 'process', 'execute', 'apply', 'call',
-    'toString', 'equals', 'hashCode', 'valueOf', 'authenticate',
-    'configure', 'validate', 'render', 'display', 'show', 'hide',
+    'if',
+    'for',
+    'while',
+    'return',
+    'new',
+    'var',
+    'let',
+    'const',
+    'get',
+    'set',
+    'run',
+    'main',
+    'init',
+    'test',
+    'string',
+    'bool',
+    'int',
+    'uint',
+    'error',
+    'nil',
+    'null',
+    'void',
+    'self',
+    'this',
+    'super',
+    'type',
+    'interface',
+    'struct',
+    'enum',
+    'module',
+    'package',
+    'import',
+    'from',
+    'with',
+    'True',
+    'False',
+    'action',
+    'create',
+    'delete',
+    'update',
+    'read',
+    'write',
+    'close',
+    'open',
+    'start',
+    'stop',
+    'send',
+    'handle',
+    'process',
+    'execute',
+    'apply',
+    'call',
+    'toString',
+    'equals',
+    'hashCode',
+    'valueOf',
+    'authenticate',
+    'configure',
+    'validate',
+    'render',
+    'display',
+    'show',
+    'hide',
 ]);
 
 const NAME_PATTERNS: RegExp[] = [
@@ -31,7 +91,6 @@ const NAME_PATTERNS: RegExp[] = [
 const DEFINITION_PATTERN =
     /^\s*(def |func |fn |function |class |public |private |protected |interface |abstract |override |export (function|class|const))/;
 
-// Map repo name variants to callgraph directory names
 const REPO_NAME_MAP: Record<string, string> = {
     'sentry': 'sentry',
     'sentry-greptile': 'sentry',
@@ -49,19 +108,19 @@ const REPO_NAME_MAP: Record<string, string> = {
 };
 
 interface CallGraphEntry {
-    name: string;        // qualified: "OrganizationAuditLogsEndpoint.get"
-    short_name: string;  // "get"
-    parent: string;      // "OrganizationAuditLogsEndpoint"
+    name: string;
+    short_name: string;
+    parent: string;
     file: string;
     line: number;
     language: string;
     callers: Array<{
         file: string;
         line: number;
-        name?: string;       // qualified caller name
+        name?: string;
         caller_file?: string;
     }>;
-    callees?: Array<{        // what this function calls (outbound calls)
+    callees?: Array<{
         name: string;
         file: string;
         line: number;
@@ -70,23 +129,29 @@ interface CallGraphEntry {
 
 type CallGraphData = Record<string, CallGraphEntry>;
 
-// Cache loaded JSON to avoid re-reading per PR
 const astCache = new Map<string, CallGraphData | null>();
 
 function resolveCallGraphDir(): string {
-    return process.env.CALLGRAPH_DIR || path.resolve(process.cwd(), 'callgraph');
+    return (
+        process.env.CALLGRAPH_DIR || path.resolve(process.cwd(), 'callgraph')
+    );
 }
 
 function resolveRepoKey(repositoryFullName: string): string | null {
-    // Extract repo name from "org/repo-name" format
     const repoName = repositoryFullName.split('/').pop() || '';
-    return REPO_NAME_MAP[repoName] || REPO_NAME_MAP[repoName.toLowerCase()] || null;
+    return (
+        REPO_NAME_MAP[repoName] || REPO_NAME_MAP[repoName.toLowerCase()] || null
+    );
 }
 
 function loadCallGraphJSON(repoKey: string): CallGraphData | null {
     if (astCache.has(repoKey)) return astCache.get(repoKey)!;
 
-    const jsonPath = path.join(resolveCallGraphDir(), repoKey, 'call-graph.json');
+    const jsonPath = path.join(
+        resolveCallGraphDir(),
+        repoKey,
+        'call-graph.json',
+    );
     try {
         if (!fs.existsSync(jsonPath)) {
             logger.log({
@@ -96,12 +161,11 @@ function loadCallGraphJSON(repoKey: string): CallGraphData | null {
             astCache.set(repoKey, null);
             return null;
         }
-        const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as CallGraphData;
+
+        const data = JSON.parse(
+            fs.readFileSync(jsonPath, 'utf8'),
+        ) as CallGraphData;
         astCache.set(repoKey, data);
-        logger.log({
-            message: `[CALL-GRAPH] Loaded AST JSON: ${Object.keys(data).length} functions from ${jsonPath}`,
-            context: 'CallGraphHelper',
-        });
         return data;
     } catch (err) {
         logger.warn({
@@ -114,14 +178,59 @@ function loadCallGraphJSON(repoKey: string): CallGraphData | null {
     }
 }
 
-/**
- * Load call graph data for use by the getCallers tool.
- * Returns the parsed JSON or null if not available.
- */
-export function loadCallGraphForTool(repositoryFullName: string): CallGraphData | null {
-    const repoKey = resolveRepoKey(repositoryFullName);
-    if (!repoKey) return null;
-    return loadCallGraphJSON(repoKey);
+function isTestLikePath(filePath: string): boolean {
+    const lower = filePath.toLowerCase();
+    return (
+        lower.includes('/test') ||
+        lower.includes('/tests') ||
+        lower.includes('/spec') ||
+        lower.includes('__tests__') ||
+        lower.endsWith('_test.go') ||
+        lower.endsWith('_test.py') ||
+        lower.endsWith('.spec.ts') ||
+        lower.endsWith('.spec.tsx') ||
+        lower.endsWith('.test.ts') ||
+        lower.endsWith('.test.tsx') ||
+        lower.endsWith('.spec.js') ||
+        lower.endsWith('.test.js')
+    );
+}
+
+function truncateText(text: string, maxChars: number): string {
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    return text.substring(0, maxChars) + '\n... (truncated)';
+}
+
+function extractContentWindow(
+    content: string,
+    centerLine: number,
+    radius: number,
+): string {
+    if (!content) return '';
+    const lines = content.split('\n');
+    const start = Math.max(1, centerLine - radius);
+    const end = Math.min(lines.length, centerLine + radius);
+    return lines
+        .slice(start - 1, end)
+        .map((line, idx) => `${start + idx}: ${line}`)
+        .join('\n');
+}
+
+async function readSnippetWindow(
+    remoteCommands: RemoteCommands,
+    filePath: string,
+    centerLine: number,
+    radius: number,
+): Promise<string> {
+    const start = Math.max(1, centerLine - radius);
+    const end = Math.max(start, centerLine + radius);
+    try {
+        const content = await remoteCommands.read(filePath, start, end);
+        return content?.trim() ? content : '';
+    } catch {
+        return '';
+    }
 }
 
 function getExtension(filePath: string): string {
@@ -129,120 +238,128 @@ function getExtension(filePath: string): string {
     return dot >= 0 ? filePath.substring(dot) : '';
 }
 
-/**
- * Extract modified line ranges from a unified diff patch.
- * Returns ranges [start, end] for the NEW side of the diff.
- */
 function getModifiedRanges(patch?: string): Array<[number, number]> {
     if (!patch) return [];
+
     const ranges: Array<[number, number]> = [];
     for (const line of patch.split('\n')) {
-        const m = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
-        if (m) {
-            const start = parseInt(m[1], 10);
-            const count = m[2] ? parseInt(m[2], 10) : 1;
-            ranges.push([start, start + count - 1]);
-        }
+        const match = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+        if (!match) continue;
+
+        const start = parseInt(match[1], 10);
+        const count = match[2] ? parseInt(match[2], 10) : 1;
+        ranges.push([start, start + count - 1]);
     }
+
     return ranges;
 }
 
-/**
- * Check if a line number falls within any of the modified ranges.
- * We expand each range by ±5 lines to capture the enclosing function.
- */
 function isInModifiedRange(
     lineNum: number,
     ranges: Array<[number, number]>,
 ): boolean {
-    const MARGIN = 5;
+    const margin = 5;
     return ranges.some(
-        ([start, end]) =>
-            lineNum >= start - MARGIN && lineNum <= end + MARGIN,
+        ([start, end]) => lineNum >= start - margin && lineNum <= end + margin,
     );
 }
 
-/**
- * Extract function names from diff patches using regex patterns.
- * Returns functions whose definition falls within modified hunk ranges.
- */
 function extractModifiedFunctionNames(
-    changedFiles: Array<{ filename: string; patch?: string; patchWithLinesStr?: string }>,
+    changedFiles: Array<{
+        filename: string;
+        patch?: string;
+        patchWithLinesStr?: string;
+    }>,
 ): Array<{ name: string; file: string; line: number }> {
     const results: Array<{ name: string; file: string; line: number }> = [];
 
     for (const file of changedFiles.slice(0, MAX_CHANGED_FILES)) {
         if (!file.filename) continue;
+
         const patch = file.patchWithLinesStr || file.patch || '';
         const modifiedRanges = getModifiedRanges(patch);
         if (modifiedRanges.length === 0) continue;
 
-        // Extract function definitions from the patch itself (lines starting with + or context)
         const lines = patch.split('\n');
         let currentLine = 0;
 
         for (const rawLine of lines) {
-            // Track line numbers from @@ headers AND extract enclosing function name
-            const hunkMatch = rawLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@(.*)/);
+            const hunkMatch = rawLine.match(
+                /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@(.*)/,
+            );
             if (hunkMatch) {
                 currentLine = parseInt(hunkMatch[1], 10) - 1;
-                // Hunk headers contain the enclosing function: @@ ... @@ def get_result(...)
                 const hunkContext = hunkMatch[3] || '';
                 if (hunkContext.trim()) {
                     let hunkName = '';
-                    for (const pat of NAME_PATTERNS) {
-                        const m = hunkContext.match(pat);
-                        if (m?.[1]) { hunkName = m[1]; break; }
+                    for (const pattern of NAME_PATTERNS) {
+                        const match = hunkContext.match(pattern);
+                        if (match?.[1]) {
+                            hunkName = match[1];
+                            break;
+                        }
                     }
-                    // Hunk header names are reliable (from git) — only filter very short names
                     if (hunkName && hunkName.length >= 2) {
-                        results.push({ name: hunkName, file: file.filename, line: currentLine + 1 });
+                        results.push({
+                            name: hunkName,
+                            file: file.filename,
+                            line: currentLine + 1,
+                        });
                     }
                 }
                 continue;
             }
 
-            // Skip removed lines
             if (rawLine.startsWith('-')) continue;
 
-            // Increment line for added and context lines
             if (rawLine.startsWith('+') || !rawLine.startsWith('\\')) {
                 currentLine++;
             }
 
-            const content = rawLine.startsWith('+') ? rawLine.substring(1) : rawLine;
+            const content = rawLine.startsWith('+')
+                ? rawLine.substring(1)
+                : rawLine;
 
-            // Check if this looks like a function definition
             if (!DEFINITION_PATTERN.test(content)) continue;
             if (!isInModifiedRange(currentLine, modifiedRanges)) continue;
 
             let name = '';
-            for (const pat of NAME_PATTERNS) {
-                const m = content.match(pat);
-                if (m?.[1]) { name = m[1]; break; }
+            for (const pattern of NAME_PATTERNS) {
+                const match = content.match(pattern);
+                if (match?.[1]) {
+                    name = match[1];
+                    break;
+                }
             }
 
-            if (!name || name.length < 5 || NOISE_NAMES.has(name) || NOISE_NAMES.has(name.toLowerCase())) continue;
+            if (
+                !name ||
+                name.length < 5 ||
+                NOISE_NAMES.has(name) ||
+                NOISE_NAMES.has(name.toLowerCase())
+            ) {
+                continue;
+            }
+
             results.push({ name, file: file.filename, line: currentLine });
         }
     }
 
-    // Deduplicate by name
     const seen = new Set<string>();
-    return results.filter((f) => {
-        if (seen.has(f.name)) return false;
-        seen.add(f.name);
+    return results.filter((func) => {
+        if (seen.has(func.name)) return false;
+        seen.add(func.name);
         return true;
     });
 }
 
-/**
- * Generate call graph from pre-computed AST data (JSON lookup).
- * Much more accurate than grep — uses tree-sitter parsed call edges.
- */
 function generateCallGraphFromAST(
     repositoryFullName: string,
-    changedFiles: Array<{ filename: string; patch?: string; patchWithLinesStr?: string }>,
+    changedFiles: Array<{
+        filename: string;
+        patch?: string;
+        patchWithLinesStr?: string;
+    }>,
 ): string | null {
     const repoKey = resolveRepoKey(repositoryFullName);
     if (!repoKey) return null;
@@ -253,25 +370,23 @@ function generateCallGraphFromAST(
     const modifiedFunctions = extractModifiedFunctionNames(changedFiles);
     if (modifiedFunctions.length === 0) return null;
 
-    // Build indexes for lookup: by short_name and by qualified name
     const byShortName = new Map<string, CallGraphEntry[]>();
     for (const entry of Object.values(data)) {
-        const sn = entry.short_name || entry.name;
-        const list = byShortName.get(sn) || [];
+        const shortName = entry.short_name || entry.name;
+        const list = byShortName.get(shortName) || [];
         list.push(entry);
-        byShortName.set(sn, list);
+        byShortName.set(shortName, list);
     }
 
     const entries: string[] = [];
 
     for (const func of modifiedFunctions) {
-        // Try exact key matches (file::QualifiedName or file::short_name)
         let entry: CallGraphEntry | undefined;
-        // Keys in the JSON now use qualified names: "file::Parent.name"
-        // Try matching by file + short_name against all entries for that short_name
         const candidates = byShortName.get(func.name) || [];
-        entry = candidates.find((c) => func.file.endsWith(c.file));
-        // Fall back to first match only for non-generic names
+        entry = candidates.find((candidate) =>
+            func.file.endsWith(candidate.file),
+        );
+
         if (!entry && candidates.length > 0 && candidates.length <= 5) {
             entry = candidates[0];
         }
@@ -280,39 +395,48 @@ function generateCallGraphFromAST(
 
         if (!entry || entry.callers.length === 0) {
             const displayName = entry ? entry.name : func.name;
-            const calleeLines = (entry?.callees || []).slice(0, 5).map((c) => {
-                const calleeShort = c.file.split('/').slice(-2).join('/');
-                return `  → calls: ${c.name} (${calleeShort}:${c.line})`;
-            });
-            const calleeSection = calleeLines.length > 0 ? '\n' + calleeLines.join('\n') : '';
-            entries.push(`${displayName} (${shortFile}:${func.line})\n  (no callers — interface impl or new function)${calleeSection}`);
+            const calleeLines = (entry?.callees || [])
+                .slice(0, 5)
+                .map((callee) => {
+                    const calleeShort = callee.file
+                        .split('/')
+                        .slice(-2)
+                        .join('/');
+                    return `  → calls: ${callee.name} (${calleeShort}:${callee.line})`;
+                });
+            const calleeSection =
+                calleeLines.length > 0 ? '\n' + calleeLines.join('\n') : '';
+            entries.push(
+                `${displayName} (${shortFile}:${func.line})\n  (no callers — interface impl or new function)${calleeSection}`,
+            );
             continue;
         }
 
-        const displayName = entry.name; // qualified: "Class.method"
-        const callerLines = entry.callers.slice(0, MAX_CALLERS_PER_FUNCTION).map((c) => {
-            const callerShort = c.file.split('/').slice(-2).join('/');
-            const callerName = c.name ? ` (${c.name})` : '';
-            return `  ← ${callerShort}:${c.line}${callerName}`;
+        const callerLines = entry.callers
+            .slice(0, MAX_CALLERS_PER_FUNCTION)
+            .map((caller) => {
+                const callerShort = caller.file.split('/').slice(-2).join('/');
+                const callerName = caller.name ? ` (${caller.name})` : '';
+                return `  ← ${callerShort}:${caller.line}${callerName}`;
+            });
+
+        const calleeLines = (entry.callees || []).slice(0, 5).map((callee) => {
+            const calleeShort = callee.file.split('/').slice(-2).join('/');
+            return `  → calls: ${callee.name} (${calleeShort}:${callee.line})`;
         });
 
-        const calleeLines = (entry.callees || []).slice(0, 5).map((c) => {
-            const calleeShort = c.file.split('/').slice(-2).join('/');
-            return `  → calls: ${c.name} (${calleeShort}:${c.line})`;
-        });
-
-        const calleeSection = calleeLines.length > 0 ? '\n' + calleeLines.join('\n') : '';
-        entries.push(`${displayName} (${shortFile}:${func.line})\n${callerLines.join('\n')}${calleeSection}`);
+        const calleeSection =
+            calleeLines.length > 0 ? '\n' + calleeLines.join('\n') : '';
+        entries.push(
+            `${entry.name} (${shortFile}:${func.line})\n${callerLines.join('\n')}${calleeSection}`,
+        );
     }
 
     if (entries.length === 0) return null;
 
-    let result = 'Changed functions and their production callers (AST):\n\n' + entries.join('\n\n');
-
-    logger.log({
-        message: `[CALL-GRAPH] AST: ${result.length} chars, ${entries.length}/${modifiedFunctions.length} functions with callers`,
-        context: 'CallGraphHelper',
-    });
+    let result =
+        'Changed functions and their production callers (AST):\n\n' +
+        entries.join('\n\n');
 
     if (result.length > MAX_CALLGRAPH_CHARS) {
         result = result.substring(0, MAX_CALLGRAPH_CHARS) + '\n... (truncated)';
@@ -321,22 +445,21 @@ function generateCallGraphFromAST(
     return result;
 }
 
-/**
- * Generate call graph using grep/rg in the sandbox (fallback).
- */
 async function generateCallGraphGrep(
     remoteCommands: RemoteCommands,
-    changedFiles: Array<{ filename: string; patch?: string; patchWithLinesStr?: string }>,
+    changedFiles: Array<{
+        filename: string;
+        patch?: string;
+        patchWithLinesStr?: string;
+    }>,
 ): Promise<string> {
     if (!remoteCommands.exec || changedFiles.length === 0) return '';
 
     const files = changedFiles
-        .filter((f) => f.filename)
+        .filter((file) => file.filename)
         .slice(0, MAX_CHANGED_FILES);
-
     if (files.length === 0) return '';
 
-    // Step 1: Extract function definitions that fall within diff hunks
     const modifiedFunctions: Array<{
         name: string;
         file: string;
@@ -360,21 +483,35 @@ async function generateCallGraphGrep(
             for (const rawLine of stdout.trim().split('\n')) {
                 const colonIdx = rawLine.indexOf(':');
                 if (colonIdx < 0) continue;
-                const lineNum = parseInt(rawLine.substring(0, colonIdx), 10);
-                const content = rawLine.substring(colonIdx + 1);
 
-                // Only include if this function is within a modified hunk
+                const lineNum = parseInt(rawLine.substring(0, colonIdx), 10);
                 if (!isInModifiedRange(lineNum, modifiedRanges)) continue;
 
+                const content = rawLine.substring(colonIdx + 1);
                 let name = '';
-                for (const pat of NAME_PATTERNS) {
-                    const m = content.match(pat);
-                    if (m?.[1]) { name = m[1]; break; }
+                for (const pattern of NAME_PATTERNS) {
+                    const match = content.match(pattern);
+                    if (match?.[1]) {
+                        name = match[1];
+                        break;
+                    }
                 }
 
-                if (!name || name.length < 5 || NOISE_NAMES.has(name) || NOISE_NAMES.has(name.toLowerCase())) continue;
+                if (
+                    !name ||
+                    name.length < 5 ||
+                    NOISE_NAMES.has(name) ||
+                    NOISE_NAMES.has(name.toLowerCase())
+                ) {
+                    continue;
+                }
 
-                modifiedFunctions.push({ name, file: file.filename, line: lineNum, ext });
+                modifiedFunctions.push({
+                    name,
+                    file: file.filename,
+                    line: lineNum,
+                    ext,
+                });
             }
         } catch {
             continue;
@@ -383,15 +520,13 @@ async function generateCallGraphGrep(
 
     if (modifiedFunctions.length === 0) return '';
 
-    // Deduplicate by name
     const seen = new Set<string>();
-    const uniqueFunctions = modifiedFunctions.filter((f) => {
-        if (seen.has(f.name)) return false;
-        seen.add(f.name);
+    const uniqueFunctions = modifiedFunctions.filter((func) => {
+        if (seen.has(func.name)) return false;
+        seen.add(func.name);
         return true;
     });
 
-    // Step 2: For each modified function, find production callers
     const entries: string[] = [];
 
     for (const func of uniqueFunctions) {
@@ -417,27 +552,28 @@ async function generateCallGraphGrep(
                     const callerLineNum = parts[1];
                     const trimmedContent = callerContent.substring(0, 80);
 
-                    callers.push(`  ← ${callerFile}:${callerLineNum}  ${trimmedContent}`);
+                    callers.push(
+                        `  ← ${callerFile}:${callerLineNum}  ${trimmedContent}`,
+                    );
                     if (callers.length >= MAX_CALLERS_PER_FUNCTION) break;
                 }
             }
         } catch {
-            // grep failed
+            // best effort
         }
 
         if (callers.length > 0) {
-            entries.push(`${func.name} (${shortFile}:${func.line})\n${callers.join('\n')}`);
+            entries.push(
+                `${func.name} (${shortFile}:${func.line})\n${callers.join('\n')}`,
+            );
         }
     }
 
     if (entries.length === 0) return '';
 
-    let result = 'Changed functions and their production callers:\n\n' + entries.join('\n\n');
-
-    logger.log({
-        message: `[CALL-GRAPH] Grep: ${result.length} chars, ${entries.length}/${uniqueFunctions.length} functions with callers`,
-        context: 'CallGraphHelper',
-    });
+    let result =
+        'Changed functions and their production callers:\n\n' +
+        entries.join('\n\n');
 
     if (result.length > MAX_CALLGRAPH_CHARS) {
         result = result.substring(0, MAX_CALLGRAPH_CHARS) + '\n... (truncated)';
@@ -446,22 +582,174 @@ async function generateCallGraphGrep(
     return result;
 }
 
-/**
- * Generate a compact call graph showing WHO CALLS each MODIFIED function.
- *
- * Strategy: try AST-based lookup first (pre-computed, precise), fall back to grep.
- * Only includes functions whose definition falls within diff hunk ranges.
- */
-export async function generateCallGraph(
+export async function generateAssembledReviewContext(
     remoteCommands: RemoteCommands,
-    changedFiles: Array<{ filename: string; patch?: string; patchWithLinesStr?: string }>,
+    changedFiles: Array<{
+        filename: string;
+        patch?: string;
+        patchWithLinesStr?: string;
+        fileContent?: string;
+    }>,
     repositoryFullName?: string,
 ): Promise<string> {
-    // Try AST-based call graph first
+    if (!repositoryFullName) return '';
+
+    const repoKey = resolveRepoKey(repositoryFullName);
+    if (!repoKey) return '';
+
+    const data = loadCallGraphJSON(repoKey);
+    if (!data) return '';
+
+    const modifiedFunctions = extractModifiedFunctionNames(changedFiles).slice(
+        0,
+        MAX_ASSEMBLED_FUNCTIONS,
+    );
+    if (modifiedFunctions.length === 0) return '';
+
+    const byShortName = new Map<string, CallGraphEntry[]>();
+    for (const entry of Object.values(data)) {
+        const shortName = entry.short_name || entry.name;
+        const list = byShortName.get(shortName) || [];
+        list.push(entry);
+        byShortName.set(shortName, list);
+    }
+
+    const sections: string[] = [];
+
+    for (const func of modifiedFunctions) {
+        const candidates = byShortName.get(func.name) || [];
+        let entry = candidates.find((candidate) =>
+            func.file.endsWith(candidate.file),
+        );
+        if (!entry && candidates.length > 0 && candidates.length <= 5) {
+            entry = candidates[0];
+        }
+
+        const changedFile = changedFiles.find(
+            (file) => file.filename === func.file,
+        );
+        const changedSnippet =
+            (await readSnippetWindow(
+                remoteCommands,
+                func.file,
+                func.line,
+                CHANGED_SNIPPET_RADIUS,
+            )) ||
+            extractContentWindow(
+                changedFile?.fileContent || '',
+                func.line,
+                CHANGED_SNIPPET_RADIUS,
+            ) ||
+            'N/A';
+
+        const callers = (entry?.callers || [])
+            .filter((caller) => !isTestLikePath(caller.file))
+            .slice(0, MAX_ASSEMBLED_CALLERS);
+        const callees = (entry?.callees || [])
+            .filter((callee) => !isTestLikePath(callee.file))
+            .slice(0, MAX_ASSEMBLED_CALLEES);
+
+        const callerBlocks = await Promise.all(
+            callers.map(async (caller) => {
+                const snippet = await readSnippetWindow(
+                    remoteCommands,
+                    caller.file,
+                    caller.line,
+                    RELATED_SNIPPET_RADIUS,
+                );
+                const shortFile = caller.file.split('/').slice(-3).join('/');
+                const callerName = caller.name ? ` ${caller.name}` : '';
+                return `- ${shortFile}:${caller.line}${callerName}\n\`\`\`\n${snippet || 'N/A'}\n\`\`\``;
+            }),
+        );
+
+        const calleeBlocks = await Promise.all(
+            callees.map(async (callee) => {
+                const snippet = await readSnippetWindow(
+                    remoteCommands,
+                    callee.file,
+                    callee.line,
+                    RELATED_SNIPPET_RADIUS,
+                );
+                const shortFile = callee.file.split('/').slice(-3).join('/');
+                return `- ${shortFile}:${callee.line} ${callee.name}\n\`\`\`\n${snippet || 'N/A'}\n\`\`\``;
+            }),
+        );
+
+        const sectionLines = [
+            `### ${entry?.name || func.name} (${func.file}:${func.line})`,
+            'Changed snippet:',
+            '```',
+            changedSnippet,
+            '```',
+        ];
+
+        if (callerBlocks.length > 0) {
+            sectionLines.push('Likely callers:', ...callerBlocks);
+        }
+
+        if (calleeBlocks.length > 0) {
+            sectionLines.push('Likely callees:', ...calleeBlocks);
+        }
+
+        sections.push(sectionLines.join('\n'));
+    }
+
+    if (sections.length === 0) return '';
+
+    const assembled = truncateText(
+        [
+            'Pre-assembled AST context for changed symbols. Start here before opening more files.',
+            'Use tools only to verify, disambiguate, or fetch missing context that is not already covered below.',
+            '',
+            ...sections,
+        ].join('\n\n'),
+        MAX_ASSEMBLED_CONTEXT_CHARS,
+    );
+
+    logger.log({
+        message: `[CALL-GRAPH] assembled-context repo=${repositoryFullName} chars=${assembled.length} symbols=${sections.length}`,
+        context: 'CallGraphHelper',
+        metadata: {
+            repositoryFullName,
+            chars: assembled.length,
+            symbols: sections.length,
+            preview: assembled.substring(0, 280),
+        },
+    });
+
+    return assembled;
+}
+
+export async function generateCallGraph(
+    remoteCommands: RemoteCommands,
+    changedFiles: Array<{
+        filename: string;
+        patch?: string;
+        patchWithLinesStr?: string;
+    }>,
+    repositoryFullName?: string,
+): Promise<string> {
     if (repositoryFullName) {
         try {
-            const astResult = generateCallGraphFromAST(repositoryFullName, changedFiles);
-            if (astResult) return astResult;
+            const astResult = generateCallGraphFromAST(
+                repositoryFullName,
+                changedFiles,
+            );
+            if (astResult) {
+                logger.log({
+                    message: `[CALL-GRAPH] source=ast repo=${repositoryFullName} chars=${astResult.length} changedFiles=${changedFiles.length}`,
+                    context: 'CallGraphHelper',
+                    metadata: {
+                        repositoryFullName,
+                        source: 'ast',
+                        changedFiles: changedFiles.length,
+                        chars: astResult.length,
+                        preview: astResult.substring(0, 280),
+                    },
+                });
+                return astResult;
+            }
         } catch (err) {
             logger.warn({
                 message: `[CALL-GRAPH] AST lookup failed, falling back to grep`,
@@ -471,6 +759,34 @@ export async function generateCallGraph(
         }
     }
 
-    // Fallback to grep-based approach
-    return generateCallGraphGrep(remoteCommands, changedFiles);
+    const grepResult = await generateCallGraphGrep(
+        remoteCommands,
+        changedFiles,
+    );
+
+    if (grepResult) {
+        logger.log({
+            message: `[CALL-GRAPH] source=grep repo=${repositoryFullName || 'unknown'} chars=${grepResult.length} changedFiles=${changedFiles.length}`,
+            context: 'CallGraphHelper',
+            metadata: {
+                repositoryFullName,
+                source: 'grep',
+                changedFiles: changedFiles.length,
+                chars: grepResult.length,
+                preview: grepResult.substring(0, 280),
+            },
+        });
+    } else {
+        logger.warn({
+            message: `[CALL-GRAPH] source=none repo=${repositoryFullName || 'unknown'} generated no call graph`,
+            context: 'CallGraphHelper',
+            metadata: {
+                repositoryFullName,
+                sourceTried: repositoryFullName ? ['ast', 'grep'] : ['grep'],
+                changedFiles: changedFiles.length,
+            },
+        });
+    }
+
+    return grepResult;
 }

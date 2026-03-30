@@ -253,7 +253,6 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 repositoryId,
             );
 
-            // Generate call graph once — shared across all agents
             let callGraph = '';
             try {
                 callGraph = await generateCallGraph(
@@ -267,6 +266,24 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     this.logger.log({
                         message: `[AGENT] Call graph generated: ${callGraph.length} chars for PR#${prNumber}`,
                         context: this.stageName,
+                        metadata: {
+                            prNumber,
+                            callGraphChars: callGraph.length,
+                            callGraphPreview: callGraph.substring(0, 320),
+                        },
+                    });
+                } else {
+                    this.logger.warn({
+                        message: `[AGENT] Call graph empty for PR#${prNumber}`,
+                        context: this.stageName,
+                        metadata: {
+                            prNumber,
+                            repositoryFullName:
+                                context.repository?.fullName ||
+                                context.pullRequest?.base?.repo?.fullName ||
+                                '',
+                            changedFiles: changedFiles.length,
+                        },
                     });
                 }
             } catch (err) {
@@ -1100,6 +1117,9 @@ ${summaries}`,
                 totalTokens: event.totalTokens,
                 toolCalls: allCalls.slice(-30), // Keep last 30 to avoid huge payloads
                 toolSummary: this.summarizeToolCalls(allCalls),
+                coverage: event.coverage,
+                verification: event.verification,
+                anomalies: event.anomalies,
             };
         }
 
