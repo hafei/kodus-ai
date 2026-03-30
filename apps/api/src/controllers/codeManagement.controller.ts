@@ -213,7 +213,7 @@ export class CodeManagementController {
     @UseGuards(PolicyGuard)
     @CheckPolicies(
         checkPermissions({
-            action: Action.Read,
+            action: Action.Update,
             resource: ResourceType.UserSettings,
         }),
     )
