@@ -24,7 +24,9 @@ import { UpdateCodeReviewParameterRepositoriesUseCase } from '../application/use
 import { UpdateOrCreateCodeReviewParameterUseCase } from '../application/use-cases/configuration/update-or-create-code-review-parameter-use-case';
 import { PreviewPrSummaryUseCase } from '../application/use-cases/summary/preview-pr-summary.use-case'; // Added
 import { CentralizedConfigSyncListener } from '../infrastructure/adapters/listeners/centralized-config-sync.listener';
+import { CentralizedConfigService } from '../infrastructure/adapters/services/centralized-config.service';
 import { CentralizedConfigInitUseCase } from '../application/use-cases/configuration/centralized-config-init.use-case';
+import { CENTRALIZED_CONFIG_SERVICE_TOKEN } from '../domain/contracts/CentralizedConfigService.contract';
 
 @Module({
     imports: [
@@ -55,6 +57,10 @@ import { CentralizedConfigInitUseCase } from '../application/use-cases/configura
         CentralizedConfigSyncListener,
         CentralizedConfigDownloadUseCase,
         CentralizedConfigInitUseCase,
+        {
+            provide: CENTRALIZED_CONFIG_SERVICE_TOKEN,
+            useClass: CentralizedConfigService,
+        },
     ],
     exports: [
         ApplyCodeReviewPresetUseCase,
@@ -71,6 +77,7 @@ import { CentralizedConfigInitUseCase } from '../application/use-cases/configura
         CentralizedConfigSyncUseCase,
         CentralizedConfigDownloadUseCase,
         CentralizedConfigInitUseCase,
+        CENTRALIZED_CONFIG_SERVICE_TOKEN,
     ],
 })
 export class CodeReviewConfigurationModule {}

@@ -1,7 +1,11 @@
 import { createLogger } from '@kodus/flow';
 import { CentralizedConfigSyncUseCase } from '@libs/code-review/application/use-cases/configuration/centralized-config-sync.use-case';
+import {
+    CENTRALIZED_CONFIG_SERVICE_TOKEN,
+    ICentralizedConfigService,
+} from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
@@ -10,6 +14,8 @@ export class CentralizedConfigSyncListener {
 
     constructor(
         private readonly centralizedConfigSyncUseCase: CentralizedConfigSyncUseCase,
+        @Inject(CENTRALIZED_CONFIG_SERVICE_TOKEN)
+        private readonly centralizedConfigService: ICentralizedConfigService,
     ) {}
 
     @OnEvent('pull-request.closed')
@@ -26,6 +32,24 @@ export class CentralizedConfigSyncListener {
             return;
         }
 
+        const validation =
+            await this.centralizedConfigService.validateCentralizedConfig({
+                organizationAndTeamData: event.organizationAndTeamData,
+                repository: event.repository,
+            });
+
+        if (!validation.success) {
+            this.logger.log({
+                message: 'Centralized config validation failed, skipping sync',
+                context: CentralizedConfigSyncListener.name,
+                metadata: {
+                    organizationAndTeamData: event.organizationAndTeamData,
+                    message: validation.message,
+                },
+            });
+            return;
+        }
+
         this.logger.log({
             message:
                 'Handling pull-request.closed event for centralized config sync',
@@ -37,6 +61,7 @@ export class CentralizedConfigSyncListener {
             },
         });
 
+        // Proceed with the sync using the use case
         await this.centralizedConfigSyncUseCase.execute({
             organizationAndTeamData: event.organizationAndTeamData,
             repository: event.repository,

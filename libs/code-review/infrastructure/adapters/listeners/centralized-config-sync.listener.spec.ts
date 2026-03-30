@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { CentralizedConfigSyncUseCase } from '@libs/code-review/application/use-cases/configuration/centralized-config-sync.use-case';
+import {
+    CENTRALIZED_CONFIG_SERVICE_TOKEN,
+    ICentralizedConfigService,
+} from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { CentralizedConfigSyncListener } from './centralized-config-sync.listener';
 
@@ -11,8 +15,19 @@ describe('CentralizedConfigSyncListener', () => {
         execute: jest.fn(),
     };
 
+    const centralizedConfigServiceMock: jest.Mocked<ICentralizedConfigService> =
+        {
+            validateCentralizedConfig: jest.fn(),
+            getCentralizedConfigRepository: jest.fn(),
+            discoverConfigFiles: jest.fn(),
+            fetchConfigFile: jest.fn(),
+            synchronizeConfigs: jest.fn(),
+            removeStaleConfigs: jest.fn(),
+        };
+
     beforeEach(async () => {
         centralizedConfigSyncUseCaseMock.execute.mockReset();
+        jest.clearAllMocks();
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -20,6 +35,10 @@ describe('CentralizedConfigSyncListener', () => {
                 {
                     provide: CentralizedConfigSyncUseCase,
                     useValue: centralizedConfigSyncUseCaseMock,
+                },
+                {
+                    provide: CENTRALIZED_CONFIG_SERVICE_TOKEN,
+                    useValue: centralizedConfigServiceMock,
                 },
             ],
         }).compile();
@@ -29,7 +48,7 @@ describe('CentralizedConfigSyncListener', () => {
         );
     });
 
-    it('should sync centralized config when pull-request.closed is emitted', async () => {
+    it('should sync centralized config when pull-request.closed is emitted and validation succeeds', async () => {
         const event = new PullRequestClosedEvent(
             {
                 organizationId: 'org-1',
@@ -43,11 +62,56 @@ describe('CentralizedConfigSyncListener', () => {
             [],
         );
 
+        centralizedConfigServiceMock.validateCentralizedConfig.mockResolvedValue(
+            {
+                success: true,
+                message: 'Valid',
+            },
+        );
+
         await listener.handlePullRequestClosedEvent(event);
 
+        expect(
+            centralizedConfigServiceMock.validateCentralizedConfig,
+        ).toHaveBeenCalledWith({
+            organizationAndTeamData: event.organizationAndTeamData,
+            repository: event.repository,
+        });
         expect(centralizedConfigSyncUseCaseMock.execute).toHaveBeenCalledWith({
             organizationAndTeamData: event.organizationAndTeamData,
             repository: event.repository,
         });
+    });
+
+    it('should skip sync when centralized config validation fails', async () => {
+        const event = new PullRequestClosedEvent(
+            {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            } as any,
+            {
+                id: 'centralized-config-repo',
+                name: 'kodus',
+            },
+            42,
+            [],
+        );
+
+        centralizedConfigServiceMock.validateCentralizedConfig.mockResolvedValue(
+            {
+                success: false,
+                message: 'Not configured',
+            },
+        );
+
+        await listener.handlePullRequestClosedEvent(event);
+
+        expect(
+            centralizedConfigServiceMock.validateCentralizedConfig,
+        ).toHaveBeenCalledWith({
+            organizationAndTeamData: event.organizationAndTeamData,
+            repository: event.repository,
+        });
+        expect(centralizedConfigSyncUseCaseMock.execute).not.toHaveBeenCalled();
     });
 });
