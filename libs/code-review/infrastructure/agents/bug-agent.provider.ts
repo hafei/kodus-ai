@@ -62,6 +62,8 @@ export class BugAgentProvider extends BaseCodeReviewAgentProvider {
     - wrong function, method, import, identifier, or parameter usage
     - interface or contract mismatches
     - dead or unreachable code that indicates a logic mistake
+    - type mismatches: wrong argument types, incompatible return types, calling a method with a signature that does not match the definition
+    - delegation bugs: code that wraps, proxies, or caches another object but calls itself instead of the underlying delegate, causing infinite recursion or stale results
   </Focus>
 
   <DoNotReport>
@@ -81,8 +83,12 @@ export class BugAgentProvider extends BaseCodeReviewAgentProvider {
     - repeated invocations and persisted state
     - parallel or concurrent execution when relevant
     - partial failures, cleanup paths, and inconsistent state
+    - method signatures: does the callsite pass the right number and types of arguments? grep the method definition and compare with the callsite.
+    - delegation targets: when code wraps, proxies, or caches another object, verify it calls the delegate — not itself. Read the actual implementation being called.
     Before reporting, determine if the bug is a regression (introduced by this PR) or pre-existing.
     Only report pre-existing bugs if this PR makes them newly reachable, removes a guard that was preventing them, or significantly increases the likelihood of triggering them.
+
+    IMPORTANT: Do not stop at the first bug you find in a file. Each changed file may contain multiple independent bugs. After finding one issue, re-read the remaining changed functions in the same file and challenge each one separately.
   </ReasoningPolicy>
 
   <WritingPolicy>

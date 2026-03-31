@@ -2,7 +2,7 @@
   "prs": [
     {
       "repo": "ai-code-review-benchmark/sentry",
-      "head": "performance-enhancement-complete",
+      "head": "performance-pagination-auditlogs",
       "base": "master",
       "title": "Enhanced Pagination Performance for High-Volume Audit Logs",
       "source_url": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/1",
@@ -874,8 +874,8 @@
     },
     {
       "repo": "ai-code-review-benchmark/keycloak",
-      "head": "feature-authz-crypto-implementation",
-      "base": "feature-authz-crypto-baseline",
+      "head": "feature-clients-authz-implementation",
+      "base": "feature-clients-authz-baseline",
       "title": "Add Client resource type and scopes to authorization schema",
       "source_url": "https://github.com/keycloak/keycloak/pull/36880",
       "golden_comments": [
