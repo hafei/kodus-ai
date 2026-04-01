@@ -18,7 +18,7 @@ import { RemoteCommands } from './collectCrossFileContexts.service';
 const execFileAsync = promisify(execFile);
 
 const CLONE_TIMEOUT_MS = 120_000;
-const CMD_TIMEOUT_MS = 30_000;
+const CMD_TIMEOUT_MS = 300_000; // 5 min — code-review-graph build needs ~90-180s for large repos (13k+ files)
 const MAX_BUFFER = 5 * 1024 * 1024; // 5 MB — cap output to prevent memory issues
 
 @Injectable()
