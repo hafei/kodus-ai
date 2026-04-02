@@ -75,6 +75,7 @@ import { AuthMode } from '@libs/platform/domain/platformIntegrations/enums/codeM
 import {
     CodeManagementConnectionStatus,
     ICodeManagementService,
+    PullRequestFileChange,
 } from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
 import { GitCloneParams } from '@libs/platform/domain/platformIntegrations/types/codeManagement/gitCloneParams.type';
 import {
@@ -694,7 +695,7 @@ export class GithubService
         description?: string;
         commitMessage?: string;
         author?: { name: string; email?: string };
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
     }): Promise<Partial<PullRequest> | null> {
         const {
             organizationAndTeamData,
@@ -820,7 +821,7 @@ export class GithubService
         repository: { id: string; name: string };
         branchName?: string;
         baseBranch?: string;
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
         message?: string;
         author?: { name: string; email?: string };
     }): Promise<boolean> {
@@ -872,6 +873,21 @@ export class GithubService
 
             const treeItems = await Promise.all(
                 files.map(async (file) => {
+                    const operation = file.operation || 'upsert';
+
+                    if (operation === 'delete') {
+                        return {
+                            path: file.path,
+                            sha: null,
+                        };
+                    }
+
+                    if (typeof file.content !== 'string') {
+                        throw new Error(
+                            `File content is required for upsert operation: ${file.path}`,
+                        );
+                    }
+
                     const { data: blob } = await octokit.rest.git.createBlob({
                         owner,
                         repo: repository.name,

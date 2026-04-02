@@ -1,7 +1,6 @@
 import { createLogger } from '@kodus/flow';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import * as yaml from 'js-yaml';
 
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { CentralizedConfigPrService } from '@libs/centralized-config/infrastructure/adapters/services/centralized-config-pr.service';
@@ -25,6 +24,7 @@ import {
     KodyRulesStatus,
     KodyRulesType,
 } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import { buildKodyRuleCentralizedMutationRequest } from './kody-rules-centralized-pr.builder';
 import { BaseResponse, McpToolDefinition } from '../types/mcp-tool.interface';
 import { wrapToolHandler } from '../utils/mcp-protocol.utils';
 
@@ -455,14 +455,18 @@ export class KodyRulesTools {
                     };
 
                     const centralizedPr =
-                        await this.createCentralizedPrForRuleMutationIfEnabled({
-                            organizationAndTeamData:
-                                params.organizationAndTeamData,
-                            repositoryId: params.kodyRule.repositoryId,
-                            ruleContent: params.kodyRule,
-                            ruleType: KodyRulesType.STANDARD,
-                            operation: 'create',
-                        });
+                        await this.centralizedConfigPrService.createMutationPullRequestIfEnabled(
+                            buildKodyRuleCentralizedMutationRequest({
+                                centralizedConfigPrService:
+                                    this.centralizedConfigPrService,
+                                organizationAndTeamData:
+                                    params.organizationAndTeamData,
+                                repositoryId: params.kodyRule.repositoryId,
+                                ruleContent: params.kodyRule,
+                                ruleType: KodyRulesType.STANDARD,
+                                operation: 'create',
+                            }),
+                        );
 
                     if (centralizedPr.mode === 'centralized-pr') {
                         return {
@@ -679,14 +683,16 @@ export class KodyRulesTools {
                         } as CreateKodyRuleDto;
 
                         const centralizedPr =
-                            await this.createCentralizedPrForRuleMutationIfEnabled(
-                                {
+                            await this.centralizedConfigPrService.createMutationPullRequestIfEnabled(
+                                buildKodyRuleCentralizedMutationRequest({
+                                    centralizedConfigPrService:
+                                        this.centralizedConfigPrService,
                                     organizationAndTeamData,
                                     repositoryId: mergedRule.repositoryId,
                                     ruleContent: mergedRule,
                                     ruleType: KodyRulesType.STANDARD,
                                     operation: 'update',
-                                },
+                                }),
                             );
 
                         if (centralizedPr.mode === 'centralized-pr') {
@@ -766,8 +772,10 @@ export class KodyRulesTools {
 
                     if (existingRule) {
                         const centralizedPr =
-                            await this.createCentralizedPrForRuleMutationIfEnabled(
-                                {
+                            await this.centralizedConfigPrService.createMutationPullRequestIfEnabled(
+                                buildKodyRuleCentralizedMutationRequest({
+                                    centralizedConfigPrService:
+                                        this.centralizedConfigPrService,
                                     organizationAndTeamData,
                                     repositoryId: existingRule.repositoryId,
                                     ruleContent: existingRule,
@@ -775,7 +783,7 @@ export class KodyRulesTools {
                                         existingRule.type ||
                                         KodyRulesType.STANDARD,
                                     operation: 'delete',
-                                },
+                                }),
                             );
 
                         if (centralizedPr.mode === 'centralized-pr') {
@@ -905,14 +913,18 @@ export class KodyRulesTools {
                     };
 
                     const centralizedPr =
-                        await this.createCentralizedPrForRuleMutationIfEnabled({
-                            organizationAndTeamData:
-                                params.organizationAndTeamData,
-                            repositoryId: params.kodyRule.repositoryId,
-                            ruleContent: params.kodyRule,
-                            ruleType: KodyRulesType.MEMORY,
-                            operation: 'create',
-                        });
+                        await this.centralizedConfigPrService.createMutationPullRequestIfEnabled(
+                            buildKodyRuleCentralizedMutationRequest({
+                                centralizedConfigPrService:
+                                    this.centralizedConfigPrService,
+                                organizationAndTeamData:
+                                    params.organizationAndTeamData,
+                                repositoryId: params.kodyRule.repositoryId,
+                                ruleContent: params.kodyRule,
+                                ruleType: KodyRulesType.MEMORY,
+                                operation: 'create',
+                            }),
+                        );
 
                     if (centralizedPr.mode === 'centralized-pr') {
                         return {
@@ -1085,110 +1097,5 @@ export class KodyRulesTools {
             this.createMemoryRule(),
             this.findMemoriesRule(),
         ];
-    }
-
-    private async createCentralizedPrForRuleMutationIfEnabled(params: {
-        organizationAndTeamData: OrganizationAndTeamData;
-        repositoryId?: string;
-        ruleContent: Partial<IKodyRule>;
-        ruleType: KodyRulesType;
-        operation: 'create' | 'update' | 'delete';
-    }): Promise<{
-        mode: 'direct' | 'centralized-pr';
-        prUrl?: string;
-        message?: string;
-    }> {
-        const centralizedRepository =
-            await this.centralizedConfigPrService.getCentralizedRepositoryIfEnabled(
-                params.organizationAndTeamData,
-            );
-
-        if (!centralizedRepository) {
-            return { mode: 'direct' };
-        }
-
-        const repositoryFolder =
-            await this.centralizedConfigPrService.resolveRepositoryFolderName(
-                params.organizationAndTeamData,
-                params.repositoryId,
-            );
-
-        const entryPath = this.getRuleEntryPath({
-            repositoryFolder,
-            ruleType: params.ruleType,
-            title: params.ruleContent.title,
-        });
-
-        const operationLabel =
-            params.operation === 'delete' ? 'remove' : params.operation;
-
-        const content =
-            params.operation === 'delete'
-                ? '# Marked for removal\n# Please remove this file during review\n'
-                : this.formatRuleToYaml(params.ruleContent);
-
-        const pr =
-            await this.centralizedConfigPrService.createPullRequestInCentralizedRepo(
-                {
-                    organizationAndTeamData: params.organizationAndTeamData,
-                    repository: centralizedRepository,
-                    files: [{ path: entryPath, content }],
-                    title: `${params.operation === 'delete' ? 'Remove' : 'Update'} ${params.ruleType === KodyRulesType.MEMORY ? 'Kody Memory' : 'Kody Rule'} from ${repositoryFolder}`,
-                    description:
-                        params.operation === 'delete'
-                            ? 'This pull request proposes removing a centralized Kody file. The file content is marked for removal in this automated proposal.'
-                            : 'This pull request proposes a centralized Kody configuration change.',
-                    commitMessage: `${operationLabel} ${params.ruleType === KodyRulesType.MEMORY ? 'memory' : 'rule'} via centralized config`,
-                    sourceBranch: `kodus-centralized-${params.ruleType}-${params.operation}-${Date.now()}`,
-                },
-            );
-
-        return {
-            mode: 'centralized-pr',
-            prUrl: pr.prUrl,
-            message:
-                'Centralized config is enabled. Change proposed through pull request instead of direct persistence.',
-        };
-    }
-
-    private formatRuleToYaml(rule: Partial<IKodyRule>): string {
-        const ruleForYaml = {
-            title: rule.title,
-            rule: rule.rule,
-            ...(rule.severity ? { severity: rule.severity } : {}),
-            ...(rule.scope ? { scope: rule.scope } : {}),
-            ...(rule.path ? { path: rule.path } : {}),
-            ...(rule.examples ? { examples: rule.examples } : {}),
-            ...(rule.inheritance ? { inheritance: rule.inheritance } : {}),
-        };
-
-        return yaml.dump(ruleForYaml);
-    }
-
-    private getRuleEntryPath(params: {
-        repositoryFolder: string;
-        ruleType: KodyRulesType;
-        title?: string;
-    }): string {
-        const rulesDirectory =
-            params.ruleType === KodyRulesType.MEMORY ? 'memories' : 'review';
-        const fileName = `${this.sanitizeRuleFileName(params.title)}.yml`;
-
-        if (params.repositoryFolder === 'global') {
-            return `.kody-rules/${rulesDirectory}/${fileName}`;
-        }
-
-        return `${params.repositoryFolder}/.kody-rules/${rulesDirectory}/${fileName}`;
-    }
-
-    private sanitizeRuleFileName(name?: string): string {
-        const normalized = (name || '')
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '')
-            .slice(0, 30);
-
-        return normalized || 'rule';
     }
 }

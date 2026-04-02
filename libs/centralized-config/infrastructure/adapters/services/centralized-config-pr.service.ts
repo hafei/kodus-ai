@@ -13,6 +13,7 @@ import {
 } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
 import { Repositories } from '@libs/platform/domain/platformIntegrations/types/codeManagement/repositories.type';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
+import { PullRequestFileChange } from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
 
 export type CentralizedMutationMode = 'direct' | 'centralized-pr';
 
@@ -20,6 +21,25 @@ export interface CentralizedPrMetadata {
     mode: CentralizedMutationMode;
     prUrl?: string;
     message?: string;
+}
+
+type Resolvable<T> = T | ((context: { repositoryFolder: string }) => T);
+
+export interface CentralizedMutationPullRequestRequest {
+    organizationAndTeamData: OrganizationAndTeamData;
+    repositoryId?: string;
+    files: Resolvable<PullRequestFileChange[]>;
+    title: Resolvable<string>;
+    description: Resolvable<string>;
+    commitMessage: Resolvable<string>;
+    sourceBranch: Resolvable<string>;
+    author?: { name: string; email?: string };
+    centralizedModeMessage?: string;
+}
+
+export interface BuildCentralizedPathParams {
+    repositoryFolder: string;
+    relativePath: string;
 }
 
 @Injectable()
@@ -67,7 +87,7 @@ export class CentralizedConfigPrService {
     async createPullRequestInCentralizedRepo(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         repository: { id: string; name: string };
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
         title: string;
         description: string;
         commitMessage: string;
@@ -124,5 +144,72 @@ export class CentralizedConfigPrService {
 
         const found = repositories?.find((repo) => repo.id === repositoryId);
         return found?.name || repositoryId;
+    }
+
+    async createMutationPullRequestIfEnabled(
+        params: CentralizedMutationPullRequestRequest,
+    ): Promise<CentralizedPrMetadata> {
+        const centralizedRepository =
+            await this.getCentralizedRepositoryIfEnabled(
+                params.organizationAndTeamData,
+            );
+
+        if (!centralizedRepository) {
+            return { mode: 'direct' };
+        }
+
+        const repositoryFolder = await this.resolveRepositoryFolderName(
+            params.organizationAndTeamData,
+            params.repositoryId,
+        );
+
+        const context = { repositoryFolder };
+
+        const pr = await this.createPullRequestInCentralizedRepo({
+            organizationAndTeamData: params.organizationAndTeamData,
+            repository: centralizedRepository,
+            files: this.resolveValue(params.files, context),
+            title: this.resolveValue(params.title, context),
+            description: this.resolveValue(params.description, context),
+            commitMessage: this.resolveValue(params.commitMessage, context),
+            sourceBranch: this.resolveValue(params.sourceBranch, context),
+            author: params.author,
+        });
+
+        return {
+            mode: 'centralized-pr',
+            prUrl: pr.prUrl,
+            message:
+                params.centralizedModeMessage ||
+                'Centralized config is enabled. Change proposed through pull request instead of direct persistence.',
+        };
+    }
+
+    buildCentralizedPath(params: BuildCentralizedPathParams): string {
+        if (params.repositoryFolder === 'global') {
+            return params.relativePath;
+        }
+
+        return `${params.repositoryFolder}/${params.relativePath}`;
+    }
+
+    sanitizeFileName(name?: string, fallback = 'item', maxLength = 30): string {
+        const normalized = (name || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, maxLength);
+
+        return normalized || fallback;
+    }
+
+    private resolveValue<T>(
+        value: Resolvable<T>,
+        context: { repositoryFolder: string },
+    ): T {
+        return typeof value === 'function'
+            ? (value as (context: { repositoryFolder: string }) => T)(context)
+            : value;
     }
 }

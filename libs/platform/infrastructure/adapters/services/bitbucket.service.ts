@@ -40,7 +40,10 @@ import {
 } from '@libs/integrations/domain/integrations/contracts/integration.service.contracts';
 import { IntegrationEntity } from '@libs/integrations/domain/integrations/entities/integration.entity';
 import { MCPManagerService } from '@libs/mcp-server/services/mcp-manager.service';
-import { CodeManagementConnectionStatus } from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
+import {
+    CodeManagementConnectionStatus,
+    PullRequestFileChange,
+} from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
 
 import { AuthMode } from '@libs/platform/domain/platformIntegrations/enums/codeManagement/authMode.enum';
 import { ICodeManagementService } from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
@@ -160,7 +163,7 @@ export class BitbucketService implements Omit<
         description?: string;
         commitMessage?: string;
         author?: { name: string; email?: string };
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
     }): Promise<Partial<PullRequest> | null> {
         const {
             organizationAndTeamData,
@@ -273,7 +276,7 @@ export class BitbucketService implements Omit<
         repository: { id: string; name: string };
         branchName?: string;
         baseBranch?: string;
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
         message?: string;
         author?: { name: string; email?: string };
     }): Promise<boolean> {
@@ -335,9 +338,22 @@ export class BitbucketService implements Omit<
             }
 
             files.forEach((file) => {
+                const operation = file.operation || 'upsert';
                 const repoPath = file.path.startsWith('/')
                     ? file.path
                     : `/${file.path}`;
+
+                if (operation === 'delete') {
+                    form.append('files', repoPath);
+                    return;
+                }
+
+                if (typeof file.content !== 'string') {
+                    throw new Error(
+                        `File content is required for upsert operation: ${file.path}`,
+                    );
+                }
+
                 form.append(repoPath, file.content);
             });
 

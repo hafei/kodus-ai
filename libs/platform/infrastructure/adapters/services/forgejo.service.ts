@@ -54,6 +54,7 @@ import { AuthMode } from '@libs/platform/domain/platformIntegrations/enums/codeM
 import {
     CodeManagementConnectionStatus,
     ICodeManagementService,
+    PullRequestFileChange,
 } from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
 import { GitCloneParams } from '@libs/platform/domain/platformIntegrations/types/codeManagement/gitCloneParams.type';
 import { Organization } from '@libs/platform/domain/platformIntegrations/types/codeManagement/organization.type';
@@ -259,7 +260,7 @@ export class ForgejoService implements Omit<
         description?: string;
         commitMessage?: string;
         author?: { name: string; email?: string };
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
     }): Promise<Partial<PullRequest> | null> {
         const {
             organizationAndTeamData,
@@ -361,7 +362,7 @@ export class ForgejoService implements Omit<
         repository: { id: string; name: string };
         branchName?: string;
         baseBranch?: string;
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
         message?: string;
         author?: { name: string; email?: string };
     }): Promise<boolean> {
@@ -414,11 +415,28 @@ export class ForgejoService implements Omit<
                 client,
                 path: repoInfo,
                 body: {
-                    files: files.map((f) => ({
-                        operation: 'create',
-                        path: f.path,
-                        content: f.content,
-                    })),
+                    files: files.map((f) => {
+                        const operation = f.operation || 'upsert';
+
+                        if (operation === 'delete') {
+                            return {
+                                operation: 'delete' as const,
+                                path: f.path,
+                            };
+                        }
+
+                        if (typeof f.content !== 'string') {
+                            throw new Error(
+                                `File content is required for upsert operation: ${f.path}`,
+                            );
+                        }
+
+                        return {
+                            operation: 'create' as const,
+                            path: f.path,
+                            content: f.content,
+                        };
+                    }),
                     message: resolvedMessage,
                     branch: resolvedBaseBranch,
                     ...(tokenAuthorIdentity

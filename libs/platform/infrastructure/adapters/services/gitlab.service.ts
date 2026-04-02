@@ -62,7 +62,10 @@ import { GitlabAuthDetail } from '@libs/integrations/domain/authIntegrations/typ
 import { IntegrationConfigEntity } from '@libs/integrations/domain/integrationConfigs/entities/integration-config.entity';
 import { IntegrationEntity } from '@libs/integrations/domain/integrations/entities/integration.entity';
 import { AuthMode } from '@libs/platform/domain/platformIntegrations/enums/codeManagement/authMode.enum';
-import { CodeManagementConnectionStatus } from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
+import {
+    CodeManagementConnectionStatus,
+    PullRequestFileChange,
+} from '@libs/platform/domain/platformIntegrations/interfaces/code-management.interface';
 import { GitCloneParams } from '@libs/platform/domain/platformIntegrations/types/codeManagement/gitCloneParams.type';
 import {
     PullRequest,
@@ -352,7 +355,7 @@ export class GitlabService implements Omit<
         description?: string;
         commitMessage?: string;
         author?: { name: string; email?: string };
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
     }): Promise<Partial<PullRequest> | null> {
         const {
             organizationAndTeamData,
@@ -440,7 +443,7 @@ export class GitlabService implements Omit<
         repository: { id: string; name: string };
         branchName?: string;
         baseBranch?: string;
-        files: { path: string; content: string }[];
+        files: PullRequestFileChange[];
         message?: string;
         author?: { name: string; email?: string };
     }): Promise<boolean> {
@@ -488,16 +491,35 @@ export class GitlabService implements Omit<
                       }
                     : undefined;
 
+            const actions = files.map((file) => {
+                const operation = file.operation || 'upsert';
+
+                if (operation === 'delete') {
+                    return {
+                        action: 'delete' as const,
+                        filePath: file.path,
+                    };
+                }
+
+                if (typeof file.content !== 'string') {
+                    throw new Error(
+                        `File content is required for upsert operation: ${file.path}`,
+                    );
+                }
+
+                return {
+                    action: 'create' as const,
+                    filePath: file.path,
+                    content: file.content,
+                    encoding: 'text' as const,
+                };
+            });
+
             const res = await gitlabAPI.Commits.create(
                 repository.id,
                 resolvedBranchName,
                 resolvedMessage,
-                files.map((f) => ({
-                    action: 'create',
-                    filePath: f.path,
-                    content: f.content,
-                    encoding: 'text',
-                })),
+                actions,
                 {
                     ...(commitOptions || {}),
                     ...(tokenAuthorIdentity || {}),
