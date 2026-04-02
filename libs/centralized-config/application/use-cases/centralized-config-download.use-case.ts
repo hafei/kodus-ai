@@ -3,8 +3,8 @@ import { createLogger } from '@kodus/flow';
 import { promises as fsPromises } from 'fs';
 import * as yaml from 'js-yaml';
 
-import { GenerateKodusConfigFileUseCase } from './generate-kodus-config-file.use-case';
-import { GetCodeReviewParameterUseCase } from './get-code-review-parameter.use-case';
+import { GenerateKodusConfigFileUseCase } from '@libs/code-review/application/use-cases/configuration/generate-kodus-config-file.use-case';
+import { GetCodeReviewParameterUseCase } from '@libs/code-review/application/use-cases/configuration/get-code-review-parameter.use-case';
 import { FindRulesInOrganizationByRuleFilterKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/find-rules-in-organization-by-filter.use-case';
 import { CreateOrUpdateKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/create-or-update.use-case';
 import {

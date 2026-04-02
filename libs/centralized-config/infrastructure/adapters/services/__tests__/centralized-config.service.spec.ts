@@ -1,7 +1,7 @@
 import { createLogger } from '@kodus/flow';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CODE_BASE_CONFIG_SERVICE_TOKEN } from '@libs/code-review/domain/contracts/CodeBaseConfigService.contract';
-import { IConfigFileMeta } from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
+import { IConfigFileMeta } from '@libs/centralized-config/domain/contracts/CentralizedConfigService.contract';
 import { ParametersKey } from '@libs/core/domain/enums';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { ConfigLevel } from '@libs/core/infrastructure/config/types/general/pullRequestMessages.type';
@@ -276,6 +276,9 @@ describe('CentralizedConfigService', () => {
                         suggestionCopyPrompt: true,
                     },
                 },
+                {
+                    skipAuthorization: true,
+                },
             );
 
             // Verify customMessages are removed from the config stored in Postgres
@@ -355,24 +358,30 @@ describe('CentralizedConfigService', () => {
             expect(result.success).toBe(true);
             expect(
                 mockCreateOrUpdatePullRequestMessagesUseCase.execute,
-            ).toHaveBeenCalledWith(expect.any(Object), {
-                organizationId: 'org-1',
-                configLevel: ConfigLevel.GLOBAL,
-                repositoryId: 'global',
-                directoryId: undefined,
-                startReviewMessage: {
-                    status: 'only_when_opened',
-                    content: 'Global start message',
+            ).toHaveBeenCalledWith(
+                expect.any(Object),
+                {
+                    organizationId: 'org-1',
+                    configLevel: ConfigLevel.GLOBAL,
+                    repositoryId: 'global',
+                    directoryId: undefined,
+                    startReviewMessage: {
+                        status: 'only_when_opened',
+                        content: 'Global start message',
+                    },
+                    endReviewMessage: {
+                        status: 'off',
+                        content: '',
+                    },
+                    globalSettings: {
+                        hideComments: true,
+                        suggestionCopyPrompt: false,
+                    },
                 },
-                endReviewMessage: {
-                    status: 'off',
-                    content: '',
+                {
+                    skipAuthorization: true,
                 },
-                globalSettings: {
-                    hideComments: true,
-                    suggestionCopyPrompt: false,
-                },
-            });
+            );
         });
 
         it('should sync config file with only custom messages', async () => {
@@ -438,24 +447,30 @@ describe('CentralizedConfigService', () => {
             expect(result.success).toBe(true);
             expect(
                 mockCreateOrUpdatePullRequestMessagesUseCase.execute,
-            ).toHaveBeenCalledWith(expect.any(Object), {
-                organizationId: 'org-1',
-                configLevel: ConfigLevel.GLOBAL,
-                repositoryId: 'global',
-                directoryId: undefined,
-                startReviewMessage: {
-                    status: 'every_push',
-                    content: 'Custom start message',
+            ).toHaveBeenCalledWith(
+                expect.any(Object),
+                {
+                    organizationId: 'org-1',
+                    configLevel: ConfigLevel.GLOBAL,
+                    repositoryId: 'global',
+                    directoryId: undefined,
+                    startReviewMessage: {
+                        status: 'every_push',
+                        content: 'Custom start message',
+                    },
+                    endReviewMessage: {
+                        status: 'every_push',
+                        content: 'Custom end message',
+                    },
+                    globalSettings: {
+                        hideComments: false,
+                        suggestionCopyPrompt: true,
+                    },
                 },
-                endReviewMessage: {
-                    status: 'every_push',
-                    content: 'Custom end message',
+                {
+                    skipAuthorization: true,
                 },
-                globalSettings: {
-                    hideComments: false,
-                    suggestionCopyPrompt: true,
-                },
-            });
+            );
 
             // Verify that customMessages are removed and only an empty config is stored in Postgres
             expect(

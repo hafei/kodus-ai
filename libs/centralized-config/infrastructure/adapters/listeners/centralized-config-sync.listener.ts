@@ -1,9 +1,9 @@
 import { createLogger } from '@kodus/flow';
-import { CentralizedConfigSyncUseCase } from '@libs/code-review/application/use-cases/configuration/centralized-config-sync.use-case';
+import { CentralizedConfigSyncUseCase } from '@libs/centralized-config/application/use-cases/centralized-config-sync.use-case';
 import {
     CENTRALIZED_CONFIG_SERVICE_TOKEN,
     ICentralizedConfigService,
-} from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
+} from '@libs/centralized-config/domain/contracts/CentralizedConfigService.contract';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';

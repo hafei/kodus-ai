@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { CentralizedConfigSyncUseCase } from '@libs/code-review/application/use-cases/configuration/centralized-config-sync.use-case';
+import { CentralizedConfigSyncUseCase } from '@libs/centralized-config/application/use-cases/centralized-config-sync.use-case';
 import {
     CENTRALIZED_CONFIG_SERVICE_TOKEN,
     ICentralizedConfigService,
-} from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
+} from '@libs/centralized-config/domain/contracts/CentralizedConfigService.contract';
 import { PullRequestClosedEvent } from '@libs/core/domain/events/pull-request-closed.event';
 import { CentralizedConfigSyncListener } from './centralized-config-sync.listener';
 
@@ -23,6 +23,10 @@ describe('CentralizedConfigSyncListener', () => {
             fetchConfigFile: jest.fn(),
             synchronizeConfigs: jest.fn(),
             removeStaleConfigs: jest.fn(),
+            discoverKodyRulesFiles: jest.fn(),
+            fetchKodyRuleFile: jest.fn(),
+            synchronizeKodyRules: jest.fn(),
+            removeStaleKodyRules: jest.fn(),
         };
 
     beforeEach(async () => {

@@ -7,7 +7,7 @@ import {
     ICentralizedConfigService,
     IConfigFileMeta,
     IKodyRuleFileMeta,
-} from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
+} from '@libs/centralized-config/domain/contracts/CentralizedConfigService.contract';
 import { ParametersKey } from '@libs/core/domain/enums';
 import { IntegrationConfigKey } from '@libs/core/domain/enums/Integration-config-key.enum';
 import { CodeReviewParameter } from '@libs/core/infrastructure/config/types/general/codeReviewConfig.type';

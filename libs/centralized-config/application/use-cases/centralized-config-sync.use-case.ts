@@ -4,7 +4,7 @@ import {
     IConfigFileMeta,
     ICentralizedConfigService,
     IKodyRuleFileMeta,
-} from '@libs/code-review/domain/contracts/CentralizedConfigService.contract';
+} from '@libs/centralized-config/domain/contracts/CentralizedConfigService.contract';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { Inject, Injectable } from '@nestjs/common';
 

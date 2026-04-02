@@ -1,8 +1,10 @@
 import { createLogger } from '@kodus/flow';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import * as yaml from 'js-yaml';
 
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
+import { CentralizedConfigPrService } from '@libs/centralized-config/infrastructure/adapters/services/centralized-config-pr.service';
 import {
     CreateKodyRuleDto,
     KodyRuleSeverity,
@@ -36,6 +38,7 @@ type KodyRuleInput = Required<
         | 'extendedContext'
         | 'reason'
         | 'severity'
+        | 'centralizedSourcePath'
         | 'sourcePath'
         | 'sourceAnchor'
         | 'contextReferenceId'
@@ -63,6 +66,7 @@ type KodyRuleMemoryInput = Required<
         | 'extendedContext'
         | 'reason'
         | 'severity'
+        | 'centralizedSourcePath'
         | 'sourcePath'
         | 'sourceAnchor'
         | 'contextReferenceId'
@@ -84,9 +88,13 @@ interface KodyRulesResponse extends BaseResponse {
 
 interface CreateKodyRuleResponse extends BaseResponse {
     data: Partial<IKodyRule>;
+    message?: string;
+    prUrl?: string;
 }
 
 interface CreateMemoryRuleResponse extends BaseResponse {
+    message?: string;
+    prUrl?: string;
     data: {
         uuid?: string;
         title?: string;
@@ -99,6 +107,11 @@ interface CreateMemoryRuleResponse extends BaseResponse {
     };
 }
 
+interface DeleteKodyRuleResponse extends BaseResponse {
+    message?: string;
+    prUrl?: string;
+}
+
 interface FindMemoriesResponse extends BaseResponse {
     data: FindMemoriesResult[];
 }
@@ -106,9 +119,11 @@ interface FindMemoriesResponse extends BaseResponse {
 @Injectable()
 export class KodyRulesTools {
     private readonly logger = createLogger(KodyRulesTools.name);
+
     constructor(
         @Inject(KODY_RULES_SERVICE_TOKEN)
         private readonly kodyRulesService: IKodyRulesService,
+        private readonly centralizedConfigPrService: CentralizedConfigPrService,
     ) {}
 
     getKodyRules(): McpToolDefinition {
@@ -366,6 +381,12 @@ export class KodyRulesTools {
                         })
                         .optional()
                         .describe('Rule inheritance settings'),
+                    teamId: z
+                        .string()
+                        .optional()
+                        .describe(
+                            'Team UUID used to evaluate centralized config and repository mappings for PR-based changes',
+                        ),
                 })
                 .describe(
                     'Complete rule definition with title, description, scope, and examples',
@@ -397,6 +418,9 @@ export class KodyRulesTools {
                     } = {
                         organizationAndTeamData: {
                             organizationId: args.organizationId,
+                            ...(args.kodyRule.teamId
+                                ? { teamId: args.kodyRule.teamId }
+                                : {}),
                         },
                         kodyRule: {
                             title: args.kodyRule.title,
@@ -429,6 +453,30 @@ export class KodyRulesTools {
                             },
                         },
                     };
+
+                    const centralizedPr =
+                        await this.createCentralizedPrForRuleMutationIfEnabled({
+                            organizationAndTeamData:
+                                params.organizationAndTeamData,
+                            repositoryId: params.kodyRule.repositoryId,
+                            ruleContent: params.kodyRule,
+                            ruleType: KodyRulesType.STANDARD,
+                            operation: 'create',
+                        });
+
+                    if (centralizedPr.mode === 'centralized-pr') {
+                        return {
+                            success: true,
+                            count: 1,
+                            data: {
+                                title: params.kodyRule.title,
+                                rule: params.kodyRule.rule,
+                                status: KodyRulesStatus.PENDING,
+                            },
+                            message: centralizedPr.message,
+                            prUrl: centralizedPr.prUrl,
+                        };
+                    }
 
                     const result: Partial<IKodyRule> =
                         await this.kodyRulesService.createOrUpdate(
@@ -535,6 +583,12 @@ export class KodyRulesTools {
                         .describe(
                             'Updated rule status: active, pending, rejected, or deleted',
                         ),
+                    teamId: z
+                        .string()
+                        .optional()
+                        .describe(
+                            'Team UUID used to evaluate centralized config and repository mappings for PR-based changes',
+                        ),
                 })
                 .describe(
                     'Updated rule definition with fields to modify (only provided fields will be updated)',
@@ -562,6 +616,9 @@ export class KodyRulesTools {
                 async (args: InputType): Promise<CreateKodyRuleResponse> => {
                     const organizationAndTeamData = {
                         organizationId: args.organizationId,
+                        ...(args.kodyRule.teamId
+                            ? { teamId: args.kodyRule.teamId }
+                            : {}),
                     };
 
                     const userInfo = {
@@ -601,6 +658,53 @@ export class KodyRulesTools {
                         }),
                     };
 
+                    const existingRule = await this.kodyRulesService.findById(
+                        args.ruleId,
+                    );
+
+                    if (existingRule) {
+                        const mergedRule = {
+                            ...existingRule,
+                            ...kodyRule,
+                            uuid: args.ruleId,
+                            repositoryId:
+                                kodyRule.repositoryId ||
+                                existingRule.repositoryId ||
+                                'global',
+                            type: KodyRulesType.STANDARD,
+                            status:
+                                kodyRule.status ||
+                                existingRule.status ||
+                                KodyRulesStatus.PENDING,
+                        } as CreateKodyRuleDto;
+
+                        const centralizedPr =
+                            await this.createCentralizedPrForRuleMutationIfEnabled(
+                                {
+                                    organizationAndTeamData,
+                                    repositoryId: mergedRule.repositoryId,
+                                    ruleContent: mergedRule,
+                                    ruleType: KodyRulesType.STANDARD,
+                                    operation: 'update',
+                                },
+                            );
+
+                        if (centralizedPr.mode === 'centralized-pr') {
+                            return {
+                                success: true,
+                                count: 1,
+                                data: {
+                                    uuid: args.ruleId,
+                                    title: mergedRule.title,
+                                    rule: mergedRule.rule,
+                                    status: mergedRule.status,
+                                },
+                                message: centralizedPr.message,
+                                prUrl: centralizedPr.prUrl,
+                            };
+                        }
+                    }
+
                     const result =
                         await this.kodyRulesService.updateRuleWithLogging(
                             organizationAndTeamData,
@@ -630,6 +734,12 @@ export class KodyRulesTools {
                 .describe(
                     'Rule UUID - unique identifier of the rule to be deleted',
                 ),
+            teamId: z
+                .string()
+                .optional()
+                .describe(
+                    'Team UUID used to evaluate centralized config and repository mappings for PR-based changes',
+                ),
         });
 
         type InputType = z.infer<typeof inputSchema>;
@@ -644,10 +754,38 @@ export class KodyRulesTools {
                 message: z.string().optional(),
             }),
             execute: wrapToolHandler(
-                async (args: InputType): Promise<BaseResponse> => {
+                async (args: InputType): Promise<DeleteKodyRuleResponse> => {
                     const organizationAndTeamData = {
                         organizationId: args.organizationId,
+                        ...(args.teamId ? { teamId: args.teamId } : {}),
                     };
+
+                    const existingRule = await this.kodyRulesService.findById(
+                        args.ruleId,
+                    );
+
+                    if (existingRule) {
+                        const centralizedPr =
+                            await this.createCentralizedPrForRuleMutationIfEnabled(
+                                {
+                                    organizationAndTeamData,
+                                    repositoryId: existingRule.repositoryId,
+                                    ruleContent: existingRule,
+                                    ruleType:
+                                        existingRule.type ||
+                                        KodyRulesType.STANDARD,
+                                    operation: 'delete',
+                                },
+                            );
+
+                        if (centralizedPr.mode === 'centralized-pr') {
+                            return {
+                                success: true,
+                                message: centralizedPr.message,
+                                prUrl: centralizedPr.prUrl,
+                            };
+                        }
+                    }
 
                     const userInfo = {
                         userId: 'kody-delete-mcp-tool',
@@ -765,6 +903,36 @@ export class KodyRulesTools {
                             path: args.kodyRule.path || null,
                         },
                     };
+
+                    const centralizedPr =
+                        await this.createCentralizedPrForRuleMutationIfEnabled({
+                            organizationAndTeamData:
+                                params.organizationAndTeamData,
+                            repositoryId: params.kodyRule.repositoryId,
+                            ruleContent: params.kodyRule,
+                            ruleType: KodyRulesType.MEMORY,
+                            operation: 'create',
+                        });
+
+                    if (centralizedPr.mode === 'centralized-pr') {
+                        return {
+                            success: true,
+                            count: 1,
+                            data: {
+                                title: params.kodyRule.title,
+                                rule: params.kodyRule.rule,
+                                status: KodyRulesStatus.PENDING,
+                                action: 'created',
+                                requiresApproval: true,
+                                message:
+                                    centralizedPr.message ||
+                                    'Memory change proposed via centralized configuration pull request.',
+                                link: centralizedPr.prUrl || '',
+                            },
+                            message: centralizedPr.message,
+                            prUrl: centralizedPr.prUrl,
+                        };
+                    }
 
                     const result: CreateOrUpdateMemoryResult | null =
                         await this.kodyRulesService.createOrUpdateMemory(
@@ -917,5 +1085,110 @@ export class KodyRulesTools {
             this.createMemoryRule(),
             this.findMemoriesRule(),
         ];
+    }
+
+    private async createCentralizedPrForRuleMutationIfEnabled(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repositoryId?: string;
+        ruleContent: Partial<IKodyRule>;
+        ruleType: KodyRulesType;
+        operation: 'create' | 'update' | 'delete';
+    }): Promise<{
+        mode: 'direct' | 'centralized-pr';
+        prUrl?: string;
+        message?: string;
+    }> {
+        const centralizedRepository =
+            await this.centralizedConfigPrService.getCentralizedRepositoryIfEnabled(
+                params.organizationAndTeamData,
+            );
+
+        if (!centralizedRepository) {
+            return { mode: 'direct' };
+        }
+
+        const repositoryFolder =
+            await this.centralizedConfigPrService.resolveRepositoryFolderName(
+                params.organizationAndTeamData,
+                params.repositoryId,
+            );
+
+        const entryPath = this.getRuleEntryPath({
+            repositoryFolder,
+            ruleType: params.ruleType,
+            title: params.ruleContent.title,
+        });
+
+        const operationLabel =
+            params.operation === 'delete' ? 'remove' : params.operation;
+
+        const content =
+            params.operation === 'delete'
+                ? '# Marked for removal\n# Please remove this file during review\n'
+                : this.formatRuleToYaml(params.ruleContent);
+
+        const pr =
+            await this.centralizedConfigPrService.createPullRequestInCentralizedRepo(
+                {
+                    organizationAndTeamData: params.organizationAndTeamData,
+                    repository: centralizedRepository,
+                    files: [{ path: entryPath, content }],
+                    title: `${params.operation === 'delete' ? 'Remove' : 'Update'} ${params.ruleType === KodyRulesType.MEMORY ? 'Kody Memory' : 'Kody Rule'} from ${repositoryFolder}`,
+                    description:
+                        params.operation === 'delete'
+                            ? 'This pull request proposes removing a centralized Kody file. The file content is marked for removal in this automated proposal.'
+                            : 'This pull request proposes a centralized Kody configuration change.',
+                    commitMessage: `${operationLabel} ${params.ruleType === KodyRulesType.MEMORY ? 'memory' : 'rule'} via centralized config`,
+                    sourceBranch: `kodus-centralized-${params.ruleType}-${params.operation}-${Date.now()}`,
+                },
+            );
+
+        return {
+            mode: 'centralized-pr',
+            prUrl: pr.prUrl,
+            message:
+                'Centralized config is enabled. Change proposed through pull request instead of direct persistence.',
+        };
+    }
+
+    private formatRuleToYaml(rule: Partial<IKodyRule>): string {
+        const ruleForYaml = {
+            title: rule.title,
+            rule: rule.rule,
+            ...(rule.severity ? { severity: rule.severity } : {}),
+            ...(rule.scope ? { scope: rule.scope } : {}),
+            ...(rule.path ? { path: rule.path } : {}),
+            ...(rule.examples ? { examples: rule.examples } : {}),
+            ...(rule.inheritance ? { inheritance: rule.inheritance } : {}),
+        };
+
+        return yaml.dump(ruleForYaml);
+    }
+
+    private getRuleEntryPath(params: {
+        repositoryFolder: string;
+        ruleType: KodyRulesType;
+        title?: string;
+    }): string {
+        const rulesDirectory =
+            params.ruleType === KodyRulesType.MEMORY ? 'memories' : 'review';
+        const fileName = `${this.sanitizeRuleFileName(params.title)}.yml`;
+
+        if (params.repositoryFolder === 'global') {
+            return `.kody-rules/${rulesDirectory}/${fileName}`;
+        }
+
+        return `${params.repositoryFolder}/.kody-rules/${rulesDirectory}/${fileName}`;
+    }
+
+    private sanitizeRuleFileName(name?: string): string {
+        const normalized = (name || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 30);
+
+        return normalized || 'rule';
     }
 }
