@@ -5,6 +5,7 @@ import * as yaml from 'js-yaml';
 
 import { GenerateKodusConfigFileUseCase } from '@libs/code-review/application/use-cases/configuration/generate-kodus-config-file.use-case';
 import { GetCodeReviewParameterUseCase } from '@libs/code-review/application/use-cases/configuration/get-code-review-parameter.use-case';
+import { CentralizedConfigPrService } from '@libs/centralized-config/infrastructure/adapters/services/centralized-config-pr.service';
 import { FindRulesInOrganizationByRuleFilterKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/find-rules-in-organization-by-filter.use-case';
 import { CreateOrUpdateKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/create-or-update.use-case';
 import {
@@ -41,6 +42,7 @@ export class CentralizedConfigDownloadUseCase {
         private readonly createOrUpdateKodyRulesUseCase: CreateOrUpdateKodyRulesUseCase,
         @Inject(PULL_REQUEST_MESSAGES_SERVICE_TOKEN)
         private readonly pullRequestMessagesService: IPullRequestMessagesService,
+        private readonly centralizedConfigPrService: CentralizedConfigPrService,
     ) {}
 
     public async execute(
@@ -790,21 +792,12 @@ export class CentralizedConfigDownloadUseCase {
         return path.replace(/^\/+/, '').replace(/\/+$/, '');
     }
 
-    private sanitizeRuleFileName(name?: string): string {
-        const normalized = (name || '')
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '')
-            .slice(0, 30);
-
-        return normalized || 'rule';
-    }
-
     private getRuleFileName(rule: IKodyRule): string {
         const preferredName =
-            this.sanitizeRuleFileName(rule.title) +
-            (rule.uuid ? `-${rule.uuid.slice(0, 8)}` : '');
+            this.centralizedConfigPrService.sanitizeFileName(
+                rule.title,
+                'rule',
+            ) + (rule.uuid ? `-${rule.uuid.slice(0, 8)}` : '');
 
         return `${preferredName}.yml`;
     }
@@ -833,11 +826,17 @@ export class CentralizedConfigDownloadUseCase {
             );
 
             if (directoryPath) {
-                return `${repoFolderName}/${directoryPath}/.kody-rules/${rulesDirectory}/${fileName}`;
+                return this.centralizedConfigPrService.buildCentralizedPath({
+                    repositoryFolder: repoFolderName,
+                    relativePath: `${directoryPath}/.kody-rules/${rulesDirectory}/${fileName}`,
+                });
             }
         }
 
-        return `${repoFolderName}/.kody-rules/${rulesDirectory}/${fileName}`;
+        return this.centralizedConfigPrService.buildCentralizedPath({
+            repositoryFolder: repoFolderName,
+            relativePath: `.kody-rules/${rulesDirectory}/${fileName}`,
+        });
     }
 
     private getUniquePath(path: string, usedPaths: Set<string>): string {

@@ -2,6 +2,7 @@ import { promises as fsPromises } from 'fs';
 import * as yaml from 'js-yaml';
 
 import { CentralizedConfigDownloadUseCase } from '../centralized-config-download.use-case';
+import { CentralizedConfigPrService } from '@libs/centralized-config/infrastructure/adapters/services/centralized-config-pr.service';
 import {
     ConfigLevel,
     PullRequestMessageStatus,
@@ -21,6 +22,36 @@ describe('CentralizedConfigDownloadUseCase', () => {
         jest.restoreAllMocks();
         jest.spyOn(fsPromises, 'readFile').mockResolvedValue('version: 1\n');
     });
+
+    const centralizedConfigPrServiceMock: Pick<
+        CentralizedConfigPrService,
+        'sanitizeFileName' | 'buildCentralizedPath'
+    > = {
+        sanitizeFileName: ((
+            name?: string,
+            fallback = 'item',
+            maxLength = 30,
+        ) => {
+            const normalized = (name || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, maxLength);
+
+            return normalized || fallback;
+        }) as CentralizedConfigPrService['sanitizeFileName'],
+        buildCentralizedPath: ((params: {
+            repositoryFolder: string;
+            relativePath: string;
+        }) => {
+            if (params.repositoryFolder === 'global') {
+                return params.relativePath;
+            }
+
+            return `${params.repositoryFolder}/${params.relativePath}`;
+        }) as CentralizedConfigPrService['buildCentralizedPath'],
+    };
 
     it('adds scoped custom messages to global/repository/directory exported configs', async () => {
         const getCodeReviewParameterUseCase = {
@@ -125,6 +156,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
             findRulesInOrganizationByRuleFilterKodyRulesUseCase as any,
             createOrUpdateKodyRulesUseCase as any,
             pullRequestMessagesService as any,
+            centralizedConfigPrServiceMock as CentralizedConfigPrService,
         );
 
         const entries = await useCase.execute(user, teamId, {
@@ -224,6 +256,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
             findRulesInOrganizationByRuleFilterKodyRulesUseCase as any,
             createOrUpdateKodyRulesUseCase as any,
             pullRequestMessagesService as any,
+            centralizedConfigPrServiceMock as CentralizedConfigPrService,
         );
 
         const entries = await useCase.execute(user, teamId, {
@@ -347,6 +380,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
             findRulesInOrganizationByRuleFilterKodyRulesUseCase as any,
             createOrUpdateKodyRulesUseCase as any,
             pullRequestMessagesService as any,
+            centralizedConfigPrServiceMock as CentralizedConfigPrService,
         );
 
         const entries = await useCase.execute(user, teamId, {
@@ -438,6 +472,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
             findRulesInOrganizationByRuleFilterKodyRulesUseCase as any,
             createOrUpdateKodyRulesUseCase as any,
             pullRequestMessagesService as any,
+            centralizedConfigPrServiceMock as CentralizedConfigPrService,
         );
 
         const entries = await useCase.execute(user, teamId, {

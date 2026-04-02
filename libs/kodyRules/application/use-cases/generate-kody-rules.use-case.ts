@@ -131,9 +131,10 @@ export class GenerateKodyRulesUseCase {
                 organizationAndTeamData,
             );
 
-            const centralizedRepository = await this.getCentralizedRepository(
-                organizationAndTeamData,
-            );
+            const centralizedRepository =
+                await this.centralizedConfigPrService.getCentralizedRepositoryIfEnabled(
+                    organizationAndTeamData,
+                );
             const shouldCreateCentralizedRulesPr =
                 !!centralizedRepository?.id && !!centralizedRepository?.name;
             const centralizedRuleFiles: PullRequestFileChange[] = [];
@@ -481,14 +482,6 @@ export class GenerateKodyRulesUseCase {
         }
 
         return integrationConfig.configValue as Repositories[];
-    }
-
-    private async getCentralizedRepository(
-        organizationAndTeamData: OrganizationAndTeamData,
-    ): Promise<{ id: string; name: string } | null> {
-        return this.centralizedConfigPrService.getCentralizedRepositoryIfEnabled(
-            organizationAndTeamData,
-        );
     }
 
     private formatRuleToYaml(rule: Partial<IKodyRule>): string {
