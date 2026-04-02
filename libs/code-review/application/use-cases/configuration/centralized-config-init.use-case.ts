@@ -109,6 +109,7 @@ export class CentralizedConfigInitUseCase {
                     skipAuthorization:
                         params.skipAuthorizationForDownload ?? false,
                     organizationId: organizationAndTeamData.organizationId,
+                    markRulesAsPendingWithSourcePath: true,
                 },
             );
 

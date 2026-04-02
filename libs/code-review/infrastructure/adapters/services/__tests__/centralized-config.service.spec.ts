@@ -99,6 +99,7 @@ describe('CentralizedConfigService', () => {
 
         mockKodyRulesService = {
             find: jest.fn(),
+            findByOrganizationId: jest.fn(),
             updateRulesStatusByFilter: jest.fn(),
         };
 
@@ -215,7 +216,7 @@ describe('CentralizedConfigService', () => {
 
             // Mock parameter operations - different mocks for different keys
             mockParametersService.findByKey.mockImplementation(
-                (key, orgAndTeamData) => {
+                (key, _orgAndTeamData) => {
                     if (key === ParametersKey.CENTRALIZED_CONFIG) {
                         return Promise.resolve({
                             configValue: {
@@ -318,7 +319,7 @@ describe('CentralizedConfigService', () => {
 
             // Mock parameter operations - different mocks for different keys
             mockParametersService.findByKey.mockImplementation(
-                (key, orgAndTeamData) => {
+                (key, _orgAndTeamData) => {
                     if (key === ParametersKey.CENTRALIZED_CONFIG) {
                         return Promise.resolve({
                             configValue: {
@@ -401,7 +402,7 @@ describe('CentralizedConfigService', () => {
 
             // Mock parameter operations - different mocks for different keys
             mockParametersService.findByKey.mockImplementation(
-                (key, orgAndTeamData) => {
+                (key, _orgAndTeamData) => {
                     if (key === ParametersKey.CENTRALIZED_CONFIG) {
                         return Promise.resolve({
                             configValue: {
@@ -481,7 +482,7 @@ describe('CentralizedConfigService', () => {
 
             // Mock parameter operations - different mocks for different keys
             mockParametersService.findByKey.mockImplementation(
-                (key, orgAndTeamData) => {
+                (key, _orgAndTeamData) => {
                     if (key === ParametersKey.CENTRALIZED_CONFIG) {
                         return Promise.resolve({
                             configValue: {
@@ -549,7 +550,7 @@ describe('CentralizedConfigService', () => {
 
             // Mock parameter operations - different mocks for different keys
             mockParametersService.findByKey.mockImplementation(
-                (key, orgAndTeamData) => {
+                (key, _orgAndTeamData) => {
                     if (key === ParametersKey.CENTRALIZED_CONFIG) {
                         return Promise.resolve({
                             configValue: {
@@ -881,6 +882,9 @@ describe('CentralizedConfigService', () => {
             mockIntegrationConfigService.findIntegrationConfigFormatted.mockResolvedValue(
                 [],
             );
+            mockKodyRulesService.findByOrganizationId.mockResolvedValue({
+                rules: [],
+            });
             mockCreateOrUpdateKodyRulesUseCase.execute.mockResolvedValue({
                 uuid: 'rule-uuid',
             });
@@ -913,6 +917,160 @@ describe('CentralizedConfigService', () => {
             );
         });
 
+        it('should update existing pending rule when sourcePath matches', async () => {
+            const ruleFiles: any[] = [
+                {
+                    centralizedDirectoryPath: '.kody-rules/review',
+                    repositoryId: undefined,
+                    directoryPath: undefined,
+                    ruleType: 'standard' as any,
+                    ruleFilePath: '.kody-rules/review/security.yml',
+                    sourcePath: '.kody-rules/review/security.yml',
+                },
+            ];
+
+            const mockRuleContent = {
+                title: 'Security Rule',
+                rule: 'Never expose secrets',
+                examples: [],
+                inheritance: { inheritable: true, exclude: [], include: [] },
+            };
+
+            mockCodeManagementService.getRepositoryTree.mockResolvedValue([]);
+            mockCodeManagementService.getDefaultBranch.mockResolvedValue(
+                'main',
+            );
+            mockCodeManagementService.getRepositoryContentFile.mockResolvedValue(
+                {
+                    data: {
+                        content: Buffer.from(
+                            yaml.dump(mockRuleContent),
+                        ).toString('base64'),
+                        encoding: 'base64',
+                    },
+                },
+            );
+
+            mockParametersService.findByKey.mockResolvedValue({
+                configValue: {
+                    repository: { name: 'central-repo', id: 'central-repo-id' },
+                },
+            });
+
+            mockIntegrationConfigService.findIntegrationConfigFormatted.mockResolvedValue(
+                [],
+            );
+            mockKodyRulesService.findByOrganizationId.mockResolvedValue({
+                rules: [
+                    {
+                        uuid: 'pending-rule-uuid',
+                        status: 'pending',
+                        sourcePath: '.kody-rules/review/security.yml',
+                    },
+                ],
+            });
+            mockCreateOrUpdateKodyRulesUseCase.execute.mockResolvedValue({
+                uuid: 'pending-rule-uuid',
+            });
+
+            const result = await service.synchronizeKodyRules({
+                organizationAndTeamData,
+                ruleFiles,
+                actor,
+            });
+
+            expect(result.success).toBe(true);
+            expect(
+                mockCreateOrUpdateKodyRulesUseCase.execute,
+            ).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    uuid: 'pending-rule-uuid',
+                    sourcePath: '.kody-rules/review/security.yml',
+                    status: 'active',
+                }),
+                'org-1',
+                expect.any(Object),
+                true,
+            );
+        });
+
+        it('should update existing active rule when sourcePath matches', async () => {
+            const ruleFiles: any[] = [
+                {
+                    centralizedDirectoryPath: '.kody-rules/review',
+                    repositoryId: undefined,
+                    directoryPath: undefined,
+                    ruleType: 'standard' as any,
+                    ruleFilePath: '.kody-rules/review/style.yml',
+                    sourcePath: '.kody-rules/review/style.yml',
+                },
+            ];
+
+            const mockRuleContent = {
+                title: 'Style Rule',
+                rule: 'Prefer const over let',
+                examples: [],
+                inheritance: { inheritable: true, exclude: [], include: [] },
+            };
+
+            mockCodeManagementService.getRepositoryTree.mockResolvedValue([]);
+            mockCodeManagementService.getDefaultBranch.mockResolvedValue(
+                'main',
+            );
+            mockCodeManagementService.getRepositoryContentFile.mockResolvedValue(
+                {
+                    data: {
+                        content: Buffer.from(
+                            yaml.dump(mockRuleContent),
+                        ).toString('base64'),
+                        encoding: 'base64',
+                    },
+                },
+            );
+
+            mockParametersService.findByKey.mockResolvedValue({
+                configValue: {
+                    repository: { name: 'central-repo', id: 'central-repo-id' },
+                },
+            });
+
+            mockIntegrationConfigService.findIntegrationConfigFormatted.mockResolvedValue(
+                [],
+            );
+            mockKodyRulesService.findByOrganizationId.mockResolvedValue({
+                rules: [
+                    {
+                        uuid: 'active-rule-uuid',
+                        status: 'active',
+                        sourcePath: '.kody-rules/review/style.yml',
+                    },
+                ],
+            });
+            mockCreateOrUpdateKodyRulesUseCase.execute.mockResolvedValue({
+                uuid: 'active-rule-uuid',
+            });
+
+            const result = await service.synchronizeKodyRules({
+                organizationAndTeamData,
+                ruleFiles,
+                actor,
+            });
+
+            expect(result.success).toBe(true);
+            expect(
+                mockCreateOrUpdateKodyRulesUseCase.execute,
+            ).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    uuid: 'active-rule-uuid',
+                    sourcePath: '.kody-rules/review/style.yml',
+                    status: 'active',
+                }),
+                'org-1',
+                expect.any(Object),
+                true,
+            );
+        });
+
         it('should handle YAML parsing errors gracefully', async () => {
             const ruleFiles: any[] = [
                 {
@@ -927,6 +1085,9 @@ describe('CentralizedConfigService', () => {
                 configValue: {
                     repository: { name: 'central-repo', id: 'central-repo-id' },
                 },
+            });
+            mockKodyRulesService.findByOrganizationId.mockResolvedValue({
+                rules: [],
             });
 
             mockCodeManagementService.getRepositoryContentFile.mockResolvedValue(

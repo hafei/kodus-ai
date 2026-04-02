@@ -1432,7 +1432,7 @@ export class CentralizedConfigService implements ICentralizedConfigService {
                 await this.codeManagementService.getRepositoryContentFile({
                     organizationAndTeamData,
                     repository,
-                    file: filePath,
+                    file: { filename: filePath },
                     pullRequest: {
                         head: { ref: defaultBranch },
                         base: { ref: defaultBranch },
@@ -1518,6 +1518,73 @@ export class CentralizedConfigService implements ICentralizedConfigService {
             });
 
             const directoryIdCache = new Map<string, string>();
+
+            const existingRulesEntity =
+                await this.kodyRulesService.findByOrganizationId(
+                    organizationAndTeamData.organizationId,
+                );
+
+            const getSourcePathLookupKey = (sourcePath?: string) =>
+                (sourcePath || '').split('#')[0];
+
+            const existingRuleBySourcePath = new Map<
+                string,
+                { uuid: string; status?: KodyRulesStatus; updatedAt?: Date }
+            >();
+
+            for (const existingRule of existingRulesEntity?.rules || []) {
+                const sourcePathKey = getSourcePathLookupKey(
+                    existingRule.sourcePath,
+                );
+
+                if (!sourcePathKey || !existingRule.uuid) {
+                    continue;
+                }
+
+                const currentMapped =
+                    existingRuleBySourcePath.get(sourcePathKey);
+
+                if (!currentMapped) {
+                    existingRuleBySourcePath.set(sourcePathKey, {
+                        uuid: existingRule.uuid,
+                        status: existingRule.status,
+                        updatedAt: existingRule.updatedAt,
+                    });
+                    continue;
+                }
+
+                const currentIsDeleted =
+                    currentMapped.status === KodyRulesStatus.DELETED;
+                const nextIsDeleted =
+                    existingRule.status === KodyRulesStatus.DELETED;
+
+                // Prefer non-deleted rules for the same source path to avoid creating duplicates.
+                if (currentIsDeleted && !nextIsDeleted) {
+                    existingRuleBySourcePath.set(sourcePathKey, {
+                        uuid: existingRule.uuid,
+                        status: existingRule.status,
+                        updatedAt: existingRule.updatedAt,
+                    });
+                    continue;
+                }
+
+                const currentUpdatedAt =
+                    currentMapped.updatedAt instanceof Date
+                        ? currentMapped.updatedAt.getTime()
+                        : new Date(currentMapped.updatedAt || 0).getTime();
+                const nextUpdatedAt =
+                    existingRule.updatedAt instanceof Date
+                        ? existingRule.updatedAt.getTime()
+                        : new Date(existingRule.updatedAt || 0).getTime();
+
+                if (nextUpdatedAt > currentUpdatedAt) {
+                    existingRuleBySourcePath.set(sourcePathKey, {
+                        uuid: existingRule.uuid,
+                        status: existingRule.status,
+                        updatedAt: existingRule.updatedAt,
+                    });
+                }
+            }
 
             for (const ruleFileMeta of ruleFiles) {
                 try {
@@ -1608,6 +1675,9 @@ export class CentralizedConfigService implements ICentralizedConfigService {
 
                     const ruleDto = {
                         ...compliantRule,
+                        uuid: existingRuleBySourcePath.get(
+                            getSourcePathLookupKey(ruleFileMeta.sourcePath),
+                        )?.uuid,
                         type: ruleFileMeta.ruleType,
                         status: KodyRulesStatus.ACTIVE,
                         repositoryId: ruleFileMeta.repositoryId || 'global',
@@ -1770,6 +1840,10 @@ export class CentralizedConfigService implements ICentralizedConfigService {
             const existingRules = existingEntity?.toJson?.()?.rules || [];
 
             for (const rule of existingRules) {
+                if (rule.status !== KodyRulesStatus.ACTIVE) {
+                    continue; // Skip non-active rules
+                }
+
                 const sourcePath = rule.sourcePath;
 
                 if (
@@ -1777,12 +1851,9 @@ export class CentralizedConfigService implements ICentralizedConfigService {
                     !(
                         sourcePath.startsWith('.kody-rules/') ||
                         sourcePath.includes('/.kody-rules/')
-                    )
+                    ) ||
+                    !currentSourcePaths.has(sourcePath)
                 ) {
-                    continue;
-                }
-
-                if (!currentSourcePaths.has(sourcePath)) {
                     try {
                         await this.deleteRuleInOrganizationByIdKodyRulesUseCase.execute(
                             rule.uuid,

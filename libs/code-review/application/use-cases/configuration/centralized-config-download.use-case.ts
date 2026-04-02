@@ -1,12 +1,32 @@
-import { Injectable } from '@nestjs/common';
-
+import { Inject, Injectable } from '@nestjs/common';
 import { createLogger } from '@kodus/flow';
+import { promises as fsPromises } from 'fs';
+import * as yaml from 'js-yaml';
+
 import { GenerateKodusConfigFileUseCase } from './generate-kodus-config-file.use-case';
 import { GetCodeReviewParameterUseCase } from './get-code-review-parameter.use-case';
+import { FindRulesInOrganizationByRuleFilterKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/find-rules-in-organization-by-filter.use-case';
+import { CreateOrUpdateKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/create-or-update.use-case';
+import {
+    IPullRequestMessagesService,
+    PULL_REQUEST_MESSAGES_SERVICE_TOKEN,
+} from '@libs/code-review/domain/pullRequestMessages/contracts/pullRequestMessages.service.contract';
+import { deepDifference, deepMerge } from '@libs/common/utils/deep';
+import { getDefaultKodusConfigFile } from '@libs/common/utils/validateCodeReviewConfigFile';
+
 import { IUser } from '@libs/identity/domain/user/interfaces/user.interface';
-import * as yaml from 'js-yaml';
-import * as fs from 'fs';
+import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 import { KodusConfigFile } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import { ConfigLevel } from '@libs/core/infrastructure/config/types/general/pullRequestMessages.type';
+import {
+    IKodyRule,
+    KodyRulesType,
+    KodyRulesStatus,
+} from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import * as path from 'path';
+
+type FileEntry = { path: string; content: string };
+type CustomMessagesConfig = NonNullable<KodusConfigFile['customMessages']>;
 
 @Injectable()
 export class CentralizedConfigDownloadUseCase {
@@ -17,6 +37,10 @@ export class CentralizedConfigDownloadUseCase {
     constructor(
         private readonly getCodeReviewParameterUseCase: GetCodeReviewParameterUseCase,
         private readonly generateKodusConfigFileUseCase: GenerateKodusConfigFileUseCase,
+        private readonly findRulesInOrganizationByRuleFilterKodyRulesUseCase: FindRulesInOrganizationByRuleFilterKodyRulesUseCase,
+        private readonly createOrUpdateKodyRulesUseCase: CreateOrUpdateKodyRulesUseCase,
+        @Inject(PULL_REQUEST_MESSAGES_SERVICE_TOKEN)
+        private readonly pullRequestMessagesService: IPullRequestMessagesService,
     ) {}
 
     public async execute(
@@ -25,142 +49,817 @@ export class CentralizedConfigDownloadUseCase {
         options: {
             skipAuthorization?: boolean;
             organizationId?: string;
+            markRulesAsPendingWithSourcePath?: boolean;
         } = {},
-    ): Promise<Array<{ path: string; content: string }>> {
-        const entries: Array<{ path: string; content: string }> = [];
-
-        // Default
+    ): Promise<FileEntry[]> {
         try {
-            const kodusDefaultConfigYMLfile = yaml.load(
-                fs.readFileSync('default-kodus-config.yml', 'utf8'),
-            ) as KodusConfigFile;
-            let yamlString = yaml.dump(kodusDefaultConfigYMLfile);
-            yamlString = `# This file is a copy of the default Kodus configuration. It is provided for reference and can be used as a starting point for your own configuration.
-# Any changes to this file will not affect the actual configuration used by Kodus.
-# Your own configuration should be defined in the global or repository-specific config files.
-# They behave as a diff to this default config, or higher level config that exists, so you only need to include the properties you want to override.
-\n\n${yamlString}`;
+            const codeReview = await this.getCodeReviewParameterUseCase.execute(
+                user,
+                teamId,
+                options,
+            );
 
-            if (yamlString) {
-                entries.push({
-                    path: 'default-kodus-config.yml',
-                    content: yamlString,
-                });
-            }
+            const [configEntries, rulesEntries] = await Promise.all([
+                this.getConfigEntries(user, teamId, codeReview, options),
+                this.getRulesEntries(user, teamId, codeReview, options),
+            ]);
+
+            return [...configEntries, ...rulesEntries];
         } catch (error) {
             this.logger.error({
-                message: 'Failed to load default Kodus config file',
+                message: 'Failed to execute centralized config download',
                 context: CentralizedConfigDownloadUseCase.name,
-                metadata: {
-                    teamId,
-                    errorMessage: error.message,
-                },
+                metadata: { teamId, errorMessage: error.message },
             });
+            throw error;
         }
+    }
 
-        // Global
-        try {
-            const { yamlString } =
-                await this.generateKodusConfigFileUseCase.execute(
-                    teamId,
-                    'global',
-                    undefined,
-                    { skipAuthorization: options.skipAuthorization },
-                );
+    private async getConfigEntries(
+        user: Partial<IUser>,
+        teamId: string,
+        codeReview: Awaited<
+            ReturnType<GetCodeReviewParameterUseCase['execute']>
+        >,
+        options: { skipAuthorization?: boolean; organizationId?: string } = {},
+    ): Promise<FileEntry[]> {
+        const entries: FileEntry[] = [];
+        const organizationId =
+            user?.organization?.uuid || options.organizationId;
 
-            if (yamlString) {
-                entries.push({ path: 'kodus-config.yml', content: yamlString });
-            }
-        } catch (error) {
-            this.logger.error({
-                message: 'Failed to generate global Kodus config file',
-                context: CentralizedConfigDownloadUseCase.name,
-                metadata: {
-                    teamId,
-                    errorMessage: error.message,
-                },
-            });
-        }
-
-        // Fetch formatted config to enumerate repos/directories
-        const codeReview = await this.getCodeReviewParameterUseCase.execute(
-            user,
+        const customMessagesByScope = await this.getCustomMessagesDiffByScope(
+            organizationId,
             teamId,
-            options,
+            codeReview,
         );
 
-        for (const repo of codeReview.configValue.repositories ?? []) {
-            if (!repo.isSelected) {
-                continue;
-            }
+        const [defaultConfig, globalConfig] = await Promise.all([
+            this.getDefaultConfigEntry(teamId),
+            this.getGlobalConfigEntry(
+                teamId,
+                options,
+                customMessagesByScope.get(
+                    this.getCustomMessagesScopeKeyGlobal(),
+                ),
+            ),
+        ]);
 
-            const repoFolderName = repo.name || repo.id;
+        if (defaultConfig) entries.push(defaultConfig);
+        if (globalConfig) entries.push(globalConfig);
 
-            try {
-                const { yamlString } =
-                    await this.generateKodusConfigFileUseCase.execute(
-                        teamId,
-                        repo.id,
-                        undefined,
-                        { skipAuthorization: options.skipAuthorization },
-                    );
+        const repositories = codeReview?.configValue?.repositories ?? [];
 
-                if (yamlString) {
-                    entries.push({
-                        path: `${repoFolderName}/kodus-config.yml`,
-                        content: yamlString,
-                    });
-                }
-            } catch (error) {
-                this.logger.error({
-                    message: 'Failed to generate repo Kodus config file',
-                    context: CentralizedConfigDownloadUseCase.name,
-                    metadata: {
-                        teamId,
-                        repoId: repo.id,
-                        errorMessage: error.message,
-                    },
-                });
-            }
+        const repoPromises = repositories
+            .filter((repo) => repo.isSelected)
+            .map(async (repo) => {
+                const repoEntries: FileEntry[] = [];
+                const repoFolderName = repo.name || repo.id;
 
-            for (const dir of repo.directories ?? []) {
-                if (!dir.isSelected) {
-                    continue;
-                }
-
+                // Repo Level Config
                 try {
-                    const { yamlString } =
+                    const res =
                         await this.generateKodusConfigFileUseCase.execute(
                             teamId,
                             repo.id,
-                            dir.id,
+                            undefined,
                             { skipAuthorization: options.skipAuthorization },
                         );
 
-                    if (yamlString) {
-                        const dirPath = (dir.path || '').replace(/^\//, '');
-                        const entryName = dirPath
-                            ? `${repoFolderName}/${dirPath}/kodus-config.yml`
-                            : `${repoFolderName}/kodus-config.yml`;
+                    const repoEntry = this.createConfigEntryWithCustomMessages(
+                        `${repoFolderName}/kodus-config.yml`,
+                        res.yamlString,
+                        customMessagesByScope.get(
+                            this.getCustomMessagesScopeKeyRepository(
+                                String(repo.id),
+                            ),
+                        ),
+                    );
 
-                        entries.push({ path: entryName, content: yamlString });
+                    if (repoEntry) {
+                        repoEntries.push(repoEntry);
                     }
                 } catch (error) {
                     this.logger.error({
-                        message:
-                            'Failed to generate directory Kodus config file',
+                        message: 'Failed to generate repo Kodus config file',
                         context: CentralizedConfigDownloadUseCase.name,
                         metadata: {
                             teamId,
                             repoId: repo.id,
-                            dirId: dir.id,
                             errorMessage: error.message,
                         },
                     });
                 }
+
+                // Directory Level Configs (Concurrent)
+                const directories = repo.directories ?? [];
+                const dirPromises = directories
+                    .filter((dir) => dir.isSelected)
+                    .map(async (dir) => {
+                        try {
+                            const res =
+                                await this.generateKodusConfigFileUseCase.execute(
+                                    teamId,
+                                    repo.id,
+                                    dir.id,
+                                    {
+                                        skipAuthorization:
+                                            options.skipAuthorization,
+                                    },
+                                );
+
+                            const dirPath = this.normalizeDirectoryPath(
+                                dir.path,
+                            );
+                            const entryName = dirPath
+                                ? `${repoFolderName}/${dirPath}/kodus-config.yml`
+                                : `${repoFolderName}/kodus-config.yml`;
+
+                            const customMessages = customMessagesByScope.get(
+                                this.getCustomMessagesScopeKeyDirectory(
+                                    String(repo.id),
+                                    String(dir.id),
+                                ),
+                            );
+
+                            return this.createConfigEntryWithCustomMessages(
+                                entryName,
+                                res.yamlString,
+                                customMessages,
+                            );
+                        } catch (error) {
+                            this.logger.error({
+                                message:
+                                    'Failed to generate directory Kodus config file',
+                                context: CentralizedConfigDownloadUseCase.name,
+                                metadata: {
+                                    teamId,
+                                    repoId: repo.id,
+                                    dirId: dir.id,
+                                    errorMessage: error.message,
+                                },
+                            });
+                        }
+                        return null;
+                    });
+
+                const dirResults = await Promise.all(dirPromises);
+                repoEntries.push(
+                    ...(dirResults.filter(Boolean) as FileEntry[]),
+                );
+
+                return repoEntries;
+            });
+
+        const nestedRepoEntries = await Promise.all(repoPromises);
+        entries.push(...nestedRepoEntries.flat());
+
+        return entries;
+    }
+
+    private async getDefaultConfigEntry(
+        teamId: string,
+    ): Promise<FileEntry | null> {
+        try {
+            const filePath = path.join(
+                process.cwd(),
+                'default-kodus-config.yml',
+            );
+            const fileContent = await fsPromises.readFile(filePath, 'utf8');
+            const header = `# This file is a copy of the default Kodus configuration. It is provided for reference and can be used as a starting point for your own configuration.\n# Any changes to this file will not affect the actual configuration used by Kodus.\n# Your own configuration should be defined in the global or repository-specific config files.\n# They behave as a diff to this default config, or higher level config that exists, so you only need to include the properties you want to override.\n\n`;
+
+            return {
+                path: 'default-kodus-config.yml',
+                content: header + fileContent,
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Failed to load default Kodus config file',
+                context: CentralizedConfigDownloadUseCase.name,
+                metadata: { teamId, errorMessage: error.message },
+            });
+            return null;
+        }
+    }
+
+    private async getGlobalConfigEntry(
+        teamId: string,
+        options: { skipAuthorization?: boolean },
+        customMessages?: NonNullable<KodusConfigFile['customMessages']>,
+    ): Promise<FileEntry | null> {
+        try {
+            const res = await this.generateKodusConfigFileUseCase.execute(
+                teamId,
+                'global',
+                undefined,
+                { skipAuthorization: options.skipAuthorization },
+            );
+
+            return this.createConfigEntryWithCustomMessages(
+                'kodus-config.yml',
+                res.yamlString,
+                customMessages,
+            );
+        } catch (error) {
+            this.logger.error({
+                message: 'Failed to generate global Kodus config file',
+                context: CentralizedConfigDownloadUseCase.name,
+                metadata: { teamId, errorMessage: error.message },
+            });
+        }
+        return null;
+    }
+
+    private async getRulesEntries(
+        user: Partial<IUser>,
+        teamId: string,
+        codeReview: Awaited<
+            ReturnType<GetCodeReviewParameterUseCase['execute']>
+        >,
+        options: {
+            skipAuthorization?: boolean;
+            organizationId?: string;
+            markRulesAsPendingWithSourcePath?: boolean;
+        } = {},
+    ): Promise<FileEntry[]> {
+        const entries: FileEntry[] = [];
+        const organizationId =
+            user?.organization?.uuid || options.organizationId;
+
+        if (!organizationId) {
+            this.logger.warn({
+                message: 'Organization ID not found for user',
+                context: CentralizedConfigDownloadUseCase.name,
+                metadata: { teamId, userId: user?.uuid },
+            });
+            return entries;
+        }
+
+        const repositoryMapping = new Map<
+            string,
+            { repoFolderName: string; directoriesById: Map<string, string> }
+        >();
+
+        for (const repo of codeReview?.configValue?.repositories ?? []) {
+            const directoriesById = new Map<string, string>();
+
+            for (const dir of repo.directories ?? []) {
+                directoriesById.set(
+                    String(dir.id),
+                    this.normalizeDirectoryPath(dir.path),
+                );
             }
+
+            repositoryMapping.set(String(repo.id), {
+                repoFolderName: repo.name || repo.id,
+                directoriesById,
+            });
+        }
+
+        const rules =
+            (await this.findRulesInOrganizationByRuleFilterKodyRulesUseCase.execute(
+                organizationId,
+                options.markRulesAsPendingWithSourcePath
+                    ? {}
+                    : { status: KodyRulesStatus.ACTIVE },
+            )) as IKodyRule[];
+
+        if (rules.length === 0) {
+            this.logger.log({
+                message: 'No Kody rules found for organization',
+                context: CentralizedConfigDownloadUseCase.name,
+                metadata: { teamId, organizationId },
+            });
+            return entries;
+        }
+
+        const entryPaths = new Set<string>();
+
+        for (const rule of rules) {
+            const baseEntryPath = this.getRuleEntryPath(
+                rule,
+                repositoryMapping,
+            );
+            const entryPath = this.getUniquePath(baseEntryPath, entryPaths);
+
+            if (!entryPath) {
+                this.logger.warn({
+                    message:
+                        'Skipping Kody rule export because entry path could not be resolved',
+                    context: CentralizedConfigDownloadUseCase.name,
+                    metadata: {
+                        teamId,
+                        ruleId: rule.uuid,
+                        sourcePath: rule.sourcePath,
+                        repositoryId: rule.repositoryId,
+                        directoryId: rule.directoryId,
+                    },
+                });
+                continue;
+            }
+
+            if (options.markRulesAsPendingWithSourcePath) {
+                await this.ensureRulePendingWithSourcePath(
+                    rule,
+                    entryPath,
+                    organizationId,
+                    user,
+                    options.skipAuthorization,
+                );
+            }
+
+            entries.push({
+                path: entryPath,
+                content: this.formatRuleToYaml(rule),
+            });
         }
 
         return entries;
+    }
+
+    private formatRuleToYaml(rule: IKodyRule): string {
+        const ruleForYaml = {
+            title: rule.title,
+            rule: rule.rule,
+            severity: rule.severity,
+            scope: rule.scope,
+            path: rule.path,
+            examples: rule.examples,
+            inheritance: rule.inheritance,
+        };
+
+        return yaml.dump(ruleForYaml);
+    }
+
+    private async ensureRulePendingWithSourcePath(
+        rule: IKodyRule,
+        sourcePath: string,
+        organizationId: string,
+        user: Partial<IUser>,
+        skipAuthorization?: boolean,
+    ): Promise<void> {
+        const shouldUpdateRule =
+            rule.status !== KodyRulesStatus.PENDING ||
+            rule.sourcePath !== sourcePath;
+
+        if (!shouldUpdateRule || !rule.uuid) {
+            return;
+        }
+
+        await this.createOrUpdateKodyRulesUseCase.execute(
+            {
+                ...rule,
+                uuid: rule.uuid,
+                status: KodyRulesStatus.PENDING,
+                sourcePath,
+            } as any,
+            organizationId,
+            {
+                userId: user.uuid || 'kody-system',
+                userEmail: user.email || 'kody@kodus.io',
+            },
+            skipAuthorization,
+        );
+    }
+
+    private async getCustomMessagesDiffByScope(
+        organizationId: string | undefined,
+        teamId: string,
+        codeReview: Awaited<
+            ReturnType<GetCodeReviewParameterUseCase['execute']>
+        >,
+    ): Promise<Map<string, CustomMessagesConfig>> {
+        const messagesByScope = new Map<string, CustomMessagesConfig>();
+
+        if (!organizationId) {
+            return messagesByScope;
+        }
+
+        try {
+            const rawMessagesByScope = new Map<string, CustomMessagesConfig>();
+            const messages = await this.pullRequestMessagesService.find({
+                organizationId,
+            });
+
+            for (const messageEntity of messages ?? []) {
+                const message = messageEntity?.toJson?.() as
+                    | IPullRequestMessages
+                    | undefined;
+
+                if (!message) {
+                    continue;
+                }
+
+                const scopeKey = this.getCustomMessagesScopeKey(
+                    message.configLevel,
+                    message.repositoryId,
+                    message.directoryId,
+                );
+
+                if (!scopeKey) {
+                    continue;
+                }
+
+                const customMessages =
+                    this.extractCustomMessagesFromMessage(message);
+
+                if (!customMessages) {
+                    continue;
+                }
+
+                rawMessagesByScope.set(scopeKey, customMessages);
+            }
+
+            const defaultCustomMessages = this.normalizeCustomMessages(
+                getDefaultKodusConfigFile().customMessages,
+            );
+
+            const globalScopeKey = this.getCustomMessagesScopeKeyGlobal();
+            const globalResolved = this.mergeCustomMessages(
+                defaultCustomMessages,
+                rawMessagesByScope.get(globalScopeKey),
+            );
+            const globalDiff = this.diffCustomMessages(
+                defaultCustomMessages,
+                globalResolved,
+            );
+
+            if (globalDiff) {
+                messagesByScope.set(globalScopeKey, globalDiff);
+            }
+
+            for (const repo of codeReview?.configValue?.repositories ?? []) {
+                const repoId = String(repo.id);
+                const repoScopeKey =
+                    this.getCustomMessagesScopeKeyRepository(repoId);
+
+                const repoResolved = this.mergeCustomMessages(
+                    globalResolved,
+                    rawMessagesByScope.get(repoScopeKey),
+                );
+                const repoDiff = this.diffCustomMessages(
+                    globalResolved,
+                    repoResolved,
+                );
+
+                if (repoDiff) {
+                    messagesByScope.set(repoScopeKey, repoDiff);
+                }
+
+                const directories = [...(repo.directories ?? [])]
+                    .filter((dir) => Boolean(dir?.id))
+                    .sort(
+                        (a, b) =>
+                            this.getDirectoryDepth(a.path) -
+                            this.getDirectoryDepth(b.path),
+                    );
+
+                const resolvedByPath = new Map<string, CustomMessagesConfig>();
+
+                for (const dir of directories) {
+                    const directoryPath = this.normalizeDirectoryPath(dir.path);
+                    const parentResolved =
+                        this.findNearestParentCustomMessages(
+                            directoryPath,
+                            resolvedByPath,
+                        ) || repoResolved;
+
+                    const dirScopeKey = this.getCustomMessagesScopeKeyDirectory(
+                        repoId,
+                        String(dir.id),
+                    );
+                    const dirResolved = this.mergeCustomMessages(
+                        parentResolved,
+                        rawMessagesByScope.get(dirScopeKey),
+                    );
+                    const dirDiff = this.diffCustomMessages(
+                        parentResolved,
+                        dirResolved,
+                    );
+
+                    if (dirDiff) {
+                        messagesByScope.set(dirScopeKey, dirDiff);
+                    }
+
+                    if (directoryPath) {
+                        resolvedByPath.set(directoryPath, dirResolved);
+                    }
+                }
+            }
+        } catch (error) {
+            this.logger.warn({
+                message:
+                    'Failed to fetch custom messages for centralized config download',
+                context: CentralizedConfigDownloadUseCase.name,
+                metadata: {
+                    teamId,
+                    organizationId,
+                    errorMessage: error.message,
+                },
+            });
+        }
+
+        return messagesByScope;
+    }
+
+    private extractCustomMessagesFromMessage(
+        message: IPullRequestMessages,
+    ): CustomMessagesConfig | null {
+        const customMessages: CustomMessagesConfig = {};
+
+        if (
+            message.startReviewMessage &&
+            this.hasDefinedValues(message.startReviewMessage)
+        ) {
+            customMessages.startReviewMessage = {
+                content: message.startReviewMessage.content,
+                status: message.startReviewMessage.status,
+            };
+        }
+
+        if (
+            message.endReviewMessage &&
+            this.hasDefinedValues(message.endReviewMessage)
+        ) {
+            customMessages.endReviewMessage = {
+                content: message.endReviewMessage.content,
+                status: message.endReviewMessage.status,
+            };
+        }
+
+        if (
+            message.globalSettings &&
+            this.hasDefinedValues(message.globalSettings)
+        ) {
+            customMessages.globalSettings = {
+                hideComments: message.globalSettings.hideComments,
+                suggestionCopyPrompt:
+                    message.globalSettings.suggestionCopyPrompt,
+            };
+        }
+
+        return Object.keys(customMessages).length > 0 ? customMessages : null;
+    }
+
+    private normalizeCustomMessages(
+        customMessages?: KodusConfigFile['customMessages'],
+    ): CustomMessagesConfig {
+        const normalized: CustomMessagesConfig = {};
+
+        if (customMessages?.startReviewMessage) {
+            normalized.startReviewMessage = customMessages.startReviewMessage;
+        }
+
+        if (customMessages?.endReviewMessage) {
+            normalized.endReviewMessage = customMessages.endReviewMessage;
+        }
+
+        if (customMessages?.globalSettings) {
+            normalized.globalSettings = customMessages.globalSettings;
+        }
+
+        return normalized;
+    }
+
+    private mergeCustomMessages(
+        base: CustomMessagesConfig,
+        override?: CustomMessagesConfig,
+    ): CustomMessagesConfig {
+        return deepMerge(
+            this.normalizeCustomMessages(base),
+            this.normalizeCustomMessages(override),
+        );
+    }
+
+    private diffCustomMessages(
+        base: CustomMessagesConfig,
+        target: CustomMessagesConfig,
+    ): CustomMessagesConfig | null {
+        const diff = deepDifference(base, target) as CustomMessagesConfig;
+        return this.isEmptyObject(diff) ? null : diff;
+    }
+
+    private getDirectoryDepth(path?: string): number {
+        const normalized = this.normalizeDirectoryPath(path);
+        if (!normalized) {
+            return 0;
+        }
+
+        return normalized.split('/').filter(Boolean).length;
+    }
+
+    private findNearestParentCustomMessages(
+        directoryPath: string,
+        resolvedByPath: Map<string, CustomMessagesConfig>,
+    ): CustomMessagesConfig | null {
+        if (!directoryPath) {
+            return null;
+        }
+
+        let currentPath = directoryPath;
+
+        while (currentPath.includes('/')) {
+            currentPath = currentPath.slice(0, currentPath.lastIndexOf('/'));
+
+            const parentResolved = resolvedByPath.get(currentPath);
+            if (parentResolved) {
+                return parentResolved;
+            }
+        }
+
+        return null;
+    }
+
+    private isEmptyObject(value: object | null | undefined): boolean {
+        if (!value) return true;
+        return Object.keys(value).length === 0;
+    }
+
+    private hasDefinedValues(value?: any): boolean {
+        if (value === undefined || value === null || value === '') {
+            return false;
+        }
+
+        if (typeof value !== 'object') {
+            return true;
+        }
+
+        if (Array.isArray(value)) {
+            return value.some((item) => this.hasDefinedValues(item));
+        }
+
+        return Object.values(value).some((item) => this.hasDefinedValues(item));
+    }
+
+    private getCustomMessagesScopeKey(
+        configLevel: ConfigLevel,
+        repositoryId?: string,
+        directoryId?: string,
+    ): string | null {
+        if (configLevel === ConfigLevel.GLOBAL) {
+            return this.getCustomMessagesScopeKeyGlobal();
+        }
+
+        if (configLevel === ConfigLevel.REPOSITORY && repositoryId) {
+            return this.getCustomMessagesScopeKeyRepository(repositoryId);
+        }
+
+        if (
+            configLevel === ConfigLevel.DIRECTORY &&
+            repositoryId &&
+            directoryId
+        ) {
+            return this.getCustomMessagesScopeKeyDirectory(
+                repositoryId,
+                directoryId,
+            );
+        }
+
+        return null;
+    }
+
+    private getCustomMessagesScopeKeyGlobal(): string {
+        return 'global';
+    }
+
+    private getCustomMessagesScopeKeyRepository(repositoryId: string): string {
+        return `repository:${repositoryId}`;
+    }
+
+    private getCustomMessagesScopeKeyDirectory(
+        repositoryId: string,
+        directoryId: string,
+    ): string {
+        return `directory:${repositoryId}:${directoryId}`;
+    }
+
+    private createConfigEntryWithCustomMessages(
+        path: string,
+        yamlString?: string,
+        customMessages?: NonNullable<KodusConfigFile['customMessages']>,
+    ): FileEntry | null {
+        const content = this.buildConfigContentWithCustomMessages(
+            yamlString,
+            customMessages,
+        );
+
+        if (!content) {
+            return null;
+        }
+
+        return { path, content };
+    }
+
+    private buildConfigContentWithCustomMessages(
+        yamlString?: string,
+        customMessages?: NonNullable<KodusConfigFile['customMessages']>,
+    ): string | null {
+        if (!customMessages || Object.keys(customMessages).length === 0) {
+            return yamlString?.trim() ? yamlString : null;
+        }
+
+        const configObject = this.parseConfigYaml(yamlString);
+        configObject.customMessages = customMessages;
+
+        if (Object.keys(configObject).length === 0) {
+            return null;
+        }
+
+        return yaml.dump(configObject);
+    }
+
+    private parseConfigYaml(yamlString?: string): KodusConfigFile {
+        if (!yamlString || !yamlString.trim()) {
+            return {} as KodusConfigFile;
+        }
+
+        try {
+            const parsed = yaml.load(yamlString);
+
+            if (parsed && typeof parsed === 'object') {
+                return parsed as KodusConfigFile;
+            }
+        } catch {
+            return {} as KodusConfigFile;
+        }
+
+        return {} as KodusConfigFile;
+    }
+
+    private normalizeDirectoryPath(path?: string): string {
+        if (!path) return '';
+        return path.replace(/^\/+/, '').replace(/\/+$/, '');
+    }
+
+    private sanitizeRuleFileName(name?: string): string {
+        const normalized = (name || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 30);
+
+        return normalized || 'rule';
+    }
+
+    private getRuleFileName(rule: IKodyRule): string {
+        const preferredName =
+            this.sanitizeRuleFileName(rule.title) +
+            (rule.uuid ? `-${rule.uuid.slice(0, 8)}` : '');
+
+        return `${preferredName}.yml`;
+    }
+
+    private getRuleEntryPath(
+        rule: IKodyRule,
+        repositoryMapping: Map<
+            string,
+            { repoFolderName: string; directoriesById: Map<string, string> }
+        >,
+    ): string {
+        const rulesDirectory =
+            rule.type === KodyRulesType.MEMORY ? 'memories' : 'review';
+        const fileName = this.getRuleFileName(rule);
+
+        if (!rule.repositoryId || rule.repositoryId === 'global') {
+            return `.kody-rules/${rulesDirectory}/${fileName}`;
+        }
+
+        const repoScope = repositoryMapping.get(String(rule.repositoryId));
+        const repoFolderName = repoScope?.repoFolderName || rule.repositoryId;
+
+        if (rule.directoryId) {
+            const directoryPath = repoScope?.directoriesById.get(
+                String(rule.directoryId),
+            );
+
+            if (directoryPath) {
+                return `${repoFolderName}/${directoryPath}/.kody-rules/${rulesDirectory}/${fileName}`;
+            }
+        }
+
+        return `${repoFolderName}/.kody-rules/${rulesDirectory}/${fileName}`;
+    }
+
+    private getUniquePath(path: string, usedPaths: Set<string>): string {
+        if (!path) return path;
+
+        if (!usedPaths.has(path)) {
+            usedPaths.add(path);
+            return path;
+        }
+
+        const suffix = path.endsWith('.yaml') ? '.yaml' : '.yml';
+        const pathWithoutExt = path.replace(/\.(yml|yaml)$/i, '');
+
+        let index = 2;
+        let candidate = `${pathWithoutExt}-${index}${suffix}`;
+
+        while (usedPaths.has(candidate)) {
+            index++;
+            candidate = `${pathWithoutExt}-${index}${suffix}`;
+        }
+
+        usedPaths.add(candidate);
+        return candidate;
     }
 }

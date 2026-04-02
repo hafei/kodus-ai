@@ -100,30 +100,6 @@ export class CentralizedConfigSyncUseCase {
                 };
             }
 
-            // Remove stale configs
-            const cleanupResult =
-                await this.centralizedConfigService.removeStaleConfigs({
-                    organizationAndTeamData,
-                    configFiles: configScopesToSync,
-                    actor,
-                });
-
-            if (!cleanupResult.success) {
-                this.logger.error({
-                    message: 'Failed to remove stale configs',
-                    context: CentralizedConfigSyncUseCase.name,
-                    metadata: {
-                        organizationAndTeamData,
-                        message: cleanupResult.message,
-                    },
-                });
-
-                return {
-                    success: false,
-                    message: `Failed to remove stale configs: ${cleanupResult.message}`,
-                };
-            }
-
             // Synchronize Kody rules
             const syncRulesResult =
                 await this.centralizedConfigService.synchronizeKodyRules({
@@ -169,6 +145,30 @@ export class CentralizedConfigSyncUseCase {
                 return {
                     success: false,
                     message: `Failed to remove stale Kody rules: ${cleanupRulesResult.message}`,
+                };
+            }
+
+            // Remove stale configs
+            const cleanupResult =
+                await this.centralizedConfigService.removeStaleConfigs({
+                    organizationAndTeamData,
+                    configFiles: configScopesToSync,
+                    actor,
+                });
+
+            if (!cleanupResult.success) {
+                this.logger.error({
+                    message: 'Failed to remove stale configs',
+                    context: CentralizedConfigSyncUseCase.name,
+                    metadata: {
+                        organizationAndTeamData,
+                        message: cleanupResult.message,
+                    },
+                });
+
+                return {
+                    success: false,
+                    message: `Failed to remove stale configs: ${cleanupResult.message}`,
                 };
             }
 
