@@ -1373,7 +1373,7 @@ export class CentralizedConfigService implements ICentralizedConfigService {
                     directoryPath,
                     ruleType,
                     ruleFilePath: item.path,
-                    sourcePath: item.path,
+                    centralizedSourcePath: item.path,
                 };
             },
         );
@@ -1534,7 +1534,7 @@ export class CentralizedConfigService implements ICentralizedConfigService {
 
             for (const existingRule of existingRulesEntity?.rules || []) {
                 const sourcePathKey = getSourcePathLookupKey(
-                    existingRule.sourcePath,
+                    existingRule.centralizedSourcePath,
                 );
 
                 if (!sourcePathKey || !existingRule.uuid) {
@@ -1676,13 +1676,16 @@ export class CentralizedConfigService implements ICentralizedConfigService {
                     const ruleDto = {
                         ...compliantRule,
                         uuid: existingRuleBySourcePath.get(
-                            getSourcePathLookupKey(ruleFileMeta.sourcePath),
+                            getSourcePathLookupKey(
+                                ruleFileMeta.centralizedSourcePath,
+                            ),
                         )?.uuid,
                         type: ruleFileMeta.ruleType,
                         status: KodyRulesStatus.ACTIVE,
                         repositoryId: ruleFileMeta.repositoryId || 'global',
                         directoryId,
-                        sourcePath: ruleFileMeta.sourcePath,
+                        centralizedSourcePath:
+                            ruleFileMeta.centralizedSourcePath,
                         origin: KodyRulesOrigin.USER,
                     };
 
@@ -1832,7 +1835,7 @@ export class CentralizedConfigService implements ICentralizedConfigService {
             }
 
             const currentSourcePaths = new Set(
-                ruleFiles.map((meta) => meta.sourcePath),
+                ruleFiles.map((meta) => meta.centralizedSourcePath),
             );
 
             let removedCount = 0;
@@ -1844,7 +1847,7 @@ export class CentralizedConfigService implements ICentralizedConfigService {
                     continue; // Skip non-active rules
                 }
 
-                const sourcePath = rule.sourcePath;
+                const sourcePath = rule.centralizedSourcePath;
 
                 if (
                     !sourcePath ||

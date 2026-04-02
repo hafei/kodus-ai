@@ -131,6 +131,11 @@ export class CreateKodyRuleDto {
 
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional({ example: 'repo-a/.kody-rules/review/no-debug.yml' })
+    centralizedSourcePath?: string;
+
+    @IsOptional()
+    @IsString()
     @ApiPropertyOptional({ example: 'L10-L24' })
     sourceAnchor?: string;
 

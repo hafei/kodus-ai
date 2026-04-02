@@ -454,7 +454,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
             expect.objectContaining({
                 uuid: 'rule-1',
                 status: 'pending',
-                sourcePath: ruleEntry!.path,
+                centralizedSourcePath: ruleEntry!.path,
             }),
             'org-1',
             {

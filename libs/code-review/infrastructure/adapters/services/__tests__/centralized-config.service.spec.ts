@@ -767,7 +767,8 @@ describe('CentralizedConfigService', () => {
                         directoryPath: undefined,
                         ruleType: 'memory' as any,
                         ruleFilePath: '.kody-rules/memories/logging.yml',
-                        sourcePath: '.kody-rules/memories/logging.yml',
+                        centralizedSourcePath:
+                            '.kody-rules/memories/logging.yml',
                     },
                     {
                         centralizedDirectoryPath: '.kody-rules/review',
@@ -775,7 +776,8 @@ describe('CentralizedConfigService', () => {
                         directoryPath: undefined,
                         ruleType: 'standard' as any,
                         ruleFilePath: '.kody-rules/review/security.yml',
-                        sourcePath: '.kody-rules/review/security.yml',
+                        centralizedSourcePath:
+                            '.kody-rules/review/security.yml',
                     },
                     {
                         centralizedDirectoryPath: 'org-a/.kody-rules/memories',
@@ -783,7 +785,8 @@ describe('CentralizedConfigService', () => {
                         directoryPath: undefined,
                         ruleType: 'memory' as any,
                         ruleFilePath: 'org-a/.kody-rules/memories/auth.yml',
-                        sourcePath: 'org-a/.kody-rules/memories/auth.yml',
+                        centralizedSourcePath:
+                            'org-a/.kody-rules/memories/auth.yml',
                     },
                     {
                         centralizedDirectoryPath:
@@ -793,7 +796,7 @@ describe('CentralizedConfigService', () => {
                         ruleType: 'standard' as any,
                         ruleFilePath:
                             'org-a/services/api/.kody-rules/review/api.yml',
-                        sourcePath:
+                        centralizedSourcePath:
                             'org-a/services/api/.kody-rules/review/api.yml',
                     },
                 ]),
@@ -845,7 +848,7 @@ describe('CentralizedConfigService', () => {
                     directoryPath: undefined,
                     ruleType: 'memory' as any,
                     ruleFilePath: '.kody-rules/memories/logging.yml',
-                    sourcePath: '.kody-rules/memories/logging.yml',
+                    centralizedSourcePath: '.kody-rules/memories/logging.yml',
                 },
             ];
 
@@ -909,7 +912,7 @@ describe('CentralizedConfigService', () => {
                     type: 'memory',
                     status: 'active',
                     repositoryId: 'global',
-                    sourcePath: '.kody-rules/memories/logging.yml',
+                    centralizedSourcePath: '.kody-rules/memories/logging.yml',
                 }),
                 'org-1',
                 expect.any(Object),
@@ -925,7 +928,7 @@ describe('CentralizedConfigService', () => {
                     directoryPath: undefined,
                     ruleType: 'standard' as any,
                     ruleFilePath: '.kody-rules/review/security.yml',
-                    sourcePath: '.kody-rules/review/security.yml',
+                    centralizedSourcePath: '.kody-rules/review/security.yml',
                 },
             ];
 
@@ -965,7 +968,8 @@ describe('CentralizedConfigService', () => {
                     {
                         uuid: 'pending-rule-uuid',
                         status: 'pending',
-                        sourcePath: '.kody-rules/review/security.yml',
+                        centralizedSourcePath:
+                            '.kody-rules/review/security.yml',
                     },
                 ],
             });
@@ -985,7 +989,7 @@ describe('CentralizedConfigService', () => {
             ).toHaveBeenCalledWith(
                 expect.objectContaining({
                     uuid: 'pending-rule-uuid',
-                    sourcePath: '.kody-rules/review/security.yml',
+                    centralizedSourcePath: '.kody-rules/review/security.yml',
                     status: 'active',
                 }),
                 'org-1',
@@ -1002,7 +1006,7 @@ describe('CentralizedConfigService', () => {
                     directoryPath: undefined,
                     ruleType: 'standard' as any,
                     ruleFilePath: '.kody-rules/review/style.yml',
-                    sourcePath: '.kody-rules/review/style.yml',
+                    centralizedSourcePath: '.kody-rules/review/style.yml',
                 },
             ];
 
@@ -1042,7 +1046,7 @@ describe('CentralizedConfigService', () => {
                     {
                         uuid: 'active-rule-uuid',
                         status: 'active',
-                        sourcePath: '.kody-rules/review/style.yml',
+                        centralizedSourcePath: '.kody-rules/review/style.yml',
                     },
                 ],
             });
@@ -1062,7 +1066,7 @@ describe('CentralizedConfigService', () => {
             ).toHaveBeenCalledWith(
                 expect.objectContaining({
                     uuid: 'active-rule-uuid',
-                    sourcePath: '.kody-rules/review/style.yml',
+                    centralizedSourcePath: '.kody-rules/review/style.yml',
                     status: 'active',
                 }),
                 'org-1',
@@ -1076,7 +1080,7 @@ describe('CentralizedConfigService', () => {
                 {
                     centralizedDirectoryPath: '.kody-rules/memories',
                     ruleFilePath: '.kody-rules/memories/invalid.yml',
-                    sourcePath: '.kody-rules/memories/invalid.yml',
+                    centralizedSourcePath: '.kody-rules/memories/invalid.yml',
                     ruleType: 'memory' as any,
                 },
             ];

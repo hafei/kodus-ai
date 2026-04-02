@@ -231,7 +231,8 @@ describe('CentralizedConfigSyncUseCase', () => {
                     centralizedDirectoryPath: 'repo-1/src/.kody-rules/review',
                     ruleType: 'standard',
                     ruleFilePath: 'repo-1/src/.kody-rules/review/rule.yml',
-                    sourcePath: 'repo-1/src/.kody-rules/review/rule.yml',
+                    centralizedSourcePath:
+                        'repo-1/src/.kody-rules/review/rule.yml',
                 },
                 {
                     repositoryId: 'repo-1-id',
@@ -239,7 +240,8 @@ describe('CentralizedConfigSyncUseCase', () => {
                     centralizedDirectoryPath: 'repo-1/src/.kody-rules/memories',
                     ruleType: 'memory',
                     ruleFilePath: 'repo-1/src/.kody-rules/memories/rule.yml',
-                    sourcePath: 'repo-1/src/.kody-rules/memories/rule.yml',
+                    centralizedSourcePath:
+                        'repo-1/src/.kody-rules/memories/rule.yml',
                 },
             ]),
             synchronizeConfigs: jest.fn().mockResolvedValue({

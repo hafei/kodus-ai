@@ -349,7 +349,7 @@ export class CentralizedConfigDownloadUseCase {
                     metadata: {
                         teamId,
                         ruleId: rule.uuid,
-                        sourcePath: rule.sourcePath,
+                        centralizedSourcePath: rule.centralizedSourcePath,
                         repositoryId: rule.repositoryId,
                         directoryId: rule.directoryId,
                     },
@@ -399,7 +399,7 @@ export class CentralizedConfigDownloadUseCase {
     ): Promise<void> {
         const shouldUpdateRule =
             rule.status !== KodyRulesStatus.PENDING ||
-            rule.sourcePath !== sourcePath;
+            rule.centralizedSourcePath !== sourcePath;
 
         if (!shouldUpdateRule || !rule.uuid) {
             return;
@@ -410,7 +410,7 @@ export class CentralizedConfigDownloadUseCase {
                 ...rule,
                 uuid: rule.uuid,
                 status: KodyRulesStatus.PENDING,
-                sourcePath,
+                centralizedSourcePath: sourcePath,
             } as any,
             organizationId,
             {

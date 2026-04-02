@@ -53,6 +53,7 @@ export interface IKodyRule {
     rule: string;
     path?: string;
     sourcePath?: string;
+    centralizedSourcePath?: string;
     sourceAnchor?: string;
     status: KodyRulesStatus;
     severity: string;
@@ -234,6 +235,7 @@ export const kodyRuleSchema = z.object({
     rule: z.string(),
     path: z.string().optional(),
     sourcePath: z.string().optional(),
+    centralizedSourcePath: z.string().optional(),
     sourceAnchor: z.string().optional(),
     status: kodyRulesStatusSchema,
     severity: z.string(),
