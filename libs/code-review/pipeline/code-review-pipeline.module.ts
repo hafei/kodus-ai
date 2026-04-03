@@ -68,6 +68,7 @@ import {
 import { BugAgentProvider } from '../infrastructure/agents/bug-agent.provider';
 import { SecurityAgentProvider } from '../infrastructure/agents/security-agent.provider';
 import { PerformanceAgentProvider } from '../infrastructure/agents/performance-agent.provider';
+import { GeneralistAgentProvider } from '../infrastructure/agents/generalist-agent.provider';
 import { KodyRulesAgentProvider } from '../infrastructure/agents/kody-rules-agent.provider';
 // ReflectionAgentProvider removed — verify/discover was hurting recall
 import { ReviewOrchestratorService } from '../infrastructure/agents/review-orchestrator.service';
@@ -141,6 +142,7 @@ import { DocumentationSearchExaService } from '../infrastructure/adapters/servic
         BugAgentProvider,
         SecurityAgentProvider,
         PerformanceAgentProvider,
+        GeneralistAgentProvider,
         KodyRulesAgentProvider,
         // ReflectionAgentProvider removed
         ReviewOrchestratorService,

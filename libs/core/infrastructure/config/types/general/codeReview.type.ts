@@ -193,7 +193,7 @@ export type CodeSuggestion = {
     label: string;
     llmPrompt?: string;
     severity?: string;
-    level?: 'critical' | 'issue' | 'warning'; // V3: critical = blocks merge, issue = should fix, warning = evaluate
+    level?: 'critical' | 'issue' | 'warning'; // Legacy-only compatibility field. New reviews use `severity`.
     crossFileEvidence?: boolean;
     rankScore?: number;
     priorityStatus?: PriorityStatus;
@@ -345,6 +345,7 @@ export type ImplementedSuggestionsToAnalyze = {
 
 export type CodeReviewConfig = {
     ignorePaths: string[];
+    reviewMode?: 'normal' | 'deep';
     reviewOptions: ReviewOptions;
     ignoredTitleKeywords: string[];
     baseBranches: string[];

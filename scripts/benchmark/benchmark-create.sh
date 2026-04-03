@@ -164,7 +164,7 @@ for (const repo of repos) {
   let ghPrs = [];
   try {
     ghPrs = JSON.parse(execSync(
-      'gh api \"repos/' + owner + '/' + repo + '/pulls?state=all&per_page=50&sort=created&direction=desc\" --jq \"[.[] | {number, head: .head.ref}]\"',
+      'gh api \"repos/' + owner + '/' + repo + '/pulls?state=open&per_page=50&sort=created&direction=desc\" --jq \"[.[] | {number, head: .head.ref}]\"',
       { encoding: 'utf8', timeout: 30000 }
     ));
   } catch {}

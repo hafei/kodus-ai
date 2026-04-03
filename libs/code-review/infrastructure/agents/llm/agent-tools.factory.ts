@@ -51,6 +51,13 @@ function mkTool(
     };
 }
 
+function addLineNumbers(content: string, baseLineNumber: number): string {
+    return content
+        .split('\n')
+        .map((line, i) => `${baseLineNumber + i}: ${line}`)
+        .join('\n');
+}
+
 /**
  * Build the tool set for the agent from RemoteCommands.
  */
@@ -128,7 +135,14 @@ export function buildAgentTools(
                         if (exitCode === 1 || !stdout.trim())
                             return 'No matches found.';
                         if (exitCode === 0) {
-                            const lines = stdout.trim().split('\n');
+                            const raw = stdout.trim();
+                            const lines = raw.split('\n');
+                            if (namesOnly) {
+                                return lines
+                                    .slice(0, MAX_GREP_MATCHES)
+                                    .join('\n');
+                            }
+
                             if (lines.length > MAX_GREP_MATCHES) {
                                 return (
                                     lines
@@ -221,12 +235,8 @@ export function buildAgentTools(
                 if (!result && result !== '') {
                     return `Error: readFile returned ${typeof result} for ${filePath}`;
                 }
-                // Inject line numbers — LLMs need visual anchors to reference lines accurately
                 const baseLineNumber = startLine > 0 ? startLine : 1;
-                result = result
-                    .split('\n')
-                    .map((line, i) => `${baseLineNumber + i}: ${line}`)
-                    .join('\n');
+                result = addLineNumbers(result, baseLineNumber);
                 if (result.length > MAX_READ_LENGTH) {
                     const lines = result.split('\n');
                     result =
@@ -389,107 +399,6 @@ export function buildAgentTools(
     // Add exec-based tools if available
     if (remoteCommands.exec) {
         const exec = remoteCommands.exec;
-
-        tools.astGrep = mkTool(
-            'Structural code search using ast-grep. Finds code patterns based on AST structure, not just text. More precise than regex grep for code patterns.',
-            {
-                type: 'object',
-                properties: {
-                    pattern: {
-                        type: 'string',
-                        description:
-                            "ast-grep pattern (e.g. 'if ($COND) { return false }', 'function $NAME($ARGS) { $$$ }')",
-                    },
-                    lang: {
-                        type: 'string',
-                        description:
-                            "Language hint (e.g. 'java', 'typescript', 'python', 'go', 'ruby')",
-                    },
-                    path: {
-                        type: 'string',
-                        description: "Directory to search in (default: '.')",
-                    },
-                },
-                required: ['pattern'],
-            },
-            async (args: any) => {
-                const pattern = args.pattern || '';
-                if (!pattern) return 'Error: pattern is required';
-
-                const EXT_MAP: Record<string, string> = {
-                    typescript: 'ts',
-                    javascript: 'js',
-                    python: 'py',
-                    go: 'go',
-                    rust: 'rs',
-                    java: 'java',
-                    ruby: 'rb',
-                    cpp: 'cpp',
-                    c: 'c',
-                    csharp: 'cs',
-                    kotlin: 'kt',
-                    swift: 'swift',
-                    php: 'php',
-                };
-
-                // Sanitize pattern to prevent command injection
-                const safePattern = pattern.replace(/'/g, "'\\''");
-                const searchPath =
-                    (args.path || '.').replace(/^\/+/, '') || '.';
-                const safePath = searchPath.replace(/'/g, "'\\''");
-
-                let cmd = `sg --pattern '${safePattern}' --json`;
-                if (args.lang) {
-                    const safeLang = String(args.lang).replace(
-                        /[^a-zA-Z0-9_-]/g,
-                        '',
-                    );
-                    cmd += ` --lang ${safeLang}`;
-                }
-                cmd += ` '${safePath}'`;
-
-                try {
-                    const { stdout, exitCode } = await exec(cmd);
-                    if (
-                        exitCode !== 0 &&
-                        (stdout.includes('command not found') ||
-                            stdout.includes('not found') ||
-                            stdout.includes('ENOENT'))
-                    ) {
-                        // ast-grep not installed — fallback to regex grep
-                        const lang = args.lang || '';
-                        const ext = EXT_MAP[lang.toLowerCase()] || lang;
-                        const fallbackPattern = pattern
-                            .replace(/\$[A-Z_]+/g, '.*')
-                            .replace(/[{}()]/g, '\\$&');
-                        const glob = ext ? `*.${ext}` : undefined;
-                        return remoteCommands
-                            .grep(fallbackPattern, searchPath, glob)
-                            .then(
-                                (r) =>
-                                    `[ast-grep not available, used regex fallback]\n${r}`,
-                            );
-                    }
-                    const output = stdout || 'No matches found.';
-                    return output.length > MAX_SHELL_OUTPUT
-                        ? output.substring(0, MAX_SHELL_OUTPUT) +
-                              '\n... (truncated)'
-                        : output;
-                } catch (err) {
-                    const msg =
-                        err instanceof Error ? err.message : String(err);
-                    if (
-                        msg.includes('not found') ||
-                        msg.includes('No such file') ||
-                        msg.includes('command not found') ||
-                        msg.includes('ENOENT')
-                    ) {
-                        return 'ast-grep not available in this sandbox. Use the grep tool with regex patterns instead.';
-                    }
-                    return `ast-grep error: ${msg}`;
-                }
-            },
-        );
 
         tools.checkTypes = mkTool(
             'Run type checker or linter on changed files. Auto-detects language and runs the appropriate tool ' +

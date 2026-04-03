@@ -92,7 +92,7 @@ for (const pr of benchmark.prs) {
   goldenByHead[pr.head] = pr;
 }
 
-const results = { issueCritical: [], withWarning: [] };
+const results = { severity: [] };
 const golden = [];
 const skippedPrs = [];
 const prMetadata = [];
@@ -151,7 +151,7 @@ for (const entry of manifest.prs) {
       processed: false,
       mongoFound: false,
       changedFiles: [],
-      candidateCounts: { issueCritical: 0, withWarning: 0 },
+      candidateCounts: { severity: 0 },
     });
     console.log(entry.repo.padEnd(18) + ' PR#' + String(prNum).padEnd(5) + ' ⚠ NOT PROCESSED (skipped)');
     continue;
@@ -160,8 +160,7 @@ for (const entry of manifest.prs) {
     // Processed but no MongoDB record — unlikely but handle gracefully
     golden.push(bpr);
     const prInfo = { pr_title: bpr.title, head: entry.head, repo: entry.repo, tool: 'kodus' };
-    results.issueCritical.push({ ...prInfo, issues: [] });
-    results.withWarning.push({ ...prInfo, issues: [] });
+    results.severity.push({ ...prInfo, issues: [] });
     prMetadata.push({
       repo: entry.repo,
       head: entry.head,
@@ -171,7 +170,7 @@ for (const entry of manifest.prs) {
       processed: true,
       mongoFound: false,
       changedFiles: [],
-      candidateCounts: { issueCritical: 0, withWarning: 0 },
+      candidateCounts: { severity: 0 },
     });
     console.log(entry.repo.padEnd(18) + ' PR#' + String(prNum).padEnd(5) + ' issue+critical= 0  +warning= 0  (processed, no findings)');
     continue;
@@ -179,7 +178,7 @@ for (const entry of manifest.prs) {
 
   golden.push(bpr);
 
-  const suggestions = { issueCritical: [], withWarning: [] };
+  const suggestions = { severity: [] };
 
   for (const file of prData.files) {
     if (!file.suggestions) continue;
@@ -188,19 +187,16 @@ for (const entry of manifest.prs) {
       const entry2 = {
         comment: (s.suggestionContent || '').substring(0, 500),
         location: (s.relevantFile || file.filename) + ':' + (s.relevantLinesStart || 'general'),
-        level: s.level || 'unknown',
         severity: s.severity || 'unknown',
         label: s.label || 'unknown',
         deliveryStatus: s.deliveryStatus || 'unknown',
       };
-      if (s.level === 'issue' || s.level === 'critical') suggestions.issueCritical.push(entry2);
-      if (s.level === 'issue' || s.level === 'critical' || s.level === 'warning') suggestions.withWarning.push(entry2);
+      suggestions.severity.push(entry2);
     }
   }
 
   const prInfo = { pr_title: bpr.title, head: entry.head, repo: entry.repo, tool: 'kodus' };
-  results.issueCritical.push({ ...prInfo, issues: suggestions.issueCritical });
-  results.withWarning.push({ ...prInfo, issues: suggestions.withWarning });
+  results.severity.push({ ...prInfo, issues: suggestions.severity });
   prMetadata.push({
     repo: entry.repo,
     head: entry.head,
@@ -213,25 +209,28 @@ for (const entry of manifest.prs) {
     mongoUpdatedAt: prData.updatedAt || null,
     changedFiles: Array.isArray(prData.files) ? prData.files.map(f => f.filename).filter(Boolean) : [],
     candidateCounts: {
-      issueCritical: suggestions.issueCritical.length,
-      withWarning: suggestions.withWarning.length,
+      severity: suggestions.severity.length,
     },
   });
 
-  console.log(entry.repo.padEnd(18) + ' PR#' + String(prNum).padEnd(5) + ' issue+critical=' + String(suggestions.issueCritical.length).padStart(2) + '  +warning=' + String(suggestions.withWarning.length).padStart(2));
+  console.log(entry.repo.padEnd(18) + ' PR#' + String(prNum).padEnd(5) + ' severity=' + String(suggestions.severity.length).padStart(2));
 }
 
 fs.writeFileSync('$RESULTS_DIR/golden.json', JSON.stringify(golden, null, 2));
-fs.writeFileSync('$RESULTS_DIR/candidates-issue-critical.json', JSON.stringify(results.issueCritical, null, 2));
-fs.writeFileSync('$RESULTS_DIR/candidates-with-warning.json', JSON.stringify(results.withWarning, null, 2));
-fs.writeFileSync('$RESULTS_DIR/pr-metadata.json', JSON.stringify({ runName: '$RUN_NAME', generatedAt: new Date().toISOString(), prs: prMetadata }, null, 2));
+fs.writeFileSync('$RESULTS_DIR/candidates-severity.json', JSON.stringify(results.severity, null, 2));
+fs.writeFileSync('$RESULTS_DIR/pr-metadata.json', JSON.stringify({
+  runName: '$RUN_NAME',
+  generatedAt: new Date().toISOString(),
+  benchmarkConfig: manifest.benchmarkConfig || null,
+  prs: prMetadata,
+}, null, 2));
 
 const totalGolden = golden.reduce((s,p) => s + p.golden_comments.length, 0);
 const totalExpected = golden.length + skippedPrs.length;
 console.log('');
 console.log('Processed: ' + golden.length + '/' + totalExpected + ' PRs (' + skippedPrs.length + ' not processed)');
 console.log('Golden: ' + totalGolden + ' comments');
-console.log('Candidates: issue+critical=' + results.issueCritical.reduce((s,c) => s + c.issues.length, 0) + '  +warning=' + results.withWarning.reduce((s,c) => s + c.issues.length, 0));
+console.log('Candidates: severity=' + results.severity.reduce((s,c) => s + c.issues.length, 0));
 if (skippedPrs.length > 0) {
   console.log('');
   console.log('⚠ Skipped PRs (not processed by worker — not counted in score):');
@@ -256,12 +255,12 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
 fi
 
 echo ""
-echo "▸ Judging with Sonnet (single pass, both levels derived)..."
+echo "▸ Judging with Sonnet (single severity pass)..."
 echo "  Key: ${ANTHROPIC_API_KEY:0:15}... (len=${#ANTHROPIC_API_KEY})"
 
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" node "$SCRIPT_DIR/judge-sonnet.js" \
   "$RESULTS_DIR/golden.json" \
-  "$RESULTS_DIR/candidates-with-warning.json" \
+  "$RESULTS_DIR/candidates-severity.json" \
   "$RESULTS_DIR" 2>&1
 
 # ── Print Results ────────────────────────────────────────────────
@@ -270,7 +269,7 @@ echo "============================================================"
 echo "BENCHMARK RESULTS — $RUN_NAME"
 echo "============================================================"
 
-for LEVEL in "issue-critical" "with-warning"; do
+for LEVEL in "severity"; do
   OUTPUT="$RESULTS_DIR/results-${LEVEL}.json"
   [ -f "$OUTPUT" ] || continue
 

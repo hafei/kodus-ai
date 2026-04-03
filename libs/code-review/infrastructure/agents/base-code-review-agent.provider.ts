@@ -60,8 +60,8 @@ export interface AgentProgressEvent {
         relevantLinesStart?: number;
         relevantLinesEnd?: number;
         oneSentenceSummary?: string;
+        label?: string;
         severity?: string;
-        level?: string;
     }>;
     coverage?: CoverageSummary;
     verification?: VerificationTraceSummary | null;
@@ -93,6 +93,12 @@ export interface ReviewAgentInput {
     /** Optional replica metadata for replicated agent runs. */
     agentReplicaIndex?: number;
     agentReplicaTotal?: number;
+    /** Review mode: 'normal' skips verify for high-confidence findings, 'deep' verifies everything. */
+    reviewMode?: 'normal' | 'deep';
+    /** Optional per-agent step budget for the main investigation loop. */
+    maxSteps?: number;
+    /** Categories allowed for this run when using a mixed/generalist reviewer. */
+    requestedCategories?: Array<'bug' | 'security' | 'performance'>;
 }
 
 /**
@@ -134,6 +140,25 @@ export abstract class BaseCodeReviewAgentProvider {
     protected abstract getIdentity(): ReviewAgentIdentity;
     protected abstract getCategoryPrompt(): string;
     protected abstract getCategoryLabel(): string;
+
+    protected supportsMixedLabels(): boolean {
+        return false;
+    }
+
+    protected getAllowedSuggestionLabels(
+        _input: ReviewAgentInput,
+    ): Array<'bug' | 'security' | 'performance'> {
+        const category = this.getCategoryLabel();
+        if (
+            category === 'bug' ||
+            category === 'security' ||
+            category === 'performance'
+        ) {
+            return [category];
+        }
+
+        return ['bug'];
+    }
 
     /**
      * Execute the agent against the provided changed files.
@@ -221,6 +246,8 @@ export abstract class BaseCodeReviewAgentProvider {
                 repositoryFullName: input.repositoryFullName,
                 baseBranch: input.baseBranch,
                 callGraph: input.callGraph,
+                reviewMode: input.reviewMode,
+                maxSteps: input.maxSteps,
 
                 onStepFinish: (step: any) => {
                     stepCount++;
@@ -280,19 +307,23 @@ export abstract class BaseCodeReviewAgentProvider {
             // Record token usage to observability (MongoDB spans)
             // Uses runInSpan to ensure proper span lifecycle and MongoDB persistence
             try {
+                const vUsage = agentResult.verificationUsage;
+                const mainInputTokens = agentResult.usage.inputTokens - (vUsage?.inputTokens ?? 0);
+                const mainOutputTokens = agentResult.usage.outputTokens - (vUsage?.outputTokens ?? 0);
+
                 await this.observabilityService.runInSpan(
                     `${identity.name}::review`,
                     async () => agentResult,
                     {
                         'gen_ai.usage.input_tokens':
-                            agentResult.usage.inputTokens,
+                            mainInputTokens,
                         'gen_ai.usage.output_tokens':
-                            agentResult.usage.outputTokens,
+                            mainOutputTokens,
                         'gen_ai.usage.total_tokens':
-                            agentResult.usage.totalTokens,
+                            mainInputTokens + mainOutputTokens,
                         ...(agentResult.usage.reasoningTokens > 0 && {
                             'gen_ai.usage.reasoning_tokens':
-                                agentResult.usage.reasoningTokens,
+                                agentResult.usage.reasoningTokens - (vUsage?.reasoningTokens ?? 0),
                         }),
                         'gen_ai.response.model': modelName,
                         'gen_ai.run.name': `code-review-${this.getCategoryLabel()}`,
@@ -308,6 +339,28 @@ export abstract class BaseCodeReviewAgentProvider {
                         durationMs,
                     },
                 );
+
+                // Separate span for verification tokens
+                if (vUsage && (vUsage.inputTokens > 0 || vUsage.outputTokens > 0)) {
+                    await this.observabilityService.runInSpan(
+                        `${identity.name}::verify`,
+                        async () => agentResult,
+                        {
+                            'gen_ai.usage.input_tokens': vUsage.inputTokens,
+                            'gen_ai.usage.output_tokens': vUsage.outputTokens,
+                            'gen_ai.usage.total_tokens': vUsage.inputTokens + vUsage.outputTokens,
+                            ...(vUsage.reasoningTokens > 0 && {
+                                'gen_ai.usage.reasoning_tokens': vUsage.reasoningTokens,
+                            }),
+                            'gen_ai.response.model': modelName,
+                            'gen_ai.run.name': `code-review-${this.getCategoryLabel()}-verify`,
+                            'type': byokConfig ? 'byok' : 'system',
+                            'organizationId': input.organizationAndTeamData?.organizationId,
+                            'teamId': input.organizationAndTeamData?.teamId,
+                            'prNumber': input.prNumber,
+                        },
+                    );
+                }
             } catch {
                 // Observability is best-effort
             }
@@ -337,9 +390,11 @@ export abstract class BaseCodeReviewAgentProvider {
                 oneSentenceSummary: s.oneSentenceSummary || '',
                 relevantLinesStart: s.relevantLinesStart,
                 relevantLinesEnd: s.relevantLinesEnd,
-                label: this.getCategoryLabel(),
+                label: this.resolveSuggestionLabel(
+                    s as Partial<CodeSuggestion> & { label?: string },
+                    input,
+                ),
                 severity: s.severity || 'medium',
-                level: s.level || 'issue', // Default to issue — if agent didn't classify, assume it's real
                 llmPrompt: s.suggestionContent,
                 ...(s.ruleUuid && { brokenKodyRulesIds: [s.ruleUuid] }),
             }));
@@ -377,8 +432,8 @@ export abstract class BaseCodeReviewAgentProvider {
                     relevantLinesStart: s.relevantLinesStart,
                     relevantLinesEnd: s.relevantLinesEnd,
                     oneSentenceSummary: s.oneSentenceSummary,
+                    label: s.label,
                     severity: s.severity,
-                    level: s.level,
                 })),
                 toolCalls: agentResult.toolCalls.map((tc) => ({
                     tool: tc.toolName || tc.tool,
@@ -495,16 +550,21 @@ export abstract class BaseCodeReviewAgentProvider {
       Step 3: Read caller context. Understand HOW the changed code is used in production.
         If available, use checkTypes to run the language's type checker on changed files.
 
+      Step 4: If the code uses an external library or framework API that you are unsure about, use searchDocs to verify.
+        Examples: "Does Rails serializer require ? suffix on include_ methods?", "Does Python dataclass use shared mutable defaults?", "Does Prisma @updatedAt fire with empty data object?"
+        Do NOT guess framework behavior — verify it.
+
     PHASE 2 — CHALLENGE (think adversarially)
 
       For each changed function, ask yourself these questions:
-        - "What if this input is null/nil/empty/zero?" → check if new code handles it
+        - "What if this input is null/nil/empty/zero?" → check if new code handles it. Then ask: "Does handling it by returning early silently disable a feature that should work in that case?"
         - "What if two requests hit this at the same time?" → check-then-act without lock = race condition
         - "What if a caller passes a different type than expected?" → datetime vs number, dict vs list
         - "What if this function is called from a path I haven't seen?" → grep again if unsure
         - "Does this change break any existing caller?" → did the signature, return type, or side effect change?
         - "Does this affect caching/invalidation?" → changed predicate = stale cache risk
         - "Does this code delegate to another layer (cache, proxy, adapter)?" → is it calling the right target — delegate vs self, concrete vs default?
+        - "When code calls through an indirection (session.getProvider(), context.getService(), factory.create()), which concrete object is returned?" → grep for the registration/binding to verify. Only report a self-recursion if you found concrete evidence (e.g. a registration line binding the interface to the current class).
 
       If you cannot confidently answer "this is safe" for any question, investigate more or report it.
 
@@ -516,6 +576,12 @@ export abstract class BaseCodeReviewAgentProvider {
         GOOD reasoning: "Challenged CreateDevice: what if two requests pass count check simultaneously? Grepped TagDevice(, found caller at impl.go:155. No lock or unique constraint — race condition. Reported."
 
       Do not stop after finding the first issue — investigate ALL changed code before responding.
+
+    IMPORTANT — VERIFY BEFORE CLAIMING:
+      NEVER claim something is missing, undefined, not imported, or does not exist without first using grep to verify.
+      NEVER claim a method has the wrong signature without first reading its definition.
+      NEVER claim a variable is unused or a branch is unreachable without tracing the actual code path.
+      If you searched and did not find it, say "I searched for X and did not find it" — do not assert "X does not exist".
   </Workflow>
 
   <Scope>
@@ -545,6 +611,29 @@ ${memoryRulesSection}
         );
 
         const categoryLabel = this.getCategoryLabel();
+        const mixedLabelMode = this.supportsMixedLabels();
+        const allowedSuggestionLabels = this.getAllowedSuggestionLabels(input);
+        const mixedLabelRules = mixedLabelMode
+            ? `- Every finding must include a "label" and it must be one of: ${allowedSuggestionLabels.join(', ')}.
+    - Use bug for correctness/regression issues, security for exploit or authorization issues, and performance for material slowdowns or resource blowups.
+    - If the same root cause could fit multiple categories, choose the strongest primary label once — do not duplicate the same finding under multiple labels.`
+            : '';
+        const mixedLabelTaskGuidance = mixedLabelMode
+            ? `
+    Before finalizing, run an explicit pass for each enabled category: ${allowedSuggestionLabels.join(', ')}.
+    Do not stop after finding only bug issues — you must still check whether the changed code introduces concrete security or performance problems when those categories are enabled.
+    In your reasoning, explicitly note at least one concrete hypothesis you tested for each enabled category, even if that category produced no finding.`
+            : '';
+        const mixedLabelLensRules = mixedLabelMode
+            ? `
+    - For every enabled category (${allowedSuggestionLabels.join(', ')}), either report a concrete finding or explain in the reasoning why no concrete issue exists.
+    - Do not suppress a concrete performance issue just because it is not a correctness bug. If the primary failure mode is scale, query count, cache blowup, unbounded loading, async fanout, or blocking I/O, label it as performance.
+    - Do not suppress a concrete security issue just because the code also has a bug. If the primary failure mode is exploitability, authorization bypass, trust-boundary failure, or unsafe input reaching a sink, label it as security.`
+            : '';
+        const outputLabelLine = mixedLabelMode
+            ? `"label": "${allowedSuggestionLabels.join('|')}",
+      `
+            : '';
 
         const taskDescriptions: Record<string, string> = {
             bug: 'real bugs introduced, exposed, or made worse by these changes',
@@ -552,10 +641,14 @@ ${memoryRulesSection}
                 'real performance regressions introduced or worsened by these changes',
             security:
                 'real security vulnerabilities introduced, exposed, or made worse by these changes',
+            generalist:
+                'real bugs, security vulnerabilities, and material performance regressions introduced, exposed, or made worse by these changes',
         };
         const taskDescription =
-            taskDescriptions[categoryLabel] ??
-            'issues introduced by these changes';
+            categoryLabel === 'generalist'
+                ? `real ${allowedSuggestionLabels.join(', ')} issues introduced, exposed, or made worse by these changes`
+                : (taskDescriptions[categoryLabel] ??
+                  'issues introduced by these changes');
 
         return (
             `<ReviewTask>
@@ -570,7 +663,8 @@ ${callGraphSection}
     Review this Pull Request for ${taskDescription}.
     For each changed function: grep callers → read context → challenge with adversarial questions.${input.callGraph ? '\n    Use the call graph above as a fast map of production callers/callees, but still verify with tools before reporting.' : ''}
     Promote a finding only when you can point to a concrete failure path, broken contract, wrong branch behavior, unsafe state transition, or caller/callee incompatibility introduced by the diff.
-    Prefer concrete bugs over speculative theories. Dismiss only what you can explain WHY it cannot fail.
+    Prefer concrete findings over speculative theories. Dismiss only what you can explain WHY it cannot fail.
+${mixedLabelTaskGuidance}
   </Task>
 
   <CoverageContract>
@@ -588,6 +682,18 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
     - Do not promote a finding from a mere possibility. The changed code plus one or two concrete references must make the failure mode plausible and specific.
     - Do not report generic resource exhaustion, shell injection, bypass, or performance theories unless the modified code directly creates or worsens that path.
     - Clear local defects in the diff should still be reported immediately. Cross-file claims require at least one confirming reference from a caller, callee, test, or nearby state transition.
+    - Do NOT report generic efficiency concerns (O(N), N+1, redundant calls, missing pagination, missing timeouts) as bugs. Report them only when the changed code creates a concrete, material slowdown or resource blowup, and then label them as performance.
+    - Do NOT report missing defensive measures (missing CSRF, missing rate limiting, missing input validation) unless you can demonstrate a specific exploit path in the changed code.
+    - Every finding must pass this test: "Can I name the exact input that triggers the failure and the exact wrong output or crash that results?" If not, do not report it.
+    - Concrete findings include build-time and contract failures too. If the diff introduces a signature mismatch, wrong delegate call, impossible method call, or dropped required side effect, you may report it even without a runtime trace.
+    - For wrappers, middleware, providers, caches, and adapters, verify both behavior and wiring: the changed code may be wrong because it calls the wrong target, preserves the wrong cached semantics, or silently stops propagating tracing/logging/metrics/auth state.
+    - For security flows, challenge any value that became static, shared, or reused across requests/users when it should be per-request, per-session, or per-principal.
+    ${mixedLabelRules}
+    ${mixedLabelLensRules}
+    - Assign a confidence score (1-10) to each finding:
+      8-10: You traced the call chain, read the definition, and confirmed the bug with concrete evidence from the code.
+      5-7: The code looks wrong but you could not fully confirm — e.g. you found the callsite but not the callee definition.
+      1-4: Suspicious pattern but speculative — you did not find confirming evidence.
     - Return only the JSON object inside markdown fences, no extra text.
   </Rules>
 
@@ -599,7 +705,7 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
   "reasoning": "For each changed function: what you challenged, what callers you found, why you reported or dismissed. Example: 'Challenged CreateDevice: what if two requests pass count check simultaneously? Grepped TagDevice(, found caller at impl.go:155. No lock or unique constraint — race condition. Reported.'",
   "suggestions": [
     {
-      "relevantFile": "path/to/file.ext",
+      ${outputLabelLine}"relevantFile": "path/to/file.ext",
       "language": "the file language",
       "suggestionContent": "WHAT: one sentence naming the exact problem. WHY: one sentence on the real impact. HOW: concrete fix if clear from the code — omit if speculative.",
       "existingCode": "problematic code snippet from the diff",
@@ -607,7 +713,8 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
       "oneSentenceSummary": "Brief summary",
       "relevantLinesStart": 10,
       "relevantLinesEnd": 15,
-      "severity": "critical|high|medium|low"
+      "severity": "critical|high|medium|low",
+      "confidence": 8
     }
   ]
 }
@@ -653,13 +760,41 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
     private formatOverrides(input: ReviewAgentInput): string {
         const parts: string[] = [];
 
-        const categoryLabel = this.getCategoryLabel();
-        const categoryDesc =
-            input.v2PromptOverrides?.categories?.descriptions?.[
-                categoryLabel as keyof typeof input.v2PromptOverrides.categories.descriptions
-            ];
-        if (categoryDesc) {
-            parts.push(`## Category Guidelines\n${categoryDesc}`);
+        const descriptions = input.v2PromptOverrides?.categories?.descriptions;
+        if (descriptions) {
+            if (this.supportsMixedLabels()) {
+                const labels: Array<'bug' | 'security' | 'performance'> = [
+                    'bug',
+                    'security',
+                    'performance',
+                ];
+
+                const mixedCategorySections = labels
+                    .map((label) => {
+                        const value = descriptions[label];
+                        if (!value) return null;
+
+                        const header =
+                            label.charAt(0).toUpperCase() + label.slice(1);
+                        return `### ${header}\n${value}`;
+                    })
+                    .filter((section): section is string => Boolean(section));
+
+                if (mixedCategorySections.length > 0) {
+                    parts.push(
+                        `## Category Guidelines\n${mixedCategorySections.join('\n\n')}`,
+                    );
+                }
+            } else {
+                const categoryLabel = this.getCategoryLabel();
+                const categoryDesc =
+                    descriptions[
+                        categoryLabel as keyof typeof descriptions
+                    ];
+                if (categoryDesc) {
+                    parts.push(`## Category Guidelines\n${categoryDesc}`);
+                }
+            }
         }
 
         // Level classification is done in a separate step after agent generation
@@ -672,5 +807,31 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
         }
 
         return parts.join('\n\n');
+    }
+
+    private resolveSuggestionLabel(
+        suggestion: Partial<CodeSuggestion> & { label?: string },
+        input: ReviewAgentInput,
+    ): string {
+        if (!this.supportsMixedLabels()) {
+            return this.getCategoryLabel();
+        }
+
+        const allowedLabels = new Set(this.getAllowedSuggestionLabels(input));
+        const rawLabel =
+            typeof suggestion.label === 'string'
+                ? suggestion.label.toLowerCase()
+                : '';
+
+        if (
+            (rawLabel === 'bug' ||
+                rawLabel === 'security' ||
+                rawLabel === 'performance') &&
+            allowedLabels.has(rawLabel as 'bug' | 'security' | 'performance')
+        ) {
+            return rawLabel;
+        }
+
+        return this.getAllowedSuggestionLabels(input)[0] || 'bug';
     }
 }

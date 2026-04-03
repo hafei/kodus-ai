@@ -83,7 +83,7 @@ services:
             start_period: 60s
         environment:
             - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
-            - NODE_OPTIONS=--max-semi-space-size=64
+            - NODE_OPTIONS=--max-old-space-size=4096 --max-semi-space-size=64
             - DEBUG_PORT=9231
             - COMPONENT_TYPE=worker
             - API_LOG_PRETTY=true
@@ -116,7 +116,7 @@ services:
             start_period: 60s
         environment:
             - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
-            - NODE_OPTIONS=--max-semi-space-size=64
+            - NODE_OPTIONS=--max-old-space-size=4096 --max-semi-space-size=64
             - DEBUG_PORT=9232
             - API_LOG_PRETTY=true
             - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}

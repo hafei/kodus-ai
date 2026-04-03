@@ -1,7 +1,6 @@
 import { createLogger } from '@kodus/flow';
 import { Output, jsonSchema } from 'ai';
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { getInternalModel } from '@libs/code-review/infrastructure/agents/llm/byok-to-vercel';
 import {
     tracedGenerateText,
     buildLangSmithProviderOptions,
@@ -186,11 +185,33 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
             relevantLinesEnd: suggestion?.relevantLinesEnd,
             label: suggestion?.label,
             severity: suggestion?.severity,
-            level: suggestion?.level,
             oneSentenceSummary:
                 suggestion?.oneSentenceSummary ||
                 suggestion?.suggestionContent?.substring(0, 200),
         };
+    }
+
+    private normalizeSeverity(
+        severity?: string,
+    ): 'critical' | 'high' | 'medium' | 'low' {
+        switch ((severity || '').toLowerCase()) {
+            case 'critical':
+                return 'critical';
+            case 'high':
+                return 'high';
+            case 'medium':
+                return 'medium';
+            case 'low':
+                return 'low';
+            case SeverityLevel.CRITICAL:
+                return 'critical';
+            case SeverityLevel.ISSUE:
+                return 'high';
+            case SeverityLevel.WARNING:
+                return 'low';
+            default:
+                return 'medium';
+        }
     }
 
     constructor(
@@ -346,6 +367,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     context.pullRequest?.base?.ref ||
                     context.repository?.defaultBranch,
                 callGraph,
+                reviewMode: context.codeReviewConfig?.reviewMode || 'normal',
             });
 
             const durationMs = Date.now() - startTime;
@@ -394,12 +416,6 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
             // Benchmark showed F1 drops of -5.7pp to -18.3pp with verify enabled.
             const reflectedSuggestions = validatedSuggestions;
 
-            // Classify level (issue/warning) using Gemini 3 Flash
-            // Separated from agent generation for consistency — BYOK models
-            // are unreliable at classification but good at finding bugs.
-            //
-            // Kody Rules suggestions skip LLM classification — their level comes
-            // directly from the severityLevel configured by the user on the rule.
             const kodyRulesSuggestions = reflectedSuggestions.filter(
                 (s) => s.label === 'kody_rules',
             );
@@ -407,54 +423,47 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 (s) => s.label !== 'kody_rules',
             );
 
-            // Map Kody Rules severity to level using the rule's configured severityLevel.
-            // The agent returns the rule UUID in brokenKodyRulesIds — use it for exact matching.
+            // Normalize Kody Rules legacy severity (critical/issue/warning) into the
+            // v2 severity scale (critical/high/medium/low). The agent returns the rule
+            // UUID in brokenKodyRulesIds — use it for exact matching.
             const kodyRulesById = new Map(
                 (context.codeReviewConfig?.kodyRules ?? [])
                     .filter((r) => r.uuid)
                     .map((r) => [r.uuid!, r]),
             );
-            const kodyRulesWithLevel = kodyRulesSuggestions.map((s) => {
+            const kodyRulesWithSeverity = kodyRulesSuggestions.map((s) => {
                 const ruleUuid = s.brokenKodyRulesIds?.[0];
                 const matchedRule = ruleUuid
                     ? kodyRulesById.get(ruleUuid)
                     : undefined;
-                const severityLevel = matchedRule
+                const legacySeverity = matchedRule
                     ? resolveKodyRuleSeverityLevel(matchedRule)
                     : SeverityLevel.ISSUE;
-                return { ...s, level: severityLevel };
+
+                return {
+                    ...s,
+                    severity: this.normalizeSeverity(legacySeverity),
+                };
             });
 
-            const prContext = [
-                context.pullRequest?.title
-                    ? `PR: ${context.pullRequest.title}`
-                    : '',
-                context.pullRequest?.body
-                    ? context.pullRequest.body.substring(0, 500)
-                    : '',
-            ]
-                .filter(Boolean)
-                .join('\n');
-
-            const levelOverrides =
-                context.codeReviewConfig?.v2PromptOverrides?.level;
-            const classifiedNonRules = await this.classifyLevels(
-                nonKodyRulesSuggestions,
-                prNumber,
-                prContext,
-                levelOverrides,
-                telemetryMeta,
+            const severityNormalizedNonRules = nonKodyRulesSuggestions.map(
+                (suggestion) => ({
+                    ...suggestion,
+                    severity: this.normalizeSeverity(suggestion.severity),
+                }),
             );
 
-            // Merge back: classified non-rules + kody rules with user-defined levels
-            const classified = [...classifiedNonRules, ...kodyRulesWithLevel];
+            const severityNormalized = [
+                ...severityNormalizedNonRules,
+                ...kodyRulesWithSeverity,
+            ];
 
             // Deduplicate suggestions that describe the same issue.
             // Kody Rules skip dedup — they are user-defined rules that must always be reported.
-            const kodyRulesForDedup = classified.filter(
+            const kodyRulesForDedup = severityNormalized.filter(
                 (s) => s.label === 'kody_rules',
             );
-            const nonKodyRulesForDedup = classified.filter(
+            const nonKodyRulesForDedup = severityNormalized.filter(
                 (s) => s.label !== 'kody_rules',
             );
 
@@ -462,11 +471,11 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
             let dedupTrace: DedupTraceSummary = {
                 status:
                     nonKodyRulesForDedup.length <= 1 ? 'skipped' : 'success',
-                totalClassifiedCount: classified.length,
+                totalClassifiedCount: severityNormalized.length,
                 kodyRulesSkippedCount: kodyRulesForDedup.length,
                 nonKodyInputCount: nonKodyRulesForDedup.length,
                 nonKodyOutputCount: nonKodyRulesForDedup.length,
-                finalOutputCount: classified.length,
+                finalOutputCount: severityNormalized.length,
                 uniqueCount: nonKodyRulesForDedup.length,
                 groupsCount: 0,
                 removedCount: 0,
@@ -484,7 +493,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 dedupedNonRules = dedupResult.suggestions;
                 dedupTrace = {
                     ...dedupResult.trace,
-                    totalClassifiedCount: classified.length,
+                    totalClassifiedCount: severityNormalized.length,
                     kodyRulesSkippedCount: kodyRulesForDedup.length,
                     nonKodyInputCount: nonKodyRulesForDedup.length,
                     nonKodyOutputCount: dedupResult.suggestions.length,
@@ -558,21 +567,27 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     ),
             );
 
-            // Sort file-level suggestions: kody_rules first, then by level (critical > issue > warning)
-            const levelOrder: Record<string, number> = {
+            // Sort file-level suggestions: kody_rules first, then by severity
+            // (critical > high > medium > low).
+            const severityOrder: Record<string, number> = {
                 critical: 0,
-                issue: 1,
-                warning: 2,
+                high: 1,
+                medium: 2,
+                low: 3,
             };
             fileLevelSuggestions.sort((a, b) => {
                 // kody_rules always first within the same file
                 const aIsRule = a.label === 'kody_rules' ? 0 : 1;
                 const bIsRule = b.label === 'kody_rules' ? 0 : 1;
                 if (aIsRule !== bIsRule) return aIsRule - bIsRule;
-                // Then by level
-                const aLevel = levelOrder[a.level || 'warning'] ?? 2;
-                const bLevel = levelOrder[b.level || 'warning'] ?? 2;
-                return aLevel - bLevel;
+                // Then by severity
+                const aSeverity = severityOrder[
+                    this.normalizeSeverity(a.severity)
+                ];
+                const bSeverity = severityOrder[
+                    this.normalizeSeverity(b.severity)
+                ];
+                return aSeverity - bSeverity;
             });
 
             return this.updateContext(context, (draft) => {
@@ -610,8 +625,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                             suggestionContent: s.suggestionContent || '',
                             oneSentenceSummary: s.oneSentenceSummary || '',
                             label: (s.label as any) || 'kody_rules',
-                            level: s.level,
-                            severity: s.level as any, // Use resolved severityLevel for badge display
+                            severity: this.normalizeSeverity(s.severity),
                             brokenKodyRulesIds: s.brokenKodyRulesIds,
                             deliveryStatus: DeliveryStatus.NOT_SENT,
                         })),
@@ -645,205 +659,6 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
      * Deduplicate suggestions that describe the same issue using LLM.
      * Groups by file, then asks Gemini Flash which suggestions are duplicates.
      */
-    /**
-     * Classify each suggestion as "issue" or "warning" using Gemini 3 Flash
-     * via OpenRouter. Separated from agent generation because BYOK models
-     * are inconsistent at classification.
-     *
-     * Uses XML prompt (dr1) + stripped category labels to avoid keyword
-     * anchoring bias. Eval score: 85% on 34 test cases.
-     */
-    private async classifyLevels(
-        suggestions: Partial<CodeSuggestion>[],
-        prNumber: number,
-        prContext?: string,
-        levelOverrides?: {
-            critical?: string;
-            issue?: string;
-            warning?: string;
-        },
-        telemetryMeta?: LangSmithTelemetryMetadata,
-    ): Promise<Partial<CodeSuggestion>[]> {
-        if (suggestions.length === 0) return suggestions;
-
-        // Use Gemini 3 Flash for classification via Google AI
-        // Falls back to getInternalModel() if Google key not available
-        let model: any;
-        const googleKey =
-            process.env.API_GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (googleKey) {
-            const { createGoogleGenerativeAI } = require('@ai-sdk/google');
-            model = createGoogleGenerativeAI({ apiKey: googleKey })(
-                'gemini-3-flash-preview',
-            );
-        } else {
-            model = getInternalModel();
-        }
-        if (!model) {
-            return suggestions.map((s) => ({ ...s, level: 'issue' as const }));
-        }
-
-        try {
-            // Strip category labels ([security], [bug], [performance]) to avoid
-            // keyword anchoring bias — the classifier should reason from the
-            // description, not the label.
-            const summaries = suggestions
-                .map(
-                    (s, i) =>
-                        `[${i}] ${s.relevantFile}:${s.relevantLinesStart}-${s.relevantLinesEnd}
-  Description: ${s.suggestionContent?.substring(0, 300) || s.oneSentenceSummary || 'N/A'}
-  Existing code: ${s.existingCode?.substring(0, 150) || 'N/A'}
-  Suggested fix: ${s.improvedCode?.substring(0, 150) || 'N/A'}`,
-                )
-                .join('\n\n');
-
-            const classifyResult: any = await tracedGenerateText({
-                model: model as any,
-                experimental_telemetry: {
-                    isEnabled: true,
-                    functionId: 'classify-suggestions',
-                },
-                providerOptions: buildLangSmithProviderOptions(
-                    'classify-suggestions',
-                    telemetryMeta,
-                ),
-                output: Output.object({
-                    schema: jsonSchema({
-                        type: 'object',
-                        properties: {
-                            classifications: {
-                                type: 'array',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        index: { type: 'number' },
-                                        level: {
-                                            type: 'string',
-                                            enum: [
-                                                'critical',
-                                                'issue',
-                                                'warning',
-                                            ],
-                                        },
-                                    },
-                                    required: ['index', 'level'],
-                                    additionalProperties: false,
-                                },
-                            },
-                        },
-                        required: ['classifications'],
-                        additionalProperties: false,
-                    }),
-                }) as any,
-                prompt: `<LevelClassifier>
-  <Context>Each finding was confirmed by an expert code review agent. Classify only — do not question validity.</Context>${prContext ? `\n  <PRContext>${prContext}</PRContext>` : ''}
-  <Definitions>
-    <Level name="critical">${levelOverrides?.critical || 'The code WILL crash, lose/corrupt data, or open a severe security breach in production. Immediate fix required before merge. Examples: null pointer dereference on every request, SQL injection, unhandled exception that kills the process, data written to wrong table/column, authentication bypass.'}</Level>
-    <Level name="issue">${levelOverrides?.issue || 'The code produces WRONG results or fails to perform its intended function in at least one scenario, but does not cause catastrophic failure. Should be fixed but can be evaluated. Examples: race condition under concurrent load, missing error handling that returns wrong status code, edge case that produces incorrect output, missing await that may lose data.'}</Level>
-    <Level name="warning">${levelOverrides?.warning || 'The code produces CORRECT results and performs its intended function in ALL scenarios but is suboptimal. Examples: N+1 query, missing caching, verbose code, unnecessary allocation, style issues.'}</Level>
-  </Definitions>
-  <DecisionRule>
-    Step 1: "Will this crash, lose data, or open a security breach on EVERY or MOST requests that hit this code path?"
-    YES → critical.
-
-    Step 2: "Does the code produce WRONG output, fail silently, or break in at least one realistic scenario?"
-    YES → issue.
-
-    Step 3: Everything else → warning.
-
-    critical = guaranteed production incident. The bug hits most/all users on this code path.
-    issue = real bug but requires specific conditions (edge case, race condition, specific input).
-    warning = code works correctly but could be better.
-
-    "Runs without error" does NOT mean "correct". Code that executes silently but produces the wrong data or does nothing when it should — is issue (or critical if it affects most requests).
-
-    Security: authentication bypass, injection, data exposure → critical. Missing rate limits, weak entropy → warning. Side-channel leaks → issue.
-  </DecisionRule>
-  <Findings>
-${summaries}
-  </Findings>
-</LevelClassifier>`,
-            });
-
-            // Track token usage for classification LLM call
-            try {
-                const classifyUsage =
-                    classifyResult.usage ?? classifyResult.totalUsage;
-                if (classifyUsage) {
-                    const classifyModelName = googleKey
-                        ? 'gemini-3-flash'
-                        : 'gpt-5.4-mini';
-                    await this.observabilityService.runInSpan(
-                        'classify-levels',
-                        async () => classifyResult,
-                        {
-                            'gen_ai.usage.input_tokens':
-                                classifyUsage.inputTokens ?? 0,
-                            'gen_ai.usage.output_tokens':
-                                classifyUsage.outputTokens ?? 0,
-                            'gen_ai.usage.total_tokens':
-                                classifyUsage.totalTokens ??
-                                (classifyUsage.inputTokens ?? 0) +
-                                    (classifyUsage.outputTokens ?? 0),
-                            'gen_ai.response.model': classifyModelName,
-                            'gen_ai.run.name': 'code-review-classify',
-                            'type': 'system',
-                            'prNumber': prNumber,
-                        },
-                    );
-                }
-            } catch {
-                // Observability is best-effort
-            }
-
-            const output =
-                (classifyResult as any).object ??
-                (classifyResult as any).output;
-            const classifications = output?.classifications || [];
-
-            const levelMap = new Map<
-                number,
-                'critical' | 'issue' | 'warning'
-            >();
-            for (const c of classifications) {
-                if (c.index != null && c.level) {
-                    levelMap.set(c.index, c.level);
-                }
-            }
-
-            const result = suggestions.map((s, i) => ({
-                ...s,
-                level: levelMap.get(i) || ('issue' as const),
-            }));
-
-            const criticalCount = result.filter(
-                (s) => s.level === 'critical',
-            ).length;
-            const issueCount = result.filter((s) => s.level === 'issue').length;
-            const warningCount = result.filter(
-                (s) => s.level === 'warning',
-            ).length;
-
-            this.logger.log({
-                message: `[CLASSIFY] PR#${prNumber}: ${criticalCount} critical, ${issueCount} issues, ${warningCount} warnings (${suggestions.length} total)`,
-                context: this.stageName,
-            });
-
-            return result;
-        } catch (error) {
-            this.logger.warn({
-                message: `[CLASSIFY] Failed for PR#${prNumber}, defaulting all to issue`,
-                context: this.stageName,
-                error,
-            });
-            // On failure, default to issue (inclusive)
-            return suggestions.map((s) => ({
-                ...s,
-                level: 'issue' as const,
-            }));
-        }
-    }
-
     private async deduplicateSuggestions(
         suggestions: Partial<CodeSuggestion>[],
         prNumber: number,
@@ -908,7 +723,7 @@ ${summaries}
             const summaries = suggestions
                 .map(
                     (s, i) =>
-                        `[${i}] ${s.relevantFile || 'unknown'}:${s.relevantLinesStart}-${s.relevantLinesEnd} [${s.label || 'unknown'}/${s.level || 'warning'}]: ${s.oneSentenceSummary || s.suggestionContent?.substring(0, 200)}${s.improvedCode ? `\n    fix: ${s.improvedCode.substring(0, 100)}` : ''}`,
+                        `[${i}] ${s.relevantFile || 'unknown'}:${s.relevantLinesStart}-${s.relevantLinesEnd} [${s.label || 'unknown'}/${this.normalizeSeverity(s.severity)}]: ${s.oneSentenceSummary || s.suggestionContent?.substring(0, 200)}${s.improvedCode ? `\n    fix: ${s.improvedCode.substring(0, 100)}` : ''}`,
                 )
                 .join('\n');
 
@@ -1217,6 +1032,8 @@ ${summaries}`,
                 ? 'Bug'
                 : name === 'security'
                   ? 'Security'
+                  : name === 'generalist'
+                    ? 'Generalist'
                   : name === 'rules'
                     ? 'Rules'
                     : name === 'kody_rules'

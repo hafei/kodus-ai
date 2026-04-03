@@ -231,6 +231,11 @@ export class CodeReviewPipelineObserver implements IPipelineObserver {
             Object.assign(additionalMetadata, ignoredFilesMetadata);
         }
 
+        if (stageName === 'AgentReviewStage' && context.dedupTrace) {
+            additionalMetadata = additionalMetadata || {};
+            additionalMetadata.dedupTrace = context.dedupTrace;
+        }
+
         let status =
             errors.length > 0
                 ? AutomationStatus.PARTIAL_ERROR

@@ -10,7 +10,7 @@ const {
     writeJson,
 } = require('./benchmark-lib');
 
-const LEVELS = ['with-warning', 'issue-critical'];
+const LEVELS = ['severity'];
 
 function parseArgs(argv) {
     const runRefs = [];

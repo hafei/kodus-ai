@@ -18,7 +18,7 @@ import { RemoteCommands } from './collectCrossFileContexts.service';
 const execFileAsync = promisify(execFile);
 
 const CLONE_TIMEOUT_MS = 120_000;
-const CMD_TIMEOUT_MS = 300_000; // 5 min — code-review-graph build needs ~90-180s for large repos (13k+ files)
+const CMD_TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 5 * 1024 * 1024; // 5 MB — cap output to prevent memory issues
 
 @Injectable()
@@ -220,7 +220,6 @@ export class LocalSandboxService implements ISandboxProvider {
                 const ALLOWED_PROGRAMS = new Set([
                     'sg', // ast-grep (macOS/homebrew)
                     'ast-grep', // ast-grep (npm global)
-                    'code-review-graph', // tree-sitter call graph builder
                     'tsc', // TypeScript compiler
                     'npx', // npx (further validated by tool-level whitelist)
                     'eslint',

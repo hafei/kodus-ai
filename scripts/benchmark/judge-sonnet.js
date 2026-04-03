@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Judge benchmark candidates against golden comments using Sonnet.
- * Runs N×M pairwise comparisons ONCE, then computes results for both
- * issue-critical and with-warning levels from the same match matrix.
+ * Runs N×M pairwise comparisons ONCE, then computes a single severity-based
+ * result set from the same match matrix.
  *
  * Usage:
- *   ANTHROPIC_API_KEY=sk-... node judge-sonnet.js <golden.json> <candidates-with-warning.json> <output-dir>
+ *   ANTHROPIC_API_KEY=sk-... node judge-sonnet.js <golden.json> <candidates-severity.json> <output-dir>
  */
 const Anthropic = require("@anthropic-ai/sdk");
 const fs = require("fs");
@@ -167,7 +167,7 @@ async function main() {
     const [goldenFile, candidatesFile, outputDir] = process.argv.slice(2);
 
     if (!goldenFile || !candidatesFile || !outputDir) {
-        console.error("Usage: node judge-sonnet.js <golden.json> <candidates-with-warning.json> <output-dir>");
+        console.error("Usage: node judge-sonnet.js <golden.json> <candidates-severity.json> <output-dir>");
         process.exit(1);
     }
 
@@ -185,19 +185,12 @@ async function main() {
     process.stderr.write("  Building match matrix...\n");
     const matrix = await buildMatchMatrix(client, golden, candidates);
 
-    // Step 2: Compute results for with-warning (all candidates)
-    process.stderr.write("  Computing with-warning results...\n");
-    const withWarning = computeGreedyMatching(matrix, golden, candidates, () => true);
-    withWarning.level = "with-warning";
-    fs.writeFileSync(path.join(outputDir, "results-with-warning.json"), JSON.stringify(withWarning, null, 2));
-    process.stderr.write("    with-warning: F1=" + withWarning.f1.toFixed(3) + " P=" + withWarning.precision.toFixed(3) + " R=" + withWarning.recall.toFixed(3) + " TP=" + withWarning.tp + " FP=" + withWarning.fp + "\n");
-
-    // Step 3: Compute results for issue-critical (filter out warnings)
-    process.stderr.write("  Computing issue-critical results...\n");
-    const issueCritical = computeGreedyMatching(matrix, golden, candidates, (c) => c.level === "issue" || c.level === "critical");
-    issueCritical.level = "issue-critical";
-    fs.writeFileSync(path.join(outputDir, "results-issue-critical.json"), JSON.stringify(issueCritical, null, 2));
-    process.stderr.write("    issue-critical: F1=" + issueCritical.f1.toFixed(3) + " P=" + issueCritical.precision.toFixed(3) + " R=" + issueCritical.recall.toFixed(3) + " TP=" + issueCritical.tp + " FP=" + issueCritical.fp + "\n");
+    // Step 2: Compute single severity-based result set
+    process.stderr.write("  Computing severity results...\n");
+    const severity = computeGreedyMatching(matrix, golden, candidates, () => true);
+    severity.level = "severity";
+    fs.writeFileSync(path.join(outputDir, "results-severity.json"), JSON.stringify(severity, null, 2));
+    process.stderr.write("    severity: F1=" + severity.f1.toFixed(3) + " P=" + severity.precision.toFixed(3) + " R=" + severity.recall.toFixed(3) + " TP=" + severity.tp + " FP=" + severity.fp + "\n");
 
     // Save raw matrix for debugging
     fs.writeFileSync(path.join(outputDir, "match-matrix.json"), JSON.stringify(matrix, null, 2));

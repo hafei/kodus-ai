@@ -86,9 +86,11 @@ export class RequestChangesOrApproveStage extends BasePipelineStage<CodeReviewPi
                 return;
             }
 
-            const criticalComments = lineComments.filter(
-                (comment) => comment.comment.suggestion?.level === 'critical',
-            );
+            const criticalComments = lineComments.filter((comment) => {
+                const severity =
+                    comment.comment.suggestion?.severity?.toLowerCase();
+                return severity === 'critical';
+            });
 
             if (criticalComments.length === 0) {
                 return;

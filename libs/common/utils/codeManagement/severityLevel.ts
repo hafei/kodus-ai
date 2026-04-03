@@ -9,11 +9,37 @@ enum ShieldColor {
     WARNING_AMBER = 'F9A825',
 }
 
-const getSeverityLevelShield = (severityLevel: SeverityLevel) => {
-    const labelTitle = 'severity_level';
-    const shield = `![${severityLevel}](https://img.shields.io/badge/${labelTitle}-${severityLevel.replace(/ /g, '\_')}-`;
+const normalizeSeverityLevel = (
+    severityLevel?: SeverityLevel | 'issue' | 'warning' | string,
+): SeverityLevel | null => {
+    switch ((severityLevel || '').toLowerCase()) {
+        case SeverityLevel.CRITICAL:
+            return SeverityLevel.CRITICAL;
+        case SeverityLevel.HIGH:
+            return SeverityLevel.HIGH;
+        case SeverityLevel.MEDIUM:
+            return SeverityLevel.MEDIUM;
+        case SeverityLevel.LOW:
+            return SeverityLevel.LOW;
+        case 'issue':
+            return SeverityLevel.HIGH;
+        case 'warning':
+            return SeverityLevel.LOW;
+        default:
+            return null;
+    }
+};
 
-    switch (severityLevel) {
+const getSeverityLevelShield = (
+    severityLevel?: SeverityLevel | 'issue' | 'warning' | string,
+) => {
+    const normalizedSeverity = normalizeSeverityLevel(severityLevel);
+    if (!normalizedSeverity) return '';
+
+    const labelTitle = 'severity_level';
+    const shield = `![${normalizedSeverity}](https://img.shields.io/badge/${labelTitle}-${normalizedSeverity.replace(/ /g, '_')}-`;
+
+    switch (normalizedSeverity) {
         case SeverityLevel.LOW:
             return `${shield}${ShieldColor.LOW_BLUE})`;
         case SeverityLevel.MEDIUM:

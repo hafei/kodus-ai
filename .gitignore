@@ -171,3 +171,4 @@ apps/web/.settings/
 apps/web/*.sublime-workspace
 apps/web/.vscode
 worktrees
+scripts/benchmark/runs/*

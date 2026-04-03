@@ -9,6 +9,7 @@ import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface
 import { BugAgentProvider } from './bug-agent.provider';
 import { SecurityAgentProvider } from './security-agent.provider';
 import { PerformanceAgentProvider } from './performance-agent.provider';
+import { GeneralistAgentProvider } from './generalist-agent.provider';
 import { KodyRulesAgentProvider } from './kody-rules-agent.provider';
 import {
     ReviewAgentInput,
@@ -36,11 +37,20 @@ export interface OrchestratorOutput {
 @Injectable()
 export class ReviewOrchestratorService {
     private readonly logger = createLogger(ReviewOrchestratorService.name);
+    private static readonly NORMAL_MODE_MAX_STEPS: Record<string, number> = {
+        generalist: 30,
+        bug: 20,
+        security: 12,
+        performance: 12,
+        'kody-rules': 20,
+    };
+    private static readonly DEEP_MODE_MAX_STEPS = 50;
 
     constructor(
         private readonly bugAgent: BugAgentProvider,
         private readonly securityAgent: SecurityAgentProvider,
         private readonly performanceAgent: PerformanceAgentProvider,
+        private readonly generalistAgent: GeneralistAgentProvider,
         @Optional()
         private readonly kodyRulesAgent?: KodyRulesAgentProvider,
     ) {}
@@ -55,22 +65,43 @@ export class ReviewOrchestratorService {
             provider: { execute: (input: any) => Promise<ReviewAgentOutput> };
         }> = [];
 
-        if (reviewOptions.bug !== false) {
+        const enabledCategories = (
+            [
+                reviewOptions.bug !== false && 'bug',
+                reviewOptions.security !== false && 'security',
+                reviewOptions.performance !== false && 'performance',
+            ].filter(Boolean) as Array<'bug' | 'security' | 'performance'>
+        );
+
+        if (agentInput.reviewMode === 'deep') {
+            if (enabledCategories.includes('bug')) {
+                agentTasks.push({
+                    name: 'bug',
+                    provider: this.bugAgent,
+                });
+            }
+            if (enabledCategories.includes('security')) {
+                agentTasks.push({
+                    name: 'security',
+                    provider: this.securityAgent,
+                });
+            }
+            if (enabledCategories.includes('performance')) {
+                agentTasks.push({
+                    name: 'performance',
+                    provider: this.performanceAgent,
+                });
+            }
+        } else if (enabledCategories.length > 0) {
             agentTasks.push({
-                name: 'bug',
-                provider: this.bugAgent,
-            });
-        }
-        if (reviewOptions.security !== false) {
-            agentTasks.push({
-                name: 'security',
-                provider: this.securityAgent,
-            });
-        }
-        if (reviewOptions.performance !== false) {
-            agentTasks.push({
-                name: 'performance',
-                provider: this.performanceAgent,
+                name: 'generalist',
+                provider: {
+                    execute: (inp: ReviewAgentInput) =>
+                        this.generalistAgent.execute({
+                            ...inp,
+                            requestedCategories: enabledCategories,
+                        }),
+                },
             });
         }
 
@@ -114,7 +145,13 @@ export class ReviewOrchestratorService {
         const results = await Promise.allSettled(
             agentTasks.map(async (task) => {
                 try {
-                    return await task.provider.execute(agentInput);
+                    return await task.provider.execute({
+                        ...agentInput,
+                        maxSteps: this.getMaxStepsForAgent(
+                            task.name,
+                            agentInput.reviewMode,
+                        ),
+                    });
                 } catch (error) {
                     this.logger.error({
                         message: `[AGENT] ${task.name} agent failed for PR#${agentInput.prNumber}`,
@@ -175,6 +212,19 @@ export class ReviewOrchestratorService {
             agentResults,
             totalDurationMs,
         };
+    }
+
+    private getMaxStepsForAgent(
+        agentName: string,
+        reviewMode?: 'normal' | 'deep',
+    ): number {
+        if (reviewMode === 'deep') {
+            return ReviewOrchestratorService.DEEP_MODE_MAX_STEPS;
+        }
+
+        return (
+            ReviewOrchestratorService.NORMAL_MODE_MAX_STEPS[agentName] ?? 20
+        );
     }
 
     /**

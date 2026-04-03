@@ -128,12 +128,18 @@ function buildAgentMetrics(agentRow, changedFiles) {
     return {
         status: agentRow.stageStatus,
         message: agentRow.stageMessage || '',
+        category: trace.category || null,
+        replicaIndex: trace.replicaIndex ?? null,
+        replicaTotal: trace.replicaTotal ?? null,
         steps: trace.steps ?? null,
         findings: trace.findings ?? null,
         durationMs: trace.durationMs ?? null,
         totalTokens: trace.totalTokens ?? null,
         toolCalls: toolCalls.length,
         toolSummary,
+        suggestionsPreview: Array.isArray(trace.suggestionsPreview)
+            ? trace.suggestionsPreview
+            : [],
         filesRead: [...filesRead].sort(),
         changedFilesTouched: touchedChangedFiles.sort(),
         changedFilesTouchedCount: touchedChangedFiles.length,
@@ -153,6 +159,92 @@ function buildAgentMetrics(agentRow, changedFiles) {
     };
 }
 
+function getBaseAgentName(agentName, metrics) {
+    if (metrics?.category) return metrics.category;
+
+    return agentName.replace(/-r\d+$/i, '').replace(/-\d+of\d+$/i, '');
+}
+
+function aggregateReplicaMetrics(agentName, replicas) {
+    if (!replicas.length) return null;
+    if (replicas.length === 1) return replicas[0].metrics;
+
+    const changedFilesTouched = new Set();
+    const filesRead = new Set();
+    const suggestionsPreview = [];
+    let maxReplicaTotal = 0;
+
+    for (const replica of replicas) {
+        for (const file of replica.metrics.changedFilesTouched || []) {
+            changedFilesTouched.add(file);
+        }
+        for (const file of replica.metrics.filesRead || []) {
+            filesRead.add(file);
+        }
+        for (const preview of replica.metrics.suggestionsPreview || []) {
+            suggestionsPreview.push(preview);
+        }
+        maxReplicaTotal = Math.max(
+            maxReplicaTotal,
+            replica.metrics.replicaTotal || 0,
+        );
+    }
+
+    const sortedReplicas = [...replicas].sort((left, right) =>
+        left.name.localeCompare(right.name),
+    );
+    const primary = sortedReplicas[0].metrics;
+
+    return {
+        ...primary,
+        category: primary.category || agentName,
+        status: sortedReplicas.every(
+            (replica) => replica.metrics.status === 'success',
+        )
+            ? 'success'
+            : sortedReplicas.some(
+                    (replica) => replica.metrics.status === 'error',
+                )
+              ? 'mixed'
+              : primary.status,
+        replicaIndex: null,
+        replicaTotal: maxReplicaTotal || sortedReplicas.length,
+        replicaNames: sortedReplicas.map((replica) => replica.name),
+        steps: sortedReplicas.reduce(
+            (sum, replica) => sum + (replica.metrics.steps || 0),
+            0,
+        ),
+        findings: sortedReplicas.reduce(
+            (sum, replica) => sum + (replica.metrics.findings || 0),
+            0,
+        ),
+        durationMs: sortedReplicas.reduce(
+            (sum, replica) => sum + (replica.metrics.durationMs || 0),
+            0,
+        ),
+        totalTokens: sortedReplicas.reduce(
+            (sum, replica) => sum + (replica.metrics.totalTokens || 0),
+            0,
+        ),
+        toolCalls: sortedReplicas.reduce(
+            (sum, replica) => sum + (replica.metrics.toolCalls || 0),
+            0,
+        ),
+        filesRead: [...filesRead].sort(),
+        changedFilesTouched: [...changedFilesTouched].sort(),
+        changedFilesTouchedCount: changedFilesTouched.size,
+        changedFilesTouchedPct:
+            primary.coverage?.totalCount && primary.coverage.totalCount > 0
+                ? changedFilesTouched.size / primary.coverage.totalCount
+                : primary.changedFilesTouchedPct,
+        suggestionsPreview: suggestionsPreview.slice(0, 20),
+        replicas: sortedReplicas.map((replica) => ({
+            name: replica.name,
+            ...replica.metrics,
+        })),
+    };
+}
+
 function main() {
     const { runName, outputDir } = parseArgs(process.argv);
     if (!runName) {
@@ -165,9 +257,10 @@ function main() {
     const { manifest } = loadManifest(runName);
     const resultsDir = resolveResultsDir(runName);
     const prMetadataPath = path.join(resultsDir, 'pr-metadata.json');
-    const prMetadata = fs.existsSync(prMetadataPath)
-        ? loadJson(prMetadataPath).prs
+    const prMetadataPayload = fs.existsSync(prMetadataPath)
+        ? loadJson(prMetadataPath)
         : null;
+    const prMetadata = prMetadataPayload?.prs || null;
 
     const baseEntries = prMetadata || manifest.prs;
     const metadata = resolvePullRequestMetadata(baseEntries);
@@ -190,12 +283,40 @@ function main() {
         const key = `${entry.repositoryId}#${entry.prNumber}`;
         const rows = stageGroups.get(key) || [];
         const changedFiles = entry.changedFiles || [];
-        const agents = {};
+        const rawAgents = {};
+        const agentReplicas = {};
+        const agentReviewStage = rows.find(
+            (row) => row.stageName === 'AgentReviewStage',
+        );
+        const dedup =
+            agentReviewStage?.stageMetadata?.dedupTrace &&
+            typeof agentReviewStage.stageMetadata.dedupTrace === 'object'
+                ? agentReviewStage.stageMetadata.dedupTrace
+                : null;
 
         for (const row of rows) {
             if (!row.stageName?.startsWith('AgentReview::')) continue;
             const agentName = row.stageName.replace('AgentReview::', '');
-            agents[agentName] = buildAgentMetrics(row, changedFiles);
+            const metrics = buildAgentMetrics(row, changedFiles);
+            rawAgents[agentName] = metrics;
+
+            const baseAgentName = getBaseAgentName(agentName, metrics);
+            if (!agentReplicas[baseAgentName]) {
+                agentReplicas[baseAgentName] = [];
+            }
+            agentReplicas[baseAgentName].push({
+                name: agentName,
+                metrics,
+            });
+        }
+
+        const agents = { ...rawAgents };
+        for (const [baseAgentName, replicas] of Object.entries(agentReplicas)) {
+            if (agents[baseAgentName]) continue;
+            const aggregate = aggregateReplicaMetrics(baseAgentName, replicas);
+            if (aggregate) {
+                agents[baseAgentName] = aggregate;
+            }
         }
 
         const finishedStage = rows.find(
@@ -215,6 +336,7 @@ function main() {
                 status: rows[0]?.executionStatus || null,
                 createdAt: rows[0]?.executionCreatedAt || null,
             },
+            dedup,
             finishedStage: finishedStage
                 ? {
                       status: finishedStage.stageStatus,
@@ -222,12 +344,17 @@ function main() {
                   }
                 : null,
             agents,
+            agentReplicas,
         };
     });
 
     const summary = {
         generatedAt: new Date().toISOString(),
         runName,
+        benchmarkConfig:
+            prMetadataPayload?.benchmarkConfig ||
+            manifest.benchmarkConfig ||
+            null,
         prs: prSummaries,
         aggregates: {
             prs: prSummaries.length,
@@ -251,6 +378,17 @@ function main() {
                         (sum, pr) => sum + (pr.agents.performance?.steps || 0),
                         0,
                     ) / (prSummaries.length || 1),
+            },
+            dedup: {
+                runsWithTrace: prSummaries.filter((pr) => pr.dedup).length,
+                totalRemoved: prSummaries.reduce(
+                    (sum, pr) => sum + (pr.dedup?.removedCount || 0),
+                    0,
+                ),
+                totalGroups: prSummaries.reduce(
+                    (sum, pr) => sum + (pr.dedup?.groupsCount || 0),
+                    0,
+                ),
             },
         },
     };

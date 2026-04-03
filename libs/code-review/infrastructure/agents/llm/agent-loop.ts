@@ -80,13 +80,14 @@ import {
 
 const logger = createLogger('AgentLoop');
 
-const MAX_STEPS = 35;
+const MAX_STEPS = 20;
 const AGENT_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes max per agent
 
 /** Schema for structured output */
 const suggestionSchema = z.object({
     relevantFile: z.string(),
     language: z.string().optional(),
+    label: z.enum(['bug', 'security', 'performance']).optional(),
     suggestionContent: z.string(),
     existingCode: z.string(),
     improvedCode: z.string(),
@@ -94,7 +95,7 @@ const suggestionSchema = z.object({
     relevantLinesStart: z.number().optional(),
     relevantLinesEnd: z.number().optional(),
     severity: z.enum(['critical', 'high', 'medium', 'low']).optional(), // V2 compat
-    level: z.enum(['issue', 'warning']).optional(), // V3: binary classification
+    confidence: z.number().min(1).max(10).optional(), // 1-10: how confident the agent is in this finding
     ruleUuid: z.string().optional(), // Kody Rules: UUID of the violated rule
 });
 
@@ -126,6 +127,8 @@ export interface AgentLoopInput {
     baseBranch?: string;
     /** Pre-computed call graph shared by reviewers and verifier. */
     callGraph?: string;
+    /** Review mode: 'normal' skips verify for high-confidence findings, 'deep' verifies everything. */
+    reviewMode?: 'normal' | 'deep';
 }
 
 export interface AgentLoopOutput {
@@ -146,6 +149,12 @@ export interface AgentLoopOutput {
         outputTokens: number;
         reasoningTokens: number;
         totalTokens: number;
+    };
+    /** Token usage for the verification sub-step only (included in total usage). */
+    verificationUsage?: {
+        inputTokens: number;
+        outputTokens: number;
+        reasoningTokens: number;
     };
     coverage: CoverageSummary;
     verification?: VerificationTraceSummary | null;
@@ -578,6 +587,7 @@ Respond with ONLY the JSON:
     {
       "relevantFile": "path/to/file",
       "language": "java",
+      "label": "bug|security|performance",
       "suggestionContent": "Description of the issue with evidence from your investigation",
       "existingCode": "problematic code",
       "improvedCode": "fixed code",
@@ -780,6 +790,8 @@ Respond with ONLY the JSON:
         }
     }
 
+    let verificationUsage = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0 };
+
     if (findings.suggestions.length > 0) {
         const verificationResult = await verifyFindingsWithTools({
             findings,
@@ -793,6 +805,11 @@ Respond with ONLY the JSON:
         totalOutputTokens += verificationResult.usage.outputTokens;
         totalReasoningTokens += verificationResult.usage.reasoningTokens;
         verificationTrace = verificationResult.trace;
+        verificationUsage = {
+            inputTokens: verificationResult.usage.inputTokens,
+            outputTokens: verificationResult.usage.outputTokens,
+            reasoningTokens: verificationResult.usage.reasoningTokens,
+        };
     }
 
     // Base usage from the main agent loop
@@ -834,6 +851,7 @@ Respond with ONLY the JSON:
             reasoningTokens: finalReasoningTokens,
             totalTokens: finalInputTokens + finalOutputTokens,
         },
+        verificationUsage,
         coverage: coverageSummary,
         verification: verificationTrace,
         anomalies: buildAgentAnomalies({
@@ -1260,6 +1278,7 @@ Return ONLY JSON:
     {
       "relevantFile": "path/to/file",
       "language": "ts",
+      "label": "bug|security|performance",
       "suggestionContent": "describe the missed issue concretely",
       "existingCode": "problematic code",
       "improvedCode": "fix",
@@ -1411,26 +1430,94 @@ async function verifyFindingsWithTools(params: {
         let totalReasoningTokens = 0;
         const decisionTraces: VerificationDecisionTrace[] = [];
 
-        for (let index = 0; index < findings.suggestions.length; index++) {
-            const suggestion = findings.suggestions[index];
-            const verificationResult = await verifySingleFindingWithTools({
-                index,
-                suggestion,
-                input,
-                allToolCalls,
-                tools,
-            });
+        const reviewMode = params.input.reviewMode || 'normal';
 
-            decisions.set(index, verificationResult.decision);
-            verifierEvidenceByIndex.set(index, verificationResult.evidence);
-            verifierParseModeByIndex.set(index, verificationResult.parseMode);
-            verifierRawTextByIndex.set(
-                index,
-                verificationResult.rawTextPreview,
-            );
-            totalInputTokens += verificationResult.usage.inputTokens;
-            totalOutputTokens += verificationResult.usage.outputTokens;
-            totalReasoningTokens += verificationResult.usage.reasoningTokens;
+        // Route each finding based on confidence + reviewMode
+        const toVerifyFull: Array<{ index: number; suggestion: any }> = [];
+        const toVerifyLight: Array<{ index: number; suggestion: any }> = [];
+        const toSkip: Array<{ index: number; suggestion: any }> = [];
+
+        for (let i = 0; i < findings.suggestions.length; i++) {
+            const suggestion = findings.suggestions[i];
+            const confidence = suggestion.confidence ?? 5;
+
+            if (reviewMode === 'deep') {
+                toVerifyFull.push({ index: i, suggestion });
+            } else if (confidence >= 8) {
+                toSkip.push({ index: i, suggestion });
+            } else if (confidence >= 5) {
+                toVerifyLight.push({ index: i, suggestion });
+            } else {
+                toVerifyFull.push({ index: i, suggestion });
+            }
+        }
+
+        if (toSkip.length > 0) {
+            logger.log({
+                message: `[AGENT-VERIFY] Skipping ${toSkip.length} high-confidence findings (confidence >= 8), verifying ${toVerifyLight.length} light + ${toVerifyFull.length} full`,
+                context: 'AgentLoop',
+            });
+        }
+
+        // Skip: auto-keep high-confidence findings
+        for (const { index } of toSkip) {
+            decisions.set(index, { index, keep: true, rationale: 'High confidence (>= 8) — skipped verification in normal mode.' });
+            verifierParseModeByIndex.set(index, 'direct');
+            verifierRawTextByIndex.set(index, '');
+            verifierEvidenceByIndex.set(index, { strongFiles: [], weakFiles: [] });
+        }
+
+        // Light verify: 2 steps max, tools available
+        const lightResults = await Promise.allSettled(
+            toVerifyLight.map(({ index, suggestion }) =>
+                verifySingleFindingWithTools({
+                    index,
+                    suggestion,
+                    input,
+                    allToolCalls,
+                    tools,
+                    maxVerifySteps: 2,
+                }),
+            ),
+        );
+
+        for (let i = 0; i < lightResults.length; i++) {
+            const result = lightResults[i];
+            if (result.status !== 'fulfilled') continue;
+            const vr = result.value;
+            decisions.set(toVerifyLight[i].index, vr.decision);
+            verifierEvidenceByIndex.set(toVerifyLight[i].index, vr.evidence);
+            verifierParseModeByIndex.set(toVerifyLight[i].index, vr.parseMode);
+            verifierRawTextByIndex.set(toVerifyLight[i].index, vr.rawTextPreview);
+            totalInputTokens += vr.usage.inputTokens;
+            totalOutputTokens += vr.usage.outputTokens;
+            totalReasoningTokens += vr.usage.reasoningTokens;
+        }
+
+        // Full verify: 5 steps, all tools
+        const fullResults = await Promise.allSettled(
+            toVerifyFull.map(({ index, suggestion }) =>
+                verifySingleFindingWithTools({
+                    index,
+                    suggestion,
+                    input,
+                    allToolCalls,
+                    tools,
+                }),
+            ),
+        );
+
+        for (let i = 0; i < fullResults.length; i++) {
+            const result = fullResults[i];
+            if (result.status !== 'fulfilled') continue;
+            const vr = result.value;
+            decisions.set(toVerifyFull[i].index, vr.decision);
+            verifierEvidenceByIndex.set(toVerifyFull[i].index, vr.evidence);
+            verifierParseModeByIndex.set(toVerifyFull[i].index, vr.parseMode);
+            verifierRawTextByIndex.set(toVerifyFull[i].index, vr.rawTextPreview);
+            totalInputTokens += vr.usage.inputTokens;
+            totalOutputTokens += vr.usage.outputTokens;
+            totalReasoningTokens += vr.usage.reasoningTokens;
         }
 
         let droppedByVerifier = 0;
@@ -1582,6 +1669,7 @@ async function verifySingleFindingWithTools(params: {
     input: AgentLoopInput;
     allToolCalls: AgentLoopOutput['toolCalls'];
     tools: Record<string, any>;
+    maxVerifySteps?: number;
 }): Promise<{
     decision: SuggestionVerificationDecision;
     evidence: ToolEvidenceSummary;
@@ -1679,6 +1767,8 @@ Rules:
 
 Drop criteria — drop the finding if ANY of these apply:
 - The finding is speculative: it describes a theoretical concern without pointing to a concrete failure path in the changed code (e.g. "lacks rate limiting", "could cause performance issues", "consider adding validation").
+- The finding is a pure efficiency concern without a failure path: O(N) queries, N+1 queries, redundant allocations, eager evaluation, synchronous operations in async context — UNLESS it causes a crash, timeout, or data corruption under normal usage.
+- The finding describes a missing defensive measure (missing CSRF, missing rate limit, missing input validation, missing authentication) without evidence that the omission is exploitable in the specific changed code.
 - The finding describes a pre-existing pattern that is NOT made worse by this PR.
 - The finding is about code style, naming, documentation, or best practices rather than a concrete bug.
 - The root cause described is factually wrong (e.g. claims something is not imported when it is).
@@ -1687,6 +1777,7 @@ Keep criteria — keep the finding only if ALL of these apply:
 - The finding identifies a concrete defect: wrong behavior, crash, data corruption, or security vulnerability.
 - The root cause is in lines added or modified by this PR.
 - You can trace a specific failure path from the changed code to the bad outcome.
+- The failure can happen under normal usage, not just under adversarial or extreme conditions.
 
 When in doubt between a speculative concern and a real bug, DROP. Precision matters more than recall at this stage — a downstream reviewer exists.
 
@@ -1712,10 +1803,11 @@ Output JSON:
 \`\`\`
 `,
         tools,
-        stopWhen: stepCountIs(5),
+        stopWhen: stepCountIs(params.maxVerifySteps || 5),
         prepareStep: ({ stepNumber }: any) => {
+            const maxSteps = params.maxVerifySteps || 5;
             verifierSteps = stepNumber;
-            if (stepNumber >= 4) {
+            if (stepNumber >= maxSteps - 1) {
                 return {
                     toolChoice: 'none' as const,
                     activeTools: [],
@@ -2518,7 +2610,7 @@ function looksLikeFindings(text: string): boolean {
         /\b(bug|issue|vulnerability|problem|error|flaw|defect)\b/,
         /\b(fix|should|must|incorrect|missing|broken|unsafe|race condition)\b/,
         /\b(line\s*\d+|\.ts\b|\.js\b|\.go\b|\.rb\b|\.py\b)/,
-        /\b(severity|critical|high|medium|issue|warning)\b/,
+        /\b(severity|critical|high|medium|low)\b/,
         /\b(existing.?code|improved.?code|suggestion)\b/,
         /```/,
     ];
@@ -2568,6 +2660,14 @@ async function structureWithFallbackModel(
                                 properties: {
                                     relevantFile: { type: 'string' },
                                     language: { type: 'string' },
+                                    label: {
+                                        type: 'string',
+                                        enum: [
+                                            'bug',
+                                            'security',
+                                            'performance',
+                                        ],
+                                    },
                                     suggestionContent: { type: 'string' },
                                     existingCode: { type: 'string' },
                                     improvedCode: { type: 'string' },
@@ -2582,10 +2682,6 @@ async function structureWithFallbackModel(
                                             'medium',
                                             'low',
                                         ],
-                                    },
-                                    level: {
-                                        type: 'string',
-                                        enum: ['issue', 'warning'],
                                     },
                                 },
                                 required: [
@@ -2615,7 +2711,7 @@ Rules:
 ${reviewText}
 ---
 
-For each issue found, extract: relevantFile, language, suggestionContent (full description), existingCode, improvedCode, oneSentenceSummary, relevantLinesStart, relevantLinesEnd, severity (critical/high/medium/low), level (issue or warning).`,
+For each issue found, extract: relevantFile, language, label (bug/security/performance when present), suggestionContent (full description), existingCode, improvedCode, oneSentenceSummary, relevantLinesStart, relevantLinesEnd, severity (critical/high/medium/low).`,
         });
 
         const output: any = (result as any).object ?? (result as any).output;

@@ -176,6 +176,39 @@ export interface CodeReviewPipelineContext extends PipelineContext {
     getFreshCloneParams?: () => Promise<CreateSandboxParams>;
 
     correlationId?: string;
+
+    /** Dedup telemetry captured by AgentReviewStage and exported by benchmark tooling. */
+    dedupTrace?: DedupTraceSummary;
+}
+
+export interface DedupTraceSuggestionSummary {
+    relevantFile?: string;
+    relevantLinesStart?: number;
+    relevantLinesEnd?: number;
+    label?: string;
+    severity?: string;
+    level?: string;
+    oneSentenceSummary?: string;
+}
+
+export interface DedupTraceGroupSummary {
+    keep: DedupTraceSuggestionSummary;
+    duplicates: DedupTraceSuggestionSummary[];
+}
+
+export interface DedupTraceSummary {
+    status: 'skipped' | 'success' | 'empty-keep-all' | 'failed-keep-all';
+    totalClassifiedCount: number;
+    kodyRulesSkippedCount: number;
+    nonKodyInputCount: number;
+    nonKodyOutputCount: number;
+    finalOutputCount: number;
+    uniqueCount: number;
+    groupsCount: number;
+    removedCount: number;
+    errorMessage?: string;
+    groups?: DedupTraceGroupSummary[];
+    unique?: DedupTraceSuggestionSummary[];
 }
 
 export interface FileContextAgentResult {

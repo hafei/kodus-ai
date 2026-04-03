@@ -3,10 +3,12 @@ import {
     IsArray,
     IsBoolean,
     IsEnum,
+    IsInt,
     IsNumber,
     IsObject,
     IsOptional,
     IsString,
+    Min,
     ValidateNested,
 } from 'class-validator';
 
