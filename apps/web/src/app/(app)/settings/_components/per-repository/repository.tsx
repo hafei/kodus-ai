@@ -19,6 +19,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@components/ui/tooltip";
+import { useKodyRulesCountByRepository } from "@services/kodyRules/hooks";
 import type { useSuspenseGetParameterPlatformConfigs } from "@services/parameters/hooks";
 import { KodyLearningStatus } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
@@ -70,6 +71,14 @@ const RepositoryCollapsibleItem = ({
             shouldFetchRepositoryCounts,
         );
 
+    const {
+        repositoryOverrideCount: repositoryKodyRulesCount,
+        directoryOverrideCounts: directoryKodyRulesCounts,
+    } = useKodyRulesCountByRepository(
+        repository.id,
+        shouldFetchRepositoryCounts,
+    );
+
     const repositoryCustomMessagesOverrideCount = hasRepositoryConfig
         ? (repositoryOverrideCountsData?.repositoryOverrideCount ?? 0)
         : 0;
@@ -91,7 +100,8 @@ const RepositoryCollapsibleItem = ({
             return (
                 total +
                 directoryConfigOverrideCount +
-                (directoryCustomMessageCounts.get(directory.id) ?? 0)
+                (directoryCustomMessageCounts.get(directory.id) ?? 0) +
+                (directoryKodyRulesCounts.get(directory.id) ?? 0)
             );
         },
         0,
@@ -100,6 +110,7 @@ const RepositoryCollapsibleItem = ({
     const overrideCount =
         repositoryConfigOverrideCount +
         repositoryCustomMessagesOverrideCount +
+        repositoryKodyRulesCount +
         nestedDirectoryOverrideCount;
 
     return (
@@ -172,6 +183,9 @@ const RepositoryCollapsibleItem = ({
                                         customMessagesOverrideCount={
                                             repositoryCustomMessagesOverrideCount
                                         }
+                                        kodyRulesOverrideCount={
+                                            repositoryKodyRulesCount
+                                        }
                                     />
                                 </SidebarMenuSubItem>
                             );
@@ -187,6 +201,9 @@ const RepositoryCollapsibleItem = ({
                                 configs={d.configs}
                                 customMessagesOverrideCount={
                                     directoryCustomMessageCounts.get(d.id) ?? 0
+                                }
+                                kodyRulesOverrideCount={
+                                    directoryKodyRulesCounts.get(d.id) ?? 0
                                 }
                             />
                         );

@@ -34,6 +34,7 @@ export const PerDirectory = ({
     repository,
     configs,
     customMessagesOverrideCount,
+    kodyRulesOverrideCount,
 }: {
     repository: Pick<CodeReviewRepositoryConfig, "id" | "name" | "isSelected">;
     directory: Pick<
@@ -43,6 +44,7 @@ export const PerDirectory = ({
     routes: Array<{ label: string; href: string }>;
     configs?: FormattedCodeReviewConfig;
     customMessagesOverrideCount?: number;
+    kodyRulesOverrideCount?: number;
 }) => {
     const searchParams = useSearchParams();
     const { repositoryId, pageName, directoryId } = useCodeReviewRouteParams();
@@ -53,7 +55,9 @@ export const PerDirectory = ({
         FormattedConfigLevel.DIRECTORY,
     );
     const resolvedOverrideCount =
-        configOverrideCount + (customMessagesOverrideCount ?? 0);
+        configOverrideCount +
+        (customMessagesOverrideCount ?? 0) +
+        (kodyRulesOverrideCount ?? 0);
 
     return (
         <Collapsible
@@ -129,6 +133,9 @@ export const PerDirectory = ({
                                     config={configs}
                                     customMessagesOverrideCount={
                                         customMessagesOverrideCount ?? 0
+                                    }
+                                    kodyRulesOverrideCount={
+                                        kodyRulesOverrideCount ?? 0
                                     }
                                 />
                             </SidebarMenuSubItem>
