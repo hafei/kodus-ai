@@ -443,7 +443,12 @@ export class KodyRulesTools {
                     return {
                         success: true,
                         count: 1,
-                        data: result,
+                        data: {
+                            uuid: result?.uuid,
+                            title: result?.title,
+                            rule: result?.rule,
+                            status: result?.status,
+                        },
                     };
                 },
             ),
