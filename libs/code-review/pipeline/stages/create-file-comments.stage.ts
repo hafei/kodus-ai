@@ -258,8 +258,8 @@ export class CreateFileCommentsStage extends BasePipelineStage<CodeReviewPipelin
             dryRun,
         } = context;
 
-        // v3 pipeline: suggestions are already filtered by classify (level=issue/critical)
-        // and deduplicated by agent-review.stage. No additional severity/quantity filtering needed.
+        // v3 pipeline: suggestions are already severity-normalized and deduplicated
+        // by agent-review.stage. No additional severity/quantity filtering needed.
         const sortedPrioritizedSuggestions = validSuggestionsToAnalyze;
         const allDiscardedSuggestions = [...discardedSuggestionsBySafeGuard];
 

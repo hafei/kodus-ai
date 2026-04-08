@@ -125,6 +125,14 @@ export class RabbitMQWrapperModule {
                                 ) ?? 20,
                             default: false,
                         },
+                        'channel-ast-graph-build': {
+                            prefetchCount: 2,
+                            default: false,
+                        },
+                        'channel-ast-graph-incremental': {
+                            prefetchCount: 5,
+                            default: false,
+                        },
                     },
                 };
             },

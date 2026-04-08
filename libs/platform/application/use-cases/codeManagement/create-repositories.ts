@@ -157,7 +157,6 @@ export class CreateRepositoriesUseCase implements IUseCase {
                 setImmediate(() => {
                     this.enqueueAstGraphBuilds(
                         selectedRepositories,
-                        params.type,
                         { organizationId, teamId },
                     ).catch((error) => {
                         this.logger.error({
@@ -204,10 +203,12 @@ export class CreateRepositoriesUseCase implements IUseCase {
             full_name?: string;
             http_url?: string;
             organizationName?: string;
+            default_branch?: string;
         }>,
-        platformType: string,
         orgTeam: { organizationId: string; teamId: string },
     ): Promise<void> {
+        const platformType = await this.codeManagementService.getTypeIntegration(orgTeam) || 'github';
+
         for (const repo of repositories) {
             try {
                 const fullName =
@@ -217,11 +218,12 @@ export class CreateRepositoriesUseCase implements IUseCase {
 
                 const repoRecord =
                     await this.repositoryRepository.findOrCreate({
-                        integrationConfigId: orgTeam.teamId, // use teamId as integration reference
+                        integrationConfigId: orgTeam.teamId,
                         externalId: String(repo.id),
                         name: repo.name,
                         fullName,
-                        platform: platformType || 'github',
+                        platform: platformType,
+                        defaultBranch: repo.default_branch,
                     });
 
                 // Only enqueue if graph not already ready or building

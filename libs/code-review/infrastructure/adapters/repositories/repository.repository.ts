@@ -37,17 +37,31 @@ export class RepositoryRepository {
             return existing;
         }
 
-        const model = this.repo.create({
-            integrationConfigId: params.integrationConfigId,
-            externalId: params.externalId,
-            name: params.name,
-            fullName: params.fullName,
-            platform: params.platform,
-            defaultBranch: params.defaultBranch ?? 'main',
-            astGraphStatus: AstGraphStatus.PENDING,
-        });
+        try {
+            const model = this.repo.create({
+                integrationConfigId: params.integrationConfigId,
+                externalId: params.externalId,
+                name: params.name,
+                fullName: params.fullName,
+                platform: params.platform,
+                defaultBranch: params.defaultBranch ?? 'main',
+                astGraphStatus: AstGraphStatus.PENDING,
+            });
 
-        return this.repo.save(model);
+            return await this.repo.save(model);
+        } catch (error: any) {
+            // Handle race condition: concurrent insert hit unique constraint
+            if (error?.code === '23505' || error?.message?.includes('duplicate key')) {
+                const retry = await this.repo.findOne({
+                    where: {
+                        platform: params.platform,
+                        externalId: params.externalId,
+                    },
+                });
+                if (retry) return retry;
+            }
+            throw error;
+        }
     }
 
     /**

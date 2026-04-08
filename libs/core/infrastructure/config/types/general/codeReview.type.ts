@@ -193,7 +193,6 @@ export type CodeSuggestion = {
     label: string;
     llmPrompt?: string;
     severity?: string;
-    level?: 'critical' | 'issue' | 'warning'; // Legacy-only compatibility field. New reviews use `severity`.
     crossFileEvidence?: boolean;
     rankScore?: number;
     priorityStatus?: PriorityStatus;
@@ -404,16 +403,6 @@ export type CodeReviewConfig = {
         };
         generation?: {
             main?: string;
-        };
-        /**
-         * Custom definitions for issue/warning level classification.
-         * Used by the level classifier to understand what the team considers
-         * "critical", "issue", or "warning". Overrides the default definitions.
-         */
-        level?: {
-            critical?: string;
-            issue?: string;
-            warning?: string;
         };
     };
     contextReferenceId?: string;

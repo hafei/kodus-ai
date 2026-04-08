@@ -12,17 +12,48 @@ import { RemoteCommands } from '@libs/code-review/infrastructure/adapters/servic
 import { ObservabilityService } from '@libs/core/log/observability.service';
 import { PermissionValidationService } from '@libs/ee/shared/services/permissionValidation.service';
 import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import { convertTiptapJSONToText } from '@libs/common/utils/tiptap-json';
 import { byokToVercelModel, getModelName } from './llm/byok-to-vercel';
 import {
     runAgentLoop,
+    type AgentLoopSecrets,
     type VerificationTraceSummary,
     type AgentAnomalySummary,
 } from './llm/agent-loop';
-import { DocumentationSearchAdapter } from './llm/agent-tools.factory';
 import {
     CoverageSummary,
     formatCoverageTargetsForPrompt,
 } from './llm/coverage-ledger';
+
+const DEFAULT_SEVERITY_FLAGS = {
+    critical:
+        'Application crash/downtime. Data loss/corruption. Security breach. Critical operation failure.',
+    high: 'Important functionality broken. Memory leaks causing eventual crash. Performance degradation affecting UX.',
+    medium: 'Partially broken functionality. Performance issues in specific scenarios. Incorrect but recoverable data.',
+    low: 'Minor performance overhead. Incorrect metrics/logs. Rarely affecting few users. Edge-case issues.',
+} as const;
+
+function resolvePromptOverrideText(value: unknown): string {
+    if (value === undefined || value === null) {
+        return '';
+    }
+
+    if (typeof value === 'string') {
+        return convertTiptapJSONToText(value).trim();
+    }
+
+    if (typeof value === 'object') {
+        if ('value' in value) {
+            return resolvePromptOverrideText(
+                (value as { value?: unknown }).value,
+            );
+        }
+
+        return convertTiptapJSONToText(value as Record<string, unknown>).trim();
+    }
+
+    return '';
+}
 
 /**
  * Category-specific agent configuration provided by each concrete subclass.
@@ -79,7 +110,6 @@ export interface ReviewAgentInput {
     memoryRules?: Partial<IKodyRule>[];
     v2PromptOverrides?: CodeReviewConfig['v2PromptOverrides'];
     generationMain?: string;
-    documentationSearchService?: DocumentationSearchAdapter;
     prTitle?: string;
     prBody?: string;
     onAgentProgress?: (event: AgentProgressEvent) => void;
@@ -93,7 +123,7 @@ export interface ReviewAgentInput {
     /** Optional replica metadata for replicated agent runs. */
     agentReplicaIndex?: number;
     agentReplicaTotal?: number;
-    /** Review mode: 'normal' skips verify for high-confidence findings, 'deep' verifies everything. */
+    /** Review mode: 'normal' skips verify only for very-high-confidence findings, 'deep' verifies everything. */
     reviewMode?: 'normal' | 'deep';
     /** Optional per-agent step budget for the main investigation loop. */
     maxSteps?: number;
@@ -220,6 +250,15 @@ export abstract class BaseCodeReviewAgentProvider {
             let stepCount = 0;
             const PROGRESS_BATCH_SIZE = 5;
 
+            // Secrets are passed separately to runAgentLoop so that
+            // LangSmith tracing never serializes API keys, tokens, or
+            // NestJS service instances (which carry ConfigService with all env vars).
+            const loopSecrets: AgentLoopSecrets = {
+                remoteCommands: input.remoteCommands,
+                byokConfig,
+                gitHubToken: input.gitHubToken,
+            };
+
             const loopParams = {
                 model,
                 systemPrompt,
@@ -233,14 +272,6 @@ export abstract class BaseCodeReviewAgentProvider {
                     repositoryId: input.repositoryId,
                     provider: modelName,
                 },
-                remoteCommands: input.remoteCommands,
-                documentationSearchService: input.documentationSearchService,
-                documentationSearchOptions: {
-                    organizationAndTeamData: input.organizationAndTeamData,
-                    byokConfig: byokConfig,
-                },
-                byokConfig: byokConfig,
-                gitHubToken: input.gitHubToken,
                 changedFiles: input.changedFiles,
                 prNumber: input.prNumber,
                 repositoryFullName: input.repositoryFullName,
@@ -297,9 +328,9 @@ export abstract class BaseCodeReviewAgentProvider {
                         pullRequestId: input.prNumber,
                     },
                 });
-                agentResult = await tracedRun(loopParams);
+                agentResult = await tracedRun(loopParams, loopSecrets);
             } else {
-                agentResult = await runAgentLoop(loopParams);
+                agentResult = await runAgentLoop(loopParams, loopSecrets);
             }
 
             const durationMs = Date.now() - startTime;
@@ -308,22 +339,24 @@ export abstract class BaseCodeReviewAgentProvider {
             // Uses runInSpan to ensure proper span lifecycle and MongoDB persistence
             try {
                 const vUsage = agentResult.verificationUsage;
-                const mainInputTokens = agentResult.usage.inputTokens - (vUsage?.inputTokens ?? 0);
-                const mainOutputTokens = agentResult.usage.outputTokens - (vUsage?.outputTokens ?? 0);
+                const mainInputTokens =
+                    agentResult.usage.inputTokens - (vUsage?.inputTokens ?? 0);
+                const mainOutputTokens =
+                    agentResult.usage.outputTokens -
+                    (vUsage?.outputTokens ?? 0);
 
                 await this.observabilityService.runInSpan(
                     `${identity.name}::review`,
                     async () => agentResult,
                     {
-                        'gen_ai.usage.input_tokens':
-                            mainInputTokens,
-                        'gen_ai.usage.output_tokens':
-                            mainOutputTokens,
+                        'gen_ai.usage.input_tokens': mainInputTokens,
+                        'gen_ai.usage.output_tokens': mainOutputTokens,
                         'gen_ai.usage.total_tokens':
                             mainInputTokens + mainOutputTokens,
                         ...(agentResult.usage.reasoningTokens > 0 && {
                             'gen_ai.usage.reasoning_tokens':
-                                agentResult.usage.reasoningTokens - (vUsage?.reasoningTokens ?? 0),
+                                agentResult.usage.reasoningTokens -
+                                (vUsage?.reasoningTokens ?? 0),
                         }),
                         'gen_ai.response.model': modelName,
                         'gen_ai.run.name': `code-review-${this.getCategoryLabel()}`,
@@ -341,21 +374,27 @@ export abstract class BaseCodeReviewAgentProvider {
                 );
 
                 // Separate span for verification tokens
-                if (vUsage && (vUsage.inputTokens > 0 || vUsage.outputTokens > 0)) {
+                if (
+                    vUsage &&
+                    (vUsage.inputTokens > 0 || vUsage.outputTokens > 0)
+                ) {
                     await this.observabilityService.runInSpan(
                         `${identity.name}::verify`,
                         async () => agentResult,
                         {
                             'gen_ai.usage.input_tokens': vUsage.inputTokens,
                             'gen_ai.usage.output_tokens': vUsage.outputTokens,
-                            'gen_ai.usage.total_tokens': vUsage.inputTokens + vUsage.outputTokens,
+                            'gen_ai.usage.total_tokens':
+                                vUsage.inputTokens + vUsage.outputTokens,
                             ...(vUsage.reasoningTokens > 0 && {
-                                'gen_ai.usage.reasoning_tokens': vUsage.reasoningTokens,
+                                'gen_ai.usage.reasoning_tokens':
+                                    vUsage.reasoningTokens,
                             }),
                             'gen_ai.response.model': modelName,
                             'gen_ai.run.name': `code-review-${this.getCategoryLabel()}-verify`,
                             'type': byokConfig ? 'byok' : 'system',
-                            'organizationId': input.organizationAndTeamData?.organizationId,
+                            'organizationId':
+                                input.organizationAndTeamData?.organizationId,
                             'teamId': input.organizationAndTeamData?.teamId,
                             'prNumber': input.prNumber,
                         },
@@ -533,47 +572,34 @@ export abstract class BaseCodeReviewAgentProvider {
     High-recall mode: if the visible code gives you concrete, code-backed suspicion of a defect, emit the finding instead of self-censoring it. A later verifier will filter unsupported claims.
   </Mindset>
 
-  <Tools>
-    Discovery (cheap — use first):
-    - grep: Search the repo for patterns. Find callers, usages, implementations, error checks. Always grep BEFORE readFile.
-    - checkTypes: Run type checker / compiler. Catches compile errors and type mismatches cheaply.
-    - findFile: Find files by name or glob.
-    - The call graph in <CallGraph> shows callers/callees for changed functions — use it as your starting map.
-
-    Analysis (expensive — use surgically):
-    - readFile: Read file contents. Always use startLine/endLine from grep results or diff markers. Never read whole files to search.
-  </Tools>
-
   <Workflow>
     Your first action must be a tool call — not text.
-    Work in two modes: DISCOVER (cheap: grep, checkTypes, call graph) then ANALYZE (expensive: readFile).
 
-    PHASE 1 — DISCOVER (find targets without reading full files)
+    PHASE 1 — INVESTIGATE (use tools)
 
-      Step 1: Run checkTypes on changed files — catch compile errors and type mismatches immediately.
+      Step 1: Read the diffs. For each changed function/method, list what it does differently now.
 
-      Step 2: For each function CHANGED in the diff, discover its connections:
-        a) Use the call graph in <CallGraph> to see who calls it and what it calls.
-        b) grep("methodName\\(", excludeTests=true) → find callers not in the call graph.
-        c) grep("implements X" or "extends X") for interfaces/abstract methods.
-        Note which files and lines are relevant — you will read them in Phase 2.
+      Step 2: For each method CHANGED in the diff, trace the call chain:
+        a) grep("exactMethodName\\(", excludeTests=true) → find who calls it
+        b) readFile the caller — what does it pass? What does it expect back?
+        c) If the changed method calls ANOTHER method, grep for THAT method too — read it. What does it actually return? Is it the right target?
+        d) Keep following calls until you hit a concrete implementation or return value. Do NOT stop at the first layer.
+        For interfaces/abstract methods, grep "implements X" or "extends X" to find concrete implementations.
+        e) Before every readFile call, identify the exact unanswered question that this read will answer.
+        f) Do not reread a highly overlapping range of the same file unless you have a new concrete question, such as a newly discovered symbol, a specific caller/callee to verify, or a branch not covered by the previous read.
+        g) Confidence-seeking rereads are a mistake. If the next read would mostly overlap with what you already saw and you cannot name a new question, do not make that read.
 
-      You must discover connections for EVERY non-test file before moving to Phase 2.
+      Step 3: Read caller context. Understand HOW the changed code is used in production.
+        If you have a concrete compile-time or contract hypothesis and checkTypes is available, you may use it to verify that hypothesis on the changed files.
 
       Step 4: If the code uses an external library or framework API that you are unsure about, use searchDocs to verify.
         Examples: "Does Rails serializer require ? suffix on include_ methods?", "Does Python dataclass use shared mutable defaults?", "Does Prisma @updatedAt fire with empty data object?"
         Do NOT guess framework behavior — verify it.
 
-    PHASE 2 — ANALYZE (read surgically, challenge adversarially)
+    PHASE 2 — CHALLENGE (think adversarially)
 
-      For each suspect from Phase 1:
-        a) readFile(file, startLine=grepLine-15, endLine=grepLine+30) — surgical reads only.
-        b) Check: what does the caller pass? What does it expect back? Does the change break it?
-        c) If the changed method calls ANOTHER method, read the target. Is it the right object? Can it return null?
-        d) Follow the chain until you hit a concrete implementation. Do NOT stop at the first layer.
-
-      For each changed function, challenge:
-        - "What if this input is null/nil/empty/zero?" → check if new code handles it
+      For each changed function, ask yourself these questions:
+        - "What if this input is null/nil/empty/zero?" → check if new code handles it. Then ask: "Does handling it by returning early silently disable a feature that should work in that case?"
         - "What if two requests hit this at the same time?" → check-then-act without lock = race condition
         - "What if a caller passes a different type than expected?" → datetime vs number, dict vs list
         - "What if this function is called from a path I haven't seen?" → grep again if unsure
@@ -582,24 +608,17 @@ export abstract class BaseCodeReviewAgentProvider {
         - "Does this code delegate to another layer (cache, proxy, adapter)?" → is it calling the right target — delegate vs self, concrete vs default?
         - "When code calls through an indirection (session.getProvider(), context.getService(), factory.create()), which concrete object is returned?" → grep for the registration/binding to verify. Only report a self-recursion if you found concrete evidence (e.g. a registration line binding the interface to the current class).
 
-      Also scan the diff for surface-level defects and report them directly:
-        - Typos in identifiers, strings, comments, or method names
-        - Wrong translations or language mismatches in i18n/locale files
-        - Naming inconsistencies (file name vs exported function/class name)
-        - Incorrect error or log messages
-        - Dead code or unused imports introduced by the diff
-        - Invalid syntax (wrong CSS prefixes, malformed templates)
-
       If you cannot confidently answer "this is safe" for any question, investigate more or report it.
 
     PHASE 3 — RESPOND
 
-      Write reasoning that shows your analysis:
+      Write reasoning that shows your adversarial analysis:
         For each changed function: what you challenged, what you found, why you reported or dismissed it.
         BAD reasoning: "The code looks correct."
         GOOD reasoning: "Challenged CreateDevice: what if two requests pass count check simultaneously? Grepped TagDevice(, found caller at impl.go:155. No lock or unique constraint — race condition. Reported."
 
       Do not stop after finding the first issue — investigate ALL changed code before responding.
+      Do not burn steps rereading the same body. If a readFile range overlaps heavily with what you already saw, reread only when a newly discovered symbol or branch creates a new concrete question; otherwise continue with grep, caller/callee tracing, or another changed file.
 
     IMPORTANT — VERIFY BEFORE CLAIMING:
       NEVER claim something is missing, undefined, not imported, or does not exist without first using grep to verify.
@@ -703,15 +722,20 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
     - "Looks correct" is not a valid reason to dismiss — explain the specific reason it is safe.
     - Before finalizing, make sure you have inspected every changed file listed above.
     - Before reporting, be able to answer at least one of these: which changed line creates the risk, what concrete failing path follows, which caller/callee assumption is broken, or what observable bad behavior would happen.
-    - Do not promote a finding from a mere possibility. The changed code plus one or two concrete references must make the failure mode plausible and specific.
+    - Do not promote a finding from a mere possibility. Plausible is not enough. The changed code plus the code you inspected must show a concrete failure path and a concrete wrong outcome.
     - Do not report generic resource exhaustion, shell injection, bypass, or performance theories unless the modified code directly creates or worsens that path.
     - Clear local defects in the diff should still be reported immediately. Cross-file claims require at least one confirming reference from a caller, callee, test, or nearby state transition.
+    - Before every readFile call, identify the exact unanswered question that this read will answer.
+    - Do not reread the same or highly overlapping range just to gain confidence. Confidence-seeking rereads are a mistake.
+    - Treat redundant readFile calls as a mistake. Only reread overlapping lines if a newly discovered symbol, caller/callee, or branch creates a new concrete question that the previous read did not answer.
     - Do NOT report generic efficiency concerns (O(N), N+1, redundant calls, missing pagination, missing timeouts) as bugs. Report them only when the changed code creates a concrete, material slowdown or resource blowup, and then label them as performance.
     - Do NOT report missing defensive measures (missing CSRF, missing rate limiting, missing input validation) unless you can demonstrate a specific exploit path in the changed code.
-    - Every finding must pass this test: "Can I name the exact input that triggers the failure and the exact wrong output or crash that results?" If not, do not report it.
+    - Every finding must pass this test: "Can I name the exact input or state that triggers the failure, and the exact wrong behavior, wrong output, or crash that results?" If not, do not report it.
+    - Before reporting, ask what would make the behavior intentional or safe. If the code you inspected does not let you reject that safe explanation, do not report the finding.
     - Concrete findings include build-time and contract failures too. If the diff introduces a signature mismatch, wrong delegate call, impossible method call, or dropped required side effect, you may report it even without a runtime trace.
     - For wrappers, middleware, providers, caches, and adapters, verify both behavior and wiring: the changed code may be wrong because it calls the wrong target, preserves the wrong cached semantics, or silently stops propagating tracing/logging/metrics/auth state.
     - For security flows, challenge any value that became static, shared, or reused across requests/users when it should be per-request, per-session, or per-principal.
+    - If the system prompt includes client-specific severity criteria, use those criteria when choosing critical/high/medium/low. Treat those criteria as authoritative over your default intuition.
     ${mixedLabelRules}
     ${mixedLabelLensRules}
     - Assign a confidence score (1-10) to each finding:
@@ -787,15 +811,13 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
         const descriptions = input.v2PromptOverrides?.categories?.descriptions;
         if (descriptions) {
             if (this.supportsMixedLabels()) {
-                const labels: Array<'bug' | 'security' | 'performance'> = [
-                    'bug',
-                    'security',
-                    'performance',
-                ];
+                const labels = this.getAllowedSuggestionLabels(input);
 
                 const mixedCategorySections = labels
                     .map((label) => {
-                        const value = descriptions[label];
+                        const value = resolvePromptOverrideText(
+                            descriptions[label],
+                        );
                         if (!value) return null;
 
                         const header =
@@ -811,21 +833,35 @@ ${coverageTargets ? `${coverageTargets}\n` : ''}
                 }
             } else {
                 const categoryLabel = this.getCategoryLabel();
-                const categoryDesc =
-                    descriptions[
-                        categoryLabel as keyof typeof descriptions
-                    ];
+                const categoryDesc = resolvePromptOverrideText(
+                    descriptions[categoryLabel as keyof typeof descriptions],
+                );
                 if (categoryDesc) {
                     parts.push(`## Category Guidelines\n${categoryDesc}`);
                 }
             }
         }
 
-        // Level classification is done in a separate step after agent generation
-        // by GPT 5.4 mini (more consistent than letting the BYOK model classify)
+        const severityFlags = input.v2PromptOverrides?.severity?.flags;
+        if (
+            severityFlags &&
+            Object.values(severityFlags).some((value) => Boolean(value))
+        ) {
+            const severityGuidance = [
+                `### Critical\n${resolvePromptOverrideText(severityFlags.critical) || DEFAULT_SEVERITY_FLAGS.critical}`,
+                `### High\n${resolvePromptOverrideText(severityFlags.high) || DEFAULT_SEVERITY_FLAGS.high}`,
+                `### Medium\n${resolvePromptOverrideText(severityFlags.medium) || DEFAULT_SEVERITY_FLAGS.medium}`,
+                `### Low\n${resolvePromptOverrideText(severityFlags.low) || DEFAULT_SEVERITY_FLAGS.low}`,
+            ].join('\n\n');
 
-        const generationMain =
-            input.generationMain ?? input.v2PromptOverrides?.generation?.main;
+            parts.push(
+                `## Client Severity Criteria\nUse these criteria when assigning the final severity field for each finding.\n\n${severityGuidance}`,
+            );
+        }
+
+        const generationMain = resolvePromptOverrideText(
+            input.generationMain ?? input.v2PromptOverrides?.generation?.main,
+        );
         if (generationMain) {
             parts.push(`## Writing Guidelines\n${generationMain}`);
         }

@@ -38,7 +38,7 @@ export interface OrchestratorOutput {
 export class ReviewOrchestratorService {
     private readonly logger = createLogger(ReviewOrchestratorService.name);
     private static readonly NORMAL_MODE_MAX_STEPS: Record<string, number> = {
-        generalist: 30,
+        generalist: 24,
         bug: 20,
         security: 12,
         performance: 12,

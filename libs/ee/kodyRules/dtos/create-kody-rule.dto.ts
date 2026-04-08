@@ -145,7 +145,7 @@ export class CreateKodyRuleDto {
     @ApiPropertyOptional({
         enum: SeverityLevel,
         enumName: 'SeverityLevel',
-        example: SeverityLevel.ISSUE,
+        example: SeverityLevel.HIGH,
     })
     severityLevel?: SeverityLevel;
 

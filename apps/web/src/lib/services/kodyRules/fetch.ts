@@ -83,7 +83,7 @@ export const getLibraryKodyRulesWithFeedback = async (params?: {
     limit?: number;
     buckets?: string[];
     name?: string;
-    severityLevel?: string;
+    severity?: string;
     tags?: string[];
     language?: keyof typeof ProgrammingLanguage;
     plug_and_play?: boolean;
@@ -99,7 +99,7 @@ export const getLibraryKodyRulesWithFeedback = async (params?: {
 
     // Add other filters if provided
     if (params?.name) fetchParams.title = params.name; // Backend expects 'title' not 'name'
-    if (params?.severityLevel) fetchParams.severityLevel = params.severityLevel;
+    if (params?.severity) fetchParams.severity = params.severity;
     if (params?.language) fetchParams.language = String(params.language);
     if (params?.plug_and_play) fetchParams.plug_and_play = true;
     if (params?.needMCPS) fetchParams.needMCPS = true;

@@ -39,6 +39,7 @@ import {
     type RichTextEditorWithMentionsRef,
 } from "@components/ui/rich-text-editor-with-mentions";
 import { Separator } from "@components/ui/separator";
+import { SliderWithMarkers } from "@components/ui/slider-with-markers";
 import { Switch } from "@components/ui/switch";
 import { useToast } from "@components/ui/toaster/use-toast";
 import { ToggleGroup } from "@components/ui/toggle-group";
@@ -58,8 +59,8 @@ import {
     KodyRulesType,
     KodyRuleWithInheritanceDetails,
     type KodyRule,
-    type KodyRuleSeverityLevel,
     type LibraryRule,
+    resolveKodyRuleDisplaySeverity,
 } from "@services/kodyRules/types";
 import {
     AtSign,
@@ -85,46 +86,50 @@ import { cn } from "src/core/utils/components";
 import type { FormattedDirectoryCodeReviewConfig } from "../_types";
 import { ExternalReferencesDisplay } from "../[repositoryId]/pr-summary/_components/external-references-display";
 
-const severityLevelOptions: {
-    value: KodyRuleSeverityLevel;
+const severityOptions: {
+    value: KodyRule["severity"];
     label: string;
     description: string;
     textColor: string;
     borderColor: string;
 }[] = [
     {
-        value: "warning",
-        label: "Warning",
-        description: "Best practices and style suggestions",
-        textColor: "text-yellow-500",
-        borderColor: "border-yellow-500",
+        value: "low",
+        label: "Low",
+        description: "Minor improvements and low-risk issues",
+        textColor: "text-info",
+        borderColor: "border-info",
     },
     {
-        value: "issue",
-        label: "Issue",
-        description: "Functional problems that should be fixed",
-        textColor: "text-orange-500",
-        borderColor: "border-orange-500",
+        value: "medium",
+        label: "Medium",
+        description: "Recommended fixes that improve correctness or quality",
+        textColor: "text-alert",
+        borderColor: "border-alert",
+    },
+    {
+        value: "high",
+        label: "High",
+        description: "Important problems that should be fixed in the PR",
+        textColor: "text-warning",
+        borderColor: "border-warning",
     },
     {
         value: "critical",
         label: "Critical",
         description:
             "Severe bugs, security vulnerabilities, or data loss risks",
-        textColor: "text-red-500",
-        borderColor: "border-red-500",
+        textColor: "text-danger",
+        borderColor: "border-danger",
     },
 ];
 
-/**
- * Maps legacy severity (low/medium/high/critical) to the new SeverityLevel.
- * critical → critical, everything else → issue.
- */
-function legacySeverityToLevel(
-    severity: KodyRule["severity"],
-): KodyRuleSeverityLevel {
-    return severity === "critical" ? "critical" : "issue";
-}
+const severitySliderOptions = {
+    low: { label: "Low", value: 0 },
+    medium: { label: "Medium", value: 1 },
+    high: { label: "High", value: 2 },
+    critical: { label: "Critical", value: 3 },
+} satisfies Record<KodyRule["severity"], { label: string; value: number }>;
 
 const executionModeOptions = [
     {
@@ -520,11 +525,9 @@ export const KodyRuleAddOrUpdateItemModal = ({
                         : "",
             rule: rule?.rule ?? "",
             title: rule?.title ?? "",
-            severityLevel:
-                rule?.severityLevel ??
-                (rule?.severity
-                    ? legacySeverityToLevel(rule.severity)
-                    : "issue"),
+            severity: rule
+                ? resolveKodyRuleDisplaySeverity(rule)
+                : "high",
             scope: initialScope,
             badExample:
                 rule?.examples?.find(({ isCorrect }) => !isCorrect)?.snippet ??
@@ -568,8 +571,8 @@ export const KodyRuleAddOrUpdateItemModal = ({
                     path: newPath,
                     rule: config.rule,
                     title: config.title,
-                    severity: isMemory ? "high" : "high", // Legacy field, kept for backward compat
-                    severityLevel: isMemory ? "issue" : config.severityLevel,
+                    severity: isMemory ? "high" : config.severity,
+                    severityLevel: isMemory ? "high" : config.severity,
                     scope: isMemory ? "file" : config.scope,
                     uuid: rule?.uuid,
                     examples: examples,
@@ -637,6 +640,9 @@ export const KodyRuleAddOrUpdateItemModal = ({
                     rule: rule?.rule,
                     title: rule?.title,
                     severity: rule?.severity,
+                    severityLevel:
+                        rule?.severityLevel ??
+                        (rule?.severity as KodyRule["severity"] | undefined),
                     scope: rule?.scope,
                     uuid: rule?.uuid,
                     examples: rule?.examples,
@@ -1395,7 +1401,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                     />
 
                     <Controller
-                        name="severityLevel"
+                        name="severity"
                         control={form.control}
                         render={({ field, fieldState }) => {
                             if (isMemory) return <></>;
@@ -1406,7 +1412,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                         <FormControl.Label
                                             className="flex flex-row gap-1"
                                             htmlFor={field.name}>
-                                            Severity Level
+                                            Severity
                                             <Tooltip>
                                                 <TooltipTrigger>
                                                     <HelpCircle
@@ -1419,7 +1425,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                     align="start"
                                                     className="flex max-w-prose flex-col gap-1 text-xs">
                                                     <p>
-                                                        Severity level defines
+                                                        Severity defines
                                                         how this rule&apos;s
                                                         violations will be
                                                         classified in code
@@ -1428,22 +1434,32 @@ export const KodyRuleAddOrUpdateItemModal = ({
 
                                                     <ul className="flex flex-col gap-1">
                                                         <li>
-                                                            <strong className="text-yellow-500">
-                                                                Warning:
+                                                            <strong className="text-info">
+                                                                Low:
                                                             </strong>{" "}
-                                                            Best practices and
-                                                            style suggestions.
+                                                            Minor improvements
+                                                            and low-risk
+                                                            issues.
                                                         </li>
                                                         <li>
-                                                            <strong className="text-blue-500">
-                                                                Issue:
+                                                            <strong className="text-alert">
+                                                                Medium:
                                                             </strong>{" "}
-                                                            Functional problems
+                                                            Recommended fixes
+                                                            that improve
+                                                            correctness or
+                                                            quality.
+                                                        </li>
+                                                        <li>
+                                                            <strong className="text-warning">
+                                                                High:
+                                                            </strong>{" "}
+                                                            Important problems
                                                             that should be
-                                                            fixed.
+                                                            fixed in the PR.
                                                         </li>
                                                         <li>
-                                                            <strong className="text-red-500">
+                                                            <strong className="text-danger">
                                                                 Critical:
                                                             </strong>{" "}
                                                             Severe bugs,
@@ -1462,34 +1478,64 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                     </FormControl.Root>
 
                                     <FormControl.Input>
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex gap-2">
-                                                {severityLevelOptions.map(
-                                                    (option) => (
-                                                        <button
-                                                            key={option.value}
-                                                            type="button"
-                                                            onClick={() =>
-                                                                field.onChange(
-                                                                    option.value,
-                                                                )
-                                                            }
-                                                            className={cn(
-                                                                "flex-1 rounded-md border-2 px-3 py-2 text-sm font-medium transition-colors",
-                                                                field.value ===
-                                                                    option.value
-                                                                    ? cn(
-                                                                          option.borderColor,
-                                                                          "bg-background",
-                                                                          option.textColor,
-                                                                      )
-                                                                    : "border-border bg-background text-muted-foreground hover:bg-accent",
-                                                            )}>
-                                                            {option.label}
-                                                        </button>
-                                                    ),
-                                                )}
+                                        <div className="flex flex-col gap-3">
+                                            <div className="relative w-full max-w-md">
+                                                <SliderWithMarkers
+                                                    id={field.name}
+                                                    min={0}
+                                                    max={3}
+                                                    step={1}
+                                                    labels={Object.values(
+                                                        severitySliderOptions,
+                                                    ).map(
+                                                        (option) =>
+                                                            option.label,
+                                                    )}
+                                                    value={
+                                                        severitySliderOptions[
+                                                            field.value ??
+                                                                "high"
+                                                        ]?.value ?? 2
+                                                    }
+                                                    disabled={field.disabled}
+                                                    onValueChange={(value) =>
+                                                        field.onChange(
+                                                            Object.entries(
+                                                                severitySliderOptions,
+                                                            ).find(
+                                                                ([, option]) =>
+                                                                    option.value ===
+                                                                    value,
+                                                            )?.[0] ??
+                                                                "high",
+                                                        )
+                                                    }
+                                                    className={cn({
+                                                        "[--slider-marker-background-active:#119DE4]":
+                                                            field.value ===
+                                                            "low",
+                                                        "[--slider-marker-background-active:#115EE4]":
+                                                            field.value ===
+                                                            "medium",
+                                                        "[--slider-marker-background-active:#6A57A4]":
+                                                            field.value ===
+                                                            "high",
+                                                        "[--slider-marker-background-active:#EF4B4B]":
+                                                            field.value ===
+                                                            "critical",
+                                                    })}
+                                                />
                                             </div>
+
+                                            <p className="text-text-secondary text-sm">
+                                                {
+                                                    severityOptions.find(
+                                                        (option) =>
+                                                            option.value ===
+                                                            field.value,
+                                                    )?.description
+                                                }
+                                            </p>
 
                                             <FormControl.Error>
                                                 {fieldState.error?.message}

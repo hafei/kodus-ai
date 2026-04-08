@@ -1,6 +1,13 @@
 import { Transform } from 'class-transformer';
-import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import {
+    IsString,
+    IsOptional,
+    IsArray,
+    IsBoolean,
+    IsEnum,
+} from 'class-validator';
 
+import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 import { ProgrammingLanguage } from '@libs/core/domain/enums/programming-language.enum';
 import { KodyRuleFilters } from '@libs/core/infrastructure/config/types/general/kodyRules.type';
 
@@ -55,9 +62,9 @@ export class FindLibraryKodyRulesDto
     severity?: string;
 
     @IsOptional()
-    @IsString()
+    @IsEnum(SeverityLevel)
     @ApiPropertyOptional()
-    severityLevel?: string;
+    severityLevel?: SeverityLevel;
 
     @IsOptional()
     @Transform(transformToArray)

@@ -67,7 +67,7 @@ export class AddLibraryKodyRulesDto {
     @ApiPropertyOptional({
         enum: SeverityLevel,
         enumName: 'SeverityLevel',
-        example: SeverityLevel.ISSUE,
+        example: SeverityLevel.HIGH,
     })
     severityLevel?: SeverityLevel;
 

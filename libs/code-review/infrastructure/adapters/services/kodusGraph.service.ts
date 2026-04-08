@@ -15,7 +15,7 @@ const TIMEOUTS = {
     CONTEXT_MS: 60_000, // 1 min — context generation
 };
 
-const KODUS_GRAPH_VERSION = '0.2.3';
+const KODUS_GRAPH_VERSION = 'latest';
 
 /** Skip test/fixture/static files to stay within parse timeout on large repos */
 const DEFAULT_EXCLUDES = [
@@ -217,7 +217,7 @@ export class KodusGraphService {
     }
 
     private async parseChangedFiles(sandbox: Sandbox, filePaths: string[]): Promise<void> {
-        const filesArg = filePaths.join(' ');
+        const filesArg = filePaths.map((f) => `'${f.replace(/'/g, "'\\''")}'`).join(' ');
         const result = await sandbox.commands.run(
             [
                 'export PATH="$HOME/.bun/bin:$PATH"',
@@ -236,26 +236,11 @@ export class KodusGraphService {
     }
 
     private async writeBaseGraphToSandbox(sandbox: Sandbox, repoId: string): Promise<void> {
-        const graphJson = await this.astGraphRepo.exportAsGraphJson(repoId);
-        const jsonStr = JSON.stringify(graphJson);
-
+        // JSON built entirely in PostgreSQL — zero intermediate JS objects.
+        const jsonStr = await this.astGraphRepo.exportAsGraphJsonString(repoId);
         const baseGraphPath = `${REPO_DIR}/${GRAPH_DIR}/base-graph.json`;
-        const chunkSize = 500_000; // 500KB
 
-        if (jsonStr.length <= chunkSize) {
-            const escaped = jsonStr.replace(/'/g, "'\\''");
-            await sandbox.commands.run(
-                `printf '%s' '${escaped}' > ${baseGraphPath}`,
-                { timeoutMs: 30_000 },
-            );
-        } else {
-            // Large graph: use base64 to avoid shell escaping issues
-            const b64 = Buffer.from(jsonStr).toString('base64');
-            await sandbox.commands.run(
-                `echo '${b64}' | base64 -d > ${baseGraphPath}`,
-                { timeoutMs: 60_000 },
-            );
-        }
+        await sandbox.files.write(baseGraphPath, jsonStr);
     }
 
     private async generatePromptContext(
@@ -263,7 +248,7 @@ export class KodusGraphService {
         filePaths: string[],
         graphPath: string = GRAPH_PATH,
     ): Promise<string> {
-        const filesArg = filePaths.join(' ');
+        const filesArg = filePaths.map((f) => `'${f.replace(/'/g, "'\\''")}'`).join(' ');
 
         const result = await sandbox.commands.run(
             [

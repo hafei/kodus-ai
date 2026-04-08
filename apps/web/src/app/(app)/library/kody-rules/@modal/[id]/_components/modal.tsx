@@ -26,6 +26,7 @@ import { useKodyRulesLimits } from "@services/kodyRules/hooks";
 import {
     KodyRulesOrigin,
     KodyRulesStatus,
+    resolveKodyRuleDisplaySeverity,
     type KodyRule,
     type LibraryRule,
 } from "@services/kodyRules/types";
@@ -106,8 +107,9 @@ export const KodyRuleLibraryItemModal = ({
             const newRule: KodyRule = {
                 title: rule.title,
                 rule: rule.rule,
-                severity: (rule.severity?.toLowerCase() ?? "high") as KodyRule["severity"],
-                severityLevel: (rule.severityLevel?.toLowerCase() ?? (rule.severity?.toLowerCase() === "critical" ? "critical" : "issue")) as KodyRule["severityLevel"],
+                severity:
+                    resolveKodyRuleDisplaySeverity(rule) as KodyRule["severity"],
+                severityLevel: resolveKodyRuleDisplaySeverity(rule),
                 path: "",
                 examples: rule.examples,
                 origin: KodyRulesOrigin.LIBRARY,
@@ -245,12 +247,7 @@ export const KodyRuleLibraryItemModal = ({
                         {rule.title}
 
                         <IssueSeverityLevelBadge
-                            severity={
-                                rule.severityLevel ??
-                                (rule.severity?.toLowerCase() === "critical"
-                                    ? "critical"
-                                    : "issue")
-                            }
+                            severity={resolveKodyRuleDisplaySeverity(rule)}
                         />
                     </DialogTitle>
 

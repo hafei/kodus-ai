@@ -1,3 +1,4 @@
+import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 import { ProgrammingLanguage } from '@libs/core/domain/enums';
 
 export type KodyRulesExamples = {
@@ -11,7 +12,7 @@ export type LibraryKodyRule = {
     rule: string;
     why_is_this_important: string;
     severity?: string;
-    severityLevel?: string;
+    severityLevel?: SeverityLevel;
     /**
      * Optional list of MCP providers (display hint for UI).
      * Examples: ["Sentry", "Datadog"], ["Linear", "Jira"].
@@ -41,7 +42,7 @@ export type BucketInfo = {
 export type KodyRuleFilters = {
     title?: string;
     severity?: string;
-    severityLevel?: string;
+    severityLevel?: SeverityLevel;
     tags?: string[];
     language?: ProgrammingLanguage;
     buckets?: string[];

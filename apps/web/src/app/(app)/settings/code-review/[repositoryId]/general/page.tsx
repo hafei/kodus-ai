@@ -41,7 +41,7 @@ import {
     useCodeReviewRouteParams,
     useCurrentConfigLevel,
 } from "../../../_hooks";
-import { MinimumLevelFilter } from "../suggestion-control/_components/minimum-level-filter";
+import { MinimumSeverityLevel } from "../suggestion-control/_components/minimum-severity-level";
 import { AutomatedReviewActive } from "./_components/automated-review-active";
 import { BaseBranches } from "./_components/base-branches";
 
@@ -280,7 +280,7 @@ export default function General() {
                     </div>
                 </AsyncBoundary>
                 <div data-field-name="suggestionControl.severityLevelFilter">
-                    <MinimumLevelFilter />
+                    <MinimumSeverityLevel />
                 </div>
                 <div data-field-name="runOnDraft">
                     <RunOnDraft />

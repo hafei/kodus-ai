@@ -5,12 +5,10 @@ enum ShieldColor {
     MEDIUM_BLUE = '1A7BBE',
     HIGH_PURPLE = '6B6B92',
     CRITICAL_RED = 'FF3D3D',
-    ISSUE_RED = 'E53935',
-    WARNING_AMBER = 'F9A825',
 }
 
 const normalizeSeverityLevel = (
-    severityLevel?: SeverityLevel | 'issue' | 'warning' | string,
+    severityLevel?: SeverityLevel | string,
 ): SeverityLevel | null => {
     switch ((severityLevel || '').toLowerCase()) {
         case SeverityLevel.CRITICAL:
@@ -21,17 +19,13 @@ const normalizeSeverityLevel = (
             return SeverityLevel.MEDIUM;
         case SeverityLevel.LOW:
             return SeverityLevel.LOW;
-        case 'issue':
-            return SeverityLevel.HIGH;
-        case 'warning':
-            return SeverityLevel.LOW;
         default:
             return null;
     }
 };
 
 const getSeverityLevelShield = (
-    severityLevel?: SeverityLevel | 'issue' | 'warning' | string,
+    severityLevel?: SeverityLevel | string,
 ) => {
     const normalizedSeverity = normalizeSeverityLevel(severityLevel);
     if (!normalizedSeverity) return '';
@@ -53,25 +47,4 @@ const getSeverityLevelShield = (
     }
 };
 
-/**
- * V3 level shield: critical (red), issue (red), or warning (amber).
- * Used when codeReviewVersion is v3-agent.
- */
-const getLevelShield = (level?: 'critical' | 'issue' | 'warning') => {
-    if (!level) return '';
-    const labelTitle = 'level';
-    const shield = `![${level}](https://img.shields.io/badge/${labelTitle}-${level}-`;
-
-    switch (level) {
-        case 'critical':
-            return `${shield}${ShieldColor.CRITICAL_RED})`;
-        case 'issue':
-            return `${shield}${ShieldColor.ISSUE_RED})`;
-        case 'warning':
-            return `${shield}${ShieldColor.WARNING_AMBER})`;
-        default:
-            return '';
-    }
-};
-
-export { getSeverityLevelShield, getLevelShield };
+export { getSeverityLevelShield };

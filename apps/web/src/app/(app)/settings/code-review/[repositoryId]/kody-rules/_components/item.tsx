@@ -16,8 +16,8 @@ import {
 } from "@components/ui/tooltip";
 import {
     KodyRulesType,
-    type KodyRuleSeverityLevel,
     type KodyRuleWithInheritanceDetails,
+    resolveKodyRuleDisplaySeverity,
 } from "@services/kodyRules/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
@@ -67,12 +67,7 @@ export const KodyRuleItem = ({
                     <div className="flex flex-wrap items-center gap-2">
                         {!isMemory && (
                             <IssueSeverityLevelBadge
-                                severity={
-                                    rule.severityLevel ??
-                                    (rule.severity === "critical"
-                                        ? "critical"
-                                        : "issue")
-                                }
+                                severity={resolveKodyRuleDisplaySeverity(rule)}
                             />
                         )}
 

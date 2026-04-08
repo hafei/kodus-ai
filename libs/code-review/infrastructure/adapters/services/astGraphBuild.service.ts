@@ -9,7 +9,7 @@ const REPO_DIR = '/home/user/repo';
 const GRAPH_DIR = '.kodus-graph';
 const GRAPH_PATH = `${GRAPH_DIR}/graph.json`;
 
-const KODUS_GRAPH_VERSION = '0.2.3';
+const KODUS_GRAPH_VERSION = 'latest';
 
 const TIMEOUTS = {
     INSTALL_MS: 120_000,
@@ -41,19 +41,28 @@ export class AstGraphBuildService {
         headSha: string;
     }): Promise<void> {
         const { repositoryId, sandbox, headSha } = params;
+        const buildStart = Date.now();
 
         this.logger.log({
             message: `[AST-GRAPH] Starting full build for repo ${repositoryId}`,
             context: AstGraphBuildService.name,
+            metadata: { repositoryId, headSha },
         });
 
         await this.repositoryRepo.updateGraphStatus(repositoryId, AstGraphStatus.BUILDING);
 
         try {
-            // Install kodus-graph
+            // 1. Install kodus-graph
+            const installStart = Date.now();
             await this.installKodusGraph(sandbox);
+            this.logger.log({
+                message: `[AST-GRAPH] kodus-graph installed (${Date.now() - installStart}ms)`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId },
+            });
 
-            // Parse full repo
+            // 2. Parse full repo
+            const parseStart = Date.now();
             const excludeFlags = DEFAULT_EXCLUDES.map((p) => `--exclude "${p}"`).join(' ');
             const parseResult = await sandbox.commands.run(
                 [
@@ -71,7 +80,14 @@ export class AstGraphBuildService {
                 );
             }
 
-            // Read graph JSON from sandbox
+            this.logger.log({
+                message: `[AST-GRAPH] Parse completed (${Date.now() - parseStart}ms)`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId, parseStderr: (parseResult.stderr || '').slice(0, 300) },
+            });
+
+            // 3. Read graph JSON from sandbox
+            const readStart = Date.now();
             const catResult = await sandbox.commands.run(
                 `cat ${REPO_DIR}/${GRAPH_PATH}`,
                 { timeoutMs: 30_000 },
@@ -84,27 +100,43 @@ export class AstGraphBuildService {
             const nodes = graphData.nodes || [];
             const edges = graphData.edges || [];
 
-            // Persist to DB (transactional: delete all + insert all)
+            this.logger.log({
+                message: `[AST-GRAPH] Graph read from sandbox (${Date.now() - readStart}ms): ${nodes.length} nodes, ${edges.length} edges`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId, rawNodes: nodes.length, rawEdges: edges.length },
+            });
+
+            // 4. Persist to DB
+            const persistStart = Date.now();
             const counts = await this.astGraphRepo.fullRebuild(repositoryId, nodes, edges);
 
-            // Update repo status
+            this.logger.log({
+                message: `[AST-GRAPH] DB persist completed (${Date.now() - persistStart}ms)`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId, nodeCount: counts.nodeCount, edgeCount: counts.edgeCount },
+            });
+
+            // 5. Update repo status
             await this.repositoryRepo.updateGraphStatus(repositoryId, AstGraphStatus.READY, {
                 sha: headSha,
                 nodeCount: counts.nodeCount,
                 edgeCount: counts.edgeCount,
             });
 
+            const totalMs = Date.now() - buildStart;
             this.logger.log({
-                message: `[AST-GRAPH] Full build complete: ${counts.nodeCount} nodes, ${counts.edgeCount} edges`,
+                message: `[AST-GRAPH] Full build COMPLETE for repo ${repositoryId} in ${totalMs}ms — ${counts.nodeCount} nodes, ${counts.edgeCount} edges`,
                 context: AstGraphBuildService.name,
-                metadata: { repositoryId, nodeCount: counts.nodeCount, edgeCount: counts.edgeCount },
+                metadata: { repositoryId, headSha, nodeCount: counts.nodeCount, edgeCount: counts.edgeCount, durationMs: totalMs },
             });
         } catch (error) {
+            const totalMs = Date.now() - buildStart;
             await this.repositoryRepo.updateGraphStatus(repositoryId, AstGraphStatus.FAILED);
             this.logger.error({
-                message: `[AST-GRAPH] Full build failed for repo ${repositoryId}`,
+                message: `[AST-GRAPH] Full build FAILED for repo ${repositoryId} after ${totalMs}ms — ${error.message}`,
                 context: AstGraphBuildService.name,
                 error,
+                metadata: { repositoryId, headSha, durationMs: totalMs },
             });
             throw error;
         }
@@ -121,17 +153,27 @@ export class AstGraphBuildService {
         newSha: string;
     }): Promise<void> {
         const { repositoryId, sandbox, changedFiles, newSha } = params;
+        const updateStart = Date.now();
 
         this.logger.log({
-            message: `[AST-GRAPH] Incremental update: ${changedFiles.length} files`,
+            message: `[AST-GRAPH] Starting incremental update: ${changedFiles.length} files for repo ${repositoryId}`,
             context: AstGraphBuildService.name,
-            metadata: { repositoryId, changedFiles: changedFiles.length },
+            metadata: { repositoryId, newSha, changedFilesCount: changedFiles.length, changedFiles: changedFiles.slice(0, 20) },
         });
 
         try {
+            // 1. Install kodus-graph
+            const installStart = Date.now();
             await this.installKodusGraph(sandbox);
+            this.logger.log({
+                message: `[AST-GRAPH] kodus-graph installed (${Date.now() - installStart}ms)`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId },
+            });
 
-            const filesArg = changedFiles.join(' ');
+            // 2. Parse changed files
+            const parseStart = Date.now();
+            const filesArg = changedFiles.map((f) => `'${f.replace(/'/g, "'\\''")}'`).join(' ');
             const parseResult = await sandbox.commands.run(
                 [
                     `export PATH="$HOME/.bun/bin:$PATH"`,
@@ -148,6 +190,13 @@ export class AstGraphBuildService {
                 );
             }
 
+            this.logger.log({
+                message: `[AST-GRAPH] Incremental parse completed (${Date.now() - parseStart}ms)`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId, changedFilesCount: changedFiles.length },
+            });
+
+            // 3. Read graph JSON
             const catResult = await sandbox.commands.run(
                 `cat ${REPO_DIR}/${GRAPH_PATH}`,
                 { timeoutMs: 30_000 },
@@ -157,28 +206,43 @@ export class AstGraphBuildService {
             }
 
             const graphData = JSON.parse(catResult.stdout);
+            const nodes = graphData.nodes || [];
+            const edges = graphData.edges || [];
+
+            // 4. Persist to DB
+            const persistStart = Date.now();
             const counts = await this.astGraphRepo.incrementalUpdate(
                 repositoryId,
                 changedFiles,
-                graphData.nodes || [],
-                graphData.edges || [],
+                nodes,
+                edges,
             );
+
+            this.logger.log({
+                message: `[AST-GRAPH] Incremental DB persist completed (${Date.now() - persistStart}ms)`,
+                context: AstGraphBuildService.name,
+                metadata: { repositoryId, nodeCount: counts.nodeCount, edgeCount: counts.edgeCount },
+            });
 
             await this.repositoryRepo.updateGraphStatus(repositoryId, AstGraphStatus.READY, {
                 sha: newSha,
-                nodeCount: undefined, // don't update total counts on incremental
+                nodeCount: undefined,
                 edgeCount: undefined,
             });
 
+            const totalMs = Date.now() - updateStart;
             this.logger.log({
-                message: `[AST-GRAPH] Incremental update complete: ${counts.nodeCount} nodes, ${counts.edgeCount} edges for ${changedFiles.length} files`,
+                message: `[AST-GRAPH] Incremental update COMPLETE for repo ${repositoryId} in ${totalMs}ms — ${counts.nodeCount} nodes, ${counts.edgeCount} edges from ${changedFiles.length} files`,
                 context: AstGraphBuildService.name,
+                metadata: { repositoryId, newSha, nodeCount: counts.nodeCount, edgeCount: counts.edgeCount, changedFilesCount: changedFiles.length, durationMs: totalMs },
             });
         } catch (error) {
+            const totalMs = Date.now() - updateStart;
             this.logger.warn({
-                message: `[AST-GRAPH] Incremental update failed (non-critical)`,
+                message: `[AST-GRAPH] Incremental update FAILED for repo ${repositoryId} after ${totalMs}ms — ${error.message}`,
                 context: AstGraphBuildService.name,
                 error,
+                metadata: { repositoryId, newSha, changedFilesCount: changedFiles.length, durationMs: totalMs },
             });
             // Don't set status to failed — graph is stale but still usable
             throw error;

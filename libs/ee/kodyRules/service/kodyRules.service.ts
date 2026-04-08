@@ -70,6 +70,7 @@ import {
     KodyRulesScope,
     KodyRulesStatus,
     KodyRulesType,
+    SeverityLevel,
 } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { MCPManagerService } from '@libs/mcp-server/services/mcp-manager.service';
 import {
@@ -257,7 +258,9 @@ export class KodyRulesService implements IKodyRulesService {
                 rule: kodyRule?.rule,
                 path: kodyRule?.path,
                 severity: kodyRule?.severity?.toLowerCase(),
-                severityLevel: kodyRule?.severityLevel,
+                severityLevel:
+                    kodyRule?.severityLevel ??
+                    (kodyRule?.severity?.toLowerCase() as SeverityLevel),
                 status: kodyRule?.status ?? KodyRulesStatus.ACTIVE,
                 sourcePath: kodyRule?.sourcePath,
                 sourceAnchor: kodyRule?.sourceAnchor,
@@ -325,7 +328,9 @@ export class KodyRulesService implements IKodyRulesService {
                 sourcePath: kodyRule.sourcePath,
                 sourceAnchor: kodyRule.sourceAnchor,
                 severity: kodyRule.severity?.toLowerCase(),
-                severityLevel: kodyRule?.severityLevel,
+                severityLevel:
+                    kodyRule?.severityLevel ??
+                    (kodyRule?.severity?.toLowerCase() as SeverityLevel),
                 status: kodyRule.status ?? KodyRulesStatus.ACTIVE,
                 repositoryId: kodyRule?.repositoryId,
                 directoryId: kodyRule?.directoryId,

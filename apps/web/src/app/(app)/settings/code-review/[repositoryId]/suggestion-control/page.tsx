@@ -26,7 +26,6 @@ import { useCodeReviewRouteParams } from "../../../_hooks";
 import { ApplyFiltersToKodyRules } from "./_components/apply-filters-to-kody-rules";
 import { LimitationTypeField } from "./_components/limitation-type";
 import { MaxSuggestions } from "./_components/max-suggestions";
-import { MinimumLevelFilter } from "./_components/minimum-level-filter";
 import { MinimumSeverityLevel } from "./_components/minimum-severity-level";
 // SuggestionGroupingMode removed — V3 agents always post individual inline comments
 import { SuggestionsPerSeverityLevel } from "./_components/suggestions-per-severity-level";
@@ -126,7 +125,7 @@ export default function SuggestionControl(
             <Page.Content className="mt-10 flex-none">
                 {codeReviewVersion === "v3-agent" ? (
                     <div className="mt-10 flex flex-col gap-8">
-                        <MinimumLevelFilter />
+                        <MinimumSeverityLevel />
                     </div>
                 ) : (
                     <div className="mt-10 flex flex-col gap-8">

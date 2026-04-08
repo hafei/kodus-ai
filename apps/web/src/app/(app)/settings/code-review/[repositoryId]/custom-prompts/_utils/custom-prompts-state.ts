@@ -51,9 +51,6 @@ export const PROMPT_FIELD_PATHS = [
     "v2PromptOverrides.severity.flags.high.value",
     "v2PromptOverrides.severity.flags.medium.value",
     "v2PromptOverrides.severity.flags.low.value",
-    "v2PromptOverrides.level.critical.value",
-    "v2PromptOverrides.level.issue.value",
-    "v2PromptOverrides.level.warning.value",
 ] as const;
 
 export function parsePromptFieldValue(value: unknown): string | object {

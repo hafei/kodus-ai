@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-    AgentReviewStage,
-    DOCUMENTATION_SEARCH_ADAPTER_TOKEN,
-} from '@/code-review/pipeline/stages/agent-review.stage';
+import { AgentReviewStage } from '@/code-review/pipeline/stages/agent-review.stage';
 import { ReviewOrchestratorService } from '@/code-review/infrastructure/agents/review-orchestrator.service';
 import { ObservabilityService } from '@/core/log/observability.service';
 import { AUTOMATION_EXECUTION_SERVICE_TOKEN } from '@/automation/domain/automationExecution/contracts/automation-execution.service';
@@ -136,10 +133,6 @@ describe('AgentReviewStage', () => {
                         findLatestStageLog: jest.fn(),
                         updateStageLog: jest.fn(),
                     },
-                },
-                {
-                    provide: DOCUMENTATION_SEARCH_ADAPTER_TOKEN,
-                    useValue: undefined,
                 },
             ],
         }).compile();

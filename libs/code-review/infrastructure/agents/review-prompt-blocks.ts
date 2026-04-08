@@ -44,7 +44,7 @@ const PROMPT_BLOCKS: Record<CategoryPromptKind, PromptBlock> = {
             '- delegation targets: when code wraps, proxies, or caches another object, verify it calls the delegate — not itself. Read the actual implementation being called.',
             'Before reporting, determine if the bug is a regression (introduced by this PR) or pre-existing.',
             'Only report pre-existing bugs if this PR makes them newly reachable, removes a guard that was preventing them, or significantly increases the likelihood of triggering them.',
-            'IMPORTANT: Do not stop at the first bug you find in a file. Each changed file may contain multiple independent bugs. After finding one issue, re-read the remaining changed functions in the same file and challenge each one separately.',
+            'IMPORTANT: Do not stop at the first bug you find in a file. Each changed file may contain multiple independent bugs. Challenge the remaining changed functions in the same file too, but do not keep re-reading the same or highly overlapping ranges unless you have a new, concrete question that the previous reads did not answer. Confidence-seeking rereads are a mistake.',
         ],
         writingPolicy: [
             'Each finding must be technical, direct, and verifiable. Structure every suggestionContent as:',

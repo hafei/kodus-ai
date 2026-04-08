@@ -5,8 +5,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { WorkflowQueueLoader } from '@libs/core/infrastructure/config/loaders/workflow-queue.loader';
 
 import { EnqueueWebhookUseCase } from '@libs/platform/application/use-cases/webhook/enqueue-webhook.use-case';
-import { RepositoryRepository } from '@libs/code-review/infrastructure/adapters/repositories/repository.repository';
-import { RepositoryModel } from '@libs/code-review/infrastructure/adapters/repositories/schemas/repository.model';
 import { JOB_QUEUE_SERVICE_TOKEN } from '@libs/core/workflow/domain/contracts/job-queue.service.contract';
 import { WORKFLOW_JOB_REPOSITORY_TOKEN } from '@libs/core/workflow/domain/contracts/workflow-job.repository.contract';
 import { OUTBOX_MESSAGE_REPOSITORY_TOKEN } from '@libs/core/workflow/domain/contracts/outbox-message.repository.contract';
@@ -19,7 +17,7 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
 @Module({
     imports: [
         ConfigModule.forFeature(WorkflowQueueLoader),
-        TypeOrmModule.forFeature([WorkflowJobModel, OutboxMessageModel, RepositoryModel]),
+        TypeOrmModule.forFeature([WorkflowJobModel, OutboxMessageModel]),
     ],
     providers: [
         WorkflowJobRepository,
@@ -37,8 +35,7 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
             useClass: WorkflowJobQueueService,
         },
         EnqueueWebhookUseCase,
-        RepositoryRepository,
     ],
-    exports: [EnqueueWebhookUseCase, RepositoryRepository, JOB_QUEUE_SERVICE_TOKEN],
+    exports: [EnqueueWebhookUseCase, JOB_QUEUE_SERVICE_TOKEN],
 })
 export class WebhookEnqueueModule {}

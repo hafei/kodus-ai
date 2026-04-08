@@ -44,58 +44,67 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
     ) {}
 
     async process(jobId: string): Promise<void> {
+        const jobStart = Date.now();
         const job = await this.jobRepository.findOne(jobId);
 
         if (!job) {
             throw new Error(`Job ${jobId} not found`);
         }
 
-        this.logger.log({
-            message: `Processing AST Graph Incremental Update job ${jobId}`,
-            context: AstGraphIncrementalJobProcessor.name,
-            metadata: { jobId, correlationId: job.correlationId },
-        });
-
-        await this.jobRepository.update(jobId, {
-            status: JobStatus.PROCESSING,
-            startedAt: new Date(),
-        });
-
         const payload = job.payload as unknown as AstGraphIncrementalJobPayload;
+        const repoLabel = payload?.fullName || payload?.repositoryId || 'unknown';
+
+        this.logger.log({
+            message: `[AST-GRAPH-INCR] Starting incremental update for ${repoLabel}`,
+            context: AstGraphIncrementalJobProcessor.name,
+            metadata: {
+                jobId,
+                repositoryId: payload?.repositoryId,
+                fullName: payload?.fullName,
+                newSha: payload?.newSha,
+                changedFilesCount: payload?.changedFiles?.length,
+                platform: payload?.platform,
+                correlationId: job.correlationId,
+            },
+        });
+
+        await this.updateJobStage(jobId, 'VALIDATING');
 
         if (!payload?.repositoryId || !payload?.changedFiles?.length || !payload?.newSha) {
             throw new Error('Invalid payload: missing required fields (repositoryId, changedFiles, newSha)');
         }
 
         let sandbox: SandboxInstance | undefined;
+        let sandboxId: string | undefined;
 
         try {
-            // 1. Resolve auth credentials for git clone
-            let cloneParams;
-            try {
-                cloneParams = await this.codeManagementService.getCloneParams(
-                    {
-                        repository: {
-                            id: '0', // not needed for token resolution
-                            defaultBranch: payload.defaultBranch,
-                            fullName: payload.fullName,
-                            name: payload.fullName.split('/').pop() || payload.fullName,
-                        },
-                        organizationAndTeamData: payload.organizationAndTeamData,
-                    },
-                    payload.platform as PlatformType,
-                );
-            } catch (authError) {
-                this.logger.warn({
-                    message: `Auth resolution failed for incremental update job ${jobId}`,
-                    context: AstGraphIncrementalJobProcessor.name,
-                    error: authError,
-                    metadata: { jobId, repositoryId: payload.repositoryId },
-                });
-                throw authError;
-            }
+            // 1. Resolve auth
+            await this.updateJobStage(jobId, 'RESOLVING_AUTH');
+            const authStart = Date.now();
 
-            // 2. Create sandbox with repo cloned
+            const cloneParams = await this.codeManagementService.getCloneParams(
+                {
+                    repository: {
+                        id: '0',
+                        defaultBranch: payload.defaultBranch,
+                        fullName: payload.fullName,
+                        name: payload.fullName.split('/').pop() || payload.fullName,
+                    },
+                    organizationAndTeamData: payload.organizationAndTeamData,
+                },
+                payload.platform as PlatformType,
+            );
+
+            this.logger.log({
+                message: `[AST-GRAPH-INCR] Auth resolved for ${repoLabel} (${Date.now() - authStart}ms)`,
+                context: AstGraphIncrementalJobProcessor.name,
+                metadata: { jobId, hasToken: !!cloneParams.auth?.token },
+            });
+
+            // 2. Create sandbox + clone
+            await this.updateJobStage(jobId, 'CLONING');
+            const cloneStart = Date.now();
+
             sandbox = await this.sandboxProvider.createSandboxWithRepo({
                 cloneUrl: cloneParams.url || payload.cloneUrl,
                 authToken: cloneParams.auth?.token || '',
@@ -104,7 +113,25 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
                 platform: payload.platform as PlatformType,
             });
 
+            sandboxId = (sandbox.sandboxHandle as any)?.sandboxId || (sandbox as any)?.id || 'unknown';
+
+            await this.jobRepository.update(jobId, {
+                metadata: { sandboxId, stage: 'CLONING' },
+            });
+
+            this.logger.log({
+                message: `[AST-GRAPH-INCR] Sandbox ready for ${repoLabel} (${Date.now() - cloneStart}ms)`,
+                context: AstGraphIncrementalJobProcessor.name,
+                metadata: { jobId, sandboxId },
+            });
+
             // 3. Run incremental AST graph update
+            await this.updateJobStage(jobId, 'PARSING', {
+                sandboxId,
+                newSha: payload.newSha,
+                changedFilesCount: payload.changedFiles.length,
+            });
+
             await this.astGraphBuildService.incrementalUpdate({
                 repositoryId: payload.repositoryId,
                 sandbox: sandbox.sandboxHandle as Sandbox,
@@ -112,58 +139,127 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
                 newSha: payload.newSha,
             });
 
+            const totalMs = Date.now() - jobStart;
+
             await this.markCompleted(jobId, {
                 repositoryId: payload.repositoryId,
                 newSha: payload.newSha,
                 changedFilesCount: payload.changedFiles.length,
+                sandboxId,
+                durationMs: totalMs,
             });
 
             this.logger.log({
-                message: `AST Graph Incremental Update job ${jobId} completed successfully`,
+                message: `[AST-GRAPH-INCR] Incremental update COMPLETED for ${repoLabel} in ${totalMs}ms (${payload.changedFiles.length} files)`,
                 context: AstGraphIncrementalJobProcessor.name,
                 metadata: {
                     jobId,
                     repositoryId: payload.repositoryId,
                     newSha: payload.newSha,
                     changedFilesCount: payload.changedFiles.length,
+                    sandboxId,
+                    durationMs: totalMs,
                 },
             });
         } catch (error) {
+            const totalMs = Date.now() - jobStart;
+            const classification = this.classifyError(error);
+
             this.logger.error({
-                message: `AST Graph Incremental Update job ${jobId} failed`,
+                message: `[AST-GRAPH-INCR] Incremental update FAILED for ${repoLabel} after ${totalMs}ms — ${error.message}`,
                 error,
                 context: AstGraphIncrementalJobProcessor.name,
                 metadata: {
                     jobId,
                     repositoryId: payload.repositoryId,
+                    newSha: payload.newSha,
                     changedFilesCount: payload.changedFiles?.length,
+                    sandboxId,
+                    durationMs: totalMs,
+                    classification,
                 },
             });
 
-            await this.handleFailure(jobId, error);
-            throw error;
+            await this.handleFailure(jobId, error, classification, sandboxId);
+
+            if (classification === ErrorClassification.TRANSIENT) {
+                throw error;
+            }
         } finally {
-            // 4. Always cleanup sandbox
             if (sandbox) {
                 try {
                     await sandbox.cleanup();
+                    this.logger.log({
+                        message: `[AST-GRAPH-INCR] Sandbox cleaned up for ${repoLabel}`,
+                        context: AstGraphIncrementalJobProcessor.name,
+                        metadata: { jobId, sandboxId },
+                    });
                 } catch (cleanupError) {
                     this.logger.warn({
-                        message: `Sandbox cleanup failed for job ${jobId}`,
+                        message: `[AST-GRAPH-INCR] Sandbox cleanup failed for ${repoLabel}`,
                         context: AstGraphIncrementalJobProcessor.name,
                         error: cleanupError,
+                        metadata: { jobId, sandboxId },
                     });
                 }
             }
         }
     }
 
-    async handleFailure(jobId: string, error: Error): Promise<void> {
+    private async updateJobStage(
+        jobId: string,
+        stage: string,
+        extra?: Record<string, unknown>,
+    ): Promise<void> {
+        await this.jobRepository.update(jobId, {
+            status: JobStatus.PROCESSING,
+            startedAt: new Date(),
+            currentStage: stage,
+            metadata: { stage, ...extra },
+        });
+    }
+
+    private classifyError(error: any): ErrorClassification {
+        const msg = (error?.message || '').toLowerCase();
+        const stderr = (error?.result?.stderr || '').toLowerCase();
+        const combined = `${msg} ${stderr}`;
+
+        // Transient: sandbox, network, timeout, clone auth, resource exhaustion
+        if (
+            combined.includes('timeout') ||
+            combined.includes('econnrefused') ||
+            combined.includes('econnreset') ||
+            combined.includes('enotfound') ||
+            combined.includes('epipe') ||
+            combined.includes('sandbox') ||
+            combined.includes('exit status 128') ||
+            combined.includes('could not resolve host') ||
+            combined.includes('rate limit') ||
+            combined.includes('out of memory') ||
+            combined.includes('enomem') ||
+            combined.includes('enospc') ||
+            combined.includes('503') ||
+            combined.includes('502') ||
+            combined.includes('temporarily unavailable')
+        ) {
+            return ErrorClassification.TRANSIENT;
+        }
+
+        return ErrorClassification.PERMANENT;
+    }
+
+    async handleFailure(
+        jobId: string,
+        error: Error,
+        classification: ErrorClassification = ErrorClassification.PERMANENT,
+        sandboxId?: string,
+    ): Promise<void> {
         await this.jobRepository.update(jobId, {
             status: JobStatus.FAILED,
-            errorClassification: ErrorClassification.PERMANENT,
+            errorClassification: classification,
             lastError: error.message?.slice(0, 1000),
             failedAt: new Date(),
+            metadata: { sandboxId, stage: 'FAILED' },
         });
     }
 
@@ -171,6 +267,7 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
         await this.jobRepository.update(jobId, {
             status: JobStatus.COMPLETED,
             completedAt: new Date(),
+            currentStage: 'DONE',
             result,
         });
     }

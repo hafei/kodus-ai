@@ -1,12 +1,11 @@
 import { ProgrammingLanguage } from "src/core/enums/programming-language";
+import { SeverityLevel } from "src/core/types";
 
 export enum KodyRuleInheritanceOrigin {
     GLOBAL = "global",
     REPOSITORY = "repository",
     DIRECTORY = "directory",
 }
-
-export type KodyRuleSeverityLevel = "warning" | "issue" | "critical";
 
 export type KodyRule = {
     uuid?: string;
@@ -17,7 +16,7 @@ export type KodyRule = {
     path: string;
     scope: "file" | "pull-request";
     severity: "low" | "medium" | "high" | "critical";
-    severityLevel?: KodyRuleSeverityLevel;
+    severityLevel?: SeverityLevel;
     repositoryId?: string;
     directoryId?: string;
     sourcePath?: string;
@@ -67,7 +66,7 @@ export type LibraryRule = {
     rule: string;
     why_is_this_important: string;
     severity?: "Low" | "Medium" | "High" | "Critical";
-    severityLevel?: KodyRuleSeverityLevel;
+    severityLevel?: SeverityLevel;
     bad_example?: string;
     good_example?: string;
     /**
@@ -96,7 +95,7 @@ type KodyRulesExample = {
 
 export type FindLibraryKodyRulesFilters = {
     name?: string;
-    severityLevel?: KodyRuleSeverityLevel;
+    severity?: KodyRule["severity"];
     tags?: string[];
     language?: keyof typeof ProgrammingLanguage;
     buckets?: string[];
@@ -175,4 +174,34 @@ export type KodyRuleSuggestion = {
     prUrl: string;
     repositoryId: string;
     repositoryFullName: string;
+};
+
+export const resolveKodyRuleDisplaySeverity = ({
+    severity,
+    severityLevel,
+}: {
+    severity?: string;
+    severityLevel?: SeverityLevel;
+}): SeverityLevel => {
+    const normalizedSeverity = severity?.toLowerCase();
+
+    if (
+        normalizedSeverity === SeverityLevel.CRITICAL ||
+        normalizedSeverity === SeverityLevel.HIGH ||
+        normalizedSeverity === SeverityLevel.MEDIUM ||
+        normalizedSeverity === SeverityLevel.LOW
+    ) {
+        return normalizedSeverity as SeverityLevel;
+    }
+
+    if (
+        severityLevel === SeverityLevel.CRITICAL ||
+        severityLevel === SeverityLevel.HIGH ||
+        severityLevel === SeverityLevel.MEDIUM ||
+        severityLevel === SeverityLevel.LOW
+    ) {
+        return severityLevel;
+    }
+
+    return SeverityLevel.LOW;
 };

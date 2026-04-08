@@ -1,4 +1,7 @@
+import { SeverityLevel, severityLevelSchema } from '@libs/common/utils/enums/severityLevel.enum';
 import z from 'zod';
+
+export { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
 export interface FindMemoriesFilters {
     repositoryId?: string;
@@ -154,24 +157,28 @@ export enum KodyRuleRequestType {
     MEMORY_UPDATE = 'memory_update',
 }
 
-export enum SeverityLevel {
-    WARNING = 'warning',
-    ISSUE = 'issue',
-    CRITICAL = 'critical',
-}
-
 /**
  * Resolves the effective SeverityLevel for a Kody Rule.
  * - If severityLevel is already set, returns it directly.
- * - Legacy mapping: severity "critical" → CRITICAL, anything else → ISSUE.
+ * - Otherwise falls back to the normalized `severity` field.
+ * - Defaults to HIGH when neither field is present.
  */
 export function resolveKodyRuleSeverityLevel(
     rule: Partial<IKodyRule>,
 ): SeverityLevel {
     if (rule.severityLevel) return rule.severityLevel;
-    return rule.severity === 'critical'
-        ? SeverityLevel.CRITICAL
-        : SeverityLevel.ISSUE;
+    switch ((rule.severity || '').toLowerCase()) {
+        case SeverityLevel.CRITICAL:
+            return SeverityLevel.CRITICAL;
+        case SeverityLevel.HIGH:
+            return SeverityLevel.HIGH;
+        case SeverityLevel.MEDIUM:
+            return SeverityLevel.MEDIUM;
+        case SeverityLevel.LOW:
+            return SeverityLevel.LOW;
+        default:
+            return SeverityLevel.HIGH;
+    }
 }
 
 export const kodyRulesTypeSchema = z.enum([...Object.values(KodyRulesType)] as [
@@ -249,11 +256,6 @@ const kodyRulesScopeSchema = z.enum([...Object.values(KodyRulesScope)] as [
 const kodyRuleRequestTypeSchema = z.enum([
     ...Object.values(KodyRuleRequestType),
 ] as [KodyRuleRequestType, ...KodyRuleRequestType[]]);
-
-const severityLevelSchema = z.enum([...Object.values(SeverityLevel)] as [
-    SeverityLevel,
-    ...SeverityLevel[],
-]);
 
 export const kodyRuleSchema = z.object({
     uuid: z.string().optional(),

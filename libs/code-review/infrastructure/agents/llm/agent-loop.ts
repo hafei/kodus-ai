@@ -1,7 +1,4 @@
-import {
-    buildAgentTools,
-    DocumentationSearchAdapter,
-} from './agent-tools.factory';
+import { buildAgentTools } from './agent-tools.factory';
 /**
  * Simple agent loop using Vercel AI SDK with native function calling.
  *
@@ -110,16 +107,10 @@ export interface AgentLoopInput {
     model: LanguageModel;
     systemPrompt: string;
     userPrompt: string;
-    remoteCommands: RemoteCommands;
-    documentationSearchService?: DocumentationSearchAdapter;
-    documentationSearchOptions?: Record<string, unknown>;
-    byokConfig?: BYOKConfig;
     agentName?: string; // e.g. 'kodus-bug-review-agent' — used for LangSmith trace identification
     telemetryMetadata?: LangSmithTelemetryMetadata;
     maxSteps?: number;
     onStepFinish?: (event: any) => void;
-    /** @deprecated — pass via toolSecrets instead to avoid LangSmith trace leaks */
-    gitHubToken?: string;
     changedFiles?: any[];
     prNumber?: number;
     repositoryFullName?: string;
@@ -127,8 +118,19 @@ export interface AgentLoopInput {
     baseBranch?: string;
     /** Pre-computed call graph shared by reviewers and verifier. */
     callGraph?: string;
-    /** Review mode: 'normal' skips verify for high-confidence findings, 'deep' verifies everything. */
+    /** Review mode: 'normal' skips verify only for very-high-confidence findings, 'deep' verifies everything. */
     reviewMode?: 'normal' | 'deep';
+}
+
+/**
+ * Secrets and service references that must NEVER be serialized into
+ * LangSmith traces or LLM payloads. Extracted from the old AgentLoopInput
+ * to prevent accidental leaks (NestJS ConfigService carries all env vars).
+ */
+export interface AgentLoopSecrets {
+    remoteCommands: RemoteCommands;
+    byokConfig?: BYOKConfig;
+    gitHubToken?: string;
 }
 
 export interface AgentLoopOutput {
@@ -210,19 +212,18 @@ export interface AgentAnomalySummary {
 
 /**
  * Run the agent loop with native function calling.
+ *
+ * `secrets` is kept separate from `input` so that LangSmith tracing
+ * (which serializes `input`) never captures API keys, tokens, or
+ * NestJS service instances that carry ConfigService with all env vars.
  */
 export async function runAgentLoop(
     input: AgentLoopInput,
+    secrets: AgentLoopSecrets,
 ): Promise<AgentLoopOutput> {
-    // Extract and redact sensitive token to prevent LangSmith trace leaks
-    const gitHubToken = input.gitHubToken;
-    delete (input as any).gitHubToken;
-
     const tools = buildAgentTools(
-        input.remoteCommands,
-        input.documentationSearchService,
-        input.documentationSearchOptions,
-        gitHubToken,
+        secrets.remoteCommands,
+        secrets.gitHubToken,
     );
     const coverageTargets = buildCoverageLedger(input.changedFiles);
 
@@ -465,7 +466,7 @@ export async function runAgentLoop(
                     try {
                         const fallbackResult = await structureWithFallbackModel(
                             bestText,
-                            input.byokConfig,
+                            secrets.byokConfig,
                         );
                         if (
                             fallbackResult &&
@@ -660,7 +661,7 @@ Respond with ONLY the JSON:
 
         const fallbackResult = await structureWithFallbackModel(
             finalText,
-            input.byokConfig,
+            secrets.byokConfig,
         );
         if (fallbackResult) {
             findings = fallbackResult.findings;
@@ -748,7 +749,7 @@ Respond with ONLY the JSON:
             if (!extraFindings && coverageSecondChance.text.length > 50) {
                 const fallbackResult = await structureWithFallbackModel(
                     coverageSecondChance.text,
-                    input.byokConfig,
+                    secrets.byokConfig,
                 );
                 if (fallbackResult) {
                     extraFindings = fallbackResult.findings;
@@ -800,6 +801,7 @@ Respond with ONLY the JSON:
         const verificationResult = await verifyFindingsWithTools({
             findings,
             input,
+            secrets,
             allToolCalls,
             tools: pickVerificationTools(tools),
         });
@@ -1204,10 +1206,13 @@ async function runSynthesisRescuePass(params: {
         input,
         findings,
         allToolCalls,
-        totalInputTokens,
-        totalOutputTokens,
-        totalReasoningTokens,
+        totalInputTokens: initialTotalInputTokens,
+        totalOutputTokens: initialTotalOutputTokens,
+        totalReasoningTokens: initialTotalReasoningTokens,
     } = params;
+    let totalInputTokens = initialTotalInputTokens;
+    let totalOutputTokens = initialTotalOutputTokens;
+    let totalReasoningTokens = initialTotalReasoningTokens;
 
     const currentFindingsSummary = findings.suggestions.length
         ? findings.suggestions
@@ -1303,7 +1308,7 @@ Return ONLY JSON:
         if (!extraFindings && synthesisText.length > 50) {
             const fallbackResult = await structureWithFallbackModel(
                 synthesisText,
-                input.byokConfig,
+                secrets.byokConfig,
             );
             if (fallbackResult) {
                 extraFindings = fallbackResult.findings;
@@ -1392,6 +1397,7 @@ function mergeFindings(
 async function verifyFindingsWithTools(params: {
     findings: FindingsOutput;
     input: AgentLoopInput;
+    secrets: AgentLoopSecrets;
     allToolCalls: AgentLoopOutput['toolCalls'];
     tools: Record<string, any>;
 }): Promise<{
@@ -1404,8 +1410,8 @@ async function verifyFindingsWithTools(params: {
         totalTokens: number;
     };
 }> {
-    const { findings, input, allToolCalls, tools } = params;
-    const internalModel = getInternalModel(input.byokConfig);
+    const { findings, input, secrets, allToolCalls, tools } = params;
+    const internalModel = getInternalModel(secrets.byokConfig);
     const reviewerEvidence = buildToolEvidenceSummary(allToolCalls);
 
     if (!internalModel || findings.suggestions.length === 0) {
@@ -1447,7 +1453,7 @@ async function verifyFindingsWithTools(params: {
 
             if (reviewMode === 'deep') {
                 toVerifyFull.push({ index: i, suggestion });
-            } else if (confidence >= 8) {
+            } else if (confidence >= 9) {
                 toSkip.push({ index: i, suggestion });
             } else if (confidence >= 5) {
                 toVerifyLight.push({ index: i, suggestion });
@@ -1458,7 +1464,7 @@ async function verifyFindingsWithTools(params: {
 
         if (toSkip.length > 0) {
             logger.log({
-                message: `[AGENT-VERIFY] Skipping ${toSkip.length} high-confidence findings (confidence >= 8), verifying ${toVerifyLight.length} light + ${toVerifyFull.length} full`,
+                message: `[AGENT-VERIFY] Skipping ${toSkip.length} very-high-confidence findings (confidence >= 9), verifying ${toVerifyLight.length} light + ${toVerifyFull.length} full`,
                 context: 'AgentLoop',
             });
         }
@@ -1469,7 +1475,7 @@ async function verifyFindingsWithTools(params: {
                 index,
                 keep: true,
                 rationale:
-                    'High confidence (>= 8) — skipped verification in normal mode.',
+                    'Very high confidence (>= 9) — skipped verification in normal mode.',
             });
             verifierParseModeByIndex.set(index, 'direct');
             verifierRawTextByIndex.set(index, '');
@@ -1486,6 +1492,7 @@ async function verifyFindingsWithTools(params: {
                     index,
                     suggestion,
                     input,
+                    secrets,
                     allToolCalls,
                     tools,
                     maxVerifySteps: 2,
@@ -1516,6 +1523,7 @@ async function verifyFindingsWithTools(params: {
                     index,
                     suggestion,
                     input,
+                    secrets,
                     allToolCalls,
                     tools,
                 }),
@@ -1685,6 +1693,7 @@ async function verifySingleFindingWithTools(params: {
     index: number;
     suggestion: FindingsOutput['suggestions'][number];
     input: AgentLoopInput;
+    secrets: AgentLoopSecrets;
     allToolCalls: AgentLoopOutput['toolCalls'];
     tools: Record<string, any>;
     maxVerifySteps?: number;
@@ -1700,8 +1709,8 @@ async function verifySingleFindingWithTools(params: {
         totalTokens: number;
     };
 }> {
-    const { index, suggestion, input, allToolCalls, tools } = params;
-    const internalModel = getInternalModel(input.byokConfig);
+    const { index, suggestion, input, secrets, allToolCalls, tools } = params;
+    const internalModel = getInternalModel(secrets.byokConfig);
     const evidenceBundle = buildSuggestionEvidenceBundle(
         index,
         suggestion,
@@ -1761,6 +1770,10 @@ async function verifySingleFindingWithTools(params: {
     let verifierSteps = 0;
     const verifierToolCalls: AgentLoopOutput['toolCalls'] = [];
     const verifierStepTexts: string[] = [];
+    const verificationPrompt = buildVerifierPrompt(
+        evidenceBundle.bundle,
+        index,
+    );
 
     const verificationRun: any = await generateText({
         model: internalModel as any,
@@ -1772,54 +1785,8 @@ async function verifySingleFindingWithTools(params: {
             `${input.agentName ?? 'agent-loop'}-verify-finding`,
             input.telemetryMetadata,
         ),
-        system: `You are a surgical code review verifier.
-
-Your task is to verify ONE candidate finding.
-
-Rules:
-- You may use only a few tool calls. Be surgical.
-- Use tools to confirm or refute the candidate finding.
-- Treat call graph hints as fast navigation hints, not as final proof.
-- You must NOT create a new finding unrelated to the candidate.
-- Do NOT rewrite the finding text, summary, severity, or suggested fix.
-
-Drop criteria — drop the finding if ANY of these apply:
-- The finding is speculative: it describes a theoretical concern without pointing to a concrete failure path in the changed code (e.g. "lacks rate limiting", "could cause performance issues", "consider adding validation").
-- The finding is a pure efficiency concern without a failure path: O(N) queries, N+1 queries, redundant allocations, eager evaluation, synchronous operations in async context — UNLESS it causes a crash, timeout, or data corruption under normal usage.
-- The finding describes a missing defensive measure (missing CSRF, missing rate limit, missing input validation, missing authentication) without evidence that the omission is exploitable in the specific changed code.
-- The finding describes a pre-existing pattern that is NOT made worse by this PR.
-- The finding is about code style, naming, documentation, or best practices rather than a concrete bug.
-- The root cause described is factually wrong (e.g. claims something is not imported when it is).
-
-Keep criteria — keep the finding only if ALL of these apply:
-- The finding identifies a concrete defect: wrong behavior, crash, data corruption, or security vulnerability.
-- The root cause is in lines added or modified by this PR.
-- You can trace a specific failure path from the changed code to the bad outcome.
-- The failure can happen under normal usage, not just under adversarial or extreme conditions.
-
-When in doubt between a speculative concern and a real bug, DROP. Precision matters more than recall at this stage — a downstream reviewer exists.
-
-Return JSON only at the end.`,
-        prompt: `${evidenceBundle.bundle}
-
-You may use up to 4 tool-call steps.
-
-Recommended approach:
-1. Read the cited file/range if needed.
-2. Search for the key symbol or caller if the claim depends on flow.
-3. Read one relevant caller/callee file if needed.
-4. Return a final JSON verdict.
-
-Output JSON:
-\`\`\`json
-{
-  "index": ${index},
-  "keep": true,
-  "rationale": "why the evidence supports keep/drop",
-  "confidence": "high|medium|low"
-}
-\`\`\`
-`,
+        system: verificationPrompt.system,
+        prompt: verificationPrompt.prompt,
         tools,
         stopWhen: stepCountIs(params.maxVerifySteps || 5),
         prepareStep: ({ stepNumber }: any) => {
@@ -1988,7 +1955,7 @@ Rules:
             await structureVerificationDecisionWithFallbackModel(
                 verificationText,
                 index,
-                input.byokConfig,
+                secrets.byokConfig,
             );
 
         if (fallbackDecision) {
@@ -2047,6 +2014,65 @@ Rules:
                 Math.max(baseUsage.inputTokens ?? 0, totalInputTokens) +
                 Math.max(baseUsage.outputTokens ?? 0, totalOutputTokens),
         },
+    };
+}
+
+export function buildVerifierPrompt(
+    evidenceBundle: string,
+    index: number,
+): {
+    system: string;
+    prompt: string;
+} {
+    return {
+        system: `You are a surgical code review verifier.
+
+Your task is to verify ONE candidate finding.
+
+Rules:
+- You may use only a few tool calls. Be surgical.
+- Use tools to confirm or refute the candidate finding.
+- Treat call graph hints as fast navigation hints, not as final proof.
+- You must NOT create a new finding unrelated to the candidate.
+- Do NOT rewrite the finding text, summary, severity, or suggested fix.
+
+Drop criteria — drop the finding if ANY of these apply:
+- The finding is speculative: it describes a theoretical concern without pointing to a concrete failure path in the changed code (e.g. "lacks rate limiting", "could cause performance issues", "consider adding validation").
+- The finding is a pure efficiency concern without a failure path: O(N) queries, N+1 queries, redundant allocations, eager evaluation, synchronous operations in async context — UNLESS it causes a crash, timeout, or data corruption under normal usage.
+- The finding describes a missing defensive measure (missing CSRF, missing rate limit, missing input validation, missing authentication) without evidence that the omission is exploitable in the specific changed code.
+- The finding describes a pre-existing pattern that is NOT made worse by this PR.
+- The finding is about code style, naming, documentation, or best practices rather than a concrete bug.
+- The root cause described is factually wrong (e.g. claims something is not imported when it is).
+
+Keep criteria — keep the finding only if ALL of these apply:
+- The finding identifies a concrete defect: wrong behavior, crash, data corruption, or security vulnerability.
+- The root cause is in lines added or modified by this PR.
+- You can trace a specific failure path from the changed code to the bad outcome.
+- The failure can happen under normal usage, not just under adversarial or extreme conditions.
+
+When in doubt between a speculative concern and a real bug, DROP. Precision matters more than recall at this stage — a downstream reviewer exists.
+
+Return JSON only at the end.`,
+        prompt: `${evidenceBundle}
+
+You may use up to 4 tool-call steps.
+
+Recommended approach:
+1. Read the cited file/range if needed.
+2. Search for the key symbol or caller if the claim depends on flow.
+3. Read one relevant caller/callee file if needed.
+4. Return a final JSON verdict.
+
+Output JSON:
+\`\`\`json
+{
+  "index": ${index},
+  "keep": true,
+  "rationale": "why the evidence supports keep/drop",
+  "confidence": "high|medium|low"
+}
+\`\`\`
+`,
     };
 }
 
@@ -2653,6 +2679,30 @@ async function structureWithFallbackModel(
     };
 } | null> {
     try {
+        const nullableStringSchema = {
+            type: ['string', 'null'],
+        } as const;
+        const nullableNumberSchema = {
+            type: ['number', 'null'],
+        } as const;
+        const nullableLabelSchema = {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: ['bug', 'security', 'performance'],
+                },
+                { type: 'null' },
+            ],
+        } as const;
+        const nullableSeveritySchema = {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: ['critical', 'high', 'medium', 'low'],
+                },
+                { type: 'null' },
+            ],
+        } as const;
         const internalModel = getInternalModel(byokConfig);
 
         if (!internalModel) {
@@ -2669,44 +2719,37 @@ async function structureWithFallbackModel(
             output: Output.object({
                 schema: jsonSchema({
                     type: 'object',
+                    additionalProperties: false,
                     properties: {
                         reasoning: { type: 'string' },
                         suggestions: {
                             type: 'array',
                             items: {
                                 type: 'object',
+                                additionalProperties: false,
                                 properties: {
                                     relevantFile: { type: 'string' },
-                                    language: { type: 'string' },
-                                    label: {
-                                        type: 'string',
-                                        enum: [
-                                            'bug',
-                                            'security',
-                                            'performance',
-                                        ],
-                                    },
+                                    language: nullableStringSchema,
+                                    label: nullableLabelSchema,
                                     suggestionContent: { type: 'string' },
                                     existingCode: { type: 'string' },
                                     improvedCode: { type: 'string' },
-                                    oneSentenceSummary: { type: 'string' },
-                                    relevantLinesStart: { type: 'number' },
-                                    relevantLinesEnd: { type: 'number' },
-                                    severity: {
-                                        type: 'string',
-                                        enum: [
-                                            'critical',
-                                            'high',
-                                            'medium',
-                                            'low',
-                                        ],
-                                    },
+                                    oneSentenceSummary: nullableStringSchema,
+                                    relevantLinesStart: nullableNumberSchema,
+                                    relevantLinesEnd: nullableNumberSchema,
+                                    severity: nullableSeveritySchema,
                                 },
                                 required: [
                                     'relevantFile',
+                                    'language',
+                                    'label',
                                     'suggestionContent',
                                     'existingCode',
                                     'improvedCode',
+                                    'oneSentenceSummary',
+                                    'relevantLinesStart',
+                                    'relevantLinesEnd',
+                                    'severity',
                                 ],
                             },
                         },
@@ -2732,7 +2775,44 @@ ${reviewText}
 For each issue found, extract: relevantFile, language, label (bug/security/performance when present), suggestionContent (full description), existingCode, improvedCode, oneSentenceSummary, relevantLinesStart, relevantLinesEnd, severity (critical/high/medium/low).`,
         });
 
-        const output: any = (result as any).object ?? (result as any).output;
+        const rawOutput: any = (result as any).object ?? (result as any).output;
+        const output = {
+            reasoning: rawOutput?.reasoning ?? '',
+            suggestions: Array.isArray(rawOutput?.suggestions)
+                ? rawOutput.suggestions.map((suggestion: any) => ({
+                      relevantFile: suggestion?.relevantFile ?? '',
+                      suggestionContent: suggestion?.suggestionContent ?? '',
+                      existingCode: suggestion?.existingCode ?? '',
+                      improvedCode: suggestion?.improvedCode ?? '',
+                      ...(suggestion?.language == null
+                          ? {}
+                          : { language: suggestion.language }),
+                      ...(suggestion?.label == null
+                          ? {}
+                          : { label: suggestion.label }),
+                      ...(suggestion?.oneSentenceSummary == null
+                          ? {}
+                          : {
+                                oneSentenceSummary:
+                                    suggestion.oneSentenceSummary,
+                            }),
+                      ...(suggestion?.relevantLinesStart == null
+                          ? {}
+                          : {
+                                relevantLinesStart:
+                                    suggestion.relevantLinesStart,
+                            }),
+                      ...(suggestion?.relevantLinesEnd == null
+                          ? {}
+                          : {
+                                relevantLinesEnd: suggestion.relevantLinesEnd,
+                            }),
+                      ...(suggestion?.severity == null
+                          ? {}
+                          : { severity: suggestion.severity }),
+                  }))
+                : [],
+        };
 
         const fallbackUsage = result.usage ?? (result as any).totalUsage;
 
