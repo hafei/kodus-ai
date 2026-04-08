@@ -1,10 +1,4 @@
-import {
-    Column,
-    Entity,
-    Index,
-    OneToMany,
-    Unique,
-} from 'typeorm';
+import { Column, Entity, OneToMany, Unique } from 'typeorm';
 
 import { CoreModel } from '@libs/core/infrastructure/repositories/model/typeOrm';
 

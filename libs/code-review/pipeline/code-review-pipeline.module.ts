@@ -69,7 +69,6 @@ import { GeneralistAgentProvider } from '../infrastructure/agents/generalist-age
 import { KodyRulesAgentProvider } from '../infrastructure/agents/kody-rules-agent.provider';
 // ReflectionAgentProvider removed — verify/discover was hurting recall
 import { ReviewOrchestratorService } from '../infrastructure/agents/review-orchestrator.service';
-import { KodusGraphService } from '../infrastructure/adapters/services/kodusGraph.service';
 
 @Module({
     imports: [
@@ -139,7 +138,6 @@ import { KodusGraphService } from '../infrastructure/adapters/services/kodusGrap
         KodyRulesAgentProvider,
         // ReflectionAgentProvider removed
         ReviewOrchestratorService,
-        KodusGraphService,
 
         // EE Stages
         KodyFineTuningStage,

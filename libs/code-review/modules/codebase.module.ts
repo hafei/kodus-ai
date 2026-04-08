@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RepositoryRepository } from '@libs/code-review/infrastructure/adapters/repositories/repository.repository';
 import { AstGraphRepository } from '@libs/code-review/infrastructure/adapters/repositories/astGraph.repository';
 import { AstGraphBuildService } from '@libs/code-review/infrastructure/adapters/services/astGraphBuild.service';
+import { KodusGraphService } from '@libs/code-review/infrastructure/adapters/services/kodusGraph.service';
 import { RepositoryModel } from '@libs/code-review/infrastructure/adapters/repositories/schemas/repository.model';
 import { AstNodeModel } from '@libs/code-review/infrastructure/adapters/repositories/schemas/astNode.model';
 import { AstEdgeModel } from '@libs/code-review/infrastructure/adapters/repositories/schemas/astEdge.model';
@@ -188,6 +189,7 @@ import { DocumentationContextModule } from './documentation-context.module';
         RepositoryRepository,
         AstGraphRepository,
         AstGraphBuildService,
+        KodusGraphService,
     ],
     exports: [
         PULL_REQUEST_MANAGER_SERVICE_TOKEN,
@@ -211,6 +213,7 @@ import { DocumentationContextModule } from './documentation-context.module';
         RepositoryRepository,
         AstGraphRepository,
         AstGraphBuildService,
+        KodusGraphService,
     ],
 })
 export class CodebaseModule {}
