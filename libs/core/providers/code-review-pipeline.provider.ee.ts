@@ -33,20 +33,25 @@ export const codeReviewPipelineProvider: Provider = {
             execute: async (
                 context: CodeReviewPipelineContext,
             ): Promise<CodeReviewPipelineContext> => {
-                const useAgentPipeline = posthog.isInitialized
-                    ? await posthog.isFeatureEnabled(
-                          FEATURE_FLAGS.agentReview,
-                          context.organizationAndTeamData?.organizationId ||
-                              context.organizationAndTeamData?.teamId ||
-                              'unknown',
-                          context.organizationAndTeamData,
-                      )
-                    : false;
+                const featureIdentifier =
+                    context.organizationAndTeamData?.organizationId ||
+                    context.organizationAndTeamData?.teamId ||
+                    'unknown';
+
+                let useAgentPipeline = false;
+                if (posthog.isInitialized) {
+                    const flagResult = await posthog.isFeatureEnabled(
+                        FEATURE_FLAGS.agentReview,
+                        featureIdentifier,
+                        context.organizationAndTeamData,
+                    );
+                    useAgentPipeline = flagResult === true;
+                }
 
                 const strategy = useAgentPipeline ? agentStrategy : eeStrategy;
 
                 logger.log({
-                    message: `Pipeline strategy selected: ${strategy.getPipelineName()} (agentFlag=${useAgentPipeline})`,
+                    message: `Pipeline strategy selected: ${strategy.getPipelineName()} (agentFlag=${useAgentPipeline}, posthogInitialized=${posthog.isInitialized}, identifier=${featureIdentifier})`,
                     context: 'CodeReviewPipelineProvider',
                 });
 
