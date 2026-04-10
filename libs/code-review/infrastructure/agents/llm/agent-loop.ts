@@ -126,7 +126,6 @@ const MAX_STEPS_NORMAL = 15;
 const MAX_STEPS_DEEP = 100;
 const AGENT_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes max per agent
 const LLM_CALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max per individual LLM call
-const TRIAGE_TIMEOUT_MS = 60_000; // 1 min max for triage (no tools, should be fast)
 
 /** Create an AbortSignal that fires after the given ms. */
 function timeoutSignal(ms: number): AbortSignal {
@@ -254,15 +253,6 @@ export interface AgentLoopOutput {
     anomalies: AgentAnomalySummary;
 }
 
-/** A function flagged by the triage pass as potentially buggy. */
-interface TriageSuspect {
-    function: string;
-    file: string;
-    hypothesis: string;
-    check: string;
-    confidence: 'high' | 'medium' | 'low';
-}
-
 interface SuggestionVerificationDecision {
     index: number;
     keep: boolean;
@@ -308,124 +298,6 @@ export interface AgentAnomalySummary {
     zeroCoverage: boolean;
     lowCoverage: boolean;
     lowStrongEvidenceFiles: boolean;
-}
-
-/**
- * Pass 0: Triage — single LLM call without tools.
- * Reads the diff + graph and returns ranked suspects for the main agent to investigate.
- * Returns empty array on any failure (timeout, parse error, empty response).
- */
-async function runTriagePass(
-    input: AgentLoopInput,
-    secrets: AgentLoopSecrets,
-): Promise<TriageSuspect[]> {
-    if (!input.callGraph) return [];
-
-    const triagePrompt = `<TriageTask>
-  <Diffs>
-${input.userPrompt.match(/<Diffs>([\s\S]*?)<\/Diffs>/)?.[1] ?? '(no diffs available)'}
-  </Diffs>
-
-  <CallGraph>
-${input.callGraph}
-  </CallGraph>
-
-  <Task>
-    You are triaging this PR before deep investigation.
-    For each changed function in the call graph, assess:
-    1. What could go wrong? (wrong delegation, wrong return, missing check, type mismatch, dead code, race condition)
-    2. How confident are you? (high/medium/low)
-    3. What should the investigator verify with tools?
-
-    Return ONLY a JSON array of up to 10 suspects, ranked by risk (highest first):
-    \`\`\`json
-    [
-      {
-        "function": "functionName",
-        "file": "path/to/file.java",
-        "hypothesis": "What might be wrong and why",
-        "check": "Specific action the investigator should take to confirm or dismiss",
-        "confidence": "high"
-      }
-    ]
-    \`\`\`
-
-    Rules:
-    - Focus on LOGIC bugs: wrong variable, wrong return, wrong delegation, missing null check, dead code, broken contract.
-    - Skip style, naming, documentation issues.
-    - If a function looks safe, skip it entirely.
-    - If no function looks suspicious, return an empty array: []
-  </Task>
-</TriageTask>`;
-
-    try {
-        const triageSignal = timeoutSignal(TRIAGE_TIMEOUT_MS);
-
-        const result = await throttledGenerateText({
-            byokConfig: secrets.byokConfig,
-            organizationId: input.telemetryMetadata?.organizationId,
-            role: 'internal',
-            label: `${input.agentName ?? 'agent-loop'}-triage`,
-            abortSignal: triageSignal,
-            fn: () =>
-                generateText({
-                    abortSignal: triageSignal,
-                    model: input.model,
-                    system: input.systemPrompt,
-                    prompt: triagePrompt,
-                    providerOptions: buildLangSmithProviderOptions(
-                        `${input.agentName ?? 'agent-loop'}-triage`,
-                        input.telemetryMetadata,
-                    ),
-                }),
-        });
-
-        const text = result.text || '';
-        if (!text) {
-            logger.log({
-                message: '[TRIAGE] Empty response from triage pass',
-                context: 'AgentLoop',
-            });
-            return [];
-        }
-
-        // Parse JSON from response (may be wrapped in ```json ... ```)
-        const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-        const jsonStr = jsonMatch?.[1]?.trim() || text.trim();
-        const parsed = JSON.parse(jsonStr);
-
-        if (!Array.isArray(parsed)) {
-            logger.warn({
-                message: `[TRIAGE] Response is not an array, skipping`,
-                context: 'AgentLoop',
-            });
-            return [];
-        }
-
-        const suspects: TriageSuspect[] = parsed
-            .filter(
-                (s: any) =>
-                    s && typeof s.function === 'string' && typeof s.file === 'string',
-            )
-            .slice(0, 10);
-
-        logger.log({
-            message: `[TRIAGE] Found ${suspects.length} suspects`,
-            context: 'AgentLoop',
-            metadata: {
-                suspects: suspects.map((s) => `[${s.confidence}] ${s.function} — ${s.hypothesis?.substring(0, 80)}`),
-            },
-        });
-
-        return suspects;
-    } catch (error) {
-        logger.warn({
-            message: `[TRIAGE] Triage pass failed, proceeding without focus targets`,
-            context: 'AgentLoop',
-            error,
-        });
-        return [];
-    }
 }
 
 /**
