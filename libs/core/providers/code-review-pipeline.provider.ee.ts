@@ -2,7 +2,7 @@
  * @license
  * Kodus Tech. All rights reserved.
  */
-import { CodeReviewPipelineStrategy } from '@libs/code-review/pipeline/strategy/code-review-pipeline.strategy';
+import { CodeReviewAgentPipelineStrategy } from '@libs/code-review/pipeline/strategy/code-review-agent-pipeline.strategy';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { IPipeline } from '@libs/core/infrastructure/pipeline/interfaces/pipeline.interface';
 import { PipelineExecutor } from '@libs/core/infrastructure/pipeline/services/pipeline-executor.service';
@@ -10,6 +10,7 @@ import { Provider } from '@nestjs/common';
 import { CodeReviewPipelineStrategyEE } from '@libs/ee/codeReview/strategies/code-review-pipeline.strategy.ee';
 import { createLogger } from '@kodus/flow';
 import { CodeReviewPipelineObserver } from '@libs/code-review/infrastructure/observers/code-review-pipeline.observer';
+import posthog, { FEATURE_FLAGS } from '@libs/common/utils/posthog';
 
 export const CODE_REVIEW_PIPELINE_TOKEN = 'CODE_REVIEW_PIPELINE';
 
@@ -18,17 +19,12 @@ const logger = createLogger('codeReviewPipelineProvider');
 export const codeReviewPipelineProvider: Provider = {
     provide: CODE_REVIEW_PIPELINE_TOKEN,
     useFactory: (
-        ceStrategy: CodeReviewPipelineStrategy,
         eeStrategy: CodeReviewPipelineStrategyEE,
+        agentStrategy: CodeReviewAgentPipelineStrategy,
         observer: CodeReviewPipelineObserver,
     ): IPipeline<CodeReviewPipelineContext> => {
-        // Always use EE strategy — EE-only stages have internal guards
-        // (e.g., KodyFineTuningStage checks config.enabled, CodeAnalysisASTStage checks env var)
-        // V3 agent stages also self-gate based on codeReviewVersion in the resolved config.
-        const strategy = eeStrategy;
-
         logger.log({
-            message: `Pipeline strategy: EE (stages self-gate based on config)`,
+            message: `Pipeline provider initialized with EE (v4) and Agent strategies`,
             context: 'CodeReviewPipelineProvider',
         });
 
@@ -37,6 +33,23 @@ export const codeReviewPipelineProvider: Provider = {
             execute: async (
                 context: CodeReviewPipelineContext,
             ): Promise<CodeReviewPipelineContext> => {
+                const useAgentPipeline = posthog.isInitialized
+                    ? await posthog.isFeatureEnabled(
+                          FEATURE_FLAGS.agentReview,
+                          context.organizationAndTeamData?.organizationId ||
+                              context.organizationAndTeamData?.teamId ||
+                              'unknown',
+                          context.organizationAndTeamData,
+                      )
+                    : false;
+
+                const strategy = useAgentPipeline ? agentStrategy : eeStrategy;
+
+                logger.log({
+                    message: `Pipeline strategy selected: ${strategy.getPipelineName()} (agentFlag=${useAgentPipeline})`,
+                    context: 'CodeReviewPipelineProvider',
+                });
+
                 const stages = strategy.configureStages();
                 const executor = new PipelineExecutor();
                 return (await executor.execute(
@@ -51,8 +64,8 @@ export const codeReviewPipelineProvider: Provider = {
         };
     },
     inject: [
-        CodeReviewPipelineStrategy,
         CodeReviewPipelineStrategyEE,
+        CodeReviewAgentPipelineStrategy,
         CodeReviewPipelineObserver,
     ],
 };
