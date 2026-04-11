@@ -1,11 +1,6 @@
 import { createLogger } from '@kodus/flow';
 import {
-    AST_ANALYSIS_SERVICE_TOKEN,
-    IASTAnalysisService,
-} from '@libs/code-review/domain/contracts/ASTAnalysisService.contract';
-import {
     SUPPORTED_LANGUAGES,
-    SyntaxCheckRequest,
     ValidationCandidate,
 } from '@libs/code-review/domain/types/astValidate.type';
 import posthog, { FEATURE_FLAGS } from '@libs/common/utils/posthog';
@@ -18,13 +13,15 @@ import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { PipelineReasons } from '@libs/core/infrastructure/pipeline/constants/pipeline-reasons.const';
 import { StageMessageHelper } from '@libs/core/infrastructure/pipeline/utils/stage-message.helper';
-import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import { applyEdit } from '@morphllm/morphsdk';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { parsePatch } from 'diff';
 import pLimit from 'p-limit';
+import { Sandbox } from 'e2b';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 import { estimateTokens } from '@libs/code-review/infrastructure/adapters/services/utils/token-estimator';
+import { SandboxSyntaxValidator } from '@libs/code-review/infrastructure/adapters/services/sandboxSyntaxValidator.service';
+import { SuggestionLLMValidator } from '@libs/code-review/infrastructure/adapters/services/suggestionLLMValidator.service';
 
 @Injectable()
 export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipelineContext> {
@@ -36,8 +33,8 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
     private readonly MAX_CHARS_THRESHOLD = 1000;
 
     constructor(
-        @Inject(AST_ANALYSIS_SERVICE_TOKEN)
-        private readonly astAnalysisService: IASTAnalysisService,
+        private readonly sandboxSyntaxValidator: SandboxSyntaxValidator,
+        private readonly suggestionLLMValidator: SuggestionLLMValidator,
     ) {
         super();
     }
@@ -93,10 +90,13 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
                 return context;
             }
 
+            const sandbox = (context.sandboxHandle?.sandboxHandle as Sandbox) ?? null;
+
             const validIds = await this.performFullValidation(
                 candidates,
                 organizationAndTeamData,
                 prNumber,
+                sandbox,
             );
 
             const updatedSuggestions = this.mapValidationResults(
@@ -199,64 +199,30 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
         candidates: ValidationCandidate[],
         orgData: OrganizationAndTeamData,
         prNumber: number,
+        sandbox: Sandbox | null,
     ): Promise<Set<string>> {
-        const payload: SyntaxCheckRequest = {
-            files: candidates.map(
-                ({ id, encodedData, language, filePath }) => ({
-                    id,
-                    encodedData,
-                    language,
-                    filePath,
-                }),
-            ),
-        };
-
-        const { taskId } = await this.astAnalysisService.startValidate(payload);
-
-        const taskRes = await this.astAnalysisService.awaitTask(
-            taskId,
-            orgData,
+        // Step 1: Syntax validation via kodus-graph parse in sandbox
+        const syntaxValidIds = await this.sandboxSyntaxValidator.validateFiles(
+            sandbox,
+            candidates,
         );
-        if (taskRes?.task?.status !== TaskStatus.TASK_STATUS_COMPLETED) {
-            throw new Error(
-                `Validation task ${taskId} incomplete: ${taskRes?.task?.status}`,
-            );
-        }
 
-        const astResults = await this.astAnalysisService.getValidate(
-            taskId,
-            orgData,
+        const syntaxValidCandidates = candidates.filter((c) =>
+            syntaxValidIds.has(c.id),
         );
-        if (!astResults) {
-            throw new Error('No results returned from AST validation');
-        }
 
-        const validAstItems = astResults.results.filter(
-            (r) => r.isValid && r.id,
-        );
+        // Step 2: LLM validation for syntax-valid candidates
         const candidateMap = new Map(candidates.map((c) => [c.id, c]));
-
         const limit = pLimit(this.CONCURRENCY_LIMIT);
-        const llmValidations = validAstItems.map((item) =>
-            limit(async () => {
-                const candidate = candidateMap.get(item.id);
-                if (!candidate) {
-                    this.logWarn(`No candidate found for AST valid item`, {
-                        id: item.id,
-                        filePath: item.filePath,
-                        prNumber,
-                        orgData,
-                    });
-                    return null;
-                }
 
+        const llmValidations = syntaxValidCandidates.map((candidate) =>
+            limit(async () => {
                 const isValid = await this.validateWithLLM(
-                    taskId,
                     candidate,
                     orgData,
                     prNumber,
                 );
-                return isValid ? item.id : null;
+                return isValid ? candidate.id : null;
             }),
         );
 
@@ -269,7 +235,6 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
     }
 
     private async validateWithLLM(
-        taskId: string,
         candidate: ValidationCandidate,
         orgData: OrganizationAndTeamData,
         prNumber: number,
@@ -278,8 +243,7 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
             const code = Buffer.from(candidate.encodedData, 'base64').toString(
                 'utf-8',
             );
-            const res = await this.astAnalysisService.validateWithLLM(
-                taskId,
+            const res = await this.suggestionLLMValidator.validateWithLLM(
                 {
                     code,
                     filePath: candidate.filePath,
@@ -474,7 +438,7 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
                 // AST Simplicity Check
                 try {
                     const { isSimple, reason } =
-                        await this.astAnalysisService.checkSuggestionSimplicity(
+                        await this.suggestionLLMValidator.checkSuggestionSimplicity(
                             context.organizationAndTeamData,
                             context.pullRequest.number,
                             suggestion,
