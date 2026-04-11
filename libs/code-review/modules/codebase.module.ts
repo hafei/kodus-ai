@@ -18,7 +18,6 @@ import {
     KodyRulesPrLevelAnalysisService,
 } from '@libs/ee/codeBase/kodyRulesPrLevelAnalysis.service';
 import { FileReviewModule } from '@libs/ee/codeReview/fileReviewContextPreparation/fileReview.module';
-import { KodyASTAnalyzeContextModule } from '@libs/ee/kodyASTAnalyze/kodyAstAnalyzeContext.module';
 import { LicenseModule } from '@libs/ee/license/license.module';
 import { PermissionValidationModule } from '@libs/ee/shared/permission-validation.module';
 import { IntegrationConfigCoreModule } from '@libs/integrations/modules/config-core.module';
@@ -87,7 +86,6 @@ import { DocumentationContextModule } from './documentation-context.module';
         forwardRef(() => FileReviewModule),
         forwardRef(() => CodeReviewPipelineModule),
         forwardRef(() => KodyFineTuningContextModule),
-        forwardRef(() => KodyASTAnalyzeContextModule),
         forwardRef(() => GlobalParametersModule),
         forwardRef(() => TokenChunkingModule),
         forwardRef(() => LicenseModule),

@@ -19,7 +19,6 @@ import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { PipelineFactory } from '@libs/core/infrastructure/pipeline/services/pipeline-factory.service';
 import { ObservabilityService } from '@libs/core/log/observability.service';
-import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 
 @Injectable()
@@ -115,12 +114,6 @@ export class CodeReviewHandlerService {
                 lastAnalyzedCommit: null,
                 validSuggestionsByPR: [],
                 validCrossFileSuggestions: [],
-                tasks: {
-                    astAnalysis: {
-                        taskId: null,
-                        status: TaskStatus.TASK_STATUS_UNSPECIFIED,
-                    },
-                },
                 externalPromptContext: {},
                 externalPromptLayers: undefined,
             };

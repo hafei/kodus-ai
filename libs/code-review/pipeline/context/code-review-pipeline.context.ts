@@ -21,7 +21,6 @@ import {
 import { Commit } from '@libs/core/infrastructure/config/types/general/commit.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { PipelineContext } from '@libs/core/infrastructure/pipeline/interfaces/pipeline-context.interface';
-import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import { IClusterizedSuggestion } from '@libs/kodyFineTuning/domain/interfaces/kodyFineTuning.interface';
 import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
 
@@ -139,12 +138,6 @@ export interface CodeReviewPipelineContext extends PipelineContext {
 
     lineComments?: CommentResult[];
 
-    tasks?: {
-        astAnalysis?: {
-            taskId: string;
-            status?: TaskStatus;
-        };
-    };
     // Resultados dos comentários de nível de PR
     prLevelCommentResults?: Array<CommentResult>;
 

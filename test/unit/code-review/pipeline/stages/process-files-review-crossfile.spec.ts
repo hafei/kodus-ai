@@ -4,8 +4,8 @@ import { SUGGESTION_SERVICE_TOKEN } from '@libs/code-review/domain/contracts/Sug
 import { PULL_REQUESTS_SERVICE_TOKEN } from '@libs/platformData/domain/pullRequests/contracts/pullRequests.service.contracts';
 import { FILE_REVIEW_CONTEXT_PREPARATION_TOKEN } from '@libs/core/domain/interfaces/file-review-context-preparation.interface';
 import { KODY_FINE_TUNING_CONTEXT_PREPARATION_TOKEN } from '@libs/core/domain/interfaces/kody-fine-tuning-context-preparation.interface';
-import { KODY_AST_ANALYZE_CONTEXT_PREPARATION_TOKEN } from '@libs/core/domain/interfaces/kody-ast-analyze-context-preparation.interface';
 import { CodeAnalysisOrchestrator } from '@libs/ee/codeBase/codeAnalysisOrchestrator.service';
+import { GraphContentFormatter } from '@libs/code-review/infrastructure/adapters/services/graphContentFormatter.service';
 import { CrossFileContextSnippet } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import {
     createSampleFileChange,
@@ -62,16 +62,16 @@ describe('ProcessFilesReview — Cross-File Filtering', () => {
                     },
                 },
                 {
-                    provide: KODY_AST_ANALYZE_CONTEXT_PREPARATION_TOKEN,
-                    useValue: {
-                        prepareKodyASTAnalyzeContext: jest.fn(),
-                    },
-                },
-                {
                     provide: CodeAnalysisOrchestrator,
                     useValue: {
                         executeStandardAnalysis: jest.fn(),
                         executeKodyRulesAnalysis: jest.fn(),
+                    },
+                },
+                {
+                    provide: GraphContentFormatter,
+                    useValue: {
+                        formatContent: jest.fn().mockResolvedValue(new Map()),
                     },
                 },
             ],

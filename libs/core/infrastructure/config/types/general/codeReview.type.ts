@@ -30,10 +30,6 @@ import {
     ReviewPreset,
     SuggestionType,
 } from '@libs/core/domain/enums/code-review.enum';
-import {
-    GetImpactAnalysisResponse,
-    TaskStatus,
-} from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import { IClusterizedSuggestion } from '@libs/kodyFineTuning/domain/interfaces/kodyFineTuning.interface';
 import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { OrganizationAndTeamData } from './organizationAndTeamData';
@@ -72,23 +68,6 @@ export interface ISafeguardResponse {
     };
 }
 
-export interface FileAST {
-    path: string;
-    duplicateFunctions: Array<{
-        functionName: string;
-        locations: string[];
-    }>;
-    missingImports: string[];
-    unusedImports: Array<{
-        functionName: string;
-        filesWithUnusedImport: string[];
-    }>;
-}
-export interface ChangedFilesWithAST {
-    file: FileChange;
-    astAnalysis: FileAST;
-}
-
 export type Repository = {
     platform: 'github' | 'gitlab' | 'bitbucket' | 'azure-devops' | 'forgejo';
     id: string;
@@ -108,19 +87,12 @@ export type AnalysisContext<TPullRequest = any> = {
     action?: string;
     baseDir?: string;
     correlationId?: string;
-    impactASTAnalysis?: GetImpactAnalysisResponse;
     reviewModeResponse?: ReviewModeResponse;
     kodyFineTuningConfig?: KodyFineTuningConfig;
     fileChangeContext?: FileChangeContext;
     clusterizedSuggestions?: IClusterizedSuggestion[];
     validCrossFileSuggestions?: CodeSuggestion[];
-    tasks?: {
-        astAnalysis?: {
-            taskId: string;
-            status?: TaskStatus;
-            hasRelevantContent?: boolean;
-        };
-    }; /** External file content and metadata loaded by PromptContextLoader. */
+    /** External file content and metadata loaded by PromptContextLoader. */
     externalPromptContext?: any;
     /** Set of layers ready for ContextPack composition (files, instructions). */
     externalPromptLayers?: ContextLayer[];
@@ -152,20 +124,6 @@ export type DocumentationContextItem = {
     url: string;
     snippet: string;
     source: string;
-};
-
-export type ASTAnalysisResult = {
-    issues: any[];
-    metrics: any;
-    suggestions: any[];
-};
-
-export type CombinedAnalysisResult = {
-    aiAnalysis?: AIAnalysisResult;
-    astAnalysis?: ASTAnalysisResult;
-    lintingAnalysis?: any;
-    securityAnalysis?: any;
-    codeSuggestions: CodeSuggestion[]; // Aggregation of all suggestions
 };
 
 export type AIAnalysisResult = {

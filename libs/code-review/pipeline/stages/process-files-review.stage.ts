@@ -22,10 +22,6 @@ import {
     IFileReviewContextPreparation,
 } from '@libs/core/domain/interfaces/file-review-context-preparation.interface';
 import {
-    IKodyASTAnalyzeContextPreparationService,
-    KODY_AST_ANALYZE_CONTEXT_PREPARATION_TOKEN,
-} from '@libs/core/domain/interfaces/kody-ast-analyze-context-preparation.interface';
-import {
     IKodyFineTuningContextPreparationService,
     KODY_FINE_TUNING_CONTEXT_PREPARATION_TOKEN,
 } from '@libs/core/domain/interfaces/kody-fine-tuning-context-preparation.interface';
@@ -40,7 +36,6 @@ import {
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { CodeAnalysisOrchestrator } from '@libs/ee/codeBase/codeAnalysisOrchestrator.service';
-import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import {
     IPullRequestsService,
     PULL_REQUESTS_SERVICE_TOKEN,
@@ -85,9 +80,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         @Inject(KODY_FINE_TUNING_CONTEXT_PREPARATION_TOKEN)
         private readonly kodyFineTuningContextPreparation: IKodyFineTuningContextPreparationService,
 
-        @Inject(KODY_AST_ANALYZE_CONTEXT_PREPARATION_TOKEN)
-        private readonly kodyAstAnalyzeContextPreparation: IKodyASTAnalyzeContextPreparationService,
-
         private readonly codeAnalysisOrchestrator: CodeAnalysisOrchestrator,
 
         private readonly graphContentFormatter: GraphContentFormatter,
@@ -131,7 +123,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 validSuggestions,
                 discardedSuggestions,
                 fileMetadata,
-                tasks,
                 errors,
             } = await this.analyzeChangedFilesInBatches(context);
 
@@ -139,7 +130,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 draft.validSuggestions = validSuggestions;
                 draft.discardedSuggestions = discardedSuggestions;
                 draft.fileMetadata = fileMetadata;
-                draft.tasks = tasks;
                 if (errors?.length > 0) {
                     draft.errors.push(...errors);
                 }
@@ -200,7 +190,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         discardedSuggestions: Partial<CodeSuggestion>[];
         fileMetadata: Map<string, any>;
         validCrossFileSuggestions: CodeSuggestion[];
-        tasks: AnalysisContext['tasks'];
         errors: PipelineError[];
     }> {
         const { organizationAndTeamData, pullRequest, changedFiles } = context;
@@ -222,7 +211,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
 
             const {
                 results,
-                tasks,
                 errors: batchErrors,
             } = await this.runBatches(batches, analysisContext);
 
@@ -251,7 +239,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 metadata: {
                     validSuggestionsCount: validSuggestions.length,
                     discardedCount: discardedSuggestions.length,
-                    tasks: tasks,
                     organizationAndTeamData: organizationAndTeamData,
                 },
             });
@@ -262,7 +249,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 fileMetadata,
                 validCrossFileSuggestions:
                     analysisContext.validCrossFileSuggestions || [],
-                tasks,
                 errors,
             };
         } catch (error) {
@@ -276,7 +262,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 discardedSuggestions: [],
                 fileMetadata: new Map(),
                 validCrossFileSuggestions: [],
-                tasks: { ...context.tasks },
                 errors: [
                     this.buildPipelineError(
                         'AnalyzeChangedFilesInBatches',
@@ -321,24 +306,15 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         context: AnalysisContext,
     ): Promise<{
         results: FileProcessingResult[];
-        tasks: AnalysisContext['tasks'];
         errors: PipelineError[];
     }> {
-        const tasks: AnalysisContext['tasks'] = {
-            astAnalysis: {
-                ...context.tasks.astAnalysis,
-            },
-        };
-
         const { results, errors } = await this.processBatchesSequentially(
             batches,
             context,
-            tasks,
         );
 
         return {
             results,
-            tasks,
             errors,
         };
     }
@@ -353,7 +329,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
     private async processBatchesSequentially(
         batches: FileChange[][],
         context: AnalysisContext,
-        tasks: AnalysisContext['tasks'],
     ): Promise<{
         results: FileProcessingResult[];
         errors: PipelineError[];
@@ -373,7 +348,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                     batch,
                     context,
                     index,
-                    tasks,
                 );
 
                 allResults.push(...batchResults);
@@ -433,7 +407,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         batch: FileChange[],
         context: AnalysisContext,
         batchIndex: number,
-        tasks: AnalysisContext['tasks'],
     ): Promise<FileProcessingResult[]> {
         const { organizationAndTeamData, pullRequest } = context;
 
@@ -459,17 +432,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             filesWithAst,
             context,
         );
-
-        const astFailed = preparedFiles.find((file) => {
-            const task = file.fileContext.tasks?.astAnalysis;
-            return task && task.status !== TaskStatus.TASK_STATUS_COMPLETED;
-        });
-
-        if (astFailed) {
-            tasks.astAnalysis.status =
-                astFailed?.fileContext?.tasks?.astAnalysis?.status ||
-                TaskStatus.TASK_STATUS_FAILED;
-        }
 
         const maxConcurrent =
             context?.codeReviewConfig?.byokConfig?.main?.maxConcurrentRequests;
@@ -1072,19 +1034,8 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             mergedSuggestions.push(...suggestionsWithSeverity);
         }
 
-        const kodyASTSuggestions =
-            await this.kodyAstAnalyzeContextPreparation.prepareKodyASTAnalyzeContext(
-                context,
-            );
-
-        // Garantir que as sugestões do AST tenham IDs
-        const kodyASTSuggestionsWithId = await this.addSuggestionsId(
-            kodyASTSuggestions?.codeSuggestions || [],
-        );
-
         mergedSuggestions = [
             ...mergedSuggestions,
-            ...kodyASTSuggestionsWithId,
             ...filteredCrossFileFinal,
         ];
 
@@ -1347,7 +1298,6 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             clusterizedSuggestions: context.clusterizedSuggestions,
             validCrossFileSuggestions:
                 context.prAnalysisResults?.validCrossFileSuggestions || [],
-            tasks: context.tasks,
             externalPromptContext: context.externalPromptContext,
             externalPromptLayers: context.externalPromptLayers,
             correlationId: context.correlationId,

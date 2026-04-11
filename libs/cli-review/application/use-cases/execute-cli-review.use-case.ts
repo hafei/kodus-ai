@@ -218,13 +218,6 @@ export class ExecuteCliReviewUseCase implements IUseCase {
                     status: AutomationStatus.IN_PROGRESS,
                 },
 
-                // Analysis tasks metadata
-                tasks: {
-                    astAnalysis: {
-                        taskId: correlationId,
-                        status: 'TASK_STATUS_COMPLETED' as any,
-                    },
-                },
             };
 
             // 5. Execute pipeline
