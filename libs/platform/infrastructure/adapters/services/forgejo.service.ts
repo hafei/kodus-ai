@@ -426,20 +426,14 @@ export class ForgejoService implements Omit<
 
             const fileExistsEntries = await Promise.all(
                 files.map(async (file) => {
-                    const operation = file.operation || 'upsert';
+                    const exists = await this.checkForgejoFileExists(
+                        client,
+                        repoInfo,
+                        fileExistsReferenceBranch,
+                        file.path,
+                    );
 
-                    if (operation === 'upsert' || operation === 'delete') {
-                        const exists = await this.checkForgejoFileExists(
-                            client,
-                            repoInfo,
-                            fileExistsReferenceBranch,
-                            file.path,
-                        );
-
-                        return [file.path, exists] as const;
-                    }
-
-                    return [file.path, false] as const;
+                    return [file.path, exists] as const;
                 }),
             );
 

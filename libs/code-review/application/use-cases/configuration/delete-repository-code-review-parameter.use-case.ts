@@ -270,7 +270,7 @@ export class DeleteRepositoryCodeReviewParameterUseCase {
                     return rule.directoryId === params.directoryId;
                 }
 
-                return !rule.directoryId;
+                return true;
             });
     }
 

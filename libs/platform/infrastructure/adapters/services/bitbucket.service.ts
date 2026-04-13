@@ -343,6 +343,16 @@ export class BitbucketService implements Omit<
                       })
                     : null;
 
+                                if (
+                !branchAlreadyExists &&
+                resolvedBranchName !== resolvedBaseBranch &&
+                !baseBranchHead
+            ) {
+                throw new BadRequestException(
+                    `Base branch "${resolvedBaseBranch}" not found.`,
+                );
+            }
+
             const form = new FormData();
 
             form.append('branch', resolvedBranchName);

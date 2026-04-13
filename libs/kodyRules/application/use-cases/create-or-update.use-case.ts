@@ -317,7 +317,10 @@ export class CreateOrUpdateKodyRulesUseCase {
                 repositoryFolder,
                 rulesDirectory:
                     ruleType === KodyRulesType.MEMORY ? 'memories' : 'review',
-                ruleContent: effectiveRule,
+                ruleContent:
+                    operation === 'update' && existingRule
+                        ? existingRule
+                        : effectiveRule,
             });
 
             if (operation === 'create') {

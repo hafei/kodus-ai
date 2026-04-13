@@ -176,9 +176,12 @@ export class CentralizedConfigDownloadUseCase {
                             const dirPath = this.normalizeDirectoryPath(
                                 dir.path,
                             );
-                            const entryName = dirPath
-                                ? `${repoFolderName}/${dirPath}/kodus-config.yml`
-                                : `${repoFolderName}/kodus-config.yml`;
+
+                            if (!dirPath) {
+                                return null;
+                            }
+
+                            const entryName = `${repoFolderName}/${dirPath}/kodus-config.yml`;
 
                             const customMessages = customMessagesByScope.get(
                                 this.getCustomMessagesScopeKeyDirectory(

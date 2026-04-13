@@ -264,7 +264,9 @@ export class CreateOrUpdatePullRequestMessagesUseCase implements IUseCase {
             ...(scopeConfig || {}),
         };
 
-        if (
+        if (shouldInherit) {
+            delete configFileContent.customMessages;
+        } else if (
             customMessagesDelta &&
             (customMessagesDelta.startReviewMessage ||
                 customMessagesDelta.endReviewMessage ||

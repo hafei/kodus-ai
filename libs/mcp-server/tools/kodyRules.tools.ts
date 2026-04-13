@@ -679,55 +679,62 @@ export class KodyRulesTools {
                         args.ruleId,
                     );
 
-                    if (existingRule) {
-                        const mergedRule = {
-                            ...existingRule,
-                            ...kodyRule,
-                            uuid: args.ruleId,
-                            repositoryId:
-                                kodyRule.repositoryId ||
-                                existingRule.repositoryId ||
-                                'global',
-                            type: KodyRulesType.STANDARD,
-                            status:
-                                kodyRule.status ||
-                                existingRule.status ||
-                                KodyRulesStatus.PENDING,
-                        } as CreateKodyRuleDto;
+                    if (!existingRule) {
+                        return {
+                            success: false,
+                            count: 0,
+                            data: { uuid: args.ruleId },
+                            message: `Rule with ID ${args.ruleId} not found.`,
+                        };
+                    }
 
-                        const centralizedPr =
-                            await this.centralizedConfigPrService.createMutationPullRequestIfEnabled(
-                                buildKodyRuleCentralizedMutationRequest({
-                                    centralizedConfigPrService:
-                                        this.centralizedConfigPrService,
-                                    organizationAndTeamData,
-                                    repositoryId: mergedRule.repositoryId,
-                                    ruleContent: mergedRule,
-                                    ruleType: KodyRulesType.STANDARD,
-                                    operation: 'update',
-                                }),
-                            );
+                    const mergedRule = {
+                        ...existingRule,
+                        ...kodyRule,
+                        uuid: args.ruleId,
+                        repositoryId:
+                            kodyRule.repositoryId ||
+                            existingRule.repositoryId ||
+                            'global',
+                        type: KodyRulesType.STANDARD,
+                        status:
+                            kodyRule.status ||
+                            existingRule.status ||
+                            KodyRulesStatus.PENDING,
+                    } as CreateKodyRuleDto;
 
-                        if (centralizedPr.mode === 'centralized-pr') {
-                            return {
-                                success: true,
-                                count: 1,
-                                data: {
-                                    uuid: args.ruleId,
-                                    title: mergedRule.title,
-                                    rule: mergedRule.rule,
-                                    status: mergedRule.status,
-                                },
-                                message: centralizedPr.message,
-                                prUrl: centralizedPr.prUrl,
-                            };
-                        }
+                    const centralizedPr =
+                        await this.centralizedConfigPrService.createMutationPullRequestIfEnabled(
+                            buildKodyRuleCentralizedMutationRequest({
+                                centralizedConfigPrService:
+                                    this.centralizedConfigPrService,
+                                organizationAndTeamData,
+                                repositoryId: mergedRule.repositoryId,
+                                ruleContent: mergedRule,
+                                ruleType: KodyRulesType.STANDARD,
+                                operation: 'update',
+                            }),
+                        );
+
+                    if (centralizedPr.mode === 'centralized-pr') {
+                        return {
+                            success: true,
+                            count: 1,
+                            data: {
+                                uuid: args.ruleId,
+                                title: mergedRule.title,
+                                rule: mergedRule.rule,
+                                status: mergedRule.status,
+                            },
+                            message: centralizedPr.message,
+                            prUrl: centralizedPr.prUrl,
+                        };
                     }
 
                     const result =
                         await this.kodyRulesService.updateRuleWithLogging(
                             organizationAndTeamData,
-                            kodyRule,
+                            mergedRule,
                             userInfo,
                         );
 

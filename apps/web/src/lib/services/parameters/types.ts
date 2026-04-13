@@ -49,10 +49,15 @@ export const isCentralizedPrResponse = (
         return false;
     }
 
+    const obj = value as Record<string, unknown>;
+
     return (
-        (value as { mode?: string }).mode === "centralized-pr" &&
-        (typeof (value as { prUrl?: unknown }).prUrl === "string" ||
-            typeof (value as { prUrl?: unknown }).prUrl === "undefined")
+        obj.mode === "centralized-pr" &&
+        (!("prUrl" in obj) || typeof obj.prUrl === "string") &&
+        (!("prNumber" in obj) || typeof obj.prNumber === "number") &&
+        (!("reused" in obj) || typeof obj.reused === "boolean") &&
+        (!("pending" in obj) || typeof obj.pending === "boolean") &&
+        (!("message" in obj) || typeof obj.message === "string")
     );
 };
 

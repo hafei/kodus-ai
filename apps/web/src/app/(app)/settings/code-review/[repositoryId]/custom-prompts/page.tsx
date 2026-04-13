@@ -238,7 +238,7 @@ function CustomPromptsContent() {
                 },
             });
 
-            if (saveResult.centralizedPr) {
+            if (saveResult?.centralizedPr) {
                 toast(
                     getCentralizedPrToastPayload(
                         saveResult.centralizedPr,

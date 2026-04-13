@@ -137,14 +137,12 @@ export class KodyRulesController {
             throw new Error('Organization ID not found');
         }
 
-        const { teamId, ...kodyRule } = body;
-
         return this.createOrUpdateKodyRulesUseCase.execute(
-            kodyRule as CreateKodyRuleDto,
+            body,
             this.request.user.organization.uuid,
             undefined,
             undefined,
-            teamId,
+            body.teamId,
         );
     }
 

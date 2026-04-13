@@ -1178,15 +1178,17 @@ export class CentralizedConfigService implements ICentralizedConfigService {
 
             const desiredKeys = new Set<string>();
 
+            const repositoriesMap = new Map(
+                repositories?.map((repo) => [repo.id, repo]) ?? [],
+            );
+
             for (const meta of configFiles) {
                 if (!meta.repositoryId) {
                     desiredKeys.add(`GLOBAL`);
                 } else if (!meta.directoryPath) {
                     desiredKeys.add(`REPO:${meta.repositoryId}`);
                 } else {
-                    const targetRepo = repositories?.find(
-                        (repo) => repo.id === meta.repositoryId,
-                    );
+                    const targetRepo = repositoriesMap.get(meta.repositoryId);
 
                     if (targetRepo?.name) {
                         try {

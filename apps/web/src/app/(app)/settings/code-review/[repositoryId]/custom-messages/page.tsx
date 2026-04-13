@@ -98,6 +98,13 @@ function CustomMessagesContent() {
                 globalSettings: unformattedGlobalSettings,
             });
 
+            await queryClient.invalidateQueries({
+                predicate: (query) =>
+                    (query.queryKey[0] as string)?.startsWith(
+                        pathToApiUrl("/pull-request-messages"),
+                    ),
+            });
+
             if (isCentralizedPrResponse(mutationResult)) {
                 toast(
                     getCentralizedPrToastPayload(
@@ -107,13 +114,6 @@ function CustomMessagesContent() {
                 );
                 return;
             }
-
-            await queryClient.invalidateQueries({
-                predicate: (query) =>
-                    (query.queryKey[0] as string)?.startsWith(
-                        pathToApiUrl("/pull-request-messages"),
-                    ),
-            });
 
             toast({
                 title: "Custom messages saved",

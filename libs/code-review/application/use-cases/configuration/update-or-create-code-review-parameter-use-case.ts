@@ -285,7 +285,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
 
         // Process references only for direct-persistence flows.
         await this.processExternalReferencesInline(
-            sanitizedConfigValue,
+            updatedConfigValue,
             organizationAndTeamData,
             'global',
             undefined,
@@ -404,7 +404,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         }
 
         await this.processExternalReferencesInline(
-            sanitizedIncomingConfig,
+            newDelta,
             organizationAndTeamData,
             repositoryId,
             directoryId,

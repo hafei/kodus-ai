@@ -127,6 +127,7 @@ export const useCodeReviewSettingsMutation = (params: {
 
         if (isCentralizedPrResponse(result)) {
             form.reset(prepared.savedFormData);
+            invalidateRelatedQueries();
             return { centralizedPr: result };
         }
 
