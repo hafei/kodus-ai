@@ -2,8 +2,8 @@ import { createLogger } from '@kodus/flow';
 import { PlatformType } from '@libs/core/domain/enums';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { execFile, ExecFileOptions } from 'child_process';
-import { lstat, mkdtemp, realpath, rm } from 'fs/promises';
+import { exec, execFile, ExecFileOptions } from 'child_process';
+import { lstat, mkdtemp, readFile, realpath, rm, writeFile, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -12,6 +12,7 @@ import {
     CreateSandboxParams,
     ISandboxProvider,
     SandboxInstance,
+    SandboxRunResult,
 } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { RemoteCommands } from './collectCrossFileContexts.service';
 
@@ -113,7 +114,48 @@ export class LocalSandboxService implements ISandboxProvider {
                 }
             };
 
-            return { remoteCommands, cleanup, type: 'local' as const };
+            const capturedRepoDir = tempDir;
+
+            const run = async (command: string, opts?: { timeoutMs?: number }): Promise<SandboxRunResult> => {
+                const execAsync = promisify(exec);
+                try {
+                    const { stdout, stderr } = await execAsync(command, {
+                        cwd: capturedRepoDir,
+                        timeout: opts?.timeoutMs ?? CMD_TIMEOUT_MS,
+                        maxBuffer: MAX_BUFFER,
+                        env: { ...process.env, PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}` },
+                    });
+                    return { stdout: stdout || '', stderr: stderr || '', exitCode: 0 };
+                } catch (error: any) {
+                    return {
+                        stdout: error.stdout || '',
+                        stderr: error.stderr || '',
+                        exitCode: error.code ?? 1,
+                    };
+                }
+            };
+
+            const sandboxReadFile = async (path: string): Promise<string> => {
+                const fullPath = path.startsWith('/') ? join(capturedRepoDir, path) : join(capturedRepoDir, path);
+                return readFile(fullPath, 'utf-8');
+            };
+
+            const sandboxWriteFile = async (path: string, content: string): Promise<void> => {
+                const fullPath = path.startsWith('/') ? join(capturedRepoDir, path) : join(capturedRepoDir, path);
+                const dir = join(fullPath, '..');
+                await mkdir(dir, { recursive: true });
+                await writeFile(fullPath, content, 'utf-8');
+            };
+
+            return {
+                remoteCommands,
+                cleanup,
+                type: 'local' as const,
+                repoDir: capturedRepoDir,
+                run,
+                readFile: sandboxReadFile,
+                writeFile: sandboxWriteFile,
+            };
         } catch (error) {
             try {
                 await rm(tempDir, { recursive: true, force: true });

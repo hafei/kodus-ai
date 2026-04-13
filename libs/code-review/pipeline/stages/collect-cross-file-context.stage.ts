@@ -236,10 +236,10 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
 
             // Generate graph JSON for content formatting (non-blocking)
             let graphJson: { nodes: any[]; edges: any[] } | null = null;
-            if (sandbox.sandboxHandle && context.changedFiles?.length) {
+            if (sandbox && context.changedFiles?.length) {
                 try {
                     graphJson = await this.kodusGraphService.parseAndGetGraphJson(
-                        sandbox.sandboxHandle,
+                        sandbox,
                         context.changedFiles,
                     );
                     this.logger.log({
@@ -256,26 +256,20 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                 }
             } else {
                 this.logger.log({
-                    message: `[CROSS-FILE] Skipping graph JSON: sandboxHandle=${!!sandbox.sandboxHandle}, changedFiles=${context.changedFiles?.length ?? 0}`,
+                    message: `[CROSS-FILE] Skipping graph JSON: sandbox=${!!sandbox.run}, changedFiles=${context.changedFiles?.length ?? 0}`,
                     context: this.stageName,
                 });
             }
 
             this.logger.log({
-                message: `[CROSS-FILE] Storing sandbox for ${label}: type=${sandbox.type ?? 'e2b'}, hasSandboxHandle=${!!sandbox.sandboxHandle}, hasBaseBranch=${!!sandbox.baseBranch}, hasGraphJson=${!!graphJson}`,
+                message: `[CROSS-FILE] Storing sandbox for ${label}: type=${sandbox.type}, hasBaseBranch=${!!sandbox.baseBranch}, hasGraphJson=${!!graphJson}`,
                 context: this.stageName,
             });
 
             return this.updateContext(context, (draft) => {
                 draft.crossFileContexts = result;
                 // Keep sandbox alive for downstream stages (safeguard, syntax validation)
-                draft.sandboxHandle = {
-                    remoteCommands: sandbox.remoteCommands,
-                    cleanup: sandbox.cleanup,
-                    type: sandbox.type ?? 'e2b',
-                    baseBranch: sandbox.baseBranch,
-                    sandboxHandle: sandbox.sandboxHandle,
-                };
+                draft.sandboxHandle = sandbox;
                 if (graphJson) {
                     draft.callGraphJson = graphJson;
                 }

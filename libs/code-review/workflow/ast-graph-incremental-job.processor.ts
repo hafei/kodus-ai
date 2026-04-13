@@ -1,6 +1,5 @@
 import { createLogger } from '@kodus/flow';
 import { Injectable, Inject } from '@nestjs/common';
-import type { Sandbox } from 'e2b';
 
 import { IJobProcessorService } from '@libs/core/workflow/domain/contracts/job-processor.service.contract';
 import {
@@ -129,8 +128,9 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
             });
 
             sandboxId =
-                (sandbox.sandboxHandle as any)?.sandboxId ||
+                (sandbox as any)?.sandboxId ||
                 (sandbox as any)?.id ||
+                sandbox.type ||
                 'unknown';
 
             await this.jobRepository.update(jobId, {
@@ -152,7 +152,7 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
 
             await this.astGraphBuildService.incrementalUpdate({
                 repositoryId: payload.repositoryId,
-                sandbox: sandbox.sandboxHandle as Sandbox,
+                sandbox,
                 changedFiles: payload.changedFiles,
                 newSha: payload.newSha,
             });

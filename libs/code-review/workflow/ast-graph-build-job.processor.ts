@@ -1,6 +1,5 @@
 import { createLogger } from '@kodus/flow';
 import { Injectable, Inject } from '@nestjs/common';
-import type { Sandbox } from 'e2b';
 
 import { IJobProcessorService } from '@libs/core/workflow/domain/contracts/job-processor.service.contract';
 import {
@@ -124,8 +123,9 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
             });
 
             sandboxId =
-                (sandbox.sandboxHandle as any)?.sandboxId ||
+                (sandbox as any)?.sandboxId ||
                 (sandbox as any)?.id ||
+                sandbox.type ||
                 'unknown';
 
             await this.jobRepository.update(jobId, {
@@ -139,11 +139,10 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
             });
 
             // 3. Get HEAD sha
-            const shaResult = await (
-                sandbox.sandboxHandle as Sandbox
-            ).commands.run('git -C /home/user/repo rev-parse HEAD', {
-                timeoutMs: 10_000,
-            });
+            const shaResult = await sandbox.run(
+                `git -C ${sandbox.repoDir} rev-parse HEAD`,
+                { timeoutMs: 10_000 },
+            );
             const headSha = shaResult.stdout?.trim() || '';
 
             if (!headSha) {
@@ -161,7 +160,7 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
 
             await this.astGraphBuildService.fullBuild({
                 repositoryId: payload.repositoryId,
-                sandbox: sandbox.sandboxHandle as Sandbox,
+                sandbox,
                 headSha,
             });
 

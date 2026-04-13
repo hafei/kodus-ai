@@ -15,6 +15,12 @@ export interface CreateSandboxParams {
     sandboxMetadata?: Record<string, string>;
 }
 
+export interface SandboxRunResult {
+    stdout: string;
+    stderr?: string;
+    exitCode: number;
+}
+
 export interface SandboxInstance {
     remoteCommands: RemoteCommands;
     cleanup: () => Promise<void>;
@@ -22,8 +28,14 @@ export interface SandboxInstance {
     type: 'e2b' | 'local' | 'null';
     /** Base branch fetched in the sandbox (e.g. "main"). Allows tools to run git diff origin/${baseBranch}...HEAD */
     baseBranch?: string;
-    /** Raw sandbox handle for long-running commands (e.g. kodus-graph). Only available for E2B sandboxes. */
-    sandboxHandle?: unknown;
+    /** Absolute path to the repo root inside the sandbox */
+    repoDir: string;
+    /** Run a shell command inside the sandbox */
+    run(command: string, opts?: { timeoutMs?: number }): Promise<SandboxRunResult>;
+    /** Read a file from the sandbox filesystem */
+    readFile(path: string, opts?: { timeoutMs?: number }): Promise<string>;
+    /** Write a file to the sandbox filesystem */
+    writeFile(path: string, content: string, opts?: { timeoutMs?: number }): Promise<void>;
 }
 
 export interface ISandboxProvider {

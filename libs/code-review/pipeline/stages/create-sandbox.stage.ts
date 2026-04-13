@@ -143,13 +143,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
             });
 
             return this.updateContext(context, (draft) => {
-                draft.sandboxHandle = {
-                    remoteCommands: sandbox.remoteCommands,
-                    cleanup: sandbox.cleanup,
-                    type: sandbox.type,
-                    baseBranch: sandbox.baseBranch,
-                    sandboxHandle: sandbox.sandboxHandle,
-                };
+                draft.sandboxHandle = sandbox;
                 draft.getFreshCloneParams = async () => {
                     const freshCloneInfo =
                         await this.cloneParamsResolver.resolve(
@@ -218,13 +212,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                 cleanup = retryResult.cleanup;
 
                 return this.updateContext(context, (draft) => {
-                    draft.sandboxHandle = {
-                        remoteCommands: retryResult.remoteCommands,
-                        cleanup: retryResult.cleanup,
-                        type: retryResult.type,
-                        baseBranch: retryResult.baseBranch,
-                        sandboxHandle: retryResult.sandboxHandle,
-                    };
+                    draft.sandboxHandle = retryResult;
                 });
             } catch (retryError) {
                 this.logger.error({

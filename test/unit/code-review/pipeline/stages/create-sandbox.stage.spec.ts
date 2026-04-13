@@ -133,6 +133,10 @@ describe('CreateSandboxStage', () => {
                         listDir: jest.fn(),
                     },
                     cleanup: jest.fn(),
+                    repoDir: '/home/user/repo',
+                    run: jest.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                    readFile: jest.fn().mockResolvedValue(''),
+                    writeFile: jest.fn().mockResolvedValue(undefined),
                 },
             });
 

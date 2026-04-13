@@ -206,6 +206,10 @@ describe('AgentReviewStage', () => {
                     },
                     cleanup: jest.fn(),
                     type: 'e2b' as const,
+                    repoDir: '/home/user/repo',
+                    run: jest.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                    readFile: jest.fn().mockResolvedValue(''),
+                    writeFile: jest.fn().mockResolvedValue(undefined),
                 },
                 codeReviewConfig: {
                     codeReviewVersion: CodeReviewVersion.V3_AGENT,
@@ -250,6 +254,10 @@ describe('AgentReviewStage', () => {
                     },
                     cleanup: jest.fn(),
                     type: 'e2b' as const,
+                    repoDir: '/home/user/repo',
+                    run: jest.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                    readFile: jest.fn().mockResolvedValue(''),
+                    writeFile: jest.fn().mockResolvedValue(undefined),
                 },
             });
 
@@ -283,6 +291,10 @@ describe('AgentReviewStage', () => {
                     },
                     cleanup: jest.fn(),
                     type: 'e2b' as const,
+                    repoDir: '/home/user/repo',
+                    run: jest.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                    readFile: jest.fn().mockResolvedValue(''),
+                    writeFile: jest.fn().mockResolvedValue(undefined),
                 },
             });
 
@@ -306,7 +318,6 @@ describe('AgentReviewStage', () => {
                         suggestionContent: 'Violates rule: must use strict null checks',
                         label: 'kody_rules',
                         severity: 'low', // LLM's opinion — should be ignored
-                        ruleUuid: 'rule-uuid-123',
                         brokenKodyRulesIds: ['rule-uuid-123'],
                         relevantLinesStart: 10,
                         relevantLinesEnd: 15,
@@ -333,6 +344,10 @@ describe('AgentReviewStage', () => {
                     },
                     cleanup: jest.fn(),
                     type: 'e2b' as const,
+                    repoDir: '/home/user/repo',
+                    run: jest.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                    readFile: jest.fn().mockResolvedValue(''),
+                    writeFile: jest.fn().mockResolvedValue(undefined),
                 },
                 codeReviewConfig: {
                     codeReviewVersion: CodeReviewVersion.V3_AGENT,
@@ -375,6 +390,10 @@ describe('AgentReviewStage', () => {
                     },
                     cleanup: jest.fn(),
                     type: 'e2b' as const,
+                    repoDir: '/home/user/repo',
+                    run: jest.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                    readFile: jest.fn().mockResolvedValue(''),
+                    writeFile: jest.fn().mockResolvedValue(undefined),
                 },
             });
 

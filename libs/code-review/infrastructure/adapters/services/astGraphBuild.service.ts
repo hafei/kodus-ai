@@ -1,11 +1,10 @@
 import { createLogger } from '@kodus/flow';
 import { Injectable } from '@nestjs/common';
-import type { Sandbox } from 'e2b';
+import { SandboxInstance } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { AstGraphRepository } from '../repositories/astGraph.repository';
 import { RepositoryRepository } from '../repositories/repository.repository';
 import { AstGraphStatus } from '../repositories/schemas/repository.model';
 
-const REPO_DIR = '/home/user/repo';
 const GRAPH_DIR = '.kodus-graph';
 const GRAPH_PATH = `${GRAPH_DIR}/graph.json`;
 
@@ -57,7 +56,7 @@ export class AstGraphBuildService {
      */
     async fullBuild(params: {
         repositoryId: string;
-        sandbox: Sandbox;
+        sandbox: SandboxInstance;
         headSha: string;
     }): Promise<void> {
         const { repositoryId, sandbox, headSha } = params;
@@ -89,10 +88,10 @@ export class AstGraphBuildService {
             const excludeFlags = DEFAULT_EXCLUDES.map(
                 (p) => `--exclude "${p}"`,
             ).join(' ');
-            const parseResult = await sandbox.commands.run(
+            const parseResult = await sandbox.run(
                 [
                     `export PATH="$HOME/.bun/bin:$PATH"`,
-                    `cd ${REPO_DIR}`,
+                    `cd ${sandbox.repoDir}`,
                     `mkdir -p ${GRAPH_DIR}`,
                     `kodus-graph parse --all --repo-dir . --out ${GRAPH_PATH} ${excludeFlags}`,
                 ].join(' && '),
@@ -198,7 +197,7 @@ export class AstGraphBuildService {
      */
     async incrementalUpdate(params: {
         repositoryId: string;
-        sandbox: Sandbox;
+        sandbox: SandboxInstance;
         changedFiles: string[];
         newSha: string;
     }): Promise<void> {
@@ -231,10 +230,10 @@ export class AstGraphBuildService {
             const filesArg = changedFiles
                 .map((f) => `'${f.replace(/'/g, "'\\''")}'`)
                 .join(' ');
-            const parseResult = await sandbox.commands.run(
+            const parseResult = await sandbox.run(
                 [
                     `export PATH="$HOME/.bun/bin:$PATH"`,
-                    `cd ${REPO_DIR}`,
+                    `cd ${sandbox.repoDir}`,
                     `mkdir -p ${GRAPH_DIR}`,
                     `kodus-graph parse --files ${filesArg} --repo-dir . --out ${GRAPH_PATH}`,
                 ].join(' && '),
@@ -324,23 +323,20 @@ export class AstGraphBuildService {
     }
 
     /**
-     * Read the graph JSON file from the E2B sandbox using the files API,
+     * Read the graph JSON file from the sandbox filesystem,
      * then split into nodes and edges.
-     *
-     * Uses `sandbox.files.read()` instead of piping via stdout (`cat`),
-     * which avoids the E2B command-runner stdout buffer overhead.
      */
     private async readGraphFromSandbox(
-        sandbox: Sandbox,
+        sandbox: SandboxInstance,
         repositoryId: string,
     ): Promise<{ nodes: any[]; edges: any[] }> {
         const readStart = Date.now();
-        const filePath = `${REPO_DIR}/${GRAPH_PATH}`;
+        const filePath = `${sandbox.repoDir}/${GRAPH_PATH}`;
 
         let rawJson: string;
         try {
-            rawJson = await sandbox.files.read(filePath, {
-                requestTimeoutMs: TIMEOUTS.READ_FILE_MS,
+            rawJson = await sandbox.readFile(filePath, {
+                timeoutMs: TIMEOUTS.READ_FILE_MS,
             });
         } catch (err) {
             const errorMessage =
@@ -385,8 +381,8 @@ export class AstGraphBuildService {
         return { nodes, edges };
     }
 
-    private async installKodusGraph(sandbox: Sandbox): Promise<void> {
-        const result = await sandbox.commands.run(
+    private async installKodusGraph(sandbox: SandboxInstance): Promise<void> {
+        const result = await sandbox.run(
             [
                 'which bun > /dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash > /dev/null 2>&1)',
                 'export PATH="$HOME/.bun/bin:$PATH"',

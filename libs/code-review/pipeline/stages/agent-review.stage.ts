@@ -296,19 +296,19 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
             let callGraph = '';
             try {
                 const sandboxType = context.sandboxHandle?.type ?? 'unknown';
-                const hasSandboxObj = !!context.sandboxHandle?.sandboxHandle;
+                const hasSandbox = !!context.sandboxHandle?.run;
                 this.logger.log({
-                    message: `[AGENT] sandboxHandle check: type=${sandboxType}, hasSandboxHandle=${hasSandboxObj}, platform=${context.platformType}, repoId=${context.repository?.id}`,
+                    message: `[AGENT] sandboxHandle check: type=${sandboxType}, hasSandbox=${hasSandbox}, platform=${context.platformType}, repoId=${context.repository?.id}`,
                     context: this.stageName,
                     metadata: {
                         sandboxType,
-                        hasSandboxObj,
+                        hasSandbox,
                         platform: context.platformType,
                         repoExternalId: context.repository?.id,
                     },
                 });
 
-                if (context.sandboxHandle?.sandboxHandle) {
+                if (context.sandboxHandle?.run) {
                     const repo =
                         await this.repositoryRepository.findByExternalId(
                             context.platformType,
@@ -328,7 +328,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     if (repo?.astGraphStatus === AstGraphStatus.READY) {
                         callGraph =
                             await this.kodusGraphService.generateContext(
-                                context.sandboxHandle.sandboxHandle,
+                                context.sandboxHandle,
                                 changedFiles,
                                 repo.uuid,
                             );
@@ -339,7 +339,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                         });
                         callGraph =
                             await this.kodusGraphService.generateContextLegacy(
-                                context.sandboxHandle.sandboxHandle,
+                                context.sandboxHandle,
                                 changedFiles,
                                 context.sandboxHandle?.baseBranch ||
                                     context.pullRequest?.base?.ref ||
@@ -371,7 +371,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     error: err,
                     metadata: {
                         sandboxType: context.sandboxHandle?.type,
-                        hasSandboxObj: !!context.sandboxHandle?.sandboxHandle,
+                        hasSandbox: !!context.sandboxHandle?.run,
                     },
                 });
             }

@@ -8,11 +8,11 @@ import {
     CreateSandboxParams,
     ISandboxProvider,
     SandboxInstance,
+    SandboxRunResult,
 } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { RemoteCommands } from './collectCrossFileContexts.service';
 
 const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — cross-file context + file analysis
-const SANDBOX_MEMORY_MB = 1536; // 1.5 GB — kodus-graph parse can OOM on large repos at 1 GB
 const REPO_DIR = '/home/user/repo';
 
 const TIMEOUTS = {
@@ -116,7 +116,25 @@ export class E2BSandboxService implements ISandboxProvider {
                 cleanup,
                 type: 'e2b' as const,
                 baseBranch: resolvedBaseBranch,
-                sandboxHandle: sandbox,
+                repoDir: REPO_DIR,
+                run: async (command: string, opts?: { timeoutMs?: number }): Promise<SandboxRunResult> => {
+                    const result = await sandbox.commands.run(command, {
+                        timeoutMs: opts?.timeoutMs ?? TIMEOUTS.COMMAND_LONG_MS,
+                    });
+                    return {
+                        stdout: result.stdout || '',
+                        stderr: result.stderr || '',
+                        exitCode: result.exitCode,
+                    };
+                },
+                readFile: async (path: string, opts?: { timeoutMs?: number }): Promise<string> => {
+                    return sandbox.files.read(path, {
+                        requestTimeoutMs: opts?.timeoutMs ?? 600_000,
+                    });
+                },
+                writeFile: async (path: string, content: string): Promise<void> => {
+                    await sandbox.files.write(path, content);
+                },
             };
         } catch (error) {
             // If setup fails, kill the sandbox before re-throwing
@@ -326,7 +344,6 @@ export class E2BSandboxService implements ISandboxProvider {
         const sandbox = await Sandbox.create({
             timeoutMs: SANDBOX_TIMEOUT_MS,
             apiKey,
-            memoryMB: SANDBOX_MEMORY_MB,
             metadata,
         });
         return { sandbox, usedTemplate: false };
