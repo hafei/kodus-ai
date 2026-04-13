@@ -213,6 +213,8 @@ export interface AgentLoopInput {
     severityLevelFilter?: string;
     /** Model context window in tokens. Used to trigger context compression when the message history grows too large. */
     contextWindowTokens?: number;
+    /** When true, skip recovery/rescue/second-chance passes. Used by rule-checking agents that don't benefit from open-ended exploration. */
+    skipHeavyPasses?: boolean;
 }
 
 /**
@@ -901,7 +903,8 @@ Respond with ONLY the JSON:
     // Self-contained mode: these passes all re-run the agent with tools,
     // which doesn't exist in trial flow. Skip them entirely.
     const isFastMode = input.reviewMode === 'fast';
-    const skipHeavyPasses = isFastMode || isSelfContained;
+    const skipHeavyPasses =
+        isFastMode || isSelfContained || !!input.skipHeavyPasses;
 
     const coverageSummaryBeforeRecovery = getCoverageSummary(coverageTargets);
     if (

@@ -95,7 +95,11 @@ export class KodyRulesAgentProvider extends BaseCodeReviewAgentProvider {
             };
         }
 
-        return super.execute(input);
+        // Kody Rules checks explicit user-defined rules — recovery, rescue,
+        // and second-chance passes are designed for open-ended bug discovery
+        // and would just re-find the same rule violations with different
+        // wording, causing duplicate comments.
+        return super.execute({ ...input, skipHeavyPasses: true });
     }
 
     /**

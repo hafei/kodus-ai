@@ -524,10 +524,22 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
             ];
 
             // Deduplicate suggestions that describe the same issue.
-            // Kody Rules skip dedup — they are user-defined rules that must always be reported.
-            const kodyRulesForDedup = severityNormalized.filter(
+            // Kody Rules skip LLM-based dedup (they're user-defined, not
+            // heuristic), but we still dedup them by ruleUuid — the same
+            // rule violation can be found by both the main loop and the
+            // synthesis rescue pass, producing duplicates with different
+            // wording.
+            const allKodyRules = severityNormalized.filter(
                 (s) => s.label === 'kody_rules',
             );
+            const seenRuleUuids = new Set<string>();
+            const kodyRulesForDedup = allKodyRules.filter((s) => {
+                const ruleId =
+                    s.brokenKodyRulesIds?.[0] || s.suggestionContent;
+                if (seenRuleUuids.has(ruleId)) return false;
+                seenRuleUuids.add(ruleId);
+                return true;
+            });
             const nonKodyRulesForDedup = severityNormalized.filter(
                 (s) => s.label !== 'kody_rules',
             );
