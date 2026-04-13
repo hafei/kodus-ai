@@ -108,7 +108,7 @@ fi
 
 # Close ALL open PRs in benchmark repos first
 echo "▸ Closing all open PRs..."
-for repo in sentry-greptile grafana-greptile discourse-greptile cal.com-greptile keycloak-greptile; do
+for repo in sentry grafana-codex discourse-cursor cal.com keycloak; do
   OPEN_PRS=$(gh api "repos/$BENCHMARK_OWNER/$repo/pulls?state=open&per_page=100" --jq '.[].number' 2>/dev/null || true)
   for pr in $OPEN_PRS; do
     gh api "repos/$BENCHMARK_OWNER/$repo/pulls/$pr" -X PATCH -f state=closed --silent 2>/dev/null || true

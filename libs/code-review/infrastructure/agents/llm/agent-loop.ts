@@ -101,8 +101,166 @@ export function buildLangSmithProviderOptions(
         },
     };
 }
+
+/**
+ * Build merged providerOptions: langsmith tracing + reasoning config.
+ * Used by all generateText calls in the agent loop to ensure consistent
+ * provider options across main loop, recovery, rescue, and verify passes.
+ */
+function buildProviderOptions(
+    runName: string,
+    meta?: LangSmithTelemetryMetadata,
+    input?: {
+        reasoningEffort?: ReasoningEffort;
+        reasoningConfigOverride?: string;
+        byokProvider?: BYOKProvider | string;
+        agentName?: string;
+    },
+): Record<string, any> {
+    const langsmith = buildLangSmithProviderOptions(runName, meta);
+
+    // JSON override takes precedence over effort preset
+    if (input?.reasoningConfigOverride) {
+        try {
+            const override = JSON.parse(input.reasoningConfigOverride);
+            return { ...langsmith, ...override };
+        } catch {
+            // Invalid JSON — fall through to effort-based mapping
+        }
+    }
+
+    const reasoning = buildReasoningProviderOptions(
+        input?.byokProvider,
+        input?.reasoningEffort,
+        input?.agentName,
+    );
+    return { ...langsmith, ...reasoning };
+}
 import { z } from 'zod';
+import { BYOKProvider } from '@kodus/kodus-common/llm';
 import { createLogger } from '@kodus/flow';
+
+type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+
+const EFFORT_TO_BUDGET: Record<ReasoningEffort, number> = {
+    none: 0,
+    low: 5_000,
+    medium: 15_000,
+    high: 40_000,
+};
+
+/**
+ * Build provider-specific reasoning/thinking options for generateText.
+ * Merges into providerOptions alongside langsmith tracing config.
+ *
+ * Maps a normalized effort level to each provider's native format:
+ *   - Anthropic (new): adaptive thinking + output_config.effort
+ *   - Anthropic (old): enabled + budget_tokens
+ *   - Google Gemini 3+: thinkingConfig.thinkingLevel (minimal/low/medium/high)
+ *   - Google Gemini 2.5: thinkingConfig.thinkingBudget
+ *   - OpenAI o-series: reasoningEffort (low/medium/high)
+ *   - OpenRouter: reasoning.effort (normalized across providers)
+ *   - Kimi/GLM/others via OPENAI_COMPATIBLE: thinking.type enabled/disabled
+ *
+ * Defaults when nothing configured: thinking stays OFF for all providers.
+ *
+ * Sources:
+ *   Claude: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
+ *   Gemini: https://ai.google.dev/gemini-api/docs/thinking
+ *   OpenRouter: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+ */
+function buildReasoningProviderOptions(
+    provider?: BYOKProvider | string,
+    effort?: ReasoningEffort,
+    modelName?: string,
+): Record<string, any> {
+    if (!effort || effort === 'none' || !provider) return {};
+
+    switch (provider) {
+        case BYOKProvider.ANTHROPIC: {
+            // Newer models (Sonnet 4.6, Opus 4.6+) use adaptive thinking +
+            // effort parameter (low/medium/high). budget_tokens is deprecated.
+            // Older models (Sonnet 3.7, Opus 4.5) use enabled + budget_tokens.
+            const isAdaptiveCapable = modelName && (
+                modelName.includes('sonnet-4') ||
+                modelName.includes('opus-4') ||
+                modelName.includes('mythos')
+            );
+
+            if (isAdaptiveCapable) {
+                return {
+                    anthropic: {
+                        thinking: { type: 'adaptive' },
+                        outputConfig: { effort },
+                    },
+                };
+            }
+
+            return {
+                anthropic: {
+                    thinking: {
+                        type: 'enabled',
+                        budgetTokens: EFFORT_TO_BUDGET[effort],
+                    },
+                },
+            };
+        }
+
+        case BYOKProvider.GOOGLE_GEMINI:
+        case BYOKProvider.GOOGLE_VERTEX: {
+            // Gemini 3+: thinkingLevel (minimal/low/medium/high)
+            // Gemini 2.5: thinkingBudget (number)
+            // Cannot disable thinking on Gemini 3.1 Pro.
+            const isGemini3 = modelName && (
+                modelName.includes('gemini-3') ||
+                modelName.includes('gemini3')
+            );
+
+            if (isGemini3) {
+                return {
+                    google: {
+                        thinkingConfig: { thinkingLevel: effort },
+                    },
+                };
+            }
+
+            return {
+                google: {
+                    thinkingConfig: {
+                        thinkingBudget: EFFORT_TO_BUDGET[effort],
+                    },
+                },
+            };
+        }
+
+        case BYOKProvider.OPENAI:
+            // o-series and GPT-5: reasoningEffort (low/medium/high)
+            return {
+                openai: { reasoningEffort: effort },
+            };
+
+        case BYOKProvider.OPEN_ROUTER:
+            // OpenRouter normalizes across all providers
+            return {
+                openrouter: { reasoning: { effort } },
+            };
+
+        case BYOKProvider.OPENAI_COMPATIBLE: {
+            // Kimi K2.5: thinking ON by default, only need to send disable
+            // GLM-5/5.1: thinking.type = enabled/disabled
+            // For compatible providers that support thinking, send the
+            // standard OpenAI-compatible thinking param
+            return {
+                openaiCompatible: {
+                    thinking: { type: 'enabled' },
+                },
+            };
+        }
+
+        default:
+            return {};
+    }
+}
 import { EnhancedJSONParser } from '@kodus/flow';
 import { BYOKConfig } from '@kodus/kodus-common/llm';
 import { FileChange } from '@libs/core/infrastructure/config/types/general/codeReview.type';
@@ -215,6 +373,14 @@ export interface AgentLoopInput {
     contextWindowTokens?: number;
     /** When true, skip recovery/rescue/second-chance passes. Used by rule-checking agents that don't benefit from open-ended exploration. */
     skipHeavyPasses?: boolean;
+    /** Reasoning effort level from BYOK config. Mapped to provider-specific
+     *  providerOptions (anthropic.thinking, google.thinkingConfig, etc). */
+    reasoningEffort?: ReasoningEffort;
+    /** Raw JSON override for reasoning config — takes precedence over effort preset. */
+    reasoningConfigOverride?: string;
+    /** BYOK provider type — needed to map reasoning effort to the correct
+     *  provider-specific format in providerOptions. */
+    byokProvider?: BYOKProvider | string;
 }
 
 /**
@@ -370,9 +536,10 @@ export async function runAgentLoop(
                         isEnabled: true,
                         functionId: input.agentName ?? 'agent-loop',
                     },
-                    providerOptions: buildLangSmithProviderOptions(
+                    providerOptions: buildProviderOptions(
                         input.agentName ?? 'agent-loop',
                         input.telemetryMetadata,
+                        input,
                     ),
                     tools,
                     // Self-contained mode has no tools — a single LLM call

@@ -385,6 +385,9 @@ export abstract class BaseCodeReviewAgentProvider {
                 severityLevelFilter: input.severityLevelFilter,
                 maxSteps: input.maxSteps,
                 contextWindowTokens: contextWindow,
+                reasoningEffort: byokConfig?.main?.reasoningEffort,
+                reasoningConfigOverride: byokConfig?.main?.reasoningConfigOverride,
+                byokProvider: byokConfig?.main?.provider,
 
                 onStepFinish: (step: any) => {
                     stepCount++;
