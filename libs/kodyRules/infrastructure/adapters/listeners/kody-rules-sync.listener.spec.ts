@@ -144,6 +144,34 @@ describe('KodyRulesSyncListener', () => {
         });
     });
 
+    it('should skip sync for non-merged pull-request.closed events', async () => {
+        const event = new PullRequestClosedEvent(
+            {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            } as any,
+            {
+                id: 'repo-1',
+                name: 'repo-1',
+            },
+            42,
+            [
+                {
+                    filename: '.agents.md',
+                    status: 'modified',
+                },
+            ],
+            false,
+        );
+
+        await listener.handlePullRequestClosedEvent(event);
+
+        expect(parametersServiceMock.findByKey).not.toHaveBeenCalled();
+        expect(
+            kodyRulesSyncServiceMock.syncFromChangedFiles,
+        ).not.toHaveBeenCalled();
+    });
+
     it('should skip sync when no files are provided', async () => {
         const event = new PullRequestClosedEvent(
             {

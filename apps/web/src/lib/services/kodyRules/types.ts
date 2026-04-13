@@ -158,6 +158,19 @@ export enum KodyRuleRequestType {
     MEMORY_UPDATE = "memory_update",
 }
 
+export type KodyRulesCentralizedPrMetadata = {
+    mode: "direct" | "centralized-pr";
+    prUrl?: string;
+    prNumber?: number;
+    reused?: boolean;
+    pending?: boolean;
+    message?: string;
+};
+
+export type KodyRulesMutationResponse =
+    | KodyRule[]
+    | KodyRulesCentralizedPrMetadata;
+
 export type KodyRuleSuggestion = {
     id: string;
     relevantFile: string;

@@ -261,34 +261,43 @@ export const changeStatusKodyRules = async (
         { ruleIds, status },
     );
 
-    return response.data as KodyRule[];
+    return response.data as KodyRule[] | CentralizedPrResponse;
 };
 
-export const applyPendingKodyRules = async (ruleIds: string[]) => {
+export const applyPendingKodyRules = async (
+    teamId: string,
+    ruleIds: string[],
+) => {
     const response = await axiosAuthorized.post<any>(
         KODY_RULES_PATHS.APPLY_PENDING_KODY_RULES,
-        { ruleIds },
+        { teamId, ruleIds },
     );
 
-    return response.data as KodyRule[];
+    return response.data as KodyRule[] | CentralizedPrResponse;
 };
 
-export const discardPendingKodyRules = async (ruleIds: string[]) => {
+export const discardPendingKodyRules = async (
+    teamId: string,
+    ruleIds: string[],
+) => {
     const response = await axiosAuthorized.post<any>(
         KODY_RULES_PATHS.DISCARD_PENDING_KODY_RULES,
-        { ruleIds },
+        { teamId, ruleIds },
     );
 
     return response.data as KodyRule[];
 };
 
-export const convertPendingUpdatesToMemories = async (ruleIds: string[]) => {
+export const convertPendingUpdatesToMemories = async (
+    teamId: string,
+    ruleIds: string[],
+) => {
     const response = await axiosAuthorized.post<any>(
         KODY_RULES_PATHS.CONVERT_PENDING_UPDATES_TO_MEMORIES,
-        { ruleIds },
+        { teamId, ruleIds },
     );
 
-    return response.data as KodyRule[];
+    return response.data as KodyRule[] | CentralizedPrResponse;
 };
 
 export const generateKodyRules = (

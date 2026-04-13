@@ -64,15 +64,30 @@ export class CentralizedConfigSyncListener {
             },
         });
 
-        await this.centralizedConfigPrService.clearActivePullRequestMetadataIfMatching(
-            {
-                organizationAndTeamData: event.organizationAndTeamData,
-                repository: event.repository,
-                pullRequestNumber: event.pullRequestNumber,
-            },
-        );
+        const closeHandlingResult =
+            await this.centralizedConfigPrService.handleTrackedPullRequestClose(
+                {
+                    organizationAndTeamData: event.organizationAndTeamData,
+                    repository: event.repository,
+                    pullRequestNumber: event.pullRequestNumber,
+                    merged: event.merged,
+                },
+            );
 
-        // Proceed with the sync using the use case
+        if (!closeHandlingResult.shouldSync) {
+            this.logger.log({
+                message:
+                    'Centralized pull request closed without merge, skipping centralized sync',
+                context: CentralizedConfigSyncListener.name,
+                metadata: {
+                    repositoryId: event.repository?.id,
+                    pullRequestNumber: event.pullRequestNumber,
+                },
+            });
+
+            return;
+        }
+
         await this.centralizedConfigSyncUseCase.execute({
             organizationAndTeamData: event.organizationAndTeamData,
             repository: event.repository,

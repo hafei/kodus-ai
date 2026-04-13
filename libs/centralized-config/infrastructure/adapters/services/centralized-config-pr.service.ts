@@ -11,6 +11,15 @@ import {
     INTEGRATION_CONFIG_SERVICE_TOKEN,
 } from '@libs/integrations/domain/integrationConfigs/contracts/integration-config.service.contracts';
 import {
+    IKodyRulesService,
+    KODY_RULES_SERVICE_TOKEN,
+} from '@libs/kodyRules/domain/contracts/kodyRules.service.contract';
+import {
+    IKodyRule,
+    KodyRuleCentralizedStatus,
+    KodyRulesStatus,
+} from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import {
     IParametersService,
     PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
@@ -61,10 +70,40 @@ export class CentralizedConfigPrService {
         private readonly parametersService: IParametersService,
         @Inject(INTEGRATION_CONFIG_SERVICE_TOKEN)
         private readonly integrationConfigService: IIntegrationConfigService,
+        @Inject(KODY_RULES_SERVICE_TOKEN)
+        private readonly kodyRulesService: IKodyRulesService,
         private readonly codeManagementService: CodeManagementService,
         @Inject(forwardRef(() => CentralizedConfigSyncUseCase))
         private readonly centralizedConfigSyncUseCase: CentralizedConfigSyncUseCase,
     ) {}
+
+    async handleTrackedPullRequestClose(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository?: { id?: string; name?: string };
+        pullRequestNumber?: number;
+        merged: boolean;
+    }): Promise<{ shouldSync: boolean }> {
+        const matchedTrackedPullRequest =
+            await this.clearActivePullRequestMetadataIfMatching({
+                organizationAndTeamData: params.organizationAndTeamData,
+                repository: params.repository,
+                pullRequestNumber: params.pullRequestNumber,
+            });
+
+        if (matchedTrackedPullRequest && !params.merged) {
+            await this.cleanupPendingProposedKodyRules(
+                params.organizationAndTeamData.organizationId,
+            );
+
+            return {
+                shouldSync: false,
+            };
+        }
+
+        return {
+            shouldSync: params.merged,
+        };
+    }
 
     async getCentralizedRepositoryIfEnabled(
         organizationAndTeamData: OrganizationAndTeamData,
@@ -907,5 +946,48 @@ export class CentralizedConfigPrService {
         }
 
         return String(repositoryId);
+    }
+
+    private async cleanupPendingProposedKodyRules(
+        organizationId: string,
+    ): Promise<void> {
+        const entity =
+            await this.kodyRulesService.findByOrganizationId(organizationId);
+
+        if (!entity?.uuid) {
+            return;
+        }
+
+        const rules = (entity.toJson?.()?.rules || []) as Partial<IKodyRule>[];
+
+        for (const rule of rules) {
+            const centralizedStatus = rule.centralizedConfig?.status;
+            const isPendingCentralizedStatus =
+                centralizedStatus === KodyRuleCentralizedStatus.PENDING_ADD ||
+                centralizedStatus === KodyRuleCentralizedStatus.PENDING_EDIT ||
+                centralizedStatus === KodyRuleCentralizedStatus.PENDING_DELETE;
+
+            if (!isPendingCentralizedStatus || !rule.uuid) {
+                continue;
+            }
+
+            if (!rule.centralizedConfig?.path) {
+                continue;
+            }
+
+            const nextStatus =
+                centralizedStatus === KodyRuleCentralizedStatus.PENDING_ADD
+                    ? KodyRulesStatus.REJECTED
+                    : rule.status;
+
+            await this.kodyRulesService.updateRule(entity.uuid, rule.uuid, {
+                ...rule,
+                status: nextStatus,
+                centralizedConfig: {
+                    ...rule.centralizedConfig,
+                    status: KodyRuleCentralizedStatus.SYNCED,
+                },
+            });
+        }
     }
 }

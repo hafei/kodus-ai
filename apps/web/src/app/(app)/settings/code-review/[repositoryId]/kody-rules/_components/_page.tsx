@@ -405,6 +405,7 @@ const KodyRulesPageContent = () => {
                 pendingNewMemories={pendingMemoryCreations}
                 pendingUpdates={pendingMemoryUpdates}
                 activeMemories={activeMemories}
+                refreshRulesList={refreshRulesList}
             />
         ));
 

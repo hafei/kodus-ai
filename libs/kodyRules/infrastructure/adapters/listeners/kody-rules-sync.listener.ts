@@ -33,6 +33,19 @@ export class KodyRulesSyncListener {
             return;
         }
 
+        if (!event.merged) {
+            this.logger.log({
+                message:
+                    'Received non-merged pull-request.closed event, skipping Kody rules sync',
+                context: KodyRulesSyncListener.name,
+                metadata: {
+                    pullRequestNumber: event.pullRequestNumber,
+                    repositoryId: event.repository.id,
+                },
+            });
+            return;
+        }
+
         if (await this.isCentralizedConfigRepo(event)) {
             this.logger.log({
                 message:

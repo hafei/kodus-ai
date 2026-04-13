@@ -17,7 +17,7 @@ describe('CentralizedConfigSyncListener', () => {
     };
 
     const centralizedConfigPrServiceMock = {
-        clearActivePullRequestMetadataIfMatching: jest.fn(),
+        handleTrackedPullRequestClose: jest.fn(),
     };
 
     const centralizedConfigServiceMock: jest.Mocked<ICentralizedConfigService> =
@@ -36,7 +36,7 @@ describe('CentralizedConfigSyncListener', () => {
 
     beforeEach(async () => {
         centralizedConfigSyncUseCaseMock.execute.mockReset();
-        centralizedConfigPrServiceMock.clearActivePullRequestMetadataIfMatching.mockReset();
+        centralizedConfigPrServiceMock.handleTrackedPullRequestClose.mockReset();
         jest.clearAllMocks();
 
         const module: TestingModule = await Test.createTestingModule({
@@ -62,7 +62,7 @@ describe('CentralizedConfigSyncListener', () => {
         );
     });
 
-    it('should sync centralized config when pull-request.closed is emitted and validation succeeds', async () => {
+    it('should sync centralized config when pull-request.closed is merged and matches tracked active PR', async () => {
         const event = new PullRequestClosedEvent(
             {
                 organizationId: 'org-1',
@@ -82,6 +82,12 @@ describe('CentralizedConfigSyncListener', () => {
                 message: 'Valid',
             },
         );
+        centralizedConfigPrServiceMock.handleTrackedPullRequestClose.mockResolvedValue(
+            {
+                matchedTrackedPullRequest: true,
+                shouldSync: true,
+            },
+        );
 
         await listener.handlePullRequestClosedEvent(event);
 
@@ -92,11 +98,12 @@ describe('CentralizedConfigSyncListener', () => {
             repository: event.repository,
         });
         expect(
-            centralizedConfigPrServiceMock.clearActivePullRequestMetadataIfMatching,
+            centralizedConfigPrServiceMock.handleTrackedPullRequestClose,
         ).toHaveBeenCalledWith({
             organizationAndTeamData: event.organizationAndTeamData,
             repository: event.repository,
             pullRequestNumber: event.pullRequestNumber,
+            merged: true,
         });
         expect(centralizedConfigSyncUseCaseMock.execute).toHaveBeenCalledWith({
             organizationAndTeamData: event.organizationAndTeamData,
@@ -134,8 +141,74 @@ describe('CentralizedConfigSyncListener', () => {
             repository: event.repository,
         });
         expect(
-            centralizedConfigPrServiceMock.clearActivePullRequestMetadataIfMatching,
+            centralizedConfigPrServiceMock.handleTrackedPullRequestClose,
         ).not.toHaveBeenCalled();
+        expect(centralizedConfigSyncUseCaseMock.execute).not.toHaveBeenCalled();
+    });
+
+    it('should skip sync when closed pull request does not match tracked active PR', async () => {
+        const event = new PullRequestClosedEvent(
+            {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            } as any,
+            {
+                id: 'centralized-config-repo',
+                name: 'kodus',
+            },
+            42,
+            [],
+            true,
+        );
+
+        centralizedConfigServiceMock.validateCentralizedConfig.mockResolvedValue(
+            {
+                success: true,
+                message: 'Valid',
+            },
+        );
+        centralizedConfigPrServiceMock.handleTrackedPullRequestClose.mockResolvedValue(
+            {
+                matchedTrackedPullRequest: false,
+                shouldSync: false,
+            },
+        );
+
+        await listener.handlePullRequestClosedEvent(event);
+
+        expect(centralizedConfigSyncUseCaseMock.execute).not.toHaveBeenCalled();
+    });
+
+    it('should skip sync when tracked active PR closes unmerged', async () => {
+        const event = new PullRequestClosedEvent(
+            {
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            } as any,
+            {
+                id: 'centralized-config-repo',
+                name: 'kodus',
+            },
+            42,
+            [],
+            false,
+        );
+
+        centralizedConfigServiceMock.validateCentralizedConfig.mockResolvedValue(
+            {
+                success: true,
+                message: 'Valid',
+            },
+        );
+        centralizedConfigPrServiceMock.handleTrackedPullRequestClose.mockResolvedValue(
+            {
+                matchedTrackedPullRequest: true,
+                shouldSync: false,
+            },
+        );
+
+        await listener.handlePullRequestClosedEvent(event);
+
         expect(centralizedConfigSyncUseCaseMock.execute).not.toHaveBeenCalled();
     });
 });

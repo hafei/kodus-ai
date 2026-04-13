@@ -48,6 +48,11 @@ describe('CentralizedConfigPrService', () => {
             findIntegrationConfigFormatted: jest.fn().mockResolvedValue([]),
         };
 
+        const kodyRulesService = {
+            findByOrganizationId: jest.fn().mockResolvedValue(null),
+            updateRule: jest.fn().mockResolvedValue(null),
+        };
+
         const codeManagementService = {
             getDefaultBranch: jest.fn().mockResolvedValue('main'),
             getPullRequest: jest.fn().mockResolvedValue({
@@ -78,6 +83,7 @@ describe('CentralizedConfigPrService', () => {
         const service = new CentralizedConfigPrService(
             parametersService as any,
             integrationConfigService as any,
+            kodyRulesService as any,
             codeManagementService as any,
             centralizedConfigSyncUseCase as any,
         );
@@ -221,16 +227,15 @@ describe('CentralizedConfigPrService', () => {
             },
         });
 
-        const wasCleared = await service.clearActivePullRequestMetadataIfMatching(
-            {
+        const wasCleared =
+            await service.clearActivePullRequestMetadataIfMatching({
                 organizationAndTeamData,
                 repository: {
                     id: '123',
                     name: 'centralized-repo',
                 },
                 pullRequestNumber: 123,
-            },
-        );
+            });
 
         expect(wasCleared).toBe(true);
         expect(parametersService.createOrUpdateConfig).toHaveBeenCalledWith(
