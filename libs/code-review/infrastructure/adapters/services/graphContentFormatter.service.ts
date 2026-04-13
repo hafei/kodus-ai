@@ -44,6 +44,12 @@ export class GraphContentFormatter {
     ): Promise<Map<string, { content: string; flag: ContentFlag }>> {
         const result = new Map<string, { content: string; flag: ContentFlag }>();
 
+        this.logger.log({
+            message: `[GRAPH-FORMAT] Input: ${files.length} files, graphJson=${graphJson ? `${graphJson.nodes.length} nodes, ${graphJson.edges.length} edges` : 'NOT available (Tier 1 disabled)'}`,
+            context: GraphContentFormatter.name,
+            metadata: { fileCount: files.length, hasGraph: !!graphJson, nodeCount: graphJson?.nodes?.length ?? 0, edgeCount: graphJson?.edges?.length ?? 0 },
+        });
+
         for (const file of files) {
             const content = file.fileContent || file.content || '';
             const patch = file.patch || '';
@@ -87,9 +93,13 @@ export class GraphContentFormatter {
 
         // Tier 1: Graph-aware extraction
         if (graphJson?.nodes?.length) {
-            const graphFormatted = this.formatWithGraph(filename, lines, changedRanges, graphJson);
-            if (graphFormatted) {
-                return { content: graphFormatted, flag: 'diff' };
+            try {
+                const graphFormatted = this.formatWithGraph(filename, lines, changedRanges, graphJson);
+                if (graphFormatted) {
+                    return { content: graphFormatted, flag: 'diff' };
+                }
+            } catch {
+                // Fall through to Tier 2 on any graph formatting error
             }
         }
 
@@ -222,7 +232,7 @@ export class GraphContentFormatter {
         return merged;
     }
 
-    private normalizePath(p: string): string {
-        return p.replace(/^\.\//, '').replace(/\\/g, '/');
+    private normalizePath(p: string | undefined): string {
+        return (p || '').replace(/^\.\//, '').replace(/\\/g, '/');
     }
 }

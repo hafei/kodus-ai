@@ -11,7 +11,7 @@ import {
 } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { RemoteCommands } from './collectCrossFileContexts.service';
 
-const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — cross-file context + file analysis
 const SANDBOX_MEMORY_MB = 1536; // 1.5 GB — kodus-graph parse can OOM on large repos at 1 GB
 const REPO_DIR = '/home/user/repo';
 
@@ -294,8 +294,16 @@ export class E2BSandboxService implements ISandboxProvider {
         apiKey: string,
         metadata?: Record<string, string>,
     ): Promise<{ sandbox: Sandbox; usedTemplate: boolean }> {
+        const isGraphStage =
+            metadata?.stage === 'graph-build' ||
+            metadata?.stage === 'graph-incremental';
+
+        // Use dedicated graph template (2 GB) for graph build stages,
+        // fall back to the default template (1 GB) for everything else.
         const templateId = this.configService.get<string>(
-            'API_E2B_TEMPLATE_ID',
+            isGraphStage
+                ? 'API_E2B_TEMPLATE_GRAPH_ID'
+                : 'API_E2B_TEMPLATE_ID',
         );
 
         if (templateId) {
@@ -303,7 +311,6 @@ export class E2BSandboxService implements ISandboxProvider {
                 const sandbox = await Sandbox.create(templateId, {
                     timeoutMs: SANDBOX_TIMEOUT_MS,
                     apiKey,
-                    memoryMB: SANDBOX_MEMORY_MB,
                     metadata,
                 });
                 return { sandbox, usedTemplate: true };

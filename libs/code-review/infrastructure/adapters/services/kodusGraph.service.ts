@@ -139,6 +139,54 @@ export class KodusGraphService {
     }
 
     /**
+     * Parse changed files and return the raw graph JSON (nodes + edges).
+     * Used by EE pipeline to provide structured graph data for content formatting.
+     * Returns null on any failure (non-blocking).
+     */
+    async parseAndGetGraphJson(
+        sandboxHandle: unknown,
+        changedFiles: FileChange[],
+    ): Promise<{ nodes: any[]; edges: any[] } | null> {
+        const sandbox = sandboxHandle as Sandbox;
+        if (!sandbox?.commands) return null;
+
+        const filePaths = changedFiles
+            .map((f) => f.filename || f.previous_filename)
+            .filter(Boolean) as string[];
+        if (filePaths.length === 0) return null;
+
+        try {
+            await this.installKodusGraph(sandbox);
+            await this.parseChangedFiles(sandbox, filePaths);
+
+            // Read the graph JSON from sandbox
+            const graphContent = await sandbox.commands.run(
+                `cat ${REPO_DIR}/${GRAPH_PATH}`,
+                { timeoutMs: 10_000 },
+            );
+            const json = JSON.parse(graphContent.stdout || '{}');
+            const nodes = json?.nodes ?? [];
+            const edges = json?.edges ?? [];
+
+            this.logger.log({
+                message: `[KODUS-GRAPH] Graph JSON extracted: ${nodes.length} nodes, ${edges.length} edges`,
+                context: KodusGraphService.name,
+                metadata: { fileCount: filePaths.length, nodeCount: nodes.length, edgeCount: edges.length },
+            });
+
+            return nodes.length > 0 ? { nodes, edges } : null;
+        } catch (error) {
+            this.logger.warn({
+                message: `[KODUS-GRAPH] Failed to parse graph JSON, skipping`,
+                context: KodusGraphService.name,
+                error,
+                metadata: { fileCount: filePaths.length },
+            });
+            return null;
+        }
+    }
+
+    /**
      * Legacy flow: parse changed files, optionally building a baseline graph
      * from the base branch via `git show` (read-only, no repo modifications).
      * When baseBranch is provided and the sandbox has it fetched, old file versions

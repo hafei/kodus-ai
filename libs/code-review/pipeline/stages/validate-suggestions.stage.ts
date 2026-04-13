@@ -17,7 +17,6 @@ import { applyEdit } from '@morphllm/morphsdk';
 import { Injectable } from '@nestjs/common';
 import { parsePatch } from 'diff';
 import pLimit from 'p-limit';
-import { Sandbox } from 'e2b';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 import { estimateTokens } from '@libs/code-review/infrastructure/adapters/services/utils/token-estimator';
 import { SandboxSyntaxValidator } from '@libs/code-review/infrastructure/adapters/services/sandboxSyntaxValidator.service';
@@ -42,17 +41,17 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
     protected override async executeStage(
         context: CodeReviewPipelineContext,
     ): Promise<CodeReviewPipelineContext> {
-        if (!(await this.shouldRunStage(context))) return context;
-
-        const {
-            validSuggestions,
-            changedFiles,
-            organizationAndTeamData,
-            pullRequest,
-        } = context;
-        const prNumber = pullRequest.number;
-
         try {
+            if (!(await this.shouldRunStage(context))) return context;
+
+            const {
+                validSuggestions,
+                changedFiles,
+                organizationAndTeamData,
+                pullRequest,
+            } = context;
+            const prNumber = pullRequest.number;
+
             const filtered = await this.filterSuggestions(
                 validSuggestions,
                 context,
@@ -90,13 +89,10 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
                 return context;
             }
 
-            const sandbox = (context.sandboxHandle?.sandboxHandle as Sandbox) ?? null;
-
             const validIds = await this.performFullValidation(
                 candidates,
                 organizationAndTeamData,
                 prNumber,
-                sandbox,
             );
 
             const updatedSuggestions = this.mapValidationResults(
@@ -109,9 +105,10 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
                 draft.validSuggestions = updatedSuggestions;
             });
         } catch (error) {
+            const { organizationAndTeamData, pullRequest } = context;
             this.logError('Error during validation process', error, {
                 organizationAndTeamData,
-                prNumber,
+                prNumber: pullRequest.number,
             });
 
             throw new Error(
@@ -199,11 +196,9 @@ export class ValidateSuggestionsStage extends BasePipelineStage<CodeReviewPipeli
         candidates: ValidationCandidate[],
         orgData: OrganizationAndTeamData,
         prNumber: number,
-        sandbox: Sandbox | null,
     ): Promise<Set<string>> {
-        // Step 1: Syntax validation via kodus-graph parse in sandbox
+        // Step 1: Syntax validation via kodus-graph parse in a dedicated sandbox
         const syntaxValidIds = await this.sandboxSyntaxValidator.validateFiles(
-            sandbox,
             candidates,
         );
 

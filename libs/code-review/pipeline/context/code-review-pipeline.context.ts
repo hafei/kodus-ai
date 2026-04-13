@@ -162,6 +162,9 @@ export interface CodeReviewPipelineContext extends PipelineContext {
     documentationQueryPlanByFile?: Record<string, DocumentationQueryPlanByFile>;
     documentationByFile?: Record<string, DocumentationItem[]>;
 
+    /** Graph JSON (nodes + edges) from kodus-graph parse, used by GraphContentFormatter for Tier 1 formatting */
+    callGraphJson?: { nodes: any[]; edges: any[] };
+
     /** Sandbox handle kept alive for safeguard agent verification */
     sandboxHandle?: SandboxInstance;
 

@@ -116,6 +116,8 @@ export type AnalysisContext<TPullRequest = any> = {
     remoteCommands?: RemoteCommands;
     /** Parameters used to create the sandbox — kept for renewal if it expires */
     getFreshCloneParams?: () => Promise<CreateSandboxParams>;
+    /** Graph JSON from kodus-graph parse (nodes + edges) for content formatting */
+    callGraphJson?: { nodes: any[]; edges: any[] };
 };
 
 export type DocumentationContextItem = {

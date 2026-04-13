@@ -9,6 +9,7 @@ import {
     ISandboxProvider,
     SANDBOX_PROVIDER_TOKEN,
 } from '@libs/code-review/domain/contracts/sandbox.provider';
+import { KodusGraphService } from '@libs/code-review/infrastructure/adapters/services/kodusGraph.service';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import { CloneParamsResolverService } from '../services/clone-params-resolver.service';
@@ -59,6 +60,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
         @Inject(SANDBOX_PROVIDER_TOKEN)
         private readonly sandboxProvider: ISandboxProvider,
         private readonly cloneParamsResolver: CloneParamsResolverService,
+        private readonly kodusGraphService: KodusGraphService,
     ) {
         super();
     }
@@ -170,6 +172,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                 authToken: cloneInfo.authToken,
                 authUsername: cloneInfo.authUsername,
                 branch: cloneInfo.branch,
+                baseBranch: cloneInfo.baseBranch,
                 prNumber: cloneInfo.prNumber,
                 platform: cloneInfo.platform,
                 sandboxMetadata: { stage: 'cross-file-context' },
@@ -213,14 +216,51 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                 },
             });
 
+            // Generate graph JSON for content formatting (non-blocking)
+            let graphJson: { nodes: any[]; edges: any[] } | null = null;
+            if (sandbox.sandboxHandle && context.changedFiles?.length) {
+                try {
+                    graphJson = await this.kodusGraphService.parseAndGetGraphJson(
+                        sandbox.sandboxHandle,
+                        context.changedFiles,
+                    );
+                    this.logger.log({
+                        message: `[CROSS-FILE] Graph JSON for ${label}: ${graphJson ? `${graphJson.nodes.length} nodes, ${graphJson.edges.length} edges` : 'null (no nodes parsed)'}`,
+                        context: this.stageName,
+                        metadata: { hasGraph: !!graphJson, nodeCount: graphJson?.nodes?.length ?? 0, edgeCount: graphJson?.edges?.length ?? 0 },
+                    });
+                } catch (err) {
+                    this.logger.warn({
+                        message: `[CROSS-FILE] Graph JSON generation failed for ${label}, continuing without it`,
+                        context: this.stageName,
+                        error: err,
+                    });
+                }
+            } else {
+                this.logger.log({
+                    message: `[CROSS-FILE] Skipping graph JSON: sandboxHandle=${!!sandbox.sandboxHandle}, changedFiles=${context.changedFiles?.length ?? 0}`,
+                    context: this.stageName,
+                });
+            }
+
+            this.logger.log({
+                message: `[CROSS-FILE] Storing sandbox for ${label}: type=${sandbox.type ?? 'e2b'}, hasSandboxHandle=${!!sandbox.sandboxHandle}, hasBaseBranch=${!!sandbox.baseBranch}, hasGraphJson=${!!graphJson}`,
+                context: this.stageName,
+            });
+
             return this.updateContext(context, (draft) => {
                 draft.crossFileContexts = result;
-                // Keep sandbox alive for safeguard agent verification
+                // Keep sandbox alive for downstream stages (safeguard, syntax validation)
                 draft.sandboxHandle = {
                     remoteCommands: sandbox.remoteCommands,
                     cleanup: sandbox.cleanup,
                     type: sandbox.type ?? 'e2b',
+                    baseBranch: sandbox.baseBranch,
+                    sandboxHandle: sandbox.sandboxHandle,
                 };
+                if (graphJson) {
+                    draft.callGraphJson = graphJson;
+                }
                 // Save a factory for clone params so safeguard can renew sandbox if it expires
                 draft.getFreshCloneParams = async () => {
                     const freshCloneInfo =
@@ -238,6 +278,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
                         authToken: freshCloneInfo.authToken,
                         authUsername: freshCloneInfo.authUsername,
                         branch: freshCloneInfo.branch,
+                        baseBranch: freshCloneInfo.baseBranch,
                         prNumber: freshCloneInfo.prNumber,
                         platform: freshCloneInfo.platform,
                         sandboxMetadata: { stage: 'cross-file-renewed' },

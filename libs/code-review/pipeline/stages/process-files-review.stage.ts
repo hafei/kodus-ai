@@ -168,7 +168,7 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
                 );
             });
         } finally {
-            // Cleanup sandbox after all files are processed
+            // Cleanup original sandbox — this stage is the last consumer
             if (context.sandboxHandle?.cleanup) {
                 try {
                     await context.sandboxHandle.cleanup();
@@ -411,7 +411,7 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
         const { organizationAndTeamData, pullRequest } = context;
 
         // Use graph JSON from pipeline context if available
-        const graphJson = (context as any).callGraphJson as GraphJson | undefined;
+        const graphJson = (context as any).callGraphJson as GraphJson | undefined; // typed on CodeReviewPipelineContext, cast here because AnalysisContext is generic
         const astResults = await this.graphContentFormatter.formatContent(
             batch,
             graphJson,
@@ -1310,6 +1310,7 @@ export class ProcessFilesReview extends BasePipelineStage<CodeReviewPipelineCont
             documentationByFile: context.documentationByFile,
             remoteCommands: context.sandboxHandle?.remoteCommands,
             getFreshCloneParams: context.getFreshCloneParams,
+            callGraphJson: context.callGraphJson,
         };
     }
 
