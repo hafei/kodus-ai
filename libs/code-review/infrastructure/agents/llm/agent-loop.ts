@@ -114,7 +114,7 @@ function buildProviderOptions(
         reasoningEffort?: ReasoningEffort;
         reasoningConfigOverride?: string;
         byokProvider?: BYOKProvider | string;
-        agentName?: string;
+        modelName?: string;
     },
 ): Record<string, any> {
     const langsmith = buildLangSmithProviderOptions(runName, meta);
@@ -132,9 +132,22 @@ function buildProviderOptions(
     const reasoning = buildReasoningProviderOptions(
         input?.byokProvider,
         input?.reasoningEffort,
-        input?.agentName,
+        input?.modelName,
     );
-    return { ...langsmith, ...reasoning };
+    const merged = { ...langsmith, ...reasoning };
+    logger.log({
+        message: '[thinking] providerOptions resolved',
+        context: 'buildProviderOptions',
+        metadata: {
+            runName,
+            provider: input?.byokProvider,
+            modelName: input?.modelName,
+            reasoningEffort: input?.reasoningEffort,
+            hasOverride: !!input?.reasoningConfigOverride,
+            reasoningPayload: reasoning,
+        },
+    });
+    return merged;
 }
 import { z } from 'zod';
 import { BYOKProvider } from '@kodus/kodus-common/llm';
@@ -539,7 +552,13 @@ export async function runAgentLoop(
                     providerOptions: buildProviderOptions(
                         input.agentName ?? 'agent-loop',
                         input.telemetryMetadata,
-                        input,
+                        {
+                            reasoningEffort: input.reasoningEffort,
+                            reasoningConfigOverride:
+                                input.reasoningConfigOverride,
+                            byokProvider: input.byokProvider,
+                            modelName: (input.model as any)?.modelId,
+                        },
                     ),
                     tools,
                     // Self-contained mode has no tools — a single LLM call
@@ -1376,6 +1395,21 @@ async function runCoverageRecoveryPass(params: {
                 generateText({
                     abortSignal: recoverySignal,
                     model: input.model,
+                    experimental_telemetry: {
+                        isEnabled: true,
+                        functionId: `${input.agentName ?? 'agent-loop'}-coverage-recovery`,
+                    },
+                    providerOptions: buildProviderOptions(
+                        `${input.agentName ?? 'agent-loop'}-coverage-recovery`,
+                        input.telemetryMetadata,
+                        {
+                            reasoningEffort: input.reasoningEffort,
+                            reasoningConfigOverride:
+                                input.reasoningConfigOverride,
+                            byokProvider: input.byokProvider,
+                            modelName: (input.model as any)?.modelId,
+                        },
+                    ),
                     system:
                         input.systemPrompt +
                         '\n\nIMPORTANT: This is a coverage recovery pass. You must inspect the remaining changed files before responding.',
@@ -1733,9 +1767,16 @@ async function runSynthesisRescuePass(params: {
                         isEnabled: true,
                         functionId: `${input.agentName ?? 'agent-loop'}-synthesis-rescue`,
                     },
-                    providerOptions: buildLangSmithProviderOptions(
+                    providerOptions: buildProviderOptions(
                         `${input.agentName ?? 'agent-loop'}-synthesis-rescue`,
                         input.telemetryMetadata,
+                        {
+                            reasoningEffort: input.reasoningEffort,
+                            reasoningConfigOverride:
+                                input.reasoningConfigOverride,
+                            byokProvider: input.byokProvider,
+                            modelName: (input.model as any)?.modelId,
+                        },
                     ),
                     system:
                         input.systemPrompt +
@@ -2281,9 +2322,15 @@ async function verifySingleFindingWithTools(params: {
                     isEnabled: true,
                     functionId: `${input.agentName ?? 'agent-loop'}-verify-finding`,
                 },
-                providerOptions: buildLangSmithProviderOptions(
+                providerOptions: buildProviderOptions(
                     `${input.agentName ?? 'agent-loop'}-verify-finding`,
                     input.telemetryMetadata,
+                    {
+                        reasoningEffort: input.reasoningEffort,
+                        reasoningConfigOverride: input.reasoningConfigOverride,
+                        byokProvider: input.byokProvider,
+                        modelName: (internalModel as any)?.modelId,
+                    },
                 ),
                 system: verificationPrompt.system,
                 prompt: verificationPrompt.prompt,
@@ -2405,9 +2452,16 @@ async function verifySingleFindingWithTools(params: {
                             isEnabled: true,
                             functionId: `${input.agentName ?? 'agent-loop'}-verify-finding-second-chance`,
                         },
-                        providerOptions: buildLangSmithProviderOptions(
+                        providerOptions: buildProviderOptions(
                             `${input.agentName ?? 'agent-loop'}-verify-finding-second-chance`,
                             input.telemetryMetadata,
+                            {
+                                reasoningEffort: input.reasoningEffort,
+                                reasoningConfigOverride:
+                                    input.reasoningConfigOverride,
+                                byokProvider: input.byokProvider,
+                                modelName: (internalModel as any)?.modelId,
+                            },
                         ),
                         system: `You are a surgical code review verifier.
 
