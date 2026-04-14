@@ -30,6 +30,7 @@ import {
     type KodyRule,
     type LibraryRule,
 } from "@services/kodyRules/types";
+import { isCentralizedPrResponse } from "@services/parameters/types";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 import {
@@ -40,8 +41,10 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { CodeReviewRepositoryConfig } from "src/app/(app)/settings/code-review/_types";
+import { getCentralizedPrToastPayload } from "src/app/(app)/settings/code-review/_utils/centralized-pr-feedback";
 import { useAuth } from "src/core/providers/auth.provider";
 import { usePermissions } from "src/core/providers/permissions.provider";
+import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import type { LiteralUnion } from "src/core/types";
 import { cn } from "src/core/utils/components";
 import { hasPermission } from "src/core/utils/permission-map";
@@ -63,6 +66,7 @@ export const KodyRuleLibraryItemModal = ({
     repositories: Array<CodeReviewRepositoryConfig>;
 }) => {
     const router = useRouter();
+    const { teamId } = useSelectedTeamId();
     const { organizationId } = useAuth();
     const queryClient = useQueryClient();
     const [positiveCount, setPositiveCount] = useState(rule.positiveCount ?? 0);
@@ -132,7 +136,19 @@ export const KodyRuleLibraryItemModal = ({
                 rule: newRule,
                 repositoriesIds: selectedRepositoriesIds,
                 directoriesIds: selectedDirectoriesIds,
+                teamId,
             });
+
+            if (isCentralizedPrResponse(addedKodyRules)) {
+                toast(
+                    getCentralizedPrToastPayload(
+                        addedKodyRules,
+                        `Rule "${rule.title}" change proposed through centralized pull request.`,
+                    ),
+                );
+
+                return;
+            }
 
             await queryClient.resetQueries({
                 predicate: (query) =>

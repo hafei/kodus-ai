@@ -2,7 +2,11 @@
 
 import { PARAMETERS_PATHS } from "@services/parameters";
 import { createOrUpdateCodeReviewParameter } from "@services/parameters/fetch";
-import { ParametersConfigKey } from "@services/parameters/types";
+import {
+    isCentralizedPrResponse,
+    ParametersConfigKey,
+    type CentralizedPrResponse,
+} from "@services/parameters/types";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UseFormReturn } from "react-hook-form";
 import { unformatConfig } from "src/core/utils/helpers";
@@ -25,6 +29,10 @@ type SaveOptions = {
     prepare?: (
         formData: CodeReviewFormType,
     ) => Promise<SavePreparationResult> | SavePreparationResult;
+};
+
+type SaveSettingsResult = {
+    centralizedPr?: CentralizedPrResponse;
 };
 
 const defaultPrepare = (
@@ -107,7 +115,7 @@ export const useCodeReviewSettingsMutation = (params: {
     const saveSettings = async (
         formData: CodeReviewFormType,
         options?: SaveOptions,
-    ) => {
+    ): Promise<SaveSettingsResult> => {
         const prepared = await (options?.prepare ?? defaultPrepare)(formData);
 
         const result = await createOrUpdateCodeReviewParameter(
@@ -117,12 +125,22 @@ export const useCodeReviewSettingsMutation = (params: {
             directoryId,
         );
 
-        if (result.error) {
-            throw new Error(`Failed to save settings: ${result.error}`);
+        if ((result as { error?: string })?.error) {
+            throw new Error(
+                `Failed to save settings: ${(result as { error: string }).error}`,
+            );
+        }
+
+        if (isCentralizedPrResponse(result)) {
+            form.reset(prepared.savedFormData);
+            invalidateRelatedQueries();
+            return { centralizedPr: result };
         }
 
         form.reset(prepared.savedFormData);
         invalidateRelatedQueries();
+
+        return {};
     };
 
     return { saveSettings };

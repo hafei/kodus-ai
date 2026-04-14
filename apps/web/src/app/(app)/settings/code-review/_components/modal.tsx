@@ -62,6 +62,7 @@ import {
     type KodyRule,
     type LibraryRule,
 } from "@services/kodyRules/types";
+import { isCentralizedPrResponse } from "@services/parameters/types";
 import {
     AtSign,
     CheckIcon,
@@ -81,9 +82,11 @@ import {
 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useMCPMentions } from "src/core/hooks/use-mcp-mentions";
+import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { cn } from "src/core/utils/components";
 
 import type { FormattedDirectoryCodeReviewConfig } from "../_types";
+import { getCentralizedPrToastPayload } from "../_utils/centralized-pr-feedback";
 import { ExternalReferencesDisplay } from "../[repositoryId]/pr-summary/_components/external-references-display";
 
 const severityOptions: {
@@ -472,6 +475,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
     canEdit: boolean;
 }) => {
     const { toast } = useToast();
+    const { teamId } = useSelectedTeamId();
 
     const initialScope = rule?.scope ?? "file";
 
@@ -564,7 +568,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                 }
             }
 
-            await createOrUpdateKodyRule(
+            const mutationResult = await createOrUpdateKodyRule(
                 {
                     path: newPath,
                     rule: config.rule,
@@ -577,6 +581,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                     origin: config.origin ?? KodyRulesOrigin.USER,
                     status: config.status ?? KodyRulesStatus.ACTIVE,
                     type: config.type ?? ruleType,
+                    centralizedConfig: rule?.centralizedConfig,
                     inheritance: {
                         ...(rule?.inheritance ?? {
                             inheritable: true,
@@ -588,12 +593,22 @@ export const KodyRuleAddOrUpdateItemModal = ({
                 },
                 repositoryId,
                 directory?.id,
+                teamId,
             );
 
-            toast({
-                description: `${entityLabel} ${rule?.uuid ? "updated" : "created"}`,
-                variant: "success",
-            });
+            if (isCentralizedPrResponse(mutationResult)) {
+                toast(
+                    getCentralizedPrToastPayload(
+                        mutationResult,
+                        `${entityLabel} change proposed through centralized pull request.`,
+                    ),
+                );
+            } else {
+                toast({
+                    description: `${entityLabel} ${rule?.uuid ? "updated" : "created"}`,
+                    variant: "success",
+                });
+            }
 
             if (!onClose) {
                 magicModal.hide(true);
@@ -632,7 +647,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
         }
 
         try {
-            await createOrUpdateKodyRule(
+            const mutationResult = await createOrUpdateKodyRule(
                 {
                     path: rule?.path,
                     rule: rule?.rule,
@@ -647,6 +662,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                     origin: rule?.origin ?? KodyRulesOrigin.USER,
                     status: rule?.status ?? KodyRulesStatus.ACTIVE,
                     type: rule?.type ?? ruleType,
+                    centralizedConfig: rule?.centralizedConfig,
                     inheritance: {
                         ...(rule?.inheritance ?? {
                             inheritable: true,
@@ -658,7 +674,18 @@ export const KodyRuleAddOrUpdateItemModal = ({
                 } as KodyRule,
                 rule?.repositoryId,
                 rule?.directoryId,
+                teamId,
             );
+
+            if (isCentralizedPrResponse(mutationResult)) {
+                toast(
+                    getCentralizedPrToastPayload(
+                        mutationResult,
+                        "Rule inheritance change proposed through centralized pull request.",
+                    ),
+                );
+                return;
+            }
 
             setIsInheritanceDisabled(val);
 

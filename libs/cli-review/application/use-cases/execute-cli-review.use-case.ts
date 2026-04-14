@@ -364,10 +364,9 @@ export class ExecuteCliReviewUseCase implements IUseCase {
                     paramObj.configValue?.repositories,
                 );
 
-            // Load and filter kody rules (global + repository-scoped)
             const { standardRules, memoryRules } =
                 this.kodyRulesValidationService.filterKodyRules(
-                    kodyRulesEntity?.toObject()?.rules,
+                    kodyRulesEntity?.toObject()?.rules || [],
                     repositoryId,
                 );
 
