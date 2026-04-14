@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AstGraphBuildService } from '@libs/code-review/infrastructure/adapters/services/astGraphBuild.service';
+import { GraphIndexerService } from '@libs/code-review/infrastructure/adapters/services/graph/graph-indexer.service';
+import { KodusGraphCli } from '@libs/code-review/infrastructure/adapters/services/graph/kodus-graph-cli';
 import { AstGraphRepository } from '@libs/code-review/infrastructure/adapters/repositories/astGraph.repository';
 import { RepositoryRepository } from '@libs/code-review/infrastructure/adapters/repositories/repository.repository';
 import { AstGraphStatus } from '@libs/code-review/infrastructure/adapters/repositories/schemas/repository.model';
@@ -15,8 +16,8 @@ jest.mock('@kodus/flow', () => ({
     }),
 }));
 
-describe('AstGraphBuildService', () => {
-    let service: AstGraphBuildService;
+describe('GraphIndexerService', () => {
+    let service: GraphIndexerService;
     let mockAstGraphRepo: jest.Mocked<AstGraphRepository>;
     let mockRepositoryRepo: jest.Mocked<RepositoryRepository>;
     let mockSandbox: jest.Mocked<SandboxInstance>;
@@ -69,6 +70,19 @@ describe('AstGraphBuildService', () => {
         } as jest.Mocked<SandboxInstance>;
     }
 
+    /** Returns the string command of the nth sandbox.run call (0-indexed). */
+    const runCmd = (sandbox: jest.Mocked<SandboxInstance>, i: number) =>
+        sandbox.run.mock.calls[i][0] as string;
+
+    /** Returns the index of the first run call whose command matches the predicate. */
+    const findRunIndex = (
+        sandbox: jest.Mocked<SandboxInstance>,
+        predicate: (cmd: string) => boolean,
+    ) =>
+        sandbox.run.mock.calls.findIndex((call) =>
+            predicate(call[0] as string),
+        );
+
     beforeEach(async () => {
         mockAstGraphRepo = {
             fullRebuild: jest
@@ -87,34 +101,35 @@ describe('AstGraphBuildService', () => {
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
-                AstGraphBuildService,
+                GraphIndexerService,
+                KodusGraphCli,
                 { provide: AstGraphRepository, useValue: mockAstGraphRepo },
                 { provide: RepositoryRepository, useValue: mockRepositoryRepo },
             ],
         }).compile();
 
-        service = module.get<AstGraphBuildService>(AstGraphBuildService);
+        service = module.get<GraphIndexerService>(GraphIndexerService);
     });
 
     describe('fullBuild', () => {
-        it('should call sandbox.run() for install and parse commands', async () => {
+        it('should install kodus-graph then parse the repo', async () => {
             await service.fullBuild({
                 repositoryId: REPO_ID,
                 sandbox: mockSandbox,
                 headSha: HEAD_SHA,
             });
 
-            // At least 2 run calls: install + parse
-            expect(mockSandbox.run).toHaveBeenCalledTimes(2);
+            // install() does: which-check → install → then parse --all
+            const installIdx = findRunIndex(mockSandbox, (cmd) =>
+                cmd.includes('bun install'),
+            );
+            const parseIdx = findRunIndex(mockSandbox, (cmd) =>
+                cmd.includes('kodus-graph parse --all'),
+            );
 
-            // First call: install kodus-graph (contains "bun install")
-            const installCmd = mockSandbox.run.mock.calls[0][0] as string;
-            expect(installCmd).toContain('bun install');
-            expect(installCmd).toContain('kodus-graph');
-
-            // Second call: parse --all
-            const parseCmd = mockSandbox.run.mock.calls[1][0] as string;
-            expect(parseCmd).toContain('kodus-graph parse --all');
+            expect(installIdx).toBeGreaterThanOrEqual(0);
+            expect(parseIdx).toBeGreaterThan(installIdx);
+            expect(runCmd(mockSandbox, installIdx)).toContain('kodus-graph');
         });
 
         it('should call sandbox.readFile() to read graph JSON', async () => {
@@ -141,12 +156,13 @@ describe('AstGraphBuildService', () => {
                 headSha: HEAD_SHA,
             });
 
-            // parse command should use the custom repoDir
-            const parseCmd = customSandbox.run.mock.calls[1][0] as string;
+            const parseIdx = findRunIndex(customSandbox, (cmd) =>
+                cmd.includes('kodus-graph parse --all'),
+            );
+            const parseCmd = runCmd(customSandbox, parseIdx);
             expect(parseCmd).toContain('cd /workspace/my-repo');
             expect(parseCmd).not.toContain('/home/user/repo');
 
-            // readFile path should use custom repoDir
             const readFilePath = customSandbox.readFile.mock
                 .calls[0][0] as string;
             expect(readFilePath).toContain('/workspace/my-repo');
@@ -185,10 +201,8 @@ describe('AstGraphBuildService', () => {
 
             const calls = mockRepositoryRepo.updateGraphStatus.mock.calls;
 
-            // First call: BUILDING
             expect(calls[0]).toEqual([REPO_ID, AstGraphStatus.BUILDING]);
 
-            // Last call: READY with sha and counts
             const lastCall = calls[calls.length - 1];
             expect(lastCall[0]).toBe(REPO_ID);
             expect(lastCall[1]).toBe(AstGraphStatus.READY);
@@ -202,17 +216,15 @@ describe('AstGraphBuildService', () => {
         });
 
         it('should throw error on parse failure (exitCode !== 0)', async () => {
+            // which-check + install succeed, parse --all fails
             mockSandbox.run
-                .mockResolvedValueOnce({
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0,
-                }) // install succeeds
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
                 .mockResolvedValueOnce({
                     stdout: '',
                     stderr: 'parse error',
                     exitCode: 1,
-                }); // parse fails
+                });
 
             await expect(
                 service.fullBuild({
@@ -222,7 +234,6 @@ describe('AstGraphBuildService', () => {
                 }),
             ).rejects.toThrow('kodus-graph parse --all failed');
 
-            // Should also mark as FAILED
             expect(
                 mockRepositoryRepo.updateGraphStatus,
             ).toHaveBeenCalledWith(REPO_ID, AstGraphStatus.FAILED);
@@ -242,16 +253,18 @@ describe('AstGraphBuildService', () => {
                 mockRepositoryRepo.updateGraphStatus,
             ).toHaveBeenCalledWith(REPO_ID, AstGraphStatus.FAILED);
 
-            // Should NOT call fullRebuild when 0 nodes
             expect(mockAstGraphRepo.fullRebuild).not.toHaveBeenCalled();
         });
 
         it('should mark status as FAILED on install error', async () => {
-            mockSandbox.run.mockResolvedValue({
-                stdout: '',
-                stderr: 'network error',
-                exitCode: 1,
-            });
+            // which-check returns 0 (empty), install returns 1
+            mockSandbox.run
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
+                .mockResolvedValue({
+                    stdout: '',
+                    stderr: 'network error',
+                    exitCode: 1,
+                });
 
             await expect(
                 service.fullBuild({
@@ -297,9 +310,12 @@ describe('AstGraphBuildService', () => {
                 newSha,
             });
 
-            // Second run call is the parse command
-            const parseCmd = mockSandbox.run.mock.calls[1][0] as string;
-            expect(parseCmd).toContain('kodus-graph parse --files');
+            const parseIdx = findRunIndex(mockSandbox, (cmd) =>
+                cmd.includes('kodus-graph parse --files'),
+            );
+            expect(parseIdx).toBeGreaterThanOrEqual(0);
+
+            const parseCmd = runCmd(mockSandbox, parseIdx);
             expect(parseCmd).toContain('src/foo.ts');
             expect(parseCmd).toContain('src/bar.ts');
         });
@@ -342,17 +358,15 @@ describe('AstGraphBuildService', () => {
         });
 
         it('should NOT set status to FAILED on error (graph is stale but usable)', async () => {
+            // which-check + install succeed, parse --files fails
             mockSandbox.run
-                .mockResolvedValueOnce({
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0,
-                }) // install
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
                 .mockResolvedValueOnce({
                     stdout: '',
                     stderr: 'parse error',
                     exitCode: 1,
-                }); // parse fails
+                });
 
             await expect(
                 service.incrementalUpdate({
@@ -363,7 +377,6 @@ describe('AstGraphBuildService', () => {
                 }),
             ).rejects.toThrow('kodus-graph parse --files failed');
 
-            // Should NOT have been called with FAILED status
             const failedCalls =
                 mockRepositoryRepo.updateGraphStatus.mock.calls.filter(
                     (call) => call[1] === AstGraphStatus.FAILED,
@@ -383,7 +396,10 @@ describe('AstGraphBuildService', () => {
                 newSha,
             });
 
-            const parseCmd = customSandbox.run.mock.calls[1][0] as string;
+            const parseIdx = findRunIndex(customSandbox, (cmd) =>
+                cmd.includes('kodus-graph parse --files'),
+            );
+            const parseCmd = runCmd(customSandbox, parseIdx);
             expect(parseCmd).toContain('cd /workspace/project');
         });
     });

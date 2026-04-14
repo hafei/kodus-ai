@@ -220,7 +220,9 @@ ${reviewOptionsMarkdown}
     private generateReviewCadenceInfo = (
         context: PlaceholderContext,
     ): string => {
-        if (!context.codeReviewConfig?.reviewCadence) return '';
+        if (!context.codeReviewConfig?.reviewCadence) {
+            return '';
+        }
 
         const language =
             context.codeReviewConfig?.languageResultPrompt ??
@@ -230,7 +232,9 @@ ${reviewOptionsMarkdown}
             TranslationsCategory.ReviewCadenceInfo,
         );
 
-        if (!translation) return '';
+        if (!translation) {
+            return '';
+        }
 
         const cadenceType = context.codeReviewConfig.reviewCadence.type;
         let statusText: string;

@@ -20,7 +20,7 @@ import {
 import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
 import { AgentProgressEvent } from '@libs/code-review/infrastructure/agents/base-code-review-agent.provider';
 
-import { KodusGraphService } from '@libs/code-review/infrastructure/adapters/services/kodusGraph.service';
+import { GraphContextService } from '@libs/code-review/infrastructure/adapters/services/graph/graph-context.service';
 import { RepositoryRepository } from '@libs/code-review/infrastructure/adapters/repositories/repository.repository';
 import { AstGraphStatus } from '@libs/code-review/infrastructure/adapters/repositories/schemas/repository.model';
 import {
@@ -213,7 +213,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
         private readonly observabilityService: ObservabilityService,
         @Inject(AUTOMATION_EXECUTION_SERVICE_TOKEN)
         private readonly automationExecutionService: IAutomationExecutionService,
-        private readonly kodusGraphService: KodusGraphService,
+        private readonly graphContext: GraphContextService,
         private readonly repositoryRepository: RepositoryRepository,
     ) {
         super();
@@ -327,7 +327,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
 
                     if (repo?.astGraphStatus === AstGraphStatus.READY) {
                         callGraph =
-                            await this.kodusGraphService.generateContext(
+                            await this.graphContext.generateContext(
                                 context.sandboxHandle,
                                 changedFiles,
                                 repo.uuid,
@@ -338,7 +338,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                             context: this.stageName,
                         });
                         callGraph =
-                            await this.kodusGraphService.generateContextLegacy(
+                            await this.graphContext.generateContextLegacy(
                                 context.sandboxHandle,
                                 changedFiles,
                                 context.sandboxHandle?.baseBranch ||

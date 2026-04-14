@@ -62,7 +62,6 @@ describe('ValidatePrerequisitesStage', () => {
             action: 'opened',
             dryRun: { enabled: false },
             errors: [],
-            batches: [],
             preparedFileContexts: [],
             validSuggestions: [],
             discardedSuggestions: [],

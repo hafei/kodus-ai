@@ -48,7 +48,6 @@ export class AutomationCodeReviewService implements Omit<
 
     async setup(payload?: any): Promise<any> {
         try {
-            // Fetch automation ID
             const automation: IAutomation = (
                 await this.automationService.find({
                     automationType: this.automationType,
@@ -104,7 +103,6 @@ export class AutomationCodeReviewService implements Omit<
                 },
             });
 
-            // Check for existing active execution
             const existingExecution = await this.getActiveExecution(
                 teamAutomationId,
                 pullRequest?.number,

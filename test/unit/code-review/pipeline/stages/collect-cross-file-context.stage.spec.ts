@@ -25,7 +25,7 @@ import {
     CollectCrossFileContextsResult,
 } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { SANDBOX_PROVIDER_TOKEN } from '@libs/code-review/domain/contracts/sandbox.provider';
-import { KodusGraphService } from '@libs/code-review/infrastructure/adapters/services/kodusGraph.service';
+import { GraphContextService } from '@libs/code-review/infrastructure/adapters/services/graph/graph-context.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import {
@@ -55,7 +55,7 @@ describe('CollectCrossFileContextStage', () => {
         getCloneParams: jest.fn(),
     };
 
-    const mockKodusGraphService = {
+    const mockGraphContextService = {
         parseAndGetGraphJson: jest.fn().mockResolvedValue(null),
     };
 
@@ -80,8 +80,8 @@ describe('CollectCrossFileContextStage', () => {
                     useValue: mockCloneParamsResolver,
                 },
                 {
-                    provide: KodusGraphService,
-                    useValue: mockKodusGraphService,
+                    provide: GraphContextService,
+                    useValue: mockGraphContextService,
                 },
             ],
         }).compile();

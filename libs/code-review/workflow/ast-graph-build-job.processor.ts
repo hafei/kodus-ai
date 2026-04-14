@@ -15,7 +15,7 @@ import {
     SandboxInstance,
 } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
-import { AstGraphBuildService } from '@libs/code-review/infrastructure/adapters/services/astGraphBuild.service';
+import { GraphIndexerService } from '@libs/code-review/infrastructure/adapters/services/graph/graph-indexer.service';
 import { RepositoryRepository } from '@libs/code-review/infrastructure/adapters/repositories/repository.repository';
 import { AstGraphStatus } from '@libs/code-review/infrastructure/adapters/repositories/schemas/repository.model';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
@@ -39,7 +39,7 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
         @Inject(SANDBOX_PROVIDER_TOKEN)
         private readonly sandboxProvider: ISandboxProvider,
         private readonly codeManagementService: CodeManagementService,
-        private readonly astGraphBuildService: AstGraphBuildService,
+        private readonly graphIndexer: GraphIndexerService,
         private readonly repositoryRepo: RepositoryRepository,
     ) {}
 
@@ -158,7 +158,7 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
             // 4. Parse + persist
             await this.updateJobStage(jobId, 'PARSING', { sandboxId, headSha });
 
-            await this.astGraphBuildService.fullBuild({
+            await this.graphIndexer.fullBuild({
                 repositoryId: payload.repositoryId,
                 sandbox,
                 headSha,

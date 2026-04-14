@@ -9,7 +9,7 @@ import {
     ISandboxProvider,
     SANDBOX_PROVIDER_TOKEN,
 } from '@libs/code-review/domain/contracts/sandbox.provider';
-import { KodusGraphService } from '@libs/code-review/infrastructure/adapters/services/kodusGraph.service';
+import { GraphContextService } from '@libs/code-review/infrastructure/adapters/services/graph/graph-context.service';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import { CloneParamsResolverService } from '../services/clone-params-resolver.service';
@@ -60,7 +60,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
         @Inject(SANDBOX_PROVIDER_TOKEN)
         private readonly sandboxProvider: ISandboxProvider,
         private readonly cloneParamsResolver: CloneParamsResolverService,
-        private readonly kodusGraphService: KodusGraphService,
+        private readonly graphContext: GraphContextService,
     ) {
         super();
     }
@@ -238,7 +238,7 @@ export class CollectCrossFileContextStage extends BasePipelineStage<CodeReviewPi
             let graphJson: { nodes: any[]; edges: any[] } | null = null;
             if (sandbox && context.changedFiles?.length) {
                 try {
-                    graphJson = await this.kodusGraphService.parseAndGetGraphJson(
+                    graphJson = await this.graphContext.parseAndGetGraphJson(
                         sandbox,
                         context.changedFiles,
                     );

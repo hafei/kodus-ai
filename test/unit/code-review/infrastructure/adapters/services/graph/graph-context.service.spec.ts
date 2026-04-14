@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { KodusGraphService } from '@libs/code-review/infrastructure/adapters/services/kodusGraph.service';
+import { GraphContextService } from '@libs/code-review/infrastructure/adapters/services/graph/graph-context.service';
+import { KodusGraphCli } from '@libs/code-review/infrastructure/adapters/services/graph/kodus-graph-cli';
 import { AstGraphRepository } from '@libs/code-review/infrastructure/adapters/repositories/astGraph.repository';
 import { RepositoryRepository } from '@libs/code-review/infrastructure/adapters/repositories/repository.repository';
 import { SandboxInstance } from '@libs/code-review/domain/contracts/sandbox.provider';
@@ -15,8 +16,8 @@ jest.mock('@kodus/flow', () => ({
     }),
 }));
 
-describe('KodusGraphService', () => {
-    let service: KodusGraphService;
+describe('GraphContextService', () => {
+    let service: GraphContextService;
     let mockAstGraphRepo: jest.Mocked<AstGraphRepository>;
     let mockRepositoryRepo: jest.Mocked<RepositoryRepository>;
     let mockSandbox: jest.Mocked<SandboxInstance>;
@@ -47,7 +48,8 @@ describe('KodusGraphService', () => {
         ],
     });
 
-    const promptContent = '## Code Graph Context\nFunction handleRequest calls query...';
+    const promptContent =
+        '## Code Graph Context\nFunction handleRequest calls query...';
 
     function createMockSandbox(
         overrides: Partial<SandboxInstance> = {},
@@ -113,13 +115,14 @@ describe('KodusGraphService', () => {
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
-                KodusGraphService,
+                GraphContextService,
+                KodusGraphCli,
                 { provide: AstGraphRepository, useValue: mockAstGraphRepo },
                 { provide: RepositoryRepository, useValue: mockRepositoryRepo },
             ],
         }).compile();
 
-        service = module.get<KodusGraphService>(KodusGraphService);
+        service = module.get<GraphContextService>(GraphContextService);
     });
 
     describe('generateContext', () => {
@@ -160,11 +163,10 @@ describe('KodusGraphService', () => {
             expect(result).toBe('');
         });
 
-        it('should call installKodusGraph, parseChangedFiles, write base graph, and generate prompt', async () => {
-            const changedFiles = createChangedFiles(
-                ['src/handler.ts'],
-                { withPatch: true },
-            );
+        it('should install, parse files, export subgraph, and produce a prompt', async () => {
+            const changedFiles = createChangedFiles(['src/handler.ts'], {
+                withPatch: true,
+            });
 
             const result = await service.generateContext(
                 mockSandbox,
@@ -172,8 +174,6 @@ describe('KodusGraphService', () => {
                 REPO_ID,
             );
 
-            // run is called multiple times:
-            // 1. version check, 2. install, 3. parse, 4. mkdir for diff, 5. context generation
             expect(mockSandbox.run).toHaveBeenCalled();
             expect(mockSandbox.writeFile).toHaveBeenCalled();
             expect(mockSandbox.readFile).toHaveBeenCalled();
@@ -182,10 +182,9 @@ describe('KodusGraphService', () => {
 
         it('should fall back to generateContextLegacy when repo not found in DB', async () => {
             mockRepositoryRepo.findById.mockResolvedValue(null);
-            const changedFiles = createChangedFiles(
-                ['src/handler.ts'],
-                { withPatch: true },
-            );
+            const changedFiles = createChangedFiles(['src/handler.ts'], {
+                withPatch: true,
+            });
 
             const result = await service.generateContext(
                 mockSandbox,
@@ -193,25 +192,20 @@ describe('KodusGraphService', () => {
                 REPO_ID,
             );
 
-            // Should still return a result (from legacy flow)
             expect(result).toBeDefined();
-            // findById was called
             expect(mockRepositoryRepo.findById).toHaveBeenCalledWith(REPO_ID);
-            // exportSubgraphJsonString should NOT have been called (legacy flow skips it)
             expect(
                 mockAstGraphRepo.exportSubgraphJsonString,
             ).not.toHaveBeenCalled();
         });
 
         it('should fall back to generateContextLegacy on error', async () => {
-            // Make the export subgraph call fail
             mockAstGraphRepo.exportSubgraphJsonString.mockRejectedValue(
                 new Error('DB connection lost'),
             );
-            const changedFiles = createChangedFiles(
-                ['src/handler.ts'],
-                { withPatch: true },
-            );
+            const changedFiles = createChangedFiles(['src/handler.ts'], {
+                withPatch: true,
+            });
 
             const result = await service.generateContext(
                 mockSandbox,
@@ -219,7 +213,6 @@ describe('KodusGraphService', () => {
                 REPO_ID,
             );
 
-            // Should not throw, should return some result from legacy
             expect(result).toBeDefined();
         });
     });
@@ -273,17 +266,13 @@ describe('KodusGraphService', () => {
                 changedFiles,
             );
 
-            // Should have run commands (install, mkdir for diff, context generation)
             expect(mockSandbox.run).toHaveBeenCalled();
-            // Should have written the diff file
             expect(mockSandbox.writeFile).toHaveBeenCalled();
-            // Should have read the prompt file
             expect(mockSandbox.readFile).toHaveBeenCalled();
             expect(result).toBe(promptContent);
         });
 
         it('should return empty string on failure (non-blocking)', async () => {
-            // Make all sandbox.run calls fail
             mockSandbox.run.mockRejectedValue(new Error('sandbox crashed'));
             const changedFiles = createChangedFiles(['src/handler.ts']);
 
@@ -296,10 +285,9 @@ describe('KodusGraphService', () => {
         });
 
         it('should pass baseBranch to buildBaseGraphFromGit when provided', async () => {
-            const changedFiles = createChangedFiles(
-                ['src/handler.ts'],
-                { withPatch: true },
-            );
+            const changedFiles = createChangedFiles(['src/handler.ts'], {
+                withPatch: true,
+            });
 
             await service.generateContextLegacy(
                 mockSandbox,
@@ -307,12 +295,12 @@ describe('KodusGraphService', () => {
                 'main',
             );
 
-            // Should have run commands that include git show for base graph
             const allRunCalls = mockSandbox.run.mock.calls.map(
                 (call) => call[0] as string,
             );
             const hasGitShowCall = allRunCalls.some(
-                (cmd) => cmd.includes('git show') && cmd.includes('origin/main'),
+                (cmd) =>
+                    cmd.includes('git show') && cmd.includes('origin/main'),
             );
             expect(hasGitShowCall).toBe(true);
         });
@@ -355,7 +343,7 @@ describe('KodusGraphService', () => {
             expect(result).toBeNull();
         });
 
-        it('should install kodus-graph, parse files, and read graph JSON via sandbox.readFile()', async () => {
+        it('should install, parse files, and read graph JSON via sandbox.readFile()', async () => {
             mockSandbox.readFile.mockResolvedValue(graphJson);
             const changedFiles = createChangedFiles(['src/handler.ts']);
 
@@ -364,16 +352,12 @@ describe('KodusGraphService', () => {
                 changedFiles,
             );
 
-            // Should have called run for install + parse
             expect(mockSandbox.run).toHaveBeenCalled();
-
-            // Should have called readFile for the graph JSON
             expect(mockSandbox.readFile).toHaveBeenCalledWith(
                 expect.stringContaining('graph.json'),
                 expect.any(Object),
             );
 
-            // Should return parsed nodes/edges
             expect(result).toEqual({
                 nodes: expect.arrayContaining([
                     expect.objectContaining({ name: 'handleRequest' }),
@@ -427,23 +411,15 @@ describe('KodusGraphService', () => {
         });
 
         it('should return null on parse command failure', async () => {
-            // version check succeeds, install succeeds, parse fails
+            // which-check + install succeed, parse fails
             mockSandbox.run
-                .mockResolvedValueOnce({
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0,
-                }) // version check
-                .mockResolvedValueOnce({
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0,
-                }) // install
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
+                .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 })
                 .mockResolvedValueOnce({
                     stdout: '',
                     stderr: 'parse error',
                     exitCode: 1,
-                }); // parse fails
+                });
 
             const changedFiles = createChangedFiles(['src/handler.ts']);
 

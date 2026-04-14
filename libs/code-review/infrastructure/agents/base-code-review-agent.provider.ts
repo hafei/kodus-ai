@@ -41,8 +41,13 @@ function estimateDiffTokens(files: FileChange[]): number {
     }, 0);
 }
 
-function chunkFilesByTokenBudget(files: FileChange[], budgetTokens: number): FileChange[][] {
-    if (files.length === 0) return [[]];
+function chunkFilesByTokenBudget(
+    files: FileChange[],
+    budgetTokens: number,
+): FileChange[][] {
+    if (files.length === 0) {
+        return [[]];
+    }
 
     const chunks: FileChange[][] = [];
     let currentChunk: FileChange[] = [];
@@ -63,7 +68,10 @@ function chunkFilesByTokenBudget(files: FileChange[], budgetTokens: number): Fil
             continue;
         }
 
-        if (currentTokens + fileTokens > budgetTokens && currentChunk.length > 0) {
+        if (
+            currentTokens + fileTokens > budgetTokens &&
+            currentChunk.length > 0
+        ) {
             chunks.push(currentChunk);
             currentChunk = [];
             currentTokens = 0;
@@ -79,22 +87,6 @@ function chunkFilesByTokenBudget(files: FileChange[], budgetTokens: number): Fil
 
     return chunks;
 }
-
-function formatOtherFilesSummary(allFiles: FileChange[], batchFiles: Set<string>): string {
-    const others = allFiles.filter(f => !batchFiles.has(f.filename));
-    if (others.length === 0) return '';
-
-    const lines = others.map(f => `  - ${f.filename} (+${f.additions} -${f.deletions})`).join('\n');
-    return `\n  <OtherFilesInThisPR count="${others.length}">\n    The following files are also changed in this PR but reviewed in a separate batch:\n${lines}\n  </OtherFilesInThisPR>`;
-}
-
-const DEFAULT_SEVERITY_FLAGS = {
-    critical:
-        'Runtime crash, data loss, or security breach that affects all users. The service goes down or data is corrupted. Examples: unhandled null dereference on a main code path, SQL injection, infinite recursion, writing to the wrong database table.',
-    high: 'A core feature is broken or produces wrong results for most users. Examples: wrong return value from a public API, race condition that corrupts shared state, broken authentication flow, missing permission check on a sensitive endpoint.',
-    medium: 'A feature is broken in a specific scenario or edge case. Most users are unaffected but the bug is real. Examples: off-by-one in pagination, incorrect behavior when input is empty, stale cache after update, wrong error message shown to user.',
-    low: 'Minor issue with minimal user impact. Examples: dead code, misleading log level, missing type annotation, hardcoded value that should be configurable, cosmetic inconsistency.',
-} as const;
 
 function resolvePromptOverrideText(value: unknown): string {
     if (value === undefined || value === null) {
@@ -177,6 +169,8 @@ export interface ReviewAgentInput {
     repositoryFullName: string;
     languageResultPrompt: string;
     memoryRules?: Partial<IKodyRule>[];
+    /** Kody rules passed through so findings tagged with ruleUuid can be cross-referenced. */
+    kodyRules?: Partial<IKodyRule>[];
     v2PromptOverrides?: CodeReviewConfig['v2PromptOverrides'];
     generationMain?: string;
     prTitle?: string;
@@ -386,7 +380,8 @@ export abstract class BaseCodeReviewAgentProvider {
                 maxSteps: input.maxSteps,
                 contextWindowTokens: contextWindow,
                 reasoningEffort: byokConfig?.main?.reasoningEffort,
-                reasoningConfigOverride: byokConfig?.main?.reasoningConfigOverride,
+                reasoningConfigOverride:
+                    byokConfig?.main?.reasoningConfigOverride,
                 byokProvider: byokConfig?.main?.provider,
 
                 onStepFinish: (step: any) => {
@@ -728,7 +723,15 @@ export abstract class BaseCodeReviewAgentProvider {
             diffBudget: number;
         },
     ): Promise<ReviewAgentOutput> {
-        const { identity, agentCategory, byokConfig, model, modelName, startTime, diffBudget } = ctx;
+        const {
+            identity,
+            agentCategory,
+            byokConfig,
+            model,
+            modelName,
+            startTime,
+            diffBudget,
+        } = ctx;
         const chunks = chunkFilesByTokenBudget(input.changedFiles, diffBudget);
 
         this.agentLogger.log({
@@ -750,13 +753,13 @@ export abstract class BaseCodeReviewAgentProvider {
 
         for (let i = 0; i < chunks.length; i++) {
             const batchFiles = chunks[i];
-            const batchFileSet = new Set(batchFiles.map(f => f.filename));
+            const batchFileSet = new Set(batchFiles.map((f) => f.filename));
             const batchLabel = `${identity.name} batch ${i + 1}/${chunks.length}`;
 
             this.agentLogger.log({
                 message: `[AGENT] ${batchLabel} starting: ${batchFiles.length} files`,
                 context: identity.name,
-                metadata: { files: batchFiles.map(f => f.filename) },
+                metadata: { files: batchFiles.map((f) => f.filename) },
             });
 
             try {
@@ -770,7 +773,9 @@ export abstract class BaseCodeReviewAgentProvider {
 
                 allSuggestions.push(...batchResult.suggestions);
                 if (batchResult.discardedBySeverity) {
-                    allDiscardedBySeverity.push(...batchResult.discardedBySeverity);
+                    allDiscardedBySeverity.push(
+                        ...batchResult.discardedBySeverity,
+                    );
                 }
                 if (batchResult.discardedByVerify) {
                     allDiscardedByVerify.push(...batchResult.discardedByVerify);
@@ -1239,7 +1244,8 @@ ${fileContentsSection}
         if (!files?.length) return '';
 
         const withContent = files.filter(
-            (f) => typeof f.fileContent === 'string' && f.fileContent.length > 0,
+            (f) =>
+                typeof f.fileContent === 'string' && f.fileContent.length > 0,
         );
         if (withContent.length === 0) return '';
 

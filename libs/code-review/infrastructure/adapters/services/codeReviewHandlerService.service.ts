@@ -18,7 +18,6 @@ import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/co
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { PipelineFactory } from '@libs/core/infrastructure/pipeline/services/pipeline-factory.service';
-import { ObservabilityService } from '@libs/core/log/observability.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 
 @Injectable()
@@ -56,7 +55,6 @@ export class CodeReviewHandlerService {
     constructor(
         @Inject('PIPELINE_PROVIDER')
         private readonly pipelineFactory: PipelineFactory<CodeReviewPipelineContext>,
-        private readonly observabilityService: ObservabilityService,
         private readonly codeManagement: CodeManagementService,
     ) {}
 
@@ -107,7 +105,6 @@ export class CodeReviewHandlerService {
                         uuid: executionId,
                     },
                 },
-                batches: [],
                 preparedFileContexts: [],
                 validSuggestions: [],
                 discardedSuggestions: [],

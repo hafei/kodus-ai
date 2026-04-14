@@ -3,7 +3,7 @@ import { AgentReviewStage } from '@/code-review/pipeline/stages/agent-review.sta
 import { ReviewOrchestratorService } from '@/code-review/infrastructure/agents/review-orchestrator.service';
 import { ObservabilityService } from '@/core/log/observability.service';
 import { AUTOMATION_EXECUTION_SERVICE_TOKEN } from '@/automation/domain/automationExecution/contracts/automation-execution.service';
-import { KodusGraphService } from '@/code-review/infrastructure/adapters/services/kodusGraph.service';
+import { GraphContextService } from '@/code-review/infrastructure/adapters/services/graph/graph-context.service';
 import { RepositoryRepository } from '@/code-review/infrastructure/adapters/repositories/repository.repository';
 import { CodeReviewPipelineContext } from '@/code-review/pipeline/context/code-review-pipeline.context';
 import { PlatformType } from '@/core/domain/enums';
@@ -137,7 +137,7 @@ describe('AgentReviewStage', () => {
                     },
                 },
                 {
-                    provide: KodusGraphService,
+                    provide: GraphContextService,
                     useValue: {
                         generateContext: jest.fn().mockResolvedValue(''),
                         generateContextLegacy: jest.fn().mockResolvedValue(''),
