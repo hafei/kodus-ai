@@ -431,13 +431,15 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             metadata: { activeJobs: this.activeJobs },
         });
 
-        // Wait for active jobs with a timeout to avoid hanging forever
-        // ECS sends SIGKILL after stopTimeout (default 30s), so we must finish before that
-        const maxWaitMs = 25000;
-        const checkIntervalMs = 1000;
-        const start = Date.now();
+        // Cap the wait so we always get a chance to release locks before
+        // ECS sends SIGKILL (default grace period is 30s). 25s of waiting
+        // leaves ~5s headroom for the release-locks query and other
+        // shutdown hooks downstream of this one.
+        const maxWaitMs = 25_000;
+        const checkIntervalMs = 1_000;
+        const waitStart = Date.now();
 
-        while (this.activeJobs > 0 && Date.now() - start < maxWaitMs) {
+        while (this.activeJobs > 0 && Date.now() - waitStart < maxWaitMs) {
             this.logger.log({
                 message: `Waiting for ${this.activeJobs} active jobs to complete...`,
                 context: WorkflowJobConsumer.name,
@@ -447,12 +449,9 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             );
         }
 
-        // Release any remaining inbox locks held by this instance
-        // This prevents "Message already claimed but not finished" errors
-        // when new workers try to process the same messages after restart
         if (this.activeJobs > 0) {
             this.logger.warn({
-                message: `Shutdown timeout reached with ${this.activeJobs} active jobs. Force-releasing inbox locks.`,
+                message: `Shutdown timeout reached with ${this.activeJobs} active jobs still running — releasing inbox locks anyway so other workers can reclaim the messages.`,
                 context: WorkflowJobConsumer.name,
                 metadata: {
                     activeJobs: this.activeJobs,
@@ -461,6 +460,10 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             });
         }
 
+        // Release every PROCESSING lock held by this host. Prevents the
+        // "dead worker leaves locks" pattern we traced in prod: without
+        // this, orphan locks sit around until the reaper cron's 2.5h
+        // timeout, blocking other workers from picking up the messages.
         try {
             const released = await this.inboxRepository.releaseAllByInstance(
                 this.instanceId,
@@ -469,19 +472,24 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
                 this.logger.log({
                     message: `Released ${released} inbox locks during shutdown`,
                     context: WorkflowJobConsumer.name,
-                    metadata: { instanceId: this.instanceId },
+                    metadata: {
+                        instanceId: this.instanceId,
+                        released,
+                    },
                 });
             }
         } catch (error) {
+            // Never throw from a shutdown hook — best-effort by design.
             this.logger.error({
                 message: 'Failed to release inbox locks during shutdown',
                 context: WorkflowJobConsumer.name,
                 error,
+                metadata: { instanceId: this.instanceId },
             });
         }
 
         this.logger.log({
-            message: 'Shutdown complete. Inbox locks released.',
+            message: 'Shutdown complete.',
             context: WorkflowJobConsumer.name,
         });
     }
