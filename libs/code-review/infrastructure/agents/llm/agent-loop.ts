@@ -1206,6 +1206,60 @@ Respond with ONLY the JSON:
         coverageSummary = getCoverageSummary(coverageTargets);
     }
 
+    // Third chance: one more pass if coverage is still below 70%
+    if (!skipHeavyPasses && shouldRunLowCoverageSecondChance(coverageSummary)) {
+        logger.warn({
+            message: `[AGENT-COVERAGE-THIRD-CHANCE] Coverage still low after second chance (${coverageSummary.touchedTargets}/${coverageSummary.totalTargets}). Running final inspection pass.`,
+            context: 'AgentLoop',
+            metadata: {
+                coverage: coverageSummary,
+            },
+        });
+
+        const coverageThirdChance = await runLowCoverageSecondChance({
+            input,
+            byokConfig: secrets.byokConfig,
+            tools,
+            coverageTargets,
+            allToolCalls,
+            totalInputTokens,
+            totalOutputTokens,
+            totalReasoningTokens,
+        });
+
+        totalInputTokens = coverageThirdChance.totalInputTokens;
+        totalOutputTokens = coverageThirdChance.totalOutputTokens;
+        totalReasoningTokens = coverageThirdChance.totalReasoningTokens;
+
+        if (coverageThirdChance.text) {
+            let extraFindings = tryParseFindings(coverageThirdChance.text);
+
+            if (!extraFindings && coverageThirdChance.text.length > 50) {
+                const fallbackResult = await structureWithFallbackModel(
+                    coverageThirdChance.text,
+                    secrets.byokConfig,
+                    input.telemetryMetadata?.organizationId,
+                );
+                if (fallbackResult) {
+                    extraFindings = fallbackResult.findings;
+                    totalInputTokens += fallbackResult.usage.inputTokens;
+                    totalOutputTokens += fallbackResult.usage.outputTokens;
+                    totalReasoningTokens +=
+                        fallbackResult.usage.reasoningTokens;
+                }
+            }
+
+            if (extraFindings) {
+                findings = mergeFindings(findings, extraFindings);
+                if (source === 'empty') {
+                    source = 'json-parse';
+                }
+            }
+        }
+
+        coverageSummary = getCoverageSummary(coverageTargets);
+    }
+
     if (!skipHeavyPasses) {
         const synthesisRescue = await runSynthesisRescuePass({
             input,
@@ -1462,10 +1516,10 @@ Investigate the remaining changed files now.
 - If no new findings appear, return an empty suggestions array.
 `,
                     tools,
-                    stopWhen: stepCountIs(6),
+                    stopWhen: stepCountIs(MAX_STEPS_NORMAL),
                     prepareStep: ({ stepNumber }: any) => {
                         recoveryStep = stepNumber;
-                        if (stepNumber >= 5) {
+                        if (stepNumber >= MAX_STEPS_NORMAL - 1) {
                             return {
                                 toolChoice: 'none' as const,
                                 activeTools: [],
@@ -1644,10 +1698,10 @@ Instructions:
 - Be surgical: inspect remaining files, then return ONLY JSON with ADDITIONAL findings.
 - If the remaining files are safe, return an empty suggestions array.`,
                     tools,
-                    stopWhen: stepCountIs(5),
+                    stopWhen: stepCountIs(MAX_STEPS_NORMAL),
                     prepareStep: ({ stepNumber }: any) => {
                         secondChanceStep = stepNumber;
-                        if (stepNumber >= 4) {
+                        if (stepNumber >= MAX_STEPS_NORMAL - 1) {
                             return {
                                 toolChoice: 'none' as const,
                                 activeTools: [],
