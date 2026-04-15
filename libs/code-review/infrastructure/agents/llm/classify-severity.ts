@@ -6,13 +6,13 @@
  * - Severity is always classified using the CLIENT's criteria (v2PromptOverrides)
  * - Classification is consistent regardless of which BYOK model the client uses
  */
-import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
 import { createLogger } from '@kodus/flow';
 import type { BYOKConfig } from '@kodus/kodus-common/llm';
 import type { CodeReviewConfig } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { getInternalModel } from './byok-to-vercel';
+import { tracedGenerateText as generateText } from './agent-loop';
 
 const logger = createLogger('SeverityClassifier');
 
@@ -89,6 +89,10 @@ export async function classifySeverity(
     try {
         const result: any = await generateText({
             model: model as any,
+            experimental_telemetry: {
+                isEnabled: true,
+                functionId: 'severity-classifier',
+            },
             prompt: `Classify the severity of each code review suggestion based on these criteria:
 
 **CRITICAL**: ${flags.critical || DEFAULT_SEVERITY_FLAGS.critical}

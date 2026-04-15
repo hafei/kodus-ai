@@ -1,8 +1,8 @@
 import { createLogger } from '@kodus/flow';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText } from 'ai';
 import { BYOKConfig } from '@kodus/kodus-common/llm';
 import { getInternalModel } from './byok-to-vercel';
+import { tracedGenerateText as generateText } from './agent-loop';
 
 const logger = createLogger('SuggestionFormatter');
 
@@ -92,6 +92,10 @@ export async function formatSuggestionContent(
         const result: any = await generateText({
             model: model as any,
             abortSignal: controller.signal,
+            experimental_telemetry: {
+                isEnabled: true,
+                functionId: 'suggestion-formatter',
+            },
             prompt: `You are a code review comment editor. Rewrite each suggestion into clean, natural prose.
 
 Rules:

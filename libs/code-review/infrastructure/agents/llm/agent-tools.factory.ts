@@ -430,7 +430,7 @@ export function buildAgentTools(
                                 /[*?[\]]/g,
                                 '',
                             );
-                            const findCmd = `find ${safePath} -type f -iname *${cleanPattern}*`;
+                            const findCmd = `find '${safePath}' -type f -iname '*${cleanPattern}*'`;
                             const { stdout } =
                                 await remoteCommands.exec(findCmd);
                             if (stdout && stdout.trim()) {

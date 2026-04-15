@@ -12,7 +12,7 @@ import {
 } from '@libs/code-review/domain/contracts/sandbox.provider';
 import { RemoteCommands } from './collectCrossFileContexts.service';
 
-const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — cross-file context + file analysis
+const SANDBOX_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes — cross-file context + file analysis
 const REPO_DIR = '/home/user/repo';
 
 const TIMEOUTS = {

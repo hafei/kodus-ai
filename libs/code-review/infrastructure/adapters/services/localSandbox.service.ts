@@ -2,7 +2,7 @@ import { createLogger } from '@kodus/flow';
 import { PlatformType } from '@libs/core/domain/enums';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { exec, execFile, ExecFileOptions } from 'child_process';
+import { exec, execFile, ExecFileOptions, spawn } from 'child_process';
 import { lstat, mkdtemp, readFile, realpath, rm, writeFile, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -276,66 +276,168 @@ export class LocalSandboxService implements ISandboxProvider {
                     'file',
                     'fd', // fast file finder (respects .gitignore)
                     'find', // fallback file finder
+                    'grep', // text filter used in pipelines (e.g. `... | grep -v "Syntax OK"`)
                 ]);
 
-                // Split command into program + args for execFile (no shell interpretation)
-                const parts =
-                    command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-                if (parts.length === 0) {
+                if (!command.trim()) {
                     return { stdout: '', exitCode: 1 };
                 }
-                const [program, ...args] = parts.map((p) =>
-                    p.replace(/^['"]|['"]$/g, ''),
-                );
 
-                if (!ALLOWED_PROGRAMS.has(program)) {
+                // Reject shell features we don't emulate up front. We support
+                // only the subset the agent tools actually emit:
+                //   - `2>&1` (stderr merged into stdout, which we always do)
+                //   - top-level `|` pipelines between whitelisted programs
+                // Anything else (`>`, `>>`, `<`, `;`, `&&`, `||`, backticks,
+                // `$(...)`) would require real shell semantics we intentionally
+                // don't provide, so we bail out instead of running it through
+                // execFile where the operator would be passed as a literal arg
+                // and confuse the underlying tool.
+                const outsideQuotes = command
+                    .replace(/"[^"]*"|'[^']*'/g, '')
+                    .replace(/\b2>&1\b/g, '');
+                if (/(?:>>|<<|>|<|;|&&|\|\||`|\$\()/.test(outsideQuotes)) {
                     return {
-                        stdout: `Program "${program}" is not allowed in local sandbox. Allowed: ${[...ALLOWED_PROGRAMS].join(', ')}`,
+                        stdout: `Unsupported shell syntax in local sandbox: ${command}`,
                         exitCode: 1,
                     };
                 }
 
-                // Block path traversal anywhere in the argument list. The old
-                // implementation tried to skip flags + their values, but it
-                // assumed every flag takes a value — so a valueless flag right
-                // before a malicious path (e.g. `cat -n ../../../etc/passwd`)
-                // would skip the dangerous arg. Validate every argument
-                // instead; flags themselves never contain `..` or `/foo` so
-                // they will pass naturally.
-                //
-                // Allow `..` as part of pattern syntax (e.g. ripgrep
-                // `'$A..$B'`) by only flagging it when it appears as a path
-                // segment, and only treat absolute paths as traversal when
-                // they look like filesystem paths (start with `/`) — flag
-                // shorthands like `-n` or `--include` start with `-`, never
-                // `/`.
-                const hasTraversal = args.some(
-                    (a) => a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
-                );
-                if (hasTraversal) {
-                    return {
-                        stdout: 'Arguments with path traversal (..) or absolute paths are not allowed.',
-                        exitCode: 1,
-                    };
-                }
+                // Split into pipeline stages on top-level `|` (respecting quotes).
+                const stages = command
+                    .split(/\|(?=(?:[^"']*(?:"[^"]*"|'[^']*'))*[^"']*$)/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
 
-                try {
-                    const { stdout, stderr } = await execFileAsync(
-                        program,
-                        args,
-                        {
-                            cwd: repoDir,
-                            timeout: CMD_TIMEOUT_MS,
-                            maxBuffer: MAX_BUFFER,
-                        },
+                const validated: Array<{ program: string; args: string[] }> =
+                    [];
+                for (const stage of stages) {
+                    // Drop `2>&1` tokens — stderr is always merged into stdout below.
+                    const parts =
+                        stage.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+                    if (parts.length === 0) {
+                        return { stdout: '', exitCode: 1 };
+                    }
+                    const tokens = parts
+                        .map((p) => p.replace(/^['"]|['"]$/g, ''))
+                        .filter((t) => t !== '2>&1');
+                    const [program, ...args] = tokens;
+
+                    if (!ALLOWED_PROGRAMS.has(program)) {
+                        return {
+                            stdout: `Program "${program}" is not allowed in local sandbox. Allowed: ${[...ALLOWED_PROGRAMS].join(', ')}`,
+                            exitCode: 1,
+                        };
+                    }
+
+                    // Block path traversal anywhere in the argument list. The
+                    // old implementation tried to skip flags + their values,
+                    // but it assumed every flag takes a value — so a valueless
+                    // flag right before a malicious path (e.g.
+                    // `cat -n ../../../etc/passwd`) would skip the dangerous
+                    // arg. Validate every argument instead; flags themselves
+                    // never contain `..` or `/foo` so they will pass naturally.
+                    //
+                    // Allow `..` as part of pattern syntax (e.g. ripgrep
+                    // `'$A..$B'`) by only flagging it when it appears as a
+                    // path segment, and only treat absolute paths as traversal
+                    // when they look like filesystem paths (start with `/`) —
+                    // flag shorthands like `-n` or `--include` start with `-`,
+                    // never `/`.
+                    const hasTraversal = args.some(
+                        (a) =>
+                            a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
                     );
-                    return { stdout: stdout + (stderr || ''), exitCode: 0 };
-                } catch (error: any) {
-                    return {
-                        stdout: (error.stdout || '') + (error.stderr || ''),
-                        exitCode: error.code ?? 1,
-                    };
+                    if (hasTraversal) {
+                        return {
+                            stdout: 'Arguments with path traversal (..) or absolute paths are not allowed.',
+                            exitCode: 1,
+                        };
+                    }
+
+                    validated.push({ program, args });
                 }
+
+                if (validated.length === 1) {
+                    try {
+                        const { stdout, stderr } = await execFileAsync(
+                            validated[0].program,
+                            validated[0].args,
+                            {
+                                cwd: repoDir,
+                                timeout: CMD_TIMEOUT_MS,
+                                maxBuffer: MAX_BUFFER,
+                            },
+                        );
+                        return {
+                            stdout: stdout + (stderr || ''),
+                            exitCode: 0,
+                        };
+                    } catch (error: any) {
+                        return {
+                            stdout:
+                                (error.stdout || '') + (error.stderr || ''),
+                            exitCode: error.code ?? 1,
+                        };
+                    }
+                }
+
+                return await new Promise((resolve) => {
+                    const children = validated.map(({ program, args }, idx) =>
+                        spawn(program, args, {
+                            cwd: repoDir,
+                            stdio: [
+                                idx === 0 ? 'ignore' : 'pipe',
+                                'pipe',
+                                'pipe',
+                            ],
+                        }),
+                    );
+
+                    let finalOutput = '';
+                    let totalSize = 0;
+                    let bufferExceeded = false;
+                    const collect = (chunk: Buffer) => {
+                        if (bufferExceeded) return;
+                        totalSize += chunk.length;
+                        if (totalSize > MAX_BUFFER) {
+                            bufferExceeded = true;
+                            finalOutput += '\n[output truncated]';
+                            return;
+                        }
+                        finalOutput += chunk.toString('utf8');
+                    };
+
+                    for (let i = 0; i < children.length; i++) {
+                        const child = children[i];
+                        const next = children[i + 1];
+                        // Merge stderr of every stage into the final output so
+                        // compiler/linter diagnostics (usually on stderr) survive.
+                        child.stderr?.on('data', collect);
+                        if (next) {
+                            child.stdout?.pipe(next.stdin!);
+                            child.stdout?.on('error', () => {});
+                            next.stdin?.on('error', () => {});
+                        } else {
+                            child.stdout?.on('data', collect);
+                        }
+                    }
+
+                    const last = children[children.length - 1];
+                    const timeout = setTimeout(() => {
+                        for (const c of children) c.kill('SIGTERM');
+                    }, CMD_TIMEOUT_MS);
+
+                    last.on('close', (code) => {
+                        clearTimeout(timeout);
+                        resolve({ stdout: finalOutput, exitCode: code ?? 0 });
+                    });
+
+                    for (const c of children) {
+                        c.on('error', (err) => {
+                            finalOutput += `\n${err.message}`;
+                        });
+                    }
+                });
             },
         };
     }

@@ -291,10 +291,9 @@ function buildCaseSkeleton(benchmarkPR, fetched, options) {
         : null;
     const prioritized = options.includeTests
         ? [...candidates].sort((left, right) => filePriority(left) - filePriority(right))
-        : [
-              ...candidates.filter((file) => !isProbablyTestFile(file.filename)),
-              ...candidates.filter((file) => isProbablyTestFile(file.filename)),
-          ].sort((left, right) => filePriority(left) - filePriority(right));
+        : candidates
+              .filter((file) => !isProbablyTestFile(file.filename))
+              .sort((left, right) => filePriority(left) - filePriority(right));
 
     const changedFiles = (forced || prioritized).slice(0, options.maxFiles);
 

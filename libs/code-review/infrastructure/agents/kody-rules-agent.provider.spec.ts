@@ -169,7 +169,7 @@ describe('KodyRulesAgentProvider — rule formatting and applicability', () => {
             expect(out).toContain('readReference');
         });
 
-        it('points at readReference when the source path looks like "owner/repo/path"', () => {
+        it('mentions both readFile and readReference for cross-repo-shaped source paths so the LLM can choose', () => {
             const rules = [
                 {
                     uuid: 'r-ext-cross',
@@ -185,8 +185,8 @@ describe('KodyRulesAgentProvider — rule formatting and applicability', () => {
             expect(out).toContain(
                 '**Reference**: `kodustech/design-system/docs/conventions.md`',
             );
-            expect(out).toContain('use readReference');
-            expect(out).not.toMatch(/use readFile\b/);
+            expect(out).toContain('use readFile');
+            expect(out).toContain('readReference');
         });
 
         it('appends the section anchor to the Reference line when sourceAnchor is set', () => {

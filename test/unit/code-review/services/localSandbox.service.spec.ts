@@ -39,44 +39,64 @@ function validateExecCommand(command: string): {
         'head',
         'tail',
         'file',
+        'grep',
     ]);
 
-    const parts = command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-    if (parts.length === 0) {
+    if (!command.trim()) {
         return { allowed: false, reason: 'empty command' };
     }
 
-    const [program, ...args] = parts.map((p) => p.replace(/^['"]|['"]$/g, ''));
-
-    if (!ALLOWED_PROGRAMS.has(program)) {
-        return {
-            allowed: false,
-            reason: `Program "${program}" is not allowed`,
-            program,
-        };
+    const outsideQuotes = command
+        .replace(/"[^"]*"|'[^']*'/g, '')
+        .replace(/\b2>&1\b/g, '');
+    if (/(?:>>|<<|>|<|;|&&|\|\||`|\$\()/.test(outsideQuotes)) {
+        return { allowed: false, reason: 'unsupported shell syntax' };
     }
 
-    const positionalArgs: string[] = [];
-    for (let i = 0; i < args.length; i++) {
-        if (args[i].startsWith('-')) {
-            i++; // skip flag value
-            continue;
+    const stages = command
+        .split(/\|(?=(?:[^"']*(?:"[^"]*"|'[^']*'))*[^"']*$)/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    let firstProgram: string | undefined;
+    let firstArgs: string[] | undefined;
+    for (const stage of stages) {
+        const parts = stage.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+        if (parts.length === 0) {
+            return { allowed: false, reason: 'empty command' };
         }
-        positionalArgs.push(args[i]);
-    }
-    const hasTraversal = positionalArgs.some(
-        (a) => a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
-    );
-    if (hasTraversal) {
-        return {
-            allowed: false,
-            reason: 'path traversal in positional args',
-            program,
-            args,
-        };
+        const tokens = parts
+            .map((p) => p.replace(/^['"]|['"]$/g, ''))
+            .filter((t) => t !== '2>&1');
+        const [program, ...args] = tokens;
+
+        if (!ALLOWED_PROGRAMS.has(program)) {
+            return {
+                allowed: false,
+                reason: `Program "${program}" is not allowed`,
+                program,
+            };
+        }
+
+        const hasTraversal = args.some(
+            (a) => a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
+        );
+        if (hasTraversal) {
+            return {
+                allowed: false,
+                reason: 'path traversal in args',
+                program,
+                args,
+            };
+        }
+
+        if (!firstProgram) {
+            firstProgram = program;
+            firstArgs = args;
+        }
     }
 
-    return { allowed: true, program, args };
+    return { allowed: true, program: firstProgram, args: firstArgs };
 }
 
 describe('LocalSandboxService exec validation', () => {
@@ -251,6 +271,60 @@ describe('LocalSandboxService exec validation', () => {
                 'eslint src/ok.ts ../../bad.ts src/also-ok.ts',
             );
             expect(result.allowed).toBe(false);
+        });
+    });
+
+    describe('pipeline support', () => {
+        it('drops trailing 2>&1 and keeps the command valid', () => {
+            const result = validateExecCommand('eslint src/file.ts 2>&1');
+            expect(result.allowed).toBe(true);
+            expect(result.program).toBe('eslint');
+            expect(result.args).not.toContain('2>&1');
+        });
+
+        it('allows a whitelisted pipeline like cmd | head -N', () => {
+            const result = validateExecCommand(
+                'eslint src/file.ts 2>&1 | head -40',
+            );
+            expect(result.allowed).toBe(true);
+            expect(result.program).toBe('eslint');
+        });
+
+        it('allows a grep filter stage in a pipeline', () => {
+            const result = validateExecCommand(
+                'go vet ./... 2>&1 | grep -v "Syntax OK" | head -20',
+            );
+            expect(result.allowed).toBe(true);
+        });
+
+        it('rejects an unknown program in a later pipeline stage', () => {
+            const result = validateExecCommand(
+                'eslint src/file.ts | awk "{print $1}"',
+            );
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('not allowed');
+        });
+
+        it('rejects output redirect', () => {
+            const result = validateExecCommand(
+                'eslint src/file.ts > /tmp/out.log',
+            );
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('shell syntax');
+        });
+
+        it('rejects command chaining with &&', () => {
+            const result = validateExecCommand(
+                'eslint src/a.ts && eslint src/b.ts',
+            );
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('shell syntax');
+        });
+
+        it('rejects command substitution', () => {
+            const result = validateExecCommand('cat $(echo /etc/passwd)');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('shell syntax');
         });
     });
 });
