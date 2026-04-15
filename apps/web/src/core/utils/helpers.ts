@@ -179,7 +179,6 @@ export const codeReviewConfigRemovePropertiesNotInType = (
         "codeReviewVersion",
         "enableCommittableSuggestions",
         "crossFileDependenciesAnalysis",
-        "bugReplicas",
         // New v2 prompt overrides for categories/severity customization
         "v2PromptOverrides",
     ];

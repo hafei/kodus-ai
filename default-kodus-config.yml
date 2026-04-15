@@ -20,7 +20,6 @@ ignorePaths:
 ignoredTitleKeywords: []
 baseBranches: []
 enableCommittableSuggestions: true
-bugReplicas: 3
 
 # review categories
 codeReviewVersion: 'v2' # legacy | v2

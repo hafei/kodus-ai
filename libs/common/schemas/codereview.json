@@ -55,12 +55,6 @@
             ],
             "description": "List of file paths to ignore during the review."
         },
-        "bugReplicas": {
-            "type": "integer",
-            "minimum": 1,
-            "default": 3,
-            "description": "Number of independent bug-agent runs to execute per review."
-        },
         "baseBranches": {
             "type": "array",
             "items": {

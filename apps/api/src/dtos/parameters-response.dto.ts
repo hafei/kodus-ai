@@ -150,9 +150,6 @@ export class CodeReviewConfigDataDto {
     @ApiProperty({ type: String, isArray: true })
     ignorePaths: string[];
 
-    @ApiProperty()
-    bugReplicas: number;
-
     @ApiProperty({ type: String, isArray: true })
     ignoredTitleKeywords: string[];
 
