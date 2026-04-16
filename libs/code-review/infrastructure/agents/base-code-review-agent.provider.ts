@@ -1082,9 +1082,10 @@ ${memoryRulesSection}
             input.prBody,
         );
         const diffsSection = this.formatDiffs(input.changedFiles);
-        const callGraphSection = input.callGraph
-            ? `\n  <CallGraph>\n${input.callGraph}\n  </CallGraph>`
-            : '';
+        // The callGraph string from kodus-graph already starts with <CallGraph>
+        // and ends with </CallGraph> — wrapping it again produced nested duplicate
+        // tags in the prompt.
+        const callGraphSection = input.callGraph ? `\n  ${input.callGraph}` : '';
         const coverageTargets = formatCoverageTargetsForPrompt(
             input.changedFiles,
         );
