@@ -279,7 +279,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
             newDelta: updatedConfigValue,
         });
 
-        if (centralizedPr) {
+        if (centralizedPr?.mode === 'centralized-pr') {
             return centralizedPr;
         }
 
@@ -399,7 +399,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                   newDelta,
               });
 
-        if (centralizedPr) {
+        if (centralizedPr?.mode === 'centralized-pr') {
             return centralizedPr;
         }
 
@@ -474,6 +474,11 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                             : undefined,
                 },
             );
+
+        // Centralized config is not enabled — fall through to direct persistence.
+        if (existingScopedConfigFileContent === null || existingScopedConfigFileContent === undefined) {
+            return null;
+        }
 
         const existingScopedConfigWithoutCustomMessages =
             this.stripCustomMessagesFromConfig(
