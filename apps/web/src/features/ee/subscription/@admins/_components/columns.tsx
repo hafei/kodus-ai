@@ -88,6 +88,9 @@ function AssignedReposLink({
     useEffect(() => {
         if (allRepositories.length > 0) {
             fetchRepoNames();
+        } else {
+            setRepoNames([]);
+            setIsLoading(false);
         }
     }, [userId, allRepositories]);
 
