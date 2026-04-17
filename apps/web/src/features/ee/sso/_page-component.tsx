@@ -14,13 +14,14 @@ import { toast } from "@components/ui/toaster/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAsyncAction } from "@hooks/use-async-action";
 import { createOrUpdateSSOConfig } from "@services/ssoConfig/fetch";
-import { Save, Upload } from "lucide-react";
+import { AlertCircle, Save, Upload } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useAuth } from "src/core/providers/auth.provider";
 import { publicDomainsSet } from "src/core/utils/email";
 import { pathToApiUrl } from "src/core/utils/helpers";
 import { revalidateServerSidePath } from "src/core/utils/revalidate-server-side";
 import { SSOConfig, SSOProtocol } from "src/lib/auth/types";
+import { Alert, AlertDescription } from "@components/ui/alert";
 import { z } from "zod";
 
 import {
@@ -34,16 +35,51 @@ const createSsoSchema = (userDomain: string) =>
             active: z.boolean().optional(),
             providerConfig: z.object({
                 issuer: z.string().optional(),
-                idpIssuer: z.string().min(1, "Issuer is required"),
-                entryPoint: z.url("Must be a valid URL"),
-                cert: z.string().min(1, "Certificate is required"),
+                idpIssuer: z.string().optional().default(""),
+                entryPoint: z.string().optional().default(""),
+                cert: z.string().optional().default(""),
                 identifierFormat: z.string().optional(),
             }),
             domains: z.array(z.string()),
         })
         .superRefine((data, ctx) => {
             if (data.active) {
-                const { domains } = data;
+                const { providerConfig, domains } = data;
+
+                if (!providerConfig.idpIssuer) {
+                    ctx.addIssue({
+                        code: "custom",
+                        message: "Issuer is required",
+                        path: ["providerConfig", "idpIssuer"],
+                    });
+                }
+
+                if (!providerConfig.entryPoint) {
+                    ctx.addIssue({
+                        code: "custom",
+                        message: "SSO URL is required",
+                        path: ["providerConfig", "entryPoint"],
+                    });
+                } else {
+                    try {
+                        new URL(providerConfig.entryPoint);
+                    } catch {
+                        ctx.addIssue({
+                            code: "custom",
+                            message: "Must be a valid URL",
+                            path: ["providerConfig", "entryPoint"],
+                        });
+                    }
+                }
+
+                if (!providerConfig.cert) {
+                    ctx.addIssue({
+                        code: "custom",
+                        message: "Certificate is required",
+                        path: ["providerConfig", "cert"],
+                    });
+                }
+
                 const validDomains = domains.filter((d) => d);
 
                 if (validDomains.length === 0) {
@@ -67,14 +103,6 @@ const createSsoSchema = (userDomain: string) =>
                     ctx.addIssue({
                         code: "custom",
                         message: "Public domains are not allowed.",
-                        path: ["domains"],
-                    });
-                }
-
-                if (validDomains.some((domain) => domain !== userDomain)) {
-                    ctx.addIssue({
-                        code: "custom",
-                        message: "You can only add your own domain.",
                         path: ["domains"],
                     });
                 }
@@ -151,6 +179,7 @@ export const ClientSsoOrganizationSettingsPage = (props: {
 
                 await revalidateServerSidePath("/organization/sso");
                 router.refresh();
+                form.reset(data);
                 toast({
                     description: "SSO settings saved",
                     variant: "success",
@@ -239,6 +268,13 @@ export const ClientSsoOrganizationSettingsPage = (props: {
     };
 
     const isEnabled = watch("active");
+    const watchedDomains = watch("domains");
+    const hasDomainMismatch =
+        isEnabled &&
+        !!userDomain &&
+        watchedDomains
+            ?.filter((d) => d)
+            .some((d) => d.toLowerCase() !== userDomain.toLowerCase());
 
     return (
         <Page.Root>
@@ -622,6 +658,24 @@ export const ClientSsoOrganizationSettingsPage = (props: {
                                                                     ?.message
                                                             }
                                                         </FormControl.Error>
+                                                        {hasDomainMismatch && (
+                                                            <Alert variant="warning">
+                                                                <AlertCircle />
+                                                                <AlertDescription>
+                                                                    Some domains
+                                                                    differ from
+                                                                    your login
+                                                                    domain (
+                                                                    {userDomain}
+                                                                    ). Make sure
+                                                                    these
+                                                                    domains
+                                                                    belong to
+                                                                    your
+                                                                    organization.
+                                                                </AlertDescription>
+                                                            </Alert>
+                                                        )}
                                                         <FormControl.Helper>
                                                             Enter domains
                                                             separated by commas.
