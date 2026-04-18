@@ -212,21 +212,22 @@ export class CreateRepositoriesUseCase implements IUseCase {
 
         for (const repo of repositories) {
             try {
+                const nameAlreadyHasNamespace = (repo.name || '').includes('/');
                 const fullName =
                     repo.fullName ||
                     repo.full_name ||
-                    `${repo.organizationName || ''}/${repo.name}`;
+                    (nameAlreadyHasNamespace
+                        ? repo.name
+                        : `${repo.organizationName || ''}/${repo.name}`);
 
-                const repoRecord = await this.repositoryService.findOrCreate(
-                    {
-                        integrationConfigId: orgTeam.teamId,
-                        externalId: String(repo.id),
-                        name: repo.name,
-                        fullName,
-                        platform: platformType,
-                        defaultBranch: repo.default_branch,
-                    },
-                );
+                const repoRecord = await this.repositoryService.findOrCreate({
+                    integrationConfigId: orgTeam.teamId,
+                    externalId: String(repo.id),
+                    name: repo.name,
+                    fullName,
+                    platform: platformType,
+                    defaultBranch: repo.default_branch,
+                });
 
                 posthog.repositoryIdentify({
                     repositoryId: repoRecord.externalId,

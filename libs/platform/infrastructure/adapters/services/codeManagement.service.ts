@@ -386,6 +386,10 @@ export class CodeManagementService implements ICodeManagementService {
             );
         }
 
+        if (!type) {
+            return [];
+        }
+
         const codeManagementService =
             this.platformIntegrationFactory.getCodeManagementService(type);
 

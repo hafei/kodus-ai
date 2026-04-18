@@ -92,20 +92,35 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
             await this.updateJobStage(jobId, 'RESOLVING_AUTH');
             const authStart = Date.now();
 
+            const repoRecord = await this.repositoryService.findById(
+                payload.repositoryId,
+            );
+            if (!repoRecord) {
+                throw new Error(
+                    `Repository ${payload.repositoryId} not found in DB — cannot resolve clone params`,
+                );
+            }
+
             const cloneParams = await this.codeManagementService.getCloneParams(
                 {
                     repository: {
-                        id: '0',
-                        defaultBranch: payload.defaultBranch,
-                        fullName: payload.fullName,
+                        id: repoRecord.externalId,
+                        defaultBranch: repoRecord.defaultBranch,
+                        fullName: repoRecord.fullName,
                         name:
-                            payload.fullName.split('/').pop() ||
-                            payload.fullName,
+                            repoRecord.fullName.split('/').pop() ||
+                            repoRecord.fullName,
                     },
                     organizationAndTeamData: payload.organizationAndTeamData,
                 },
                 payload.platform as PlatformType,
             );
+
+            if (!cloneParams) {
+                throw new Error(
+                    `Failed to resolve clone params for ${repoRecord.fullName} (platform=${payload.platform}) — provider returned null`,
+                );
+            }
 
             this.logger.log({
                 message: `[AST-GRAPH-JOB] Auth resolved for ${repoLabel} (${Date.now() - authStart}ms)`,
@@ -117,11 +132,14 @@ export class AstGraphBuildJobProcessor implements IJobProcessorService {
             await this.updateJobStage(jobId, 'CLONING');
             const cloneStart = Date.now();
 
+            const branchRaw = repoRecord.defaultBranch || payload.defaultBranch;
+            const branch = branchRaw.replace(/^refs\/heads\//, '');
+
             sandbox = await this.sandboxProvider.createSandboxWithRepo({
                 cloneUrl: cloneParams.url || payload.cloneUrl,
                 authToken: cloneParams.auth?.token || '',
                 authUsername: cloneParams.auth?.username,
-                branch: payload.defaultBranch,
+                branch,
                 platform: payload.platform as PlatformType,
                 sandboxMetadata: { stage: 'graph-build' },
             });

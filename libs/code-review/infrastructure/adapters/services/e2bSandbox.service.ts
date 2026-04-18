@@ -118,7 +118,10 @@ export class E2BSandboxService implements ISandboxProvider {
                 type: 'e2b' as const,
                 baseBranch: resolvedBaseBranch,
                 repoDir: REPO_DIR,
-                run: async (command: string, opts?: { timeoutMs?: number }): Promise<SandboxRunResult> => {
+                run: async (
+                    command: string,
+                    opts?: { timeoutMs?: number },
+                ): Promise<SandboxRunResult> => {
                     const result = await sandbox.commands.run(command, {
                         timeoutMs: opts?.timeoutMs ?? TIMEOUTS.COMMAND_LONG_MS,
                     });
@@ -128,12 +131,18 @@ export class E2BSandboxService implements ISandboxProvider {
                         exitCode: result.exitCode,
                     };
                 },
-                readFile: async (path: string, opts?: { timeoutMs?: number }): Promise<string> => {
+                readFile: async (
+                    path: string,
+                    opts?: { timeoutMs?: number },
+                ): Promise<string> => {
                     return sandbox.files.read(path, {
                         requestTimeoutMs: opts?.timeoutMs ?? 600_000,
                     });
                 },
-                writeFile: async (path: string, content: string): Promise<void> => {
+                writeFile: async (
+                    path: string,
+                    content: string,
+                ): Promise<void> => {
                     await sandbox.files.write(path, content);
                 },
             };
@@ -179,7 +188,7 @@ export class E2BSandboxService implements ISandboxProvider {
         // Shallow-fetch the PR ref or branch (minimal network transfer)
         const refspec =
             prNumber != null
-                ? this.getPrRefspec(platform, prNumber)
+                ? this.getPrRefspec(platform, prNumber, cloneUrl, branch)
                 : `refs/heads/${branch}`;
         const localRef = prNumber != null ? 'pr-head' : 'cli-head';
         const authHeader = this.buildAuthHeader(
@@ -429,14 +438,25 @@ export class E2BSandboxService implements ISandboxProvider {
         }
     }
 
-    private getPrRefspec(platform: PlatformType, prNumber: number): string {
+    private getPrRefspec(
+        platform: PlatformType,
+        prNumber: number,
+        cloneUrl: string,
+        branch: string,
+    ): string {
         switch (platform) {
             case PlatformType.GITHUB:
                 return `refs/pull/${prNumber}/head`;
             case PlatformType.GITLAB:
                 return `refs/merge-requests/${prNumber}/head`;
-            case PlatformType.BITBUCKET:
-                return `refs/pull-requests/${prNumber}/from`;
+            case PlatformType.BITBUCKET: {
+                const isCloud = /(^|\/\/|\.)bitbucket\.org(\/|$)/i.test(
+                    cloneUrl,
+                );
+                return isCloud
+                    ? `refs/heads/${branch}`
+                    : `refs/pull-requests/${prNumber}/from`;
+            }
             case PlatformType.AZURE_REPOS:
                 return `refs/pull/${prNumber}/merge`;
             default:

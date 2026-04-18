@@ -25,6 +25,14 @@ services:
     kodus-api:
         <<: *app-service-defaults
         container_name: kodus_api
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+                # Optional so the compose file still validates when the
+                # `local-db` profile is not active (e.g. pointing at an
+                # external RabbitMQ). When the local rabbitmq IS running,
+                # docker waits for its healthcheck before starting.
+                required: false
         ports:
             - '${API_PORT:-3001}:${API_PORT:-3001}'
             - '9229:9229'
@@ -61,6 +69,14 @@ services:
     worker:
         <<: *app-service-defaults
         container_name: kodus_worker
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+                # Optional so the compose file still validates when the
+                # `local-db` profile is not active (e.g. pointing at an
+                # external RabbitMQ). When the local rabbitmq IS running,
+                # docker waits for its healthcheck before starting.
+                required: false
         volumes:
             - .:/usr/src/app:delegated
             - node_modules_cache:/usr/src/app/node_modules:nocopy
@@ -93,6 +109,14 @@ services:
     webhooks:
         <<: *app-service-defaults
         container_name: kodus_webhooks
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+                # Optional so the compose file still validates when the
+                # `local-db` profile is not active (e.g. pointing at an
+                # external RabbitMQ). When the local rabbitmq IS running,
+                # docker waits for its healthcheck before starting.
+                required: false
         volumes:
             - .:/usr/src/app:delegated
             - node_modules_cache:/usr/src/app/node_modules:nocopy

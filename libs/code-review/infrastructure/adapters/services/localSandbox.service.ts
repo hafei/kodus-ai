@@ -3,7 +3,15 @@ import { PlatformType } from '@libs/core/domain/enums';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { exec, execFile, ExecFileOptions, spawn } from 'child_process';
-import { lstat, mkdtemp, readFile, realpath, rm, writeFile, mkdir } from 'fs/promises';
+import {
+    lstat,
+    mkdtemp,
+    readFile,
+    realpath,
+    rm,
+    writeFile,
+    mkdir,
+} from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -54,7 +62,7 @@ export class LocalSandboxService implements ISandboxProvider {
             );
             const refspec =
                 prNumber != null
-                    ? this.getPrRefspec(platform, prNumber)
+                    ? this.getPrRefspec(platform, prNumber, cloneUrl, branch)
                     : `refs/heads/${branch}`;
             const localRef = prNumber != null ? 'pr-head' : 'cli-head';
 
@@ -116,16 +124,23 @@ export class LocalSandboxService implements ISandboxProvider {
 
             const capturedRepoDir = tempDir;
 
-            const run = async (command: string, opts?: { timeoutMs?: number }): Promise<SandboxRunResult> => {
+            const run = async (
+                command: string,
+                opts?: { timeoutMs?: number },
+            ): Promise<SandboxRunResult> => {
                 const execAsync = promisify(exec);
                 try {
                     const { stdout, stderr } = await execAsync(command, {
                         cwd: capturedRepoDir,
                         timeout: opts?.timeoutMs ?? CMD_TIMEOUT_MS,
                         maxBuffer: MAX_BUFFER,
-                        env: process.env as Record<string, string>,
+                        env: process.env,
                     });
-                    return { stdout: stdout || '', stderr: stderr || '', exitCode: 0 };
+                    return {
+                        stdout: stdout || '',
+                        stderr: stderr || '',
+                        exitCode: 0,
+                    };
                 } catch (error: any) {
                     return {
                         stdout: error.stdout || '',
@@ -136,12 +151,19 @@ export class LocalSandboxService implements ISandboxProvider {
             };
 
             const sandboxReadFile = async (path: string): Promise<string> => {
-                const fullPath = path.startsWith('/') ? path : join(capturedRepoDir, path);
+                const fullPath = path.startsWith('/')
+                    ? path
+                    : join(capturedRepoDir, path);
                 return readFile(fullPath, 'utf-8');
             };
 
-            const sandboxWriteFile = async (path: string, content: string): Promise<void> => {
-                const fullPath = path.startsWith('/') ? path : join(capturedRepoDir, path);
+            const sandboxWriteFile = async (
+                path: string,
+                content: string,
+            ): Promise<void> => {
+                const fullPath = path.startsWith('/')
+                    ? path
+                    : join(capturedRepoDir, path);
                 const dir = join(fullPath, '..');
                 await mkdir(dir, { recursive: true });
                 await writeFile(fullPath, content, 'utf-8');
@@ -357,8 +379,7 @@ export class LocalSandboxService implements ISandboxProvider {
                     // flag shorthands like `-n` or `--include` start with `-`,
                     // never `/`.
                     const hasTraversal = args.some(
-                        (a) =>
-                            a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
+                        (a) => a.startsWith('/') || /(^|\/)\.\.($|\/)/.test(a),
                     );
                     if (hasTraversal) {
                         return {
@@ -387,8 +408,7 @@ export class LocalSandboxService implements ISandboxProvider {
                         };
                     } catch (error: any) {
                         return {
-                            stdout:
-                                (error.stdout || '') + (error.stderr || ''),
+                            stdout: (error.stdout || '') + (error.stderr || ''),
                             exitCode: error.code ?? 1,
                         };
                     }
@@ -515,14 +535,25 @@ export class LocalSandboxService implements ISandboxProvider {
         }
     }
 
-    private getPrRefspec(platform: PlatformType, prNumber: number): string {
+    private getPrRefspec(
+        platform: PlatformType,
+        prNumber: number,
+        cloneUrl: string,
+        branch: string,
+    ): string {
         switch (platform) {
             case PlatformType.GITHUB:
                 return `refs/pull/${prNumber}/head`;
             case PlatformType.GITLAB:
                 return `refs/merge-requests/${prNumber}/head`;
-            case PlatformType.BITBUCKET:
-                return `refs/pull-requests/${prNumber}/from`;
+            case PlatformType.BITBUCKET: {
+                const isCloud = /(^|\/\/|\.)bitbucket\.org(\/|$)/i.test(
+                    cloneUrl,
+                );
+                return isCloud
+                    ? `refs/heads/${branch}`
+                    : `refs/pull-requests/${prNumber}/from`;
+            }
             case PlatformType.AZURE_REPOS:
                 return `refs/pull/${prNumber}/merge`;
             default:

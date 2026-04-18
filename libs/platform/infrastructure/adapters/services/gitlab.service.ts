@@ -557,14 +557,8 @@ export class GitlabService implements Omit<
                     };
                 })
                 .filter(
-                    (
-                        action,
-                    ): action is {
-                        action: 'create' | 'update' | 'delete';
-                        filePath: string;
-                        content?: string;
-                        encoding?: 'text';
-                    } => Boolean(action),
+                    (action): action is NonNullable<typeof action> =>
+                        action !== null,
                 );
 
             if (actions.length === 0) {
@@ -989,6 +983,7 @@ export class GitlabService implements Omit<
                                 return {
                                     id: project.id.toString(),
                                     name: project.path_with_namespace,
+                                    full_name: project.path_with_namespace,
                                     http_url: project.http_url_to_repo,
                                     avatar_url: project.namespace?.avatar_url,
                                     organizationName: project.namespace?.name,
@@ -1032,6 +1027,7 @@ export class GitlabService implements Omit<
                                 return {
                                     id: project.id.toString(),
                                     name: project.path_with_namespace,
+                                    full_name: project.path_with_namespace,
                                     http_url: project.http_url_to_repo,
                                     avatar_url: project.namespace?.avatar_url,
                                     organizationName: project.namespace?.name,
@@ -1948,7 +1944,9 @@ export class GitlabService implements Omit<
         const minIndent = Math.min(...indents);
         if (minIndent === 0) return code;
         return lines
-            .map((line) => (line.length >= minIndent ? line.slice(minIndent) : line))
+            .map((line) =>
+                line.length >= minIndent ? line.slice(minIndent) : line,
+            )
             .join('\n');
     }
 
@@ -2488,32 +2486,73 @@ export class GitlabService implements Omit<
                 },
             });
 
-            const commitDetails = await Promise.all(
-                commits.map(async (commit) => {
-                    const user = await this.getUserByEmailOrNameWithRetry({
-                        organizationAndTeamData,
+            const authorKey = (email?: string, name?: string) =>
+                `${(email || '').toLowerCase()}|${name || ''}`;
+            const uniqueAuthors = new Map<
+                string,
+                { email?: string; userName?: string }
+            >();
+            for (const commit of commits) {
+                const key = authorKey(
+                    commit?.author_email,
+                    commit?.author_name,
+                );
+                if (!uniqueAuthors.has(key)) {
+                    uniqueAuthors.set(key, {
                         email: commit?.author_email,
                         userName: commit?.author_name,
                     });
+                }
+            }
 
-                    return {
-                        sha: commit?.id,
-                        message: commit?.message,
-                        created_at: commit?.created_at,
-                        author: {
-                            name: commit?.author_name,
-                            email: commit?.author_email,
-                            date: commit?.authored_date,
-                            username: user ? user.username : null,
-                            id: user && user.id ? user.id : null,
-                        },
-                        parents:
-                            commit?.parent_ids
-                                ?.map((p) => ({ sha: p ?? '' }))
-                                ?.filter((p) => p.sha) ?? [],
-                    };
-                }),
-            );
+            const USER_LOOKUP_CONCURRENCY = 5;
+            const authorEntries = Array.from(uniqueAuthors.entries());
+            const userByAuthorKey = new Map<string, any>();
+            for (
+                let i = 0;
+                i < authorEntries.length;
+                i += USER_LOOKUP_CONCURRENCY
+            ) {
+                const batch = authorEntries.slice(
+                    i,
+                    i + USER_LOOKUP_CONCURRENCY,
+                );
+                const results = await Promise.all(
+                    batch.map(([key, a]) =>
+                        this.getUserByEmailOrNameWithRetry({
+                            organizationAndTeamData,
+                            email: a.email,
+                            userName: a.userName || '',
+                        }).then((user) => [key, user] as const),
+                    ),
+                );
+                for (const [key, user] of results) {
+                    userByAuthorKey.set(key, user);
+                }
+            }
+
+            const commitDetails = commits.map((commit) => {
+                const user = userByAuthorKey.get(
+                    authorKey(commit?.author_email, commit?.author_name),
+                );
+
+                return {
+                    sha: commit?.id,
+                    message: commit?.message,
+                    created_at: commit?.created_at,
+                    author: {
+                        name: commit?.author_name,
+                        email: commit?.author_email,
+                        date: commit?.authored_date,
+                        username: user ? user.username : null,
+                        id: user && user.id ? user.id : null,
+                    },
+                    parents:
+                        commit?.parent_ids
+                            ?.map((p) => ({ sha: p ?? '' }))
+                            ?.filter((p) => p.sha) ?? [],
+                };
+            });
 
             const sortedCommits = commitDetails.sort((a, b) => {
                 return (
@@ -3083,9 +3122,12 @@ export class GitlabService implements Omit<
                 throw new Error('GitLab authentication details not found');
             }
 
-            // Construct the full GitLab URL
             const gitlabHost = gitlabAuthDetail.host || 'gitlab.com';
-            const fullGitlabUrl = `https://${gitlabHost}/${params?.repository?.fullName}`;
+            const encodedPath = (params?.repository?.fullName || '')
+                .split('/')
+                .map(encodeURIComponent)
+                .join('/');
+            const fullGitlabUrl = `https://${gitlabHost}/${encodedPath}`;
 
             return {
                 organizationId: params.organizationAndTeamData.organizationId,

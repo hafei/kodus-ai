@@ -111,7 +111,7 @@ fi
 # an empty commit to its head branch, GitHub fires a `synchronize` webhook
 # and the worker picks up a spurious review — doubling (or worse) the
 # number of jobs enqueued for the run.
-BENCHMARK_REPOS="sentry grafana-codex discourse-cursor cal.com keycloak"
+BENCHMARK_REPOS="${BENCHMARK_REPOS:-sentry grafana-codex discourse-cursor cal.com keycloak}"
 
 echo "▸ Closing all open PRs..."
 for repo in $BENCHMARK_REPOS; do
@@ -125,13 +125,18 @@ for repo in $BENCHMARK_REPOS; do
 done
 
 echo "▸ Verifying all PRs are closed (GitHub needs a moment to propagate)..."
-CLOSE_TIMEOUT="${BENCHMARK_CLOSE_TIMEOUT_SEC:-45}"
-CLOSE_POLL_INTERVAL=2
+CLOSE_TIMEOUT="${BENCHMARK_CLOSE_TIMEOUT_SEC:-60}"
+CLOSE_POLL_INTERVAL="${BENCHMARK_CLOSE_POLL_INTERVAL:-5}"
 CLOSE_ELAPSED=0
 while :; do
   PENDING=""
   for repo in $BENCHMARK_REPOS; do
     STILL_OPEN=$(gh api "repos/$BENCHMARK_OWNER/$repo/pulls?state=open&per_page=100" --jq '.[].number' 2>/dev/null || true)
+    # Ignore rate-limit responses (contain "rate limit" in error body)
+    if echo "$STILL_OPEN" | grep -q "rate limit"; then
+      echo "  ⚠️ Hit GitHub rate limit while checking $repo — assuming PRs are closed"
+      continue
+    fi
     [ -n "$STILL_OPEN" ] && PENDING="$PENDING $repo($(echo "$STILL_OPEN" | tr '\n' ',' | sed 's/,$//'))"
   done
   if [ -z "$PENDING" ]; then
@@ -143,6 +148,9 @@ while :; do
     echo "  Retrying close on stragglers and continuing anyway..."
     for repo in $BENCHMARK_REPOS; do
       STILL_OPEN=$(gh api "repos/$BENCHMARK_OWNER/$repo/pulls?state=open&per_page=100" --jq '.[].number' 2>/dev/null || true)
+      if echo "$STILL_OPEN" | grep -q "rate limit"; then
+        continue
+      fi
       for pr in $STILL_OPEN; do
         gh api "repos/$BENCHMARK_OWNER/$repo/pulls/$pr" -X PATCH -f state=closed --silent 2>/dev/null || true
       done

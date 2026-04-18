@@ -133,8 +133,18 @@ describe('E2BSandboxService', () => {
             service = await createService({ API_E2B_KEY: 'key' });
         });
 
-        const getPrRefspec = (platform: PlatformType, prNumber: number) =>
-            (service as any).getPrRefspec(platform, prNumber);
+        const getPrRefspec = (
+            platform: PlatformType,
+            prNumber: number,
+            cloneUrl = 'https://example.com/org/repo.git',
+            branch = 'feature',
+        ) =>
+            (service as any).getPrRefspec(
+                platform,
+                prNumber,
+                cloneUrl,
+                branch,
+            );
 
         it('should return GitHub refspec', () => {
             expect(getPrRefspec(PlatformType.GITHUB, 42)).toBe(
@@ -146,6 +156,30 @@ describe('E2BSandboxService', () => {
             expect(getPrRefspec(PlatformType.GITLAB, 42)).toBe(
                 'refs/merge-requests/42/head',
             );
+        });
+
+        it('should return branch refspec for Bitbucket Cloud (bitbucket.org)', () => {
+            // Cloud doesn't expose PR refs via git — must clone the source branch.
+            expect(
+                getPrRefspec(
+                    PlatformType.BITBUCKET,
+                    42,
+                    'https://bitbucket.org/org/repo',
+                    'feat/my-branch',
+                ),
+            ).toBe('refs/heads/feat/my-branch');
+        });
+
+        it('should return pull-requests refspec for Bitbucket Server/DC', () => {
+            // Self-hosted Bitbucket exposes PR refs via git.
+            expect(
+                getPrRefspec(
+                    PlatformType.BITBUCKET,
+                    42,
+                    'https://bitbucket.company.internal/scm/proj/repo.git',
+                    'feat/my-branch',
+                ),
+            ).toBe('refs/pull-requests/42/from');
         });
     });
 
