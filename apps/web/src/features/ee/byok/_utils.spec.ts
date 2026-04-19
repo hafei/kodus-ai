@@ -110,6 +110,24 @@ describe("BYOK topbar visibility", () => {
         ).toBe(true);
     });
 
+    it("does not show the missing key topbar for trial orgs (BYOK is optional during trial)", async () => {
+        const { shouldShowBYOKMissingKeyTopbar } = await import("./_utils");
+
+        expect(
+            shouldShowBYOKMissingKeyTopbar({
+                license: {
+                    valid: true,
+                    subscriptionStatus: "trial",
+                    trialEnd: new Date().toISOString(),
+                } as any,
+                byokConfig: null,
+                organizationId: "org-1",
+                permissions: {},
+                role: UserRole.OWNER,
+            }),
+        ).toBe(false);
+    });
+
     it("does not treat canceled/expired/payment_failed subscriptions as BYOK eligible", async () => {
         const { isBYOKSubscriptionPlan } = await import("./_utils");
 

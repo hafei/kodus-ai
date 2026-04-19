@@ -475,34 +475,72 @@ const DONE_TOOL_NAME = 'submitResult' as const;
 /**
  * Create a done-tool with a given Zod schema.
  * The tool has no `execute`, so calling it stops the agent loop.
+ *
+ * `strict` controls provider-specific schema enforcement:
+ * - Gemini: `true` activates VALIDATED mode, which prevents empty-args calls
+ *   (the known bug where Gemini "calls" submitResult with `{}`).
+ * - OpenAI (and compatible: Moonshot, z.AI, Novita, OpenRouter when routing
+ *   to OpenAI-style models): `true` activates Structured Outputs, which
+ *   requires every schema property to be listed in `required`. Our findings
+ *   schema has optional props, so strict mode makes the provider reject the
+ *   tool up front with "Invalid schema for function 'submitResult'".
+ * - Anthropic: tool_use API doesn't enforce strict schemas; the flag is
+ *   effectively ignored either way.
+ *
+ * Callers should pass `strict: true` only when the target model is Gemini.
  */
 function createDoneTool<T extends z.ZodType>(
     description: string,
     schema: T,
+    strict: boolean,
 ) {
     return defineTool({
         description,
         // AI SDK v6 uses `inputSchema`, not `parameters` (which is silently
         // ignored — that's why Gemini was calling the tool with empty args).
         inputSchema: schema as any,
-        // strict: true forces Gemini to use VALIDATED mode instead of ANY,
-        // which guarantees the model fills in the schema fields.
-        strict: true,
+        strict,
         // no execute → stops the loop
     });
 }
 
-/** Pre-built done tools for each agent context. */
-const DONE_TOOLS = {
-    findings: createDoneTool(
-        'Submit your final code review findings. Call this tool when your investigation is complete.',
-        _findingsSchema,
-    ),
-    verification: createDoneTool(
-        'Submit your verification verdict for the candidate finding. Call this tool when you have enough evidence.',
-        _verificationSchema,
-    ),
-} as const;
+const FINDINGS_TOOL_DESCRIPTION =
+    'Submit your final code review findings. Call this tool when your investigation is complete.';
+const VERIFICATION_TOOL_DESCRIPTION =
+    'Submit your verification verdict for the candidate finding. Call this tool when you have enough evidence.';
+
+/**
+ * Return true when the given Vercel AI SDK model is a Gemini model, so that
+ * callers can enable strict/VALIDATED mode for the done-tool schema.
+ * Detection uses the model id (e.g. "gemini-3.1-pro-preview-customtools")
+ * rather than the provider name, so Gemini served via OpenRouter or other
+ * proxies is still recognized.
+ */
+function isGeminiModel(model: unknown): boolean {
+    const modelId = (model as any)?.modelId;
+    return typeof modelId === 'string' && /^gemini[-_]/i.test(modelId);
+}
+
+/**
+ * Pre-build the done-tools for a given model. Cheap to call; the returned
+ * object is a plain `{ findings, verification }` whose `strict` matches the
+ * provider's expectations.
+ */
+function buildDoneTools(model: unknown) {
+    const strict = isGeminiModel(model);
+    return {
+        findings: createDoneTool(
+            FINDINGS_TOOL_DESCRIPTION,
+            _findingsSchema,
+            strict,
+        ),
+        verification: createDoneTool(
+            VERIFICATION_TOOL_DESCRIPTION,
+            _verificationSchema,
+            strict,
+        ),
+    };
+}
 
 /**
  * Extract the done-tool result from a generateText result.
@@ -510,7 +548,7 @@ const DONE_TOOLS = {
  */
 function extractDoneToolResult<T>(result: any): T | null {
     const extract = (tc: any): T | null => {
-        const args = tc?.args ?? tc?.input ?? null;
+        let args = tc?.args ?? tc?.input ?? null;
         // Safety net: Gemini sometimes calls the tool with empty args {}
         // even in VALIDATED mode when the schema is very complex.
         if (
@@ -523,6 +561,37 @@ function extractDoneToolResult<T>(result: any): T | null {
                 context: 'AgentLoop',
             });
             return null;
+        }
+        // Gemini (customtools mode) occasionally double-encodes the structured
+        // args as `{ result: "<stringified JSON>" }` instead of emitting the
+        // schema fields directly. Detect that single-key wrapper and unwrap
+        // it so downstream code sees the expected shape. Observed crashing
+        // with `TypeError: Cannot read properties of undefined (reading
+        // 'length')` on the [AGENT-DONE-TOOL] log line.
+        if (
+            typeof args === 'object' &&
+            (args as any).result !== undefined &&
+            typeof (args as any).result === 'string' &&
+            Object.keys(args as any).length === 1
+        ) {
+            try {
+                const parsed = JSON.parse((args as any).result);
+                if (parsed && typeof parsed === 'object') {
+                    logger.warn({
+                        message:
+                            '[DONE-TOOL] Unwrapped double-encoded args from Gemini (single-key `result` string wrapper)',
+                        context: 'AgentLoop',
+                    });
+                    args = parsed;
+                }
+            } catch {
+                logger.warn({
+                    message:
+                        '[DONE-TOOL] Model returned `{ result: <string> }` but inner payload is not valid JSON — falling back to text parsing',
+                    context: 'AgentLoop',
+                });
+                return null;
+            }
         }
         return args as T;
     };
@@ -798,7 +867,11 @@ export async function runAgentLoop(
                     ),
                     tools: isSelfContained
                         ? tools
-                        : { ...tools, [DONE_TOOL_NAME]: DONE_TOOLS.findings },
+                        : {
+                              ...tools,
+                              [DONE_TOOL_NAME]: buildDoneTools(input.model)
+                                  .findings,
+                          },
                     // Self-contained mode has no tools — a single LLM call
                     // is enough to produce the final JSON response.
                     stopWhen: isSelfContained
@@ -1205,7 +1278,7 @@ export async function runAgentLoop(
 
     if (doneToolFindings) {
         logger.log({
-            message: `[AGENT-DONE-TOOL] Model called submitResult with ${doneToolFindings.suggestions.length} suggestions`,
+            message: `[AGENT-DONE-TOOL] Model called submitResult with ${doneToolFindings.suggestions?.length ?? 0} suggestions`,
             context: 'AgentLoop',
         });
     }
@@ -1863,7 +1936,7 @@ Investigate the remaining changed files now.
 `,
                     tools: {
                         ...tools,
-                        [DONE_TOOL_NAME]: DONE_TOOLS.findings,
+                        [DONE_TOOL_NAME]: buildDoneTools(input.model).findings,
                     },
                     stopWhen: [
                         hasToolCall(DONE_TOOL_NAME),
@@ -2125,7 +2198,7 @@ Instructions:
 - If the remaining files are safe, call submitResult with an empty suggestions array.`,
                     tools: {
                         ...tools,
-                        [DONE_TOOL_NAME]: DONE_TOOLS.findings,
+                        [DONE_TOOL_NAME]: buildDoneTools(input.model).findings,
                     },
                     stopWhen: [
                         hasToolCall(DONE_TOOL_NAME),
@@ -2959,7 +3032,8 @@ async function verifySingleFindingWithTools(params: {
                 prompt: verificationPrompt.prompt,
                 tools: {
                     ...tools,
-                    [DONE_TOOL_NAME]: DONE_TOOLS.verification,
+                    [DONE_TOOL_NAME]: buildDoneTools(internalModel)
+                        .verification,
                 },
                 stopWhen: [
                     hasToolCall(DONE_TOOL_NAME),

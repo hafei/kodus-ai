@@ -40,7 +40,14 @@ export async function formatSuggestionContent(
 ): Promise<Map<number, FormattedSuggestion>> {
     if (suggestions.length === 0) return new Map();
 
-    // Resolve model: Google API key → BYOK fallback
+    // Resolve model in the same order as classify-severity / dedup:
+    //   1. Cloud default: Google AI key → gemini-3-flash-preview (fast classifier)
+    //   2. BYOK / self-hosted env: delegate to getInternalModel, which
+    //      internally tries the client's BYOK config first and then falls back
+    //      to `API_LLM_PROVIDER_MODEL` + `API_OPEN_AI_API_KEY` (self-hosted).
+    //   3. If neither is configured, getInternalModel returns null and we skip
+    //      formatting (comments still ship, just without the natural-prose
+    //      polish).
     const googleKey =
         process.env.API_GOOGLE_AI_API_KEY ||
         process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -50,8 +57,8 @@ export async function formatSuggestionContent(
         model = createGoogleGenerativeAI({ apiKey: googleKey })(
             'gemini-3-flash-preview',
         );
-    } else if (options?.byokConfig) {
-        model = getInternalModel(options.byokConfig);
+    } else {
+        model = getInternalModel(options?.byokConfig);
     }
 
     if (!model) {
