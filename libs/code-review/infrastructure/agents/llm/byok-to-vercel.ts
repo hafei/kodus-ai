@@ -68,7 +68,12 @@ export function byokToVercelModel(
                 return createOpenAICompatible({
                     name: 'self-hosted',
                     apiKey: openaiKey,
-                    baseURL: openaiBaseURL || '',
+                    // `@ai-sdk/openai-compatible` has no default baseURL (unlike
+                    // `@ai-sdk/openai`), so an empty value throws "Invalid URL"
+                    // on the first request. Default to api.openai.com to match
+                    // the legacy v2 getChatGPT behavior when no custom endpoint
+                    // is configured.
+                    baseURL: openaiBaseURL || 'https://api.openai.com/v1',
                 })(envMode);
             }
             // self-hosted mode declared but no usable env key — fall through
@@ -203,7 +208,9 @@ export function getInternalModel(
             return createOpenAICompatible({
                 name: 'self-hosted',
                 apiKey: openaiKey,
-                baseURL: openaiBaseURL || '',
+                // Match byokToVercelModel: openai-compatible has no default
+                // baseURL, so empty string → "Invalid URL" throw.
+                baseURL: openaiBaseURL || 'https://api.openai.com/v1',
             })(envMode);
         }
 
