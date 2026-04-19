@@ -49,6 +49,13 @@ export const shouldShowBYOKMissingKeyTopbar = (params: {
         return false;
     }
 
+    // Trial orgs can configure BYOK if they want, but we don't nag them
+    // with the persistent "missing key" topbar — the alert is only for
+    // paying plans where BYOK is expected.
+    if (license.subscriptionStatus === "trial") {
+        return false;
+    }
+
     if (role === UserRole.OWNER) {
         return true;
     }

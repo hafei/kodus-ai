@@ -18,7 +18,7 @@ const CODE_REVIEW_ROUTE_OVERRIDE_PATH_PREFIXES: Record<string, string[]> = {
         "runOnDraft",
         "enableCommittableSuggestions",
     ],
-    "review-categories": ["reviewOptions", "codeReviewVersion"],
+    "review-categories": ["reviewOptions"],
     "custom-prompts": ["v2PromptOverrides"],
     // The "Review Filters" tab lives under href=suggestion-control and
     // edits `suggestionControl.*` fields (max suggestions, severity
