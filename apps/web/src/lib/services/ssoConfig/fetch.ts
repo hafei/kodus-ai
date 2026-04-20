@@ -91,6 +91,7 @@ export const getSSOConnectionTestResult = async (
 export const requestSSODomainVerification = async (params: {
     domain: string;
     contactEmail: string;
+    organizationName: string;
 }): Promise<RequestSSODomainVerificationResponse> => {
     const response =
         await axiosAuthorized.post<RequestSSODomainVerificationResponse>(

@@ -116,18 +116,22 @@ export class SSOConfigController {
     })
     @ApiCreatedResponse({ type: ApiObjectResponseDto })
     async requestDomainVerification(
-        @Body() body: { domain: string; contactEmail: string },
+        @Body()
+        body: {
+            domain: string;
+            contactEmail: string;
+            organizationName: string;
+        },
     ) {
         const organizationId = this.request?.user?.organization?.uuid;
-        const organizationName = this.request?.user?.organization?.name;
 
-        if (!organizationId || !organizationName) {
+        if (!organizationId) {
             throw new Error('Organization not found');
         }
 
         return this.ssoDomainVerificationService.requestDomainVerification({
             organizationId,
-            organizationName,
+            organizationName: body.organizationName,
             domain: body.domain,
             contactEmail: body.contactEmail,
             requestedBy: this.request?.user?.email,

@@ -13,6 +13,7 @@ import { FormControl } from "@components/ui/form-control";
 import { Input } from "@components/ui/input";
 import { toast } from "@components/ui/toaster/use-toast";
 import { requestSSODomainVerification } from "@services/ssoConfig/fetch";
+import { useOrganizationContext } from "src/features/organization/_providers/organization-context";
 
 interface DomainVerificationModalProps {
     open: boolean;
@@ -27,6 +28,7 @@ export const DomainVerificationModal = ({
 }: DomainVerificationModalProps) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [contactEmail, setContactEmail] = useState("");
+    const { organizationName } = useOrganizationContext();
 
     const handleSubmit = async () => {
         if (!domain) {
@@ -56,6 +58,7 @@ export const DomainVerificationModal = ({
             await requestSSODomainVerification({
                 domain,
                 contactEmail: trimmedContactEmail,
+                organizationName,
             });
 
             toast({

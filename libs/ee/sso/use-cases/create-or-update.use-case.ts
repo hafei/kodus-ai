@@ -201,9 +201,11 @@ export class CreateOrUpdateSSOConfigUseCase {
             }
 
             if (!targetActive) {
+                const targetDomainsSet = new Set(targetDomains);
+
                 nextDomainVerification = {
                     verifiedDomains: persistedDomainVerificationRecords.filter(
-                        (record) => targetDomains.includes(record.domain),
+                        (record) => targetDomainsSet.has(record.domain),
                     ),
                 };
             }
