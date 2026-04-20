@@ -125,7 +125,9 @@ export interface IConfigApi {
         accessToken: string,
         repositoryId: string,
         settings: RepositorySettings,
-    ): Promise<RepositorySettings | CentralizedPrMetadata>;
+    ): Promise<
+        RepositorySettings | (CentralizedPrMetadata & { mode: 'centralized-pr' })
+    >;
     getCentralizedConfigStatus(
         accessToken: string,
     ): Promise<CentralizedConfigStatus>;
