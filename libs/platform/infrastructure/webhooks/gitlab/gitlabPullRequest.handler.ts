@@ -281,6 +281,11 @@ export class GitLabMergeRequestHandler implements IWebhookEventHandler {
                                         repoName: repository.name,
                                         platform: PlatformType.GITLAB,
                                         baseBranch: baseRef,
+                                        newSha:
+                                            payload?.object_attributes
+                                                ?.merge_commit_sha ??
+                                            payload?.object_attributes
+                                                ?.last_commit?.id,
                                         organizationAndTeamData:
                                             context.organizationAndTeamData,
                                     })

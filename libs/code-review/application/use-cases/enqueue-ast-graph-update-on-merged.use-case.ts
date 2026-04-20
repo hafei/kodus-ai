@@ -24,6 +24,12 @@ export interface EnqueueAstGraphUpdateInput {
     repoName: string;
     platform: PlatformType;
     baseBranch: string;
+    /**
+     * SHA representing the new state of the default branch after the merge.
+     * Used for tracking/auditing the graph version; the incremental
+     * processor tolerates missing values.
+     */
+    newSha?: string;
     organizationAndTeamData: OrganizationAndTeamData;
 }
 
@@ -75,6 +81,7 @@ export class EnqueueAstGraphUpdateOnMergedUseCase implements IUseCase {
             repoName,
             platform,
             baseBranch,
+            newSha,
             organizationAndTeamData,
         } = input;
 
@@ -112,7 +119,7 @@ export class EnqueueAstGraphUpdateOnMergedUseCase implements IUseCase {
             };
         }
 
-        let changedFiles: string[] = [];
+        let changedFiles: string[];
         try {
             const files =
                 (await this.codeManagementService.getFilesByPullRequestId(
@@ -171,7 +178,7 @@ export class EnqueueAstGraphUpdateOnMergedUseCase implements IUseCase {
                       payload: {
                           repositoryId: repo.uuid,
                           changedFiles,
-                          newSha: '',
+                          newSha,
                           cloneUrl: '',
                           defaultBranch: repo.defaultBranch,
                           fullName: repo.fullName,

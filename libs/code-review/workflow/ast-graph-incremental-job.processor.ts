@@ -79,15 +79,15 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
 
         await this.updateJobStage(jobId, 'VALIDATING');
 
-        if (
-            !payload?.repositoryId ||
-            !payload?.changedFiles?.length ||
-            !payload?.newSha
-        ) {
+        if (!payload?.repositoryId || !payload?.changedFiles?.length) {
             throw new Error(
-                'Invalid payload: missing required fields (repositoryId, changedFiles, newSha)',
+                'Invalid payload: missing required fields (repositoryId, changedFiles)',
             );
         }
+        // newSha is informational (logged + passed to graphIndexer for
+        // tracking) but not execution-critical — the sandbox clones by
+        // defaultBranch, not by sha. Keep it optional so incremental
+        // updates run even when the caller can't produce a merge sha.
 
         let sandbox: SandboxInstance | undefined;
         let sandboxId: string | undefined;
@@ -97,20 +97,35 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
             await this.updateJobStage(jobId, 'RESOLVING_AUTH');
             const authStart = Date.now();
 
+            const repoRecord = await this.repositoryService.findById(
+                payload.repositoryId,
+            );
+            if (!repoRecord) {
+                throw new Error(
+                    `Repository ${payload.repositoryId} not found in DB — cannot resolve clone params`,
+                );
+            }
+
             const cloneParams = await this.codeManagementService.getCloneParams(
                 {
                     repository: {
-                        id: '0',
-                        defaultBranch: payload.defaultBranch,
-                        fullName: payload.fullName,
+                        id: repoRecord.externalId,
+                        defaultBranch: repoRecord.defaultBranch,
+                        fullName: repoRecord.fullName,
                         name:
-                            payload.fullName.split('/').pop() ||
-                            payload.fullName,
+                            repoRecord.fullName.split('/').pop() ||
+                            repoRecord.fullName,
                     },
                     organizationAndTeamData: payload.organizationAndTeamData,
                 },
                 payload.platform as PlatformType,
             );
+
+            if (!cloneParams) {
+                throw new Error(
+                    `Failed to resolve clone params for ${repoRecord.fullName} (platform=${payload.platform}) — provider returned null`,
+                );
+            }
 
             this.logger.log({
                 message: `[AST-GRAPH-INCR] Auth resolved for ${repoLabel} (${Date.now() - authStart}ms)`,
@@ -122,11 +137,14 @@ export class AstGraphIncrementalJobProcessor implements IJobProcessorService {
             await this.updateJobStage(jobId, 'CLONING');
             const cloneStart = Date.now();
 
+            const branchRaw = repoRecord.defaultBranch || payload.defaultBranch;
+            const branch = branchRaw.replace(/^refs\/heads\//, '');
+
             sandbox = await this.sandboxProvider.createSandboxWithRepo({
                 cloneUrl: cloneParams.url || payload.cloneUrl,
                 authToken: cloneParams.auth?.token || '',
                 authUsername: cloneParams.auth?.username,
-                branch: payload.defaultBranch,
+                branch,
                 platform: payload.platform as PlatformType,
                 sandboxMetadata: { stage: 'graph-incremental' },
             });

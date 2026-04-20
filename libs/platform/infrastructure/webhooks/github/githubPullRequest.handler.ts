@@ -262,6 +262,9 @@ export class GitHubPullRequestHandler implements IWebhookEventHandler {
                                     repoName: repository.name,
                                     platform: PlatformType.GITHUB,
                                     baseBranch: baseRef,
+                                    newSha:
+                                        payload?.pull_request
+                                            ?.merge_commit_sha,
                                     organizationAndTeamData:
                                         context.organizationAndTeamData,
                                 })

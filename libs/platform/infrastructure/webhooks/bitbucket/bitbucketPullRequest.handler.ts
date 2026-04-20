@@ -305,6 +305,9 @@ export class BitbucketPullRequestHandler implements IWebhookEventHandler {
                                             platform:
                                                 PlatformType.BITBUCKET,
                                             baseBranch: baseRef,
+                                            newSha:
+                                                payload?.pullrequest
+                                                    ?.merge_commit?.hash,
                                             organizationAndTeamData:
                                                 context.organizationAndTeamData,
                                         })

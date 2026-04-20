@@ -311,6 +311,10 @@ export class AzureReposPullRequestHandler implements IWebhookEventHandler {
                                             platform:
                                                 PlatformType.AZURE_REPOS,
                                             baseBranch: baseRefFull,
+                                            newSha:
+                                                params?.payload?.resource
+                                                    ?.lastMergeCommit
+                                                    ?.commitId,
                                             organizationAndTeamData:
                                                 context.organizationAndTeamData,
                                         })
