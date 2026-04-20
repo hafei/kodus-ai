@@ -164,6 +164,24 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
     /**
      * AST Graph Build jobs
      * Delayed exchange bindings are created by RabbitMQDLQInitializer.
+     *
+     * Uses Single Active Consumer so only ONE worker at a time pulls from
+     * this queue (up to prefetchCount in-flight). Combined with
+     * prefetchCount=5 on the channel, this caps global AST-build
+     * concurrency at 5 across the cluster and frees the other workers to
+     * serve other queues (code-review, webhook, etc). Failover is
+     * automatic: if the active consumer dies, RabbitMQ promotes another.
+     *
+     * `x-consumer-timeout` is set to 25min (20min job timeout + 5min
+     * overhead). If the active consumer holds a message unacked past
+     * this window, RabbitMQ cancels it and promotes another — this
+     * bounds the failover latency when a worker hangs (OOM, event-loop
+     * stall) rather than crashing cleanly.
+     *
+     * NOTE: queue arguments are fixed at creation. To apply SAC /
+     * consumer-timeout on an existing queue without recreating it, set a
+     * broker policy with `single-active-consumer: true` and
+     * `consumer-timeout: 1500000` matching this queue name.
      */
     @RabbitSubscribe({
         exchange: 'workflow.exchange',
@@ -175,6 +193,8 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             channel: 'channel-ast-graph-build',
             arguments: {
                 'x-queue-type': 'quorum',
+                'x-single-active-consumer': true,
+                'x-consumer-timeout': 25 * 60 * 1000,
                 'x-dead-letter-exchange': 'workflow.exchange.dlx',
                 'x-dead-letter-routing-key': 'workflow.job.failed',
             },
@@ -195,6 +215,12 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
     /**
      * AST Graph Incremental Update jobs
      * Delayed exchange bindings are created by RabbitMQDLQInitializer.
+     *
+     * Single Active Consumer + prefetchCount=5 caps global concurrency
+     * at 5 — see handleAstGraphBuildJob for rationale.
+     *
+     * `x-consumer-timeout` set to 15min (10min job timeout + 5min
+     * overhead) for tighter failover when a worker hangs.
      */
     @RabbitSubscribe({
         exchange: 'workflow.exchange',
@@ -206,6 +232,8 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             channel: 'channel-ast-graph-incremental',
             arguments: {
                 'x-queue-type': 'quorum',
+                'x-single-active-consumer': true,
+                'x-consumer-timeout': 15 * 60 * 1000,
                 'x-dead-letter-exchange': 'workflow.exchange.dlx',
                 'x-dead-letter-routing-key': 'workflow.job.failed',
             },
@@ -221,6 +249,19 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             message,
             amqpMsg,
         );
+    }
+
+    /**
+     * Inbox claim timeout per queue, in minutes. Dimensioned as
+     * (workflow timeout + overhead) so a hard worker crash doesn't
+     * block retries for the default 2.5h while we wait for the reaper.
+     * Queues not listed fall back to 150 (2.5h).
+     */
+    private resolveClaimTimeoutMinutes(queueName: string): number {
+        if (queueName === 'workflow.jobs.ast_graph_build.queue') return 30;
+        if (queueName === 'workflow.jobs.ast_graph_incremental.queue') return 15;
+        if (queueName === 'workflow.jobs.webhook.queue') return 20;
+        return 150;
     }
 
     private async handleWorkflowJob(
@@ -289,6 +330,7 @@ export class WorkflowJobConsumer implements OnApplicationShutdown {
             consumerId,
             this.instanceId,
             unwrappedMessage.jobId,
+            this.resolveClaimTimeoutMinutes(queueName),
         );
 
         if (!claimed) {

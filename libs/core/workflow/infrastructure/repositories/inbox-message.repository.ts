@@ -45,14 +45,17 @@ export class InboxMessageRepository implements IInboxMessageRepository {
      * Claims a message for processing using an atomic UPSERT.
      * Returns the message model if successfully claimed, or null if it's already being processed or finished.
      *
-     * Uses 2.5-hour timeout for PROCESSING messages to avoid reclaiming long-running jobs
-     * (e.g., code reviews with 2h timeout + 30min margin). Only allows reclaiming messages that are truly stuck.
+     * `claimTimeoutMinutes` bounds how long a PROCESSING message stays locked before
+     * another worker can reclaim it after a hard crash (no releaseLock ran). Default
+     * 150min (2.5h) suits code review (2h timeout + margin); pass a smaller value for
+     * shorter workflows so retries aren't blocked for hours.
      */
     async claim(
         messageId: string,
         consumerId: string,
         lockedBy: string,
         jobId?: string,
+        claimTimeoutMinutes: number = 150,
     ): Promise<InboxMessageModel | null> {
         const query = `
             INSERT INTO "kodus_workflow"."inbox_messages"
@@ -67,7 +70,7 @@ export class InboxMessageRepository implements IInboxMessageRepository {
                 "attempts" = "inbox_messages"."attempts" + 1,
                 "updatedAt" = NOW()
             WHERE "inbox_messages"."status" NOT IN ($6, $7)
-               OR ("inbox_messages"."status" = $7 AND "inbox_messages"."lockedAt" < NOW() - INTERVAL '2.5 hours')
+               OR ("inbox_messages"."status" = $7 AND "inbox_messages"."lockedAt" < NOW() - make_interval(mins => $8))
             RETURNING *;
         `;
 
@@ -80,6 +83,7 @@ export class InboxMessageRepository implements IInboxMessageRepository {
                 lockedBy,
                 InboxStatus.PROCESSED,
                 InboxStatus.PROCESSING,
+                claimTimeoutMinutes,
             ]);
 
             if (results && results.length > 0) {
