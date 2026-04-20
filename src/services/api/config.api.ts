@@ -141,8 +141,12 @@ export class RealConfigApi implements IConfigApi {
         accessToken: string,
         repositoryId: string,
         settings: RepositorySettings,
-    ): Promise<RepositorySettings | CentralizedPrMetadata> {
-        return this.requester<RepositorySettings | CentralizedPrMetadata>(
+    ): Promise<
+        RepositorySettings | (CentralizedPrMetadata & { mode: 'centralized-pr' })
+    > {
+        return this.requester<
+            RepositorySettings | (CentralizedPrMetadata & { mode: 'centralized-pr' })
+        >(
             `/cli/config/repositories/${encodeURIComponent(repositoryId)}/settings`,
             {
                 method: 'PATCH',

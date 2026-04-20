@@ -191,7 +191,9 @@ class RepositorySettingsService {
     }
 
     private isCentralizedPrMetadata(
-        value: RepositorySettings | CentralizedPrMetadata,
+        value:
+            | RepositorySettings
+            | (CentralizedPrMetadata & { mode: 'centralized-pr' }),
     ): value is CentralizedPrMetadata & { mode: 'centralized-pr' } {
         return (
             typeof value === 'object' &&
