@@ -128,7 +128,7 @@ class RepositorySettingsService {
         return {
             repositoryId: matchedRepository.id,
             repositoryFullName: this.toRepositoryFullName(matchedRepository),
-            settings: updatedSettings,
+            settings: updatedSettings as RepositorySettings,
         };
     }
 
