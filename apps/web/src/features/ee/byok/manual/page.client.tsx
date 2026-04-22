@@ -150,8 +150,19 @@ export function ByokManualPageClient({
                   )
                 : !!data.apiKey?.trim();
 
-        if (!hasNewCredentials) {
-            // Editing with no new credentials: skip test (creds stay unchanged server-side)
+        // If the user changed the base URL on an openai_compatible config
+        // without re-entering credentials, we can't skip the test: the
+        // backend's SSRF guard only runs inside the test-byok probe, and
+        // the new URL could point at internal infra. Forcing the probe
+        // makes the backend reject with "apiKey is required", which nudges
+        // the user to paste credentials to authorize the URL change.
+        const urlChanged =
+            data.provider === "openai_compatible" &&
+            (data.baseURL ?? undefined) !== existingConfig?.baseURL;
+
+        if (!hasNewCredentials && !urlChanged) {
+            // Editing with no new credentials and no URL change: skip test
+            // (stored creds and URL stay unchanged server-side).
             return { ok: true, code: "ok", latencyMs: 0 };
         }
 

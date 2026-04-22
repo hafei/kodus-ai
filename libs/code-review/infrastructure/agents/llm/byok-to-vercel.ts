@@ -32,10 +32,10 @@ function vertexModelFromSaJson(
         const decoded = Buffer.from(base64SaJson, 'base64').toString('utf-8');
         const credentials = JSON.parse(decoded) as { project_id?: string };
         if (!credentials?.project_id) return null;
-        const location =
-            locationOverride?.trim() ||
-            process.env.API_VERTEX_AI_LOCATION ||
-            'us-central1';
+        // Keep this helper pure: the caller is responsible for resolving
+        // the region (BYOK config or env var) and passing it as
+        // locationOverride. Default to us-central1 when omitted.
+        const location = locationOverride?.trim() || 'us-central1';
         return createVertex({
             project: credentials.project_id,
             location,
@@ -192,6 +192,7 @@ export function byokToVercelModel(
                     const vertexModel = vertexModelFromSaJson(
                         vertexKey,
                         envMode,
+                        process.env.API_VERTEX_AI_LOCATION,
                     );
                     if (vertexModel) return vertexModel;
                     return createGoogleGenerativeAI({ apiKey: vertexKey })(
@@ -388,7 +389,11 @@ export function getInternalModel(
                 );
             }
             if (vertexKey) {
-                const vertexModel = vertexModelFromSaJson(vertexKey, envMode);
+                const vertexModel = vertexModelFromSaJson(
+                    vertexKey,
+                    envMode,
+                    process.env.API_VERTEX_AI_LOCATION,
+                );
                 if (vertexModel) return vertexModel;
                 return createGoogleGenerativeAI({ apiKey: vertexKey })(envMode);
             }
