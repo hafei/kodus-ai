@@ -242,27 +242,39 @@ export class OrganizationParametersController {
     @ApiBody({
         schema: {
             type: 'object',
-            required: ['provider', 'apiKey'],
+            required: ['provider'],
             properties: {
                 provider: { type: 'string' },
                 apiKey: { type: 'string' },
                 baseURL: { type: 'string' },
                 model: { type: 'string' },
+                vertexLocation: { type: 'string' },
+                awsBearerToken: { type: 'string' },
+                awsAccessKeyId: { type: 'string' },
+                awsSecretAccessKey: { type: 'string' },
+                awsRegion: { type: 'string' },
+                awsSessionToken: { type: 'string' },
             },
         },
     })
     @ApiOperation({
         summary: 'Test BYOK connection',
         description:
-            'Probe the provider with the supplied credentials to verify they work. Uses a cheap metadata call (list models) — no LLM inference is performed.',
+            'Probe the provider with the supplied credentials to verify they work. Uses cheap metadata / identity calls (list-models for most providers, GoogleAuth token exchange for Vertex, STS GetCallerIdentity for Bedrock) — no LLM inference is performed.',
     })
     public async testByokConnection(
         @Body()
         body: {
             provider: string;
-            apiKey: string;
+            apiKey?: string;
             baseURL?: string;
             model?: string;
+            vertexLocation?: string;
+            awsBearerToken?: string;
+            awsAccessKeyId?: string;
+            awsSecretAccessKey?: string;
+            awsRegion?: string;
+            awsSessionToken?: string;
         },
     ): Promise<TestByokResult> {
         return await this.testByokConnectionUseCase.execute(body);
