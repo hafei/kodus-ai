@@ -212,7 +212,7 @@ export class ObservabilityService implements OnModuleInit {
                 this.logger.error({
                     message: 'Error initializing observability',
                     context: ObservabilityService.name,
-                    error,
+                    error: this.safeErrorForLog(error),
                     metadata: {
                         serviceName: options.serviceName,
                         host: config.host,
@@ -642,6 +642,24 @@ export class ObservabilityService implements OnModuleInit {
             parentRunIdsArr: Array.from(acc.parentRunIds),
             runNamesArr: Array.from(acc.runNames),
         };
+    }
+
+    private redactConnectionString(value: string | undefined): string | undefined {
+        if (!value) return value;
+        return value.replace(
+            /\b(mongodb(?:\+srv)?:\/\/)[^\s:@/]+:[^\s@/]+@/gi,
+            '$1***:***@',
+        );
+    }
+
+    private safeErrorForLog(err: unknown): Error {
+        const source = err instanceof Error ? err : new Error(String(err));
+        const redacted = new Error(
+            this.redactConnectionString(source.message) ?? '',
+        );
+        redacted.name = source.name;
+        redacted.stack = this.redactConnectionString(source.stack);
+        return redacted;
     }
 
     private makeKey(config: DatabaseConnection, serviceName: string): string {
