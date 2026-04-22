@@ -1,9 +1,15 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class SsoTestSession1776879326293 implements MigrationInterface {
-    name = 'SsoTestSession1776879326293'
+export class SsoTestSession1776881803169 implements MigrationInterface {
+    name = 'SsoTestSession1776881803169'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`
+            CREATE TYPE "public"."sso_test_session_protocol_enum" AS ENUM('saml', 'oidc')
+        `);
+        await queryRunner.query(`
+            CREATE TYPE "public"."sso_test_session_status_enum" AS ENUM('pending', 'success', 'failed')
+        `);
         await queryRunner.query(`
             CREATE TABLE "sso_test_session" (
                 "uuid" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -54,6 +60,12 @@ export class SsoTestSession1776879326293 implements MigrationInterface {
         `);
         await queryRunner.query(`
             DROP TABLE "sso_test_session"
+        `);
+        await queryRunner.query(`
+            DROP TYPE "public"."sso_test_session_status_enum"
+        `);
+        await queryRunner.query(`
+            DROP TYPE "public"."sso_test_session_protocol_enum"
         `);
     }
 
