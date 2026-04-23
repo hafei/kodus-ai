@@ -13,7 +13,6 @@ on:
             - "apps/web/**"
             - "docker/Dockerfile.web"
             - "docker/Dockerfile.web.dev"
-            - "docker/Dockerfile.web.selfhosted"
 
 jobs:
     build_and_push_image:
