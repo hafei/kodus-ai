@@ -162,18 +162,11 @@ const nextConfig = {
         // GitLab OAuth envs (GLOBAL_GITLAB_*, WEB_GITLAB_*) migrated to
         // PublicConfig / useConfig() in Wave 1 — no longer inlined.
         WEB_TERMS_AND_CONDITIONS: process.env.WEB_TERMS_AND_CONDITIONS,
-        WEB_SUPPORT_DOCS_URL: process.env.WEB_SUPPORT_DOCS_URL,
-        WEB_SUPPORT_DISCORD_INVITE_URL:
-            process.env.WEB_SUPPORT_DISCORD_INVITE_URL,
-        WEB_SUPPORT_TALK_TO_FOUNDER_URL:
-            process.env.WEB_SUPPORT_TALK_TO_FOUNDER_URL,
+        // Wave 2 doc/support/token-docs envs (WEB_SUPPORT_*, WEB_TOKEN_DOCS_*)
+        // migrated to PublicConfig / useConfig() — no longer inlined.
         WEB_BITBUCKET_INSTALL_URL: process.env.WEB_BITBUCKET_INSTALL_URL,
         WEB_HOSTNAME_BILLING: process.env.WEB_HOSTNAME_BILLING,
         WEB_PORT_BILLING: process.env.WEB_PORT_BILLING,
-        WEB_TOKEN_DOCS_GITHUB: process.env.WEB_TOKEN_DOCS_GITHUB,
-        WEB_TOKEN_DOCS_GITLAB: process.env.WEB_TOKEN_DOCS_GITLAB,
-        WEB_TOKEN_DOCS_BITBUCKET: process.env.WEB_TOKEN_DOCS_BITBUCKET,
-        WEB_TOKEN_DOCS_AZUREREPOS: process.env.WEB_TOKEN_DOCS_AZUREREPOS,
 
         WEB_HOSTNAME_MCP_MANAGER: process.env.WEB_HOSTNAME_MCP_MANAGER,
         WEB_PORT_MCP_MANAGER: process.env.WEB_PORT_MCP_MANAGER,

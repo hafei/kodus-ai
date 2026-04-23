@@ -16,9 +16,11 @@ import {
     TooltipTrigger,
 } from "@components/ui/tooltip";
 import { FileTextIcon, LifeBuoy } from "lucide-react";
+import { useConfig } from "@providers/ConfigProvider";
 import { cn } from "src/core/utils/components";
 
 export const SupportSidebarButton = () => {
+    const cfg = useConfig();
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Cmd/Ctrl + Alt/Option + H (Help)
@@ -80,11 +82,7 @@ export const SupportSidebarButton = () => {
                 <div className="flex flex-col">
                     <NextLink
                         target="_blank"
-                        href={
-                            process.env.NEXT_PUBLIC_WEB_SUPPORT_DOCS_URL ??
-                            process.env.WEB_SUPPORT_DOCS_URL ??
-                            ""
-                        }
+                        href={cfg.supportDocsUrl || ""}
                         className={cn(
                             "flex items-center gap-3 px-4 py-3",
                             "text-text-secondary hover:text-text-primary hover:bg-background-tertiary",
@@ -96,12 +94,7 @@ export const SupportSidebarButton = () => {
 
                     <NextLink
                         target="_blank"
-                        href={
-                            process.env
-                                .NEXT_PUBLIC_WEB_SUPPORT_DISCORD_INVITE_URL ??
-                            process.env.WEB_SUPPORT_DISCORD_INVITE_URL ??
-                            ""
-                        }
+                        href={cfg.supportDiscordInviteUrl || ""}
                         className={cn(
                             "flex items-center gap-3 px-4 py-3",
                             "text-text-secondary hover:text-text-primary hover:bg-background-tertiary",
@@ -113,12 +106,7 @@ export const SupportSidebarButton = () => {
 
                     <NextLink
                         target="_blank"
-                        href={
-                            process.env
-                                .NEXT_PUBLIC_WEB_SUPPORT_TALK_TO_FOUNDER_URL ??
-                            process.env.WEB_SUPPORT_TALK_TO_FOUNDER_URL ??
-                            ""
-                        }
+                        href={cfg.supportTalkToFounderUrl || ""}
                         className={cn(
                             "flex items-center gap-3 px-4 py-3",
                             "text-text-secondary hover:text-text-primary hover:bg-background-tertiary",
