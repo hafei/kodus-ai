@@ -5,9 +5,12 @@
 
 jest.mock("server-only", () => ({}), { virtual: true });
 
-jest.mock("src/core/utils/helpers", () => ({
-    createUrl: (host: string, port: string, path: string) =>
+const createUrlMock = jest.fn(
+    (host: string, port: string, path: string) =>
         `http://${host}:${port}${path}`,
+);
+jest.mock("src/core/utils/helpers", () => ({
+    createUrl: (...args: unknown[]) => (createUrlMock as any)(...args),
 }));
 
 import { GET, POST } from "./[...path]/route";
@@ -39,6 +42,7 @@ describe("/api/proxy/billing/[...path]", () => {
     };
 
     beforeEach(() => {
+        createUrlMock.mockClear();
         fetchMock = jest
             .fn()
             .mockResolvedValue(new Response("ok", { status: 200 }));
@@ -98,5 +102,28 @@ describe("/api/proxy/billing/[...path]", () => {
         );
         const res = await GET(mockReq("GET"), ctx(["x"]));
         expect(res.status).toBe(502);
+    });
+
+    // Regression: in self-hosted, createUrl's default containerName
+    // points at the API container (kodus_api). Without the explicit
+    // { containerName: hostName } option, the billing hostname
+    // (kodus-service-billing) failed the "hostName !== containerName"
+    // check and the helper produced an https/no-port URL — ECONNREFUSED
+    // at port 443. The billing route must always pass the resolved
+    // hostName as the containerName so the http+port branch fires for
+    // any upstream, regardless of which default createUrl uses.
+    it("passes resolved hostName as containerName option to createUrl", async () => {
+        process.env.WEB_HOSTNAME_BILLING = "localhost";
+        process.env.GLOBAL_BILLING_CONTAINER_NAME = "my-billing";
+        await GET(mockReq("GET"), ctx(["trial"]));
+        const [, , , options] = createUrlMock.mock.calls[0];
+        expect(options).toEqual({ containerName: "my-billing" });
+    });
+
+    it("passes hostName as containerName even when not resolved from localhost", async () => {
+        process.env.WEB_HOSTNAME_BILLING = "billing.internal";
+        await GET(mockReq("GET"), ctx(["status"]));
+        const [, , , options] = createUrlMock.mock.calls[0];
+        expect(options).toEqual({ containerName: "billing.internal" });
     });
 });
