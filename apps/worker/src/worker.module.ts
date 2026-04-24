@@ -23,6 +23,7 @@ import { SharedConfigModule } from '@libs/shared/infrastructure/shared-config.mo
 import { SharedLogModule } from '@libs/shared/infrastructure/shared-log.module';
 import { SharedObservabilityModule } from '@libs/shared/infrastructure/shared-observability.module';
 
+import { AnalyticsClassifierCron } from './cron/analytics-classifier.cron';
 import { AnalyticsIngestionCron } from './cron/analytics-ingestion.cron';
 import { resolveWorkerRole, type WorkerRole } from './worker-role';
 import { WorkerDrainService } from './worker-drain.service';
@@ -78,11 +79,18 @@ export class WorkerModule {
         // analytics
         return {
             module: WorkerModule,
-            imports: [...baseImports, AnalyticsWarehouseModule.forRoot()],
+            imports: [
+                ...baseImports,
+                // LLM is needed by the PR-type classifier; the ingestion
+                // hot path itself doesn't call any model.
+                LLMModule.forRoot({ logger: LoggerWrapperService }),
+                AnalyticsWarehouseModule.forRoot(),
+            ],
             providers: [
                 WorkerDrainService,
                 WorkerHealthGuardService,
                 AnalyticsIngestionCron,
+                AnalyticsClassifierCron,
             ] satisfies Provider[],
         };
     }

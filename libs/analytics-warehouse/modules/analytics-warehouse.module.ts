@@ -9,6 +9,7 @@ import {
     PullRequestsSchema,
 } from '@libs/platformData/infrastructure/adapters/repositories/schemas/pullRequests.model';
 
+import { PullRequestClassifierService } from '../classification/pull-request-classifier.service';
 import { ANALYTICS_ENTITIES } from '../entities';
 import { BackfillOrchestratorService } from '../ingestion/backfill-orchestrator.service';
 import { PullRequestIngestionService } from '../ingestion/pull-request-ingestion.service';
@@ -57,11 +58,13 @@ export class AnalyticsWarehouseModule {
             providers: [
                 PullRequestIngestionService,
                 BackfillOrchestratorService,
+                PullRequestClassifierService,
             ],
             exports: [
                 TypeOrmModule,
                 PullRequestIngestionService,
                 BackfillOrchestratorService,
+                PullRequestClassifierService,
             ],
         };
     }
