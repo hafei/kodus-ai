@@ -155,8 +155,12 @@ export class PullRequestClassifierService {
               `AND pr."organizationId" = $1`)
             : '';
         // Prioritize recent PRs — freshest data powers the dashboard
-        // highlights users see first. NULLS LAST keeps older rows from
-        // the legacy backfill (with odd parsed timestamps) from starving.
+        // highlights users see first. We order by `parsed_created_at`
+        // (not `parsed_opened_at`) so the query can walk the existing
+        // `idx_pr_opt_org_created` composite index instead of doing a
+        // full scan + in-memory sort on every cron tick. NULLS LAST
+        // keeps older rows from the legacy backfill (with odd parsed
+        // timestamps) from starving.
         const limitPos = params.length;
         const rows = (await this.ds.query(
             `SELECT pr."_id"             AS id,
@@ -166,7 +170,7 @@ export class PullRequestClassifierService {
                  ON prt."pullRequestId" = pr."_id"
               WHERE prt."pullRequestId" IS NULL
                 ${orgFilter}
-           ORDER BY pr.parsed_opened_at DESC NULLS LAST
+           ORDER BY pr.parsed_created_at DESC NULLS LAST
               LIMIT $${limitPos}`,
             params,
         )) as PendingRow[];

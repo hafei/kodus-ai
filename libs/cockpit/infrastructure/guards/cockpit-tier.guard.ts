@@ -63,6 +63,21 @@ export class CockpitTierGuard implements CanActivate {
             typeof req.query?.organizationId === 'string'
                 ? req.query.organizationId
                 : undefined;
+
+        // IDOR protection: the downstream controllers read
+        // `organizationId` from the query string, so if we allowed a
+        // JWT for org A to pass a query for org B the tier check would
+        // be on A while the data read hits B. Enforce that either the
+        // query is absent, or it matches the JWT.
+        if (orgFromQuery && orgFromJwt && orgFromQuery !== orgFromJwt) {
+            throw new ForbiddenException(
+                'cockpit: organizationId in query does not match authenticated user',
+            );
+        }
+
+        // Prefer the JWT org — it's the only value we can actually
+        // trust. The query param is a convenience for endpoints that
+        // take it (e.g. `/cockpit/validate?organizationId=...`).
         const organizationId = orgFromJwt ?? orgFromQuery;
 
         if (!organizationId) {

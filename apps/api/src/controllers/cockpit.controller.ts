@@ -50,6 +50,34 @@ function requireRange(q: CockpitRangeQuery): void {
     }
 }
 
+function parseOptionalPositiveInt(
+    raw: string | undefined,
+    field: string,
+): number | undefined {
+    if (raw === undefined || raw === '') return undefined;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+        throw new BadRequestException(
+            `${field} must be a positive integer (got "${raw}")`,
+        );
+    }
+    return n;
+}
+
+function parseOptionalNonNegativeInt(
+    raw: string | undefined,
+    field: string,
+): number | undefined {
+    if (raw === undefined || raw === '') return undefined;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+        throw new BadRequestException(
+            `${field} must be a non-negative integer (got "${raw}")`,
+        );
+    }
+    return n;
+}
+
 // -------------------------------------------------------------------------
 // /cockpit/*  — validation + ops
 // -------------------------------------------------------------------------
@@ -140,13 +168,20 @@ export class CockpitController {
                 'analytics backfill disabled — set API_ANALYTICS_ALLOW_TRIGGER=true',
             );
         }
+        // Validate numeric inputs before handing them to the
+        // orchestrator. `stepDays <= 0` would loop forever because the
+        // window cursor can't advance; `pauseMs < 0` and `batch <= 0`
+        // would break the scanner in subtler ways.
+        const stepDaysNum = parseOptionalPositiveInt(stepDays, 'stepDays');
+        const pauseMsNum = parseOptionalNonNegativeInt(pauseMs, 'pauseMs');
+        const batchNum = parseOptionalPositiveInt(batch, 'batch');
         return this.backfillOrchestrator.run({
             fresh: fresh === 'true',
             from,
             until,
-            stepDays: stepDays ? Number(stepDays) : undefined,
-            pauseMs: pauseMs ? Number(pauseMs) : undefined,
-            batchSize: batch ? Number(batch) : undefined,
+            stepDays: stepDaysNum,
+            pauseMs: pauseMsNum,
+            batchSize: batchNum,
             organizationId,
         });
     }
