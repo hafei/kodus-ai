@@ -954,31 +954,10 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                 matchingGroupIds.has(g.id),
             );
 
-            const hasNotClassifiedPaths = affectedPaths.some(
-                (filePath: string) => {
-                    const normalizedFile = normalizePath(filePath);
-
-                    return !matchingEntries.some(({ normalizedPath }) =>
-                        isPathCoveredByDirectory(
-                            normalizedPath,
-                            normalizedFile,
-                        ),
-                    );
-                },
-            );
-
-            if (matchingGroups.length > 0 && hasNotClassifiedPaths) {
-                matchingGroups.push({ name: 'not classified', folders: [{ path: null }] });
-            }
-
-            if (matchingGroups.length !== 1) {
-                return;
-            }
-
-            if (
-                matchingGroups.length === 1 &&
-                matchingGroups[0]?.folders?.[0]?.path !== null
-            ) {
+            // If exactly 1 group matches, use its config
+            // (files outside any group don't invalidate the match)
+            // If 2+ groups match, fall back to repository config
+            if (matchingGroups.length === 1) {
                 return matchingGroups[0];
             }
 
