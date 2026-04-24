@@ -82,31 +82,29 @@ describe("billingFetch dual-mode", () => {
         expect(url).not.toContain("3992");
     });
 
-    // Regression: createUrl's self-hosted branch compares hostName
-    // against a default that points at the API container. Without the
-    // containerName option set to the billing host, createUrl returns
-    // https://<billing-host> with no port — ECONNREFUSED at 443 on
-    // customers running WEB_NODE_ENV=self-hosted. The billing proxy
-    // route got this fix; the server-side direct fetcher needs it too,
-    // otherwise SSR/server-component billing calls break in the same
-    // way.
-    it("server side: passes resolved hostName as containerName option to createUrl", async () => {
+    // Regression: the server-side billingFetch must flag its
+    // createUrl call as internal so the http+port branch fires. Before
+    // the explicit `{ internal: true }` flag existed this relied on a
+    // containerName trick; without either signal the helper returned
+    // https://<host> with no port and ECONNREFUSED'd at 443 under
+    // WEB_NODE_ENV=self-hosted.
+    it("server side: flags createUrl as internal (localhost-resolved host)", async () => {
         setServer(true);
         process.env.WEB_HOSTNAME_BILLING = "localhost";
         process.env.GLOBAL_BILLING_CONTAINER_NAME = "my-billing";
         const { billingFetch } = await import("./utils");
         await billingFetch("trial");
         const [, , , options] = createUrlMock.mock.calls[0];
-        expect(options).toEqual({ containerName: "my-billing" });
+        expect(options).toEqual({ internal: true });
         delete process.env.GLOBAL_BILLING_CONTAINER_NAME;
     });
 
-    it("server side: hostName used directly becomes its own containerName", async () => {
+    it("server side: flags createUrl as internal (direct hostname)", async () => {
         setServer(true);
         process.env.WEB_HOSTNAME_BILLING = "billing.customer.com";
         const { billingFetch } = await import("./utils");
         await billingFetch("plans");
         const [, , , options] = createUrlMock.mock.calls[0];
-        expect(options).toEqual({ containerName: "billing.customer.com" });
+        expect(options).toEqual({ internal: true });
     });
 });

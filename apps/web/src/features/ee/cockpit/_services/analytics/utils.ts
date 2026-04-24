@@ -38,8 +38,9 @@ export const analyticsFetch = async <Data>(
         ...(selectedRepository && { repository: selectedRepository }),
     };
 
+    // Analytics service is intra-network — http + port, no heuristics.
     const finalUrl = createUrl(`${hostName}`, port, `/api${url}`, {
-        containerName: hostName,
+        internal: true,
     });
 
     try {

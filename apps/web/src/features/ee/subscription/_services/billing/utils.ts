@@ -26,14 +26,11 @@ export const billingFetch = async <Data>(
                 "kodus-service-billing";
         }
         const port = process.env.WEB_PORT_BILLING;
-        // createUrl's self-hosted branch compares hostName against a
-        // default that points at the API container, so a billing
-        // container name wrongly triggers the https/no-port path and
-        // ECONNREFUSEs at port 443. Pass the resolved hostName as
-        // containerName to keep the http+port branch under self-hosted
-        // — same pattern the billing proxy route uses.
+        // Internal hop: always http + port, no protocol guessing. The
+        // old `containerName: hostName` trick is gone now that
+        // createUrl exposes this flag directly.
         url = createUrl(hostName, port, `/api/billing/${_url}`, {
-            containerName: hostName,
+            internal: true,
         });
     } else {
         const path = _url.toString();

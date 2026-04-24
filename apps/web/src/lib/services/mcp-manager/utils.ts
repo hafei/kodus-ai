@@ -43,9 +43,7 @@ export const mcpManagerFetch = async <Data>(
                 "kodus-mcp-manager";
         }
         const port = process.env.WEB_PORT_MCP_MANAGER;
-        url = createUrl(hostName, port, _url.toString(), {
-            containerName: hostName,
-        });
+        url = createUrl(hostName, port, _url.toString(), { internal: true });
     } else {
         authorization = await getJWTToken();
         const path = _url.toString();

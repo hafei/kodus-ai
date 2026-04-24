@@ -104,26 +104,23 @@ describe("/api/proxy/billing/[...path]", () => {
         expect(res.status).toBe(502);
     });
 
-    // Regression: in self-hosted, createUrl's default containerName
-    // points at the API container (kodus_api). Without the explicit
-    // { containerName: hostName } option, the billing hostname
-    // (kodus-service-billing) failed the "hostName !== containerName"
-    // check and the helper produced an https/no-port URL — ECONNREFUSED
-    // at port 443. The billing route must always pass the resolved
-    // hostName as the containerName so the http+port branch fires for
-    // any upstream, regardless of which default createUrl uses.
-    it("passes resolved hostName as containerName option to createUrl", async () => {
+    // Regression: the billing route must always tell createUrl it's an
+    // internal hop. Before `{ internal: true }` existed, the proxy
+    // relied on a `containerName: hostName` trick to dodge createUrl's
+    // self-hosted branch; without either signal, the helper produced
+    // an https/no-port URL and ECONNREFUSED'd at port 443.
+    it("flags the createUrl call as internal so http+port is forced", async () => {
         process.env.WEB_HOSTNAME_BILLING = "localhost";
         process.env.GLOBAL_BILLING_CONTAINER_NAME = "my-billing";
         await GET(mockReq("GET"), ctx(["trial"]));
         const [, , , options] = createUrlMock.mock.calls[0];
-        expect(options).toEqual({ containerName: "my-billing" });
+        expect(options).toEqual({ internal: true });
     });
 
-    it("passes hostName as containerName even when not resolved from localhost", async () => {
+    it("stays internal even when the hostname is not localhost-resolved", async () => {
         process.env.WEB_HOSTNAME_BILLING = "billing.internal";
         await GET(mockReq("GET"), ctx(["status"]));
         const [, , , options] = createUrlMock.mock.calls[0];
-        expect(options).toEqual({ containerName: "billing.internal" });
+        expect(options).toEqual({ internal: true });
     });
 });

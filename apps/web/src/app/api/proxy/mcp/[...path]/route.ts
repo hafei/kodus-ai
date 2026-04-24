@@ -13,9 +13,7 @@ function resolveMcpUpstream(path: string, search: string): string {
             "kodus-mcp-manager";
     }
     const port = process.env.WEB_PORT_MCP_MANAGER;
-    return createUrl(hostName, port, path + search, {
-        containerName: hostName,
-    });
+    return createUrl(hostName, port, path + search, { internal: true });
 }
 
 /**

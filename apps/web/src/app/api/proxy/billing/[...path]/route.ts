@@ -14,14 +14,10 @@ function resolveBillingUpstream(path: string, search: string): string {
     const port = process.env.WEB_PORT_BILLING;
     // The billing service expects its own routes under /api/billing/*,
     // so prefix the forwarded path here instead of leaking it into
-    // every client caller.
-    // createUrl's self-hosted branch compares hostName against a default
-    // that points at the API container, so a billing container name
-    // (kodus-service-billing) wrongly triggers the https/no-port path.
-    // Pass the resolved hostName as containerName to keep the http+port
-    // branch under self-hosted.
+    // every client caller. `internal: true` tells createUrl this is an
+    // intra-network hop — http + port, no protocol guessing.
     return createUrl(hostName, port, "/api/billing" + path + search, {
-        containerName: hostName,
+        internal: true,
     });
 }
 

@@ -12,8 +12,6 @@ import { apiProxyPath } from "../utils/api-proxy";
 import { isSelfHosted } from "../utils/self-hosted";
 import { isServerSide } from "./server-side";
 
-const containerName = process.env.GLOBAL_API_CONTAINER_NAME || "kodus_api";
-
 export function pathToApiUrl(
     path: ApiRoute | string,
     params?: Record<string, string | number | boolean>,
@@ -38,58 +36,70 @@ export function pathToApiUrl(
 
     let hostName = process.env.WEB_HOSTNAME_API;
     if (hostName === "localhost") {
-        hostName = containerName;
+        hostName =
+            process.env.GLOBAL_API_CONTAINER_NAME || "kodus_api";
     }
     const port = process.env.WEB_PORT_API;
 
-    return createUrl(hostName, port, path);
+    // Web server talks to the API container over the internal Docker
+    // network — http + port, never https.
+    return createUrl(hostName, port, path, { internal: true });
 }
 
+/**
+ * Build a URL for a backend upstream.
+ *
+ * Pass `{ internal: true }` when the target is on the same Docker /
+ * Kubernetes network as us (`kodus_api:3001`, `kodus-service-billing:3992`,
+ * etc.) — then the function just assembles `http://host:port/path`.
+ *
+ * When `internal` is unset, the function falls back to a heuristic
+ * (production + self-hosted with a non-localhost hostname → https with
+ * no port) for backwards compatibility with any caller that still
+ * points at a public domain directly. New code should always set
+ * `internal` explicitly.
+ */
 export function createUrl(
     hostName?: string,
     port?: string,
     path?: string,
-    options?: { containerName?: string },
+    options?: { internal?: boolean },
 ): string {
-    let finalPort: string;
-    let protocol: string;
+    const HTTP = "http://";
+    const HTTPS = "https://";
 
-    const defaultOptions = { containerName };
-    const config = { ...defaultOptions, ...options };
-
-    const isProduction = process.env.WEB_NODE_ENV === "production";
-
-    if (
-        isProduction ||
-        (isSelfHosted &&
-            hostName !== "localhost" &&
-            hostName !== config.containerName)
-    ) {
-        // Cases: Production OR (SelfHosted with a specific domain)
-        protocol = "https";
-        finalPort = "";
-    } else {
-        // Cases: Development OR (SelfHosted running on localhost)
-        // Also implicitly covers isDevelopment(), because if it's not production nor self-hosted with a domain,
-        // and isDevelopment() is true, it will fall here.
-        // If it's self-hosted and hostname === "localhost", it will also fall here.
-
-        const HTTP = "http://";
-        const HTTPS = "https://";
-        if (hostName?.includes(HTTP)) {
-            protocol = "http";
-            hostName = hostName.replace(HTTP, "");
-        } else if (hostName?.includes(HTTPS)) {
-            protocol = "https";
-            hostName = hostName.replace(HTTPS, "");
-        } else {
-            protocol = "http";
-        }
-
-        finalPort = port ? `:${port}` : "";
+    // If the hostName carries an explicit scheme, honor it regardless
+    // of the internal/heuristic logic below.
+    let schemeOverride: string | null = null;
+    if (hostName?.startsWith(HTTP)) {
+        schemeOverride = "http";
+        hostName = hostName.slice(HTTP.length);
+    } else if (hostName?.startsWith(HTTPS)) {
+        schemeOverride = "https";
+        hostName = hostName.slice(HTTPS.length);
     }
 
-    return `${protocol}://${hostName}${finalPort}${path}`;
+    const portPart = port ? `:${port}` : "";
+
+    // Explicit internal hop: same-cluster http+port, no heuristics.
+    if (options?.internal) {
+        return `${schemeOverride ?? "http"}://${hostName}${portPart}${path}`;
+    }
+
+    // Explicit scheme on the hostName overrides the public-URL
+    // heuristic below — the caller signalled exactly what they want
+    // (including whether to keep the port).
+    if (schemeOverride) {
+        return `${schemeOverride}://${hostName}${portPart}${path}`;
+    }
+
+    // Legacy heuristic path, kept for callers that pass a bare
+    // customer-supplied hostname and want a public-facing URL.
+    const isProduction = process.env.WEB_NODE_ENV === "production";
+    if (isProduction || (isSelfHosted && hostName !== "localhost")) {
+        return `https://${hostName}${path}`;
+    }
+    return `http://${hostName}${portPart}${path}`;
 }
 
 export function isJwtExpired(expirationDate: number) {
@@ -205,7 +215,10 @@ export const codeReviewConfigRemovePropertiesNotInType = (
 export const waitFor = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
-export const unformatConfig = <T>(node: FormattedConfig<T>): T => {
+// Trailing comma on the generic <T,> disambiguates from JSX for
+// SWC/Turbopack's edge-runtime parser when this module is imported
+// from middleware.ts.
+export const unformatConfig = <T,>(node: FormattedConfig<T>): T => {
     const unformattedConfig: Partial<T> = {};
 
     (Object.keys(node) as (keyof T)[]).forEach((key) => {

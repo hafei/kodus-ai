@@ -56,71 +56,64 @@ describe("createUrl", () => {
         return mod!.createUrl;
     }
 
-    describe("self-hosted mode", () => {
-        it("billing container without containerName option picks https/no-port (regression repro)", () => {
-            // This is the shape of the ECONNREFUSED bug: hostName
-            // differed from the API container default, so createUrl
-            // concluded the caller wanted a public https endpoint.
-            const createUrl = loadCreateUrl({
-                nodeEnv: "self-hosted",
-                apiContainer: "kodus_api",
-            });
+    describe("{ internal: true } — explicit intra-network hop", () => {
+        it("self-hosted billing container: http + port", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "self-hosted" });
             const url = createUrl(
                 "kodus-service-billing",
                 "3992",
                 "/api/billing/trial",
-            );
-            expect(url).toBe(
-                "https://kodus-service-billing/api/billing/trial",
-            );
-        });
-
-        it("billing container WITH { containerName: hostName } picks http+port (fix)", () => {
-            const createUrl = loadCreateUrl({
-                nodeEnv: "self-hosted",
-                apiContainer: "kodus_api",
-            });
-            const url = createUrl(
-                "kodus-service-billing",
-                "3992",
-                "/api/billing/trial",
-                { containerName: "kodus-service-billing" },
+                { internal: true },
             );
             expect(url).toBe(
                 "http://kodus-service-billing:3992/api/billing/trial",
             );
         });
 
-        it("localhost always picks http+port regardless of options", () => {
-            const createUrl = loadCreateUrl({
-                nodeEnv: "self-hosted",
-                apiContainer: "kodus_api",
-            });
+        it("production with internal flag still http + port (no heuristic override)", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "production" });
+            expect(
+                createUrl("kodus_api", "3001", "/team", { internal: true }),
+            ).toBe("http://kodus_api:3001/team");
+        });
+
+        it("explicit https:// scheme in hostName beats the internal default", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "self-hosted" });
+            expect(
+                createUrl("https://api.internal", "8443", "/x", {
+                    internal: true,
+                }),
+            ).toBe("https://api.internal:8443/x");
+        });
+    });
+
+    describe("legacy heuristic (no `internal` flag) — kept for back-compat", () => {
+        it("regression repro: in self-hosted with no flag, billing host leaks to https/no-port", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "self-hosted" });
+            expect(
+                createUrl(
+                    "kodus-service-billing",
+                    "3992",
+                    "/api/billing/trial",
+                ),
+            ).toBe("https://kodus-service-billing/api/billing/trial");
+        });
+
+        it("localhost stays http + port even without a flag", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "self-hosted" });
             expect(createUrl("localhost", "3001", "/x")).toBe(
                 "http://localhost:3001/x",
             );
         });
 
-        it("hostname matching the API container default picks http+port", () => {
-            const createUrl = loadCreateUrl({
-                nodeEnv: "self-hosted",
-                apiContainer: "kodus_api",
-            });
-            expect(createUrl("kodus_api", "3001", "/team")).toBe(
-                "http://kodus_api:3001/team",
-            );
-        });
-    });
-
-    describe("non-self-hosted modes", () => {
-        it("development: http+port for any host", () => {
+        it("development: http + port for any host", () => {
             const createUrl = loadCreateUrl({ nodeEnv: "development" });
             expect(createUrl("anything", "1234", "/p")).toBe(
                 "http://anything:1234/p",
             );
         });
 
-        it("production: https, no port", () => {
+        it("production: https, no port (public-facing default)", () => {
             const createUrl = loadCreateUrl({ nodeEnv: "production" });
             expect(createUrl("api.example.com", "443", "/p")).toBe(
                 "https://api.example.com/p",
