@@ -104,4 +104,70 @@ describe("RabbitMQDLQInitializer lifecycle", () => {
         );
         expect(assertedQueues).not.toContain("workflow.jobs.webhook.queue");
     });
+
+    // Regression: `this.amqpConnection.channel` is a getter that throws
+    // ChannelNotAvailableError when the RabbitMQ handshake hasn't
+    // completed at bootstrap. That exception used to propagate out of
+    // onApplicationBootstrap and crash the entire Nest process. Now it
+    // must be tolerated — the addSetup callback below handles the
+    // reconnection path.
+    it("tolerates the .channel getter throwing, still registers addSetup", async () => {
+        const addSetup = jest.fn();
+        const amqp = {
+            get channel() {
+                const err: any = new Error("channel is not available");
+                err.name = "ChannelNotAvailableError";
+                throw err;
+            },
+            managedChannel: { addSetup },
+        } as any;
+
+        const instance = new RabbitMQDLQInitializer(amqp);
+        await expect(
+            instance.onApplicationBootstrap(),
+        ).resolves.toBeUndefined();
+        expect(addSetup).toHaveBeenCalledTimes(1);
+    });
+
+    it("tolerates .channel being null, still registers addSetup", async () => {
+        const addSetup = jest.fn();
+        const amqp = {
+            channel: null,
+            managedChannel: { addSetup },
+        } as any;
+
+        const instance = new RabbitMQDLQInitializer(amqp);
+        await expect(
+            instance.onApplicationBootstrap(),
+        ).resolves.toBeUndefined();
+        expect(addSetup).toHaveBeenCalledTimes(1);
+    });
+
+    it("skips gracefully when managedChannel is missing", async () => {
+        const amqp = { channel: {}, managedChannel: undefined } as any;
+        const instance = new RabbitMQDLQInitializer(amqp);
+        await expect(
+            instance.onApplicationBootstrap(),
+        ).resolves.toBeUndefined();
+    });
+
+    it("swallows errors from eager declaration — bootstrap still resolves", async () => {
+        const assertExchange = jest
+            .fn()
+            .mockRejectedValue(new Error("pre-condition failed"));
+        const bindQueue = jest.fn();
+        const addSetup = jest.fn();
+        const amqp = {
+            channel: { assertExchange, bindQueue },
+            managedChannel: { addSetup },
+        } as any;
+
+        const instance = new RabbitMQDLQInitializer(amqp);
+        await expect(
+            instance.onApplicationBootstrap(),
+        ).resolves.toBeUndefined();
+        // Eager path failed, but the reconnect callback is still
+        // registered — recovery still possible.
+        expect(addSetup).toHaveBeenCalledTimes(1);
+    });
 });
