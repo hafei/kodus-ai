@@ -24,10 +24,24 @@ export class AnalyticsTypeORMFactory implements TypeOrmOptionsFactory {
             );
         }
 
-        const env = process.env.API_DATABASE_ENV ?? process.env.API_NODE_ENV;
-        const isProduction = !['development', 'test'].includes(env);
-        const disableSSL = process.env.API_DATABASE_DISABLE_SSL === 'true';
+        // Prefer ConfigService over direct process.env access to match
+        // the project-wide convention (see kody-rules/4368bf47-...):
+        // env reads go through the config layer so they can be tested
+        // and overridden uniformly. `configService.get` transparently
+        // falls back to `process.env` when no loader is registered for
+        // the key, so no extra config loader is required here.
+        const env =
+            this.configService.get<string>('API_DATABASE_ENV') ??
+            this.configService.get<string>('API_NODE_ENV');
+        const isProduction = !['development', 'test'].includes(env ?? '');
+        const disableSSL =
+            this.configService.get<string>('API_DATABASE_DISABLE_SSL') ===
+            'true';
         const useSSL = isProduction && !disableSSL;
+        const poolMax = parseInt(
+            this.configService.get<string>('ANALYTICS_PG_POOL_MAX') ?? '5',
+            10,
+        );
 
         return {
             name: ANALYTICS_DATA_SOURCE,
@@ -48,7 +62,7 @@ export class AnalyticsTypeORMFactory implements TypeOrmOptionsFactory {
             logging: !isProduction,
             ssl: useSSL,
             extra: {
-                max: parseInt(process.env.ANALYTICS_PG_POOL_MAX ?? '5', 10),
+                max: poolMax,
                 min: 1,
                 idleTimeoutMillis: 30000,
                 connectionTimeoutMillis: 60000,
