@@ -181,7 +181,7 @@ export const SelectRepositoriesDropdown = ({
                                                                             d.id
                                                                         }
                                                                         className="text-text-tertiary text-xs">
-                                                                        {d.path}
+                                                                        {d.folders?.[0]?.path ?? d.name}
                                                                     </span>
                                                                 ))}
                                                         </div>

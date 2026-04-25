@@ -111,6 +111,18 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
             let directoryPath = body.directoryPath;
             let directoryId = body.directoryId;
 
+            // Resolve directoryPaths: prefer array, fallback to single path
+            const resolvedPaths: string[] | undefined =
+                body.directoryPaths?.length > 0
+                    ? body.directoryPaths
+                    : directoryPath && directoryPath !== '/' && directoryPath !== ''
+                      ? [directoryPath]
+                      : undefined;
+
+            if (resolvedPaths) {
+                directoryPath = undefined; // handled via resolvedPaths
+            }
+
             if (directoryPath === '/' || directoryPath === '') {
                 directoryPath = undefined;
             }
@@ -151,7 +163,122 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
 
             this.mergeRepositories(codeReviewConfigs, filteredRepositoryInfo);
 
-            if (directoryPath) {
+            if (resolvedPaths) {
+                if (!repositoryId) {
+                    throw new Error(
+                        'Repository ID is required when directory paths are provided',
+                    );
+                }
+
+                const repoIndex = codeReviewConfigs.repositories.findIndex(
+                    (r) => r.id === repositoryId,
+                );
+
+                if (repoIndex === -1) {
+                    throw new Error('Repository configuration not found');
+                }
+
+                const targetRepo = codeReviewConfigs.repositories[repoIndex];
+                if (!targetRepo.directories) {
+                    targetRepo.directories = [];
+                }
+
+                if (directoryId) {
+                    // Edit mode: update folders of an existing group
+                    const existingGroup = targetRepo.directories.find(
+                        (g) => g.id === directoryId,
+                    );
+
+                    if (!existingGroup) {
+                        throw new Error(
+                            'Directory group not found for editing',
+                        );
+                    }
+
+                    // Ensure no path is already used in a DIFFERENT group
+                    const otherUsedPaths = new Set<string>();
+                    for (const group of targetRepo.directories) {
+                        if (group.id !== directoryId) {
+                            for (const f of group.folders || []) {
+                                otherUsedPaths.add(f.path);
+                            }
+                        }
+                    }
+
+                    for (const path of resolvedPaths) {
+                        if (otherUsedPaths.has(path)) {
+                            throw new Error(
+                                `Path "${path}" is already covered by another directory group`,
+                            );
+                        }
+                    }
+
+                    // Keep existing folder IDs for paths that haven't changed
+                    const existingFoldersByPath = new Map(
+                        (existingGroup.folders || []).map((f) => [f.path, f]),
+                    );
+
+                    existingGroup.folders = resolvedPaths.map((p) => {
+                        const existing = existingFoldersByPath.get(p);
+                        return existing ?? {
+                            id: uuidv4(),
+                            name: p.split('/').pop() || '',
+                            path: p,
+                        };
+                    });
+
+                    existingGroup.name =
+                        existingGroup.folders[0]?.name ?? '';
+                } else {
+                    // Create mode: check for existing group with exact same paths
+                    const existingGroup = targetRepo.directories.find(
+                        (group) =>
+                            group.folders &&
+                            resolvedPaths.every((p) =>
+                                group.folders.some((f) => f.path === p),
+                            ),
+                    );
+
+                    if (existingGroup) {
+                        directoryId = existingGroup.id;
+                    } else {
+                        // Ensure no path is already used in another group
+                        const usedPaths = new Set<string>();
+                        for (const group of targetRepo.directories) {
+                            for (const f of group.folders || []) {
+                                usedPaths.add(f.path);
+                            }
+                        }
+
+                        for (const path of resolvedPaths) {
+                            if (usedPaths.has(path)) {
+                                throw new Error(
+                                    `Path "${path}" is already covered by another directory group`,
+                                );
+                            }
+                        }
+
+                        const firstName =
+                            resolvedPaths[0].split('/').pop() || '';
+
+                        const newGroup: DirectoryCodeReviewConfig = {
+                            id: uuidv4(),
+                            name: firstName,
+                            isSelected: true,
+                            configs: {},
+                            folders: resolvedPaths.map((p) => ({
+                                id: uuidv4(),
+                                name: p.split('/').pop() || '',
+                                path: p,
+                            })),
+                        };
+
+                        targetRepo.directories.push(newGroup);
+                        directoryId = newGroup.id;
+                    }
+                }
+            } else if (directoryPath) {
+                // Legacy single-path support (CLI, sync)
                 if (directoryId) {
                     throw new Error(
                         'Directory ID should not be provided when directory path is provided',
@@ -177,26 +304,34 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                     targetRepo.directories = [];
                 }
 
-                const existingDirectory = targetRepo.directories.find(
-                    (d) => d.path === directoryPath,
+                // Find existing group that contains this path
+                const existingGroup = targetRepo.directories.find(
+                    (group) =>
+                        group.folders?.some((f) => f.path === directoryPath),
                 );
 
-                if (existingDirectory) {
-                    directoryId = existingDirectory.id;
+                if (existingGroup) {
+                    directoryId = existingGroup.id;
                 } else {
                     const segments = directoryPath.split('/');
                     const name = segments[segments.length - 1];
 
-                    const newDirectory: DirectoryCodeReviewConfig = {
+                    const newGroup: DirectoryCodeReviewConfig = {
                         id: uuidv4(),
                         name,
-                        path: directoryPath,
                         isSelected: true,
                         configs: {},
+                        folders: [
+                            {
+                                id: uuidv4(),
+                                name,
+                                path: directoryPath,
+                            },
+                        ],
                     };
 
-                    targetRepo.directories.push(newDirectory);
-                    directoryId = newDirectory.id;
+                    targetRepo.directories.push(newGroup);
+                    directoryId = newGroup.id;
                 }
             }
 

@@ -130,8 +130,14 @@ export type CodeReviewBaseConfig = {
     configs: CodeReviewGlobalConfig;
 };
 
-export type CodeReviewDirectoryConfig = CodeReviewBaseConfig & {
+export type DirectoryFolder = {
+    id: string;
+    name: string;
     path: string;
+};
+
+export type CodeReviewDirectoryConfig = CodeReviewBaseConfig & {
+    folders: DirectoryFolder[];
 };
 
 export type CodeReviewRepositoryConfig = CodeReviewBaseConfig & {

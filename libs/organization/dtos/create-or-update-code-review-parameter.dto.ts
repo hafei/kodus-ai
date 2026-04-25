@@ -467,4 +467,10 @@ export class CreateOrUpdateCodeReviewParameterDto {
     @IsOptional()
     @ApiPropertyOptional({ example: 'src/services' })
     directoryPath?: string;
+
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    @ApiPropertyOptional({ example: ['/src/services', '/src/controllers'] })
+    directoryPaths?: string[];
 }
