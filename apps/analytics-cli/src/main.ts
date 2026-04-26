@@ -130,19 +130,25 @@ async function main() {
         logger: ['log', 'warn', 'error'],
     });
 
-    // Graceful shutdown so a Ctrl+C during a window still flushes the
-    // checkpoint update (the orchestrator commits per-window, but the
-    // Mongo cursor inside a window can be aborted mid-flight).
-    let shuttingDown = false;
-    const shutdown = async (signal: string) => {
-        if (shuttingDown) return;
-        shuttingDown = true;
+    // Wire SIGINT/SIGTERM into an AbortController so the orchestrator
+    // finishes the current window, writes a `paused` checkpoint, and
+    // returns. Re-running picks up from that checkpoint.
+    //
+    // The single-shot path doesn't honor the signal yet — that would
+    // require plumbing it through PullRequestIngestionService. Chunked
+    // mode (default) is the right tool for any realistic backfill.
+    const ac = new AbortController();
+    let signaled = false;
+    const onSignal = (sig: string) => {
+        if (signaled) return;
+        signaled = true;
         logger.warn(
-            `received ${signal} — finishing current window then exiting`,
+            `received ${sig} — finishing current window then exiting`,
         );
+        ac.abort();
     };
-    process.on('SIGINT', () => void shutdown('SIGINT'));
-    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    process.on('SIGINT', () => onSignal('SIGINT'));
+    process.on('SIGTERM', () => onSignal('SIGTERM'));
 
     try {
         if (args.singleShot) {
@@ -167,6 +173,7 @@ async function main() {
                 batchSize: args.batch,
                 fresh: args.fresh,
                 organizationId: args.org,
+                signal: ac.signal,
             });
             logger.log(`chunked backfill result: ${JSON.stringify(res)}`);
         }
