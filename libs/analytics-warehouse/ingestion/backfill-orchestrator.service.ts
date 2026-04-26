@@ -62,6 +62,13 @@ export interface BackfillOptions {
     fresh?: boolean;
     /** Restrict to a single org (for spot replay). */
     organizationId?: string;
+    /** Cooperative cancellation. When aborted, the loop finishes the
+     * current window, writes a `paused` checkpoint and returns with
+     * `status='paused'`. Re-running with the default `fresh: false`
+     * resumes from that checkpoint. ECS stopTimeout caps how long the
+     * in-flight window can take before SIGKILL — bump it on the task
+     * def if windows routinely exceed 30s. */
+    signal?: AbortSignal;
 }
 
 export interface BackfillResult {
@@ -154,6 +161,31 @@ export class BackfillOrchestratorService {
 
         try {
             while (cursor < until) {
+                if (options.signal?.aborted) {
+                    this.logger.warn(
+                        `backfill aborted at cursor=${cursor.toISOString()} ` +
+                            `— windows=${windows} scanned=${scannedTotal}`,
+                    );
+                    const finishedAt = new Date();
+                    await this.upsertCheckpoint({
+                        cursorAt: cursor,
+                        status: 'paused',
+                        startedAt,
+                        finishedAt,
+                        scannedTotal,
+                        lastError: null,
+                        params: null,
+                    });
+                    return {
+                        startedAt,
+                        finishedAt,
+                        windows,
+                        scannedTotal,
+                        upsertedTotal,
+                        finalCursor: cursor,
+                        status: 'paused',
+                    };
+                }
                 const windowEnd = new Date(
                     Math.min(
                         cursor.getTime() + stepDays * 86_400_000,
@@ -215,7 +247,7 @@ export class BackfillOrchestratorService {
                 );
 
                 if (cursor < until && pauseMs > 0) {
-                    await new Promise((r) => setTimeout(r, pauseMs));
+                    await this.sleepInterruptible(pauseMs, options.signal);
                 }
             }
 
@@ -390,5 +422,27 @@ export class BackfillOrchestratorService {
                 "last_run_at" = now()`,
             [SOURCE, at, id],
         );
+    }
+
+    private sleepInterruptible(
+        ms: number,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        return new Promise((resolve) => {
+            if (signal?.aborted) {
+                resolve();
+                return;
+            }
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            const onAbort = () => {
+                if (timer) clearTimeout(timer);
+                resolve();
+            };
+            timer = setTimeout(() => {
+                signal?.removeEventListener('abort', onAbort);
+                resolve();
+            }, ms);
+            signal?.addEventListener('abort', onAbort, { once: true });
+        });
     }
 }

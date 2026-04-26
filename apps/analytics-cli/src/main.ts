@@ -17,7 +17,14 @@ import { SharedLogModule } from '@libs/shared/infrastructure/shared-log.module';
 import { SharedMongoModule } from '@libs/shared/database/shared-mongo.module';
 
 /**
- * Backfill CLI — populates the analytics warehouse from Mongo `pullRequests`.
+ * Analytics warehouse backfill CLI — prod-ready entry.
+ *
+ * This file is the canonical entry. It is bundled by `nest build
+ * analytics-cli` into `dist/apps/analytics-cli/main.js` so prod images
+ * (which strip TS sources and `tsconfig.json`) can run it via
+ * `node dist/apps/analytics-cli/main.js`.
+ *
+ * In dev, `yarn analytics:backfill` runs this same file under ts-node.
  *
  * Two modes:
  *   chunked     (default): walk the timeline in N-day windows by `createdAt`,
@@ -28,13 +35,15 @@ import { SharedMongoModule } from '@libs/shared/database/shared-mongo.module';
  *                          / fresh tenants.
  *
  * Usage:
- *   yarn analytics:backfill                    # chunked, resumes from checkpoint
- *   yarn analytics:backfill --fresh            # chunked, ignores checkpoint
- *   yarn analytics:backfill --from 2024-01-01 --until 2024-02-01
- *   yarn analytics:backfill --org <organizationId>
- *   yarn analytics:backfill --step-days 1 --pause-ms 5000 --batch 200
- *   yarn analytics:backfill --single-shot      # legacy mode
- *   yarn analytics:backfill --single-shot --max 10000 --batch 500
+ *   yarn analytics:backfill                    # dev (ts-node)
+ *   yarn analytics:backfill:prod               # prod (compiled, run inside ECS task)
+ *
+ *   --fresh                                    # ignore checkpoint
+ *   --from 2024-01-01 --until 2024-02-01
+ *   --org <organizationId>
+ *   --step-days 1 --pause-ms 5000 --batch 200
+ *   --single-shot                              # legacy mode
+ *   --single-shot --max 10000 --batch 500
  */
 @Module({
     imports: [
