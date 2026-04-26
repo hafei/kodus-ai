@@ -1,8 +1,8 @@
 let withBundleAnalyzer = (config) => config;
 
-if (process.env.ANALYZE === "true") {
+if (process.env.ANALYZE === 'true') {
     // Só carrega o bundle analyzer se a variável ANALYZE for 'true'
-    withBundleAnalyzer = require("@next/bundle-analyzer")({
+    withBundleAnalyzer = require('@next/bundle-analyzer')({
         enabled: true,
     });
 }
@@ -13,7 +13,7 @@ const nextConfig = {
     // production image can ship only the files the runtime actually needs
     // (no full node_modules, no devDependencies). Shrinks the web image
     // from ~1GB to ~200MB and reduces supply-chain surface.
-    output: "standalone",
+    output: 'standalone',
     // Pin the file-tracing root to this package instead of letting Next
     // auto-detect via lockfile. Auto-detect walks upward until it finds a
     // yarn.lock / package.json and was picking up stray files above the
@@ -34,9 +34,7 @@ const nextConfig = {
     // in every web pipeline.
     generateBuildId: async () => {
         return (
-            process.env.RELEASE_VERSION ||
-            process.env.GIT_COMMIT_SHA ||
-            "dev"
+            process.env.RELEASE_VERSION || process.env.GIT_COMMIT_SHA || 'dev'
         );
     },
     typescript: {
@@ -57,31 +55,31 @@ const nextConfig = {
     async headers() {
         return [
             {
-                source: "/:path*",
+                source: '/:path*',
                 headers: [
                     {
-                        key: "X-Frame-Options",
-                        value: "DENY",
+                        key: 'X-Frame-Options',
+                        value: 'DENY',
                     },
                     {
-                        key: "Content-Security-Policy",
+                        key: 'Content-Security-Policy',
                         value: "frame-ancestors 'none'",
                     },
                     {
-                        key: "X-Content-Type-Options",
-                        value: "nosniff",
+                        key: 'X-Content-Type-Options',
+                        value: 'nosniff',
                     },
                     {
-                        key: "Referrer-Policy",
-                        value: "strict-origin-when-cross-origin",
+                        key: 'Referrer-Policy',
+                        value: 'strict-origin-when-cross-origin',
                     },
                     {
-                        key: "Permissions-Policy",
-                        value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+                        key: 'Permissions-Policy',
+                        value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
                     },
                     {
-                        key: "Strict-Transport-Security",
-                        value: "max-age=31536000; includeSubDomains",
+                        key: 'Strict-Transport-Security',
+                        value: 'max-age=31536000; includeSubDomains',
                     },
                 ],
             },
@@ -90,66 +88,66 @@ const nextConfig = {
     images: {
         remotePatterns: [
             {
-                protocol: "https",
-                hostname: "github.com",
-                port: "",
-                pathname: "/**",
+                protocol: 'https',
+                hostname: 'github.com',
+                port: '',
+                pathname: '/**',
             },
             {
-                protocol: "https",
-                hostname: "lh3.googleusercontent.com",
-                port: "",
-                pathname: "/**",
+                protocol: 'https',
+                hostname: 'lh3.googleusercontent.com',
+                port: '',
+                pathname: '/**',
             },
             {
-                protocol: "https",
-                hostname: "t5y4w6q9.rocketcdn.me",
-                port: "",
-                pathname: "/**",
+                protocol: 'https',
+                hostname: 't5y4w6q9.rocketcdn.me',
+                port: '',
+                pathname: '/**',
             },
         ],
     },
     async rewrites() {
         return [
             {
-                source: "/setup/teams/configuration",
-                destination: "/setup/configuration/teams",
+                source: '/setup/teams/configuration',
+                destination: '/setup/configuration/teams',
             },
             {
-                source: "/teams/:teamId/integrations/teams/configuration",
-                destination: "/teams/:teamId/configuration/teams",
+                source: '/teams/:teamId/integrations/teams/configuration',
+                destination: '/teams/:teamId/configuration/teams',
             },
             {
-                source: "/setup/github/configuration",
-                destination: "/setup/configuration/github",
+                source: '/setup/github/configuration',
+                destination: '/setup/configuration/github',
             },
             {
-                source: "/setup/gitlab/configuration",
-                destination: "/setup/configuration/gitlab",
+                source: '/setup/gitlab/configuration',
+                destination: '/setup/configuration/gitlab',
             },
             {
-                source: "/teams/:teamId/integrations/gitlab/configuration",
-                destination: "/teams/:teamId/configuration/gitlab",
+                source: '/teams/:teamId/integrations/gitlab/configuration',
+                destination: '/teams/:teamId/configuration/gitlab',
             },
             {
-                source: "/teams/:teamId/integrations/github/configuration",
-                destination: "/teams/:teamId/configuration/github",
+                source: '/teams/:teamId/integrations/github/configuration',
+                destination: '/teams/:teamId/configuration/github',
             },
             {
-                source: "/teams/:teamId/integrations/azure-repos/configuration",
-                destination: "/teams/:teamId/configuration/azure-repos",
+                source: '/teams/:teamId/integrations/azure-repos/configuration',
+                destination: '/teams/:teamId/configuration/azure-repos',
             },
             {
-                source: "/setup/azure-repos/configuration",
-                destination: "/setup/configuration/azure-repos",
+                source: '/setup/azure-repos/configuration',
+                destination: '/setup/configuration/azure-repos',
             },
             {
-                source: "/setup/bitbucket/configuration",
-                destination: "/setup/configuration/bitbucket",
+                source: '/setup/bitbucket/configuration',
+                destination: '/setup/configuration/bitbucket',
             },
             {
-                source: "/teams/:teamId/integrations/bitbucket/configuration",
-                destination: "/teams/:teamId/configuration/bitbucket",
+                source: '/teams/:teamId/integrations/bitbucket/configuration',
+                destination: '/teams/:teamId/configuration/bitbucket',
             },
         ];
     },

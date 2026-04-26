@@ -183,7 +183,7 @@ const GOOD_EXAMPLE_PLACEHOLDER = `for (var i = 1; i <= 10; i += 2)  // Compliant
 
 const getDirectoryPathForReplace = (
     directory: FormattedDirectoryCodeReviewConfig,
-) => `${directory.path.slice(1)}/`;
+) => `${(directory.folders?.[0]?.path ?? '').slice(1)}/`;
 const getKodyRulePathWithoutDirectoryPath = ({
     directory,
     rule,
@@ -1013,7 +1013,7 @@ export const KodyRuleAddOrUpdateItemModal = ({
                                                             size="md"
                                                             variant="helper"
                                                             className="text-text-primary pointer-events-none h-full rounded-r-none ring-1">
-                                                            {directory?.path}/
+                                                            {directory?.folders?.[0]?.path ?? ''}/
                                                         </Badge>
                                                     )}
 

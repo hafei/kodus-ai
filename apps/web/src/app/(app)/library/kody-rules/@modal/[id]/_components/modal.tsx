@@ -128,7 +128,7 @@ export const KodyRuleLibraryItemModal = ({
                 const directory = repository?.directories?.find(
                     (d) => d.id === directoryId,
                 );
-                newRule.path = `${directory?.path.slice(1)}/**`;
+                newRule.path = `${(directory?.folders?.[0]?.path ?? '').slice(1)}/**`;
             }
 
             const addedKodyRules = await addKodyRuleToRepositories({
@@ -169,8 +169,8 @@ export const KodyRuleLibraryItemModal = ({
                                 (d) => d.id === rule.directoryId,
                             );
 
-                            const directoryFullPath = directory?.path
-                                ? `${repository?.name}${directory.path}`
+                            const directoryFullPath = directory?.folders?.[0]?.path
+                                ? `${repository?.name}${directory.folders[0].path}`
                                 : undefined;
 
                             return (

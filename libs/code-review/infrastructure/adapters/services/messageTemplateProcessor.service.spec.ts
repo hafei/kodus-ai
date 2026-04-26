@@ -112,13 +112,14 @@ describe('MessageTemplateProcessor', () => {
     });
 
     describe('handler registry', () => {
-        it('exposes the four default placeholders', () => {
+        it('exposes the default placeholders', () => {
             expect(new Set(processor.getAvailablePlaceholders())).toEqual(
                 new Set([
                     '@changedFiles',
                     '@changeSummary',
                     '@reviewOptions',
                     '@reviewCadence',
+                    '@reviewScope',
                 ]),
             );
         });
