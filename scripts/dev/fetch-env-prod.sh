@@ -98,6 +98,8 @@ KEYS=(
     "/prod/kodus-orchestrator/GLOBAL_KODUS_SERVICE_DISCORD"
     "/prod/kodus-orchestrator/KODUS_SERVICE_AZURE_REPOS"
     "/prod/kodus-orchestrator/API_CRON_AUTOMATION_DAILY_CHECKIN"
+    "/prod/kodus-orchestrator/API_CRON_WEEKLY_RECAP"
+    "/prod/kodus-orchestrator/API_CRON_WEEKLY_RECAP_ENABLED"
 
     "/prod/kodus-orchestrator/RESEND_API_KEY"
     "/prod/kodus-orchestrator/RESEND_WEBHOOK_SECRET"

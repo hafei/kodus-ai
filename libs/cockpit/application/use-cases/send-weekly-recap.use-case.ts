@@ -128,30 +128,39 @@ export class SendWeeklyRecapUseCase {
         let sent = 0;
         const failures: WeeklyRecapResult['failures'] = [];
 
-        const results = await Promise.allSettled(
-            recipients.map((r) =>
-                this.emailService.sendWeeklyRecap(r, props, this.logger),
-            ),
-        );
+        // Chunk the fanout so a large org doesn't open hundreds of
+        // concurrent connections to Resend at once — that exhausts
+        // Node sockets and trips the API's per-second rate limit.
+        // 50 is well under Resend's default burst window and gives
+        // a clean upper bound on memory/socket pressure.
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < recipients.length; i += CHUNK_SIZE) {
+            const chunk = recipients.slice(i, i + CHUNK_SIZE);
+            const results = await Promise.allSettled(
+                chunk.map((r) =>
+                    this.emailService.sendWeeklyRecap(r, props, this.logger),
+                ),
+            );
 
-        results.forEach((r, i) => {
-            const email = recipients[i].email;
-            if (r.status === 'fulfilled' && r.value) {
-                sent += 1;
-            } else if (r.status === 'rejected') {
-                failures.push({
-                    email,
-                    reason:
-                        r.reason instanceof Error
-                            ? r.reason.message
-                            : String(r.reason),
-                });
-            } else {
-                // EmailService swallows errors and returns undefined on failure;
-                // promote that to an explicit failure entry so callers know.
-                failures.push({ email, reason: 'send returned undefined' });
-            }
-        });
+            results.forEach((r, j) => {
+                const email = chunk[j].email;
+                if (r.status === 'fulfilled' && r.value) {
+                    sent += 1;
+                } else if (r.status === 'rejected') {
+                    failures.push({
+                        email,
+                        reason:
+                            r.reason instanceof Error
+                                ? r.reason.message
+                                : String(r.reason),
+                    });
+                } else {
+                    // EmailService swallows errors and returns undefined on failure;
+                    // promote that to an explicit failure entry so callers know.
+                    failures.push({ email, reason: 'send returned undefined' });
+                }
+            });
+        }
 
         this.logger.log({
             message: 'Weekly recap completed',

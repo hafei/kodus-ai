@@ -398,9 +398,14 @@ function fmtPercent(p: number, digits = 1): string {
 }
 
 function fmtDateRange(start: string, end: string): string {
+    // Pin to UTC: input is `YYYY-MM-DDT00:00:00Z`, but without an
+    // explicit timeZone, toLocaleDateString uses the server's local
+    // zone and a host in PST/EST shifts the recap window back by a
+    // day in the rendered email.
     const opts: Intl.DateTimeFormatOptions = {
         month: 'short',
         day: 'numeric',
+        timeZone: 'UTC',
     };
     try {
         const s = new Date(`${start}T00:00:00Z`).toLocaleDateString(
