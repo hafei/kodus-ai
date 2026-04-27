@@ -134,6 +134,13 @@ const KodyRulesPageContent = () => {
                 case KodyRulesStatus.ACTIVE:
                     result.activeRules.push(rule);
                     break;
+                // PAUSED rules stay visible in the user's list with a
+                // distinct badge so they can be reviewed and resumed —
+                // they just aren't enforced on PRs. Without this case
+                // they were silently dropped and pause looked broken.
+                case KodyRulesStatus.PAUSED:
+                    result.activeRules.push(rule);
+                    break;
                 case KodyRulesStatus.PENDING:
                     result.pendingRules.push(rule);
                     break;
