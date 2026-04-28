@@ -20,12 +20,10 @@ ENV API_DEVELOPMENT_MODE=false
 ENV RELEASE_VERSION=${RELEASE_VERSION}
 ENV SENTRY_RELEASE=${RELEASE_VERSION}
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean \
-  && apt-get update \
+RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    ca-certificates git python3 make g++ procps
+    ca-certificates git python3 make g++ procps \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN corepack disable \
   && npm i -g yarn@1.22.22
@@ -35,23 +33,19 @@ COPY package.json yarn.lock .npmrc ./
 COPY packages/kodus-common ./packages/kodus-common
 COPY packages/kodus-flow ./packages/kodus-flow
 
-# The `npmrc` BuildKit secret (optional) lets CI inject auth for the
-# @kodus registry without the token ever landing in an image layer.
-# Usage: `docker buildx build --secret id=npmrc,src=$HOME/.npmrc ...`.
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
-    --mount=type=cache,target=/yarn-cache,sharing=locked \
-    cd packages/kodus-common \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn install \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn prepack
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
-    --mount=type=cache,target=/yarn-cache,sharing=locked \
-    cd packages/kodus-flow \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn install \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn build
+# Railway's Metal builder rejects BuildKit secret mounts and requires a
+# service-id-prefixed cache key on cache mounts (which can't share across
+# our 3 services), so this Dockerfile drops both. The repo-local .npmrc
+# copied above only holds registry URLs (no tokens), and the @kodus/*
+# packages are replaced by the local copies in packages/ via `cp -r`.
+RUN cd packages/kodus-common \
+  && yarn install \
+  && yarn prepack
+RUN cd packages/kodus-flow \
+  && yarn install \
+  && yarn build
 
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
-    --mount=type=cache,target=/yarn-cache,sharing=locked \
-    YARN_CACHE_FOLDER=/yarn-cache yarn install --frozen-lockfile
+RUN yarn install --frozen-lockfile
 RUN rm -rf node_modules/@kodus/kodus-common && cp -r packages/kodus-common node_modules/@kodus/kodus-common
 RUN rm -rf node_modules/@kodus/flow && cp -r packages/kodus-flow node_modules/@kodus/flow
 
@@ -79,20 +73,14 @@ COPY package.json yarn.lock .npmrc ./
 COPY packages/kodus-common ./packages/kodus-common
 COPY packages/kodus-flow ./packages/kodus-flow
 
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
-    --mount=type=cache,target=/yarn-cache,sharing=locked \
-    cd packages/kodus-common \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn install \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn prepack
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
-    --mount=type=cache,target=/yarn-cache,sharing=locked \
-    cd packages/kodus-flow \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn install \
-  && YARN_CACHE_FOLDER=/yarn-cache yarn build
+RUN cd packages/kodus-common \
+  && yarn install \
+  && yarn prepack
+RUN cd packages/kodus-flow \
+  && yarn install \
+  && yarn build
 
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
-    --mount=type=cache,target=/yarn-cache,sharing=locked \
-    YARN_CACHE_FOLDER=/yarn-cache yarn install --frozen-lockfile --prefer-offline --production=true
+RUN yarn install --frozen-lockfile --prefer-offline --production=true
 
 # Drop nested node_modules/src/test that were needed for `yarn prepack`
 # but not at runtime — keeping them would duplicate hundreds of MB inside
@@ -118,12 +106,10 @@ ENV RELEASE_VERSION=${RELEASE_VERSION}
 ENV SENTRY_RELEASE=${RELEASE_VERSION}
 ENV SERVICE_TYPE=${SERVICE_TYPE}
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean \
-  && apt-get update \
+RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    ca-certificates procps
+    ca-certificates procps \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=1000:1000 --from=prod-deps /usr/src/app/node_modules ./node_modules
 COPY --chown=1000:1000 --from=build /usr/src/app/dist ./dist
