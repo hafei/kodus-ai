@@ -41,8 +41,10 @@ export function pathToApiUrl(
     }
     const port = process.env.WEB_PORT_API;
 
-    // Web server talks to the API container over the internal Docker
-    // network — http + port, never https.
+    // `internal: true` is the caller saying "this is a same-cluster
+    // hop". `createUrl` honours that only when a port is set (Docker
+    // compose / dev). On AWS, no port is set and `createUrl` falls
+    // through to the public-domain heuristic (https, no port).
     return createUrl(hostName, port, path, { internal: true });
 }
 
@@ -82,7 +84,14 @@ export function createUrl(
     const portPart = port ? `:${port}` : "";
 
     // Explicit internal hop: same-cluster http+port, no heuristics.
-    if (options?.internal) {
+    // We require BOTH `internal` AND a port to take this path. The
+    // proxy routes (billing, mcp, api/*) all set `internal: true`
+    // unconditionally, but on AWS QA/prod the env doesn't ship
+    // WEB_PORT_* (the upstream is a public domain fronted by an ALB
+    // that terminates TLS on 443). Without `port`, treat the call as a
+    // public-domain hop and fall through to the heuristic below — that
+    // produces `https://<host><path>`, which is what the ALB expects.
+    if (options?.internal && port) {
         return `${schemeOverride ?? "http"}://${hostName}${portPart}${path}`;
     }
 

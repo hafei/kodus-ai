@@ -85,6 +85,31 @@ describe("createUrl", () => {
                 }),
             ).toBe("https://api.internal:8443/x");
         });
+
+        // Regression repro for the QA/prod AWS outage on 2026-04-28: every
+        // /api/proxy/* route hardcodes `internal: true`, but when the env
+        // points at a public ALB-fronted domain there's no WEB_PORT_*. We
+        // must NOT produce `http://<host>/path` (port 80, plain HTTP) —
+        // the ALB only listens on 443 with TLS termination, so the
+        // upstream rejects with ECONNREFUSED. With no port, the call has
+        // to fall through to the public-URL heuristic (https + no port).
+        it("production with internal flag and NO port → https, no port (AWS ALB)", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "production" });
+            expect(
+                createUrl("qa.api.kodus.io", undefined, "/user/email", {
+                    internal: true,
+                }),
+            ).toBe("https://qa.api.kodus.io/user/email");
+        });
+
+        it("self-hosted with internal flag and NO port → https, no port (customer domain)", () => {
+            const createUrl = loadCreateUrl({ nodeEnv: "self-hosted" });
+            expect(
+                createUrl("api.cliente.com", undefined, "/x", {
+                    internal: true,
+                }),
+            ).toBe("https://api.cliente.com/x");
+        });
     });
 
     describe("legacy heuristic (no `internal` flag) — kept for back-compat", () => {
