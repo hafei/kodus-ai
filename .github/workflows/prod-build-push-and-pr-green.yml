@@ -27,6 +27,12 @@ env:
         github.sha }}
     BUILDX_PLATFORMS: linux/arm64
     BUILDX_CACHE_SCOPE: kodus-ai-arm64
+    # The runner is linux/amd64 but our images are pushed arm64-only.
+    # Without this, Trivy tries to resolve a child manifest for its own
+    # platform inside the manifest list and fails with "no child with
+    # platform linux/amd64". Trivy CLI picks up `TRIVY_PLATFORM` env to
+    # mean `--platform`, so all three scan steps inherit it.
+    TRIVY_PLATFORM: linux/arm64
 
     # ECR repositories (required)
     ECR_REPOSITORY_API: ${{ vars.ECR_REPOSITORY_API }}
