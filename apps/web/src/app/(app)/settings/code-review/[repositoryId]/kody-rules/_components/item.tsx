@@ -42,11 +42,20 @@ export const KodyRuleItem = ({
     tab,
     onAnyChange,
     showSuggestionsButton = false,
+    selection,
 }: {
     rule: KodyRuleWithInheritanceDetails;
     tab: "review-rules" | "memories";
     onAnyChange: () => void;
     showSuggestionsButton?: boolean;
+    /** Optional bulk-selection wiring. When omitted the row renders
+     *  without a checkbox (legacy / read-only views). When the rule
+     *  isn't eligible (inherited / no uuid), pass `eligible: false`. */
+    selection?: {
+        isSelected: boolean;
+        eligible: boolean;
+        onToggle: () => void;
+    };
 }) => {
     const { repositoryId, directoryId } = useCodeReviewRouteParams();
     const { teamId } = useSelectedTeamId();
@@ -102,6 +111,21 @@ export const KodyRuleItem = ({
             <CardHeader className="flex-row items-start justify-between gap-10">
                 <div className="-mb-2 flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
+                        {selection?.eligible && (
+                            <input
+                                type="checkbox"
+                                checked={selection.isSelected}
+                                onChange={selection.onToggle}
+                                aria-label={
+                                    "Select " +
+                                    entityLabel +
+                                    " " +
+                                    (rule.title ?? "")
+                                }
+                                className="border-card-lv3 bg-card-lv2 size-4 cursor-pointer rounded border accent-primary-light"
+                            />
+                        )}
+
                         {!isMemory && (
                             <IssueSeverityLevelBadge
                                 severity={resolveKodyRuleDisplaySeverity(rule)}
