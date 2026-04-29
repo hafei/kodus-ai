@@ -160,25 +160,33 @@ describe('TelemetryService', () => {
 
     // ─── firstReviewCompleted ───────────────────────────────────────────
     describe('firstReviewCompleted', () => {
-        it('uses orgId as distinctId, fires PostHog and n8n, skips Resend', async () => {
+        const fullPayload = {
+            organizationId: 'org-1',
+            organizationName: 'Acme Corp',
+            teamId: 'team-1',
+            repositoryId: 'r-1',
+            repositoryName: 'api-service',
+            pullRequestNumber: 42,
+            platform: 'github',
+            ownerId: 'owner-1',
+            ownerEmail: 'owner@acme.com',
+        };
+
+        it('uses ownerId as distinctId when present, fires PostHog and n8n with hydrated payload, skips Resend', async () => {
             const { service, posthog, resend, n8n } = buildService();
 
-            await service.firstReviewCompleted({
-                organizationId: 'org-1',
-                teamId: 'team-1',
-                repositoryId: 'r-1',
-                pullRequestNumber: 42,
-                platform: 'github',
-            });
+            await service.firstReviewCompleted(fullPayload);
 
+            // Owner becomes the PostHog distinctId so events tie to a real user.
             expect(posthog.capture).toHaveBeenCalledWith(
-                'org-1',
+                'owner-1',
                 'first_review_completed',
                 expect.objectContaining({
                     organizationId: 'org-1',
-                    repositoryId: 'r-1',
+                    organizationName: 'Acme Corp',
+                    repositoryName: 'api-service',
+                    ownerEmail: 'owner@acme.com',
                     pullRequestNumber: 42,
-                    platform: 'github',
                 }),
                 {
                     organization: 'org-1',
@@ -190,11 +198,24 @@ describe('TelemetryService', () => {
                 'first_review.completed',
                 expect.objectContaining({
                     organizationId: 'org-1',
-                    repositoryId: 'r-1',
-                    pullRequestNumber: 42,
+                    organizationName: 'Acme Corp',
+                    repositoryName: 'api-service',
+                    ownerEmail: 'owner@acme.com',
+                    ownerId: 'owner-1',
                 }),
             );
             expect(resend.send).not.toHaveBeenCalled();
+        });
+
+        it('falls back to organizationId as distinctId when ownerId is missing', async () => {
+            const { service, posthog } = buildService();
+
+            await service.firstReviewCompleted({
+                organizationId: 'org-1',
+                teamId: 'team-1',
+            });
+
+            expect(posthog.capture.mock.calls[0][0]).toBe('org-1');
         });
     });
 

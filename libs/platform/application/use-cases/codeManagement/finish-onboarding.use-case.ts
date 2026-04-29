@@ -8,6 +8,10 @@ import {
     IParametersService,
     PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/parameters/contracts/parameters.service.contract';
+import {
+    ITeamService,
+    TEAM_SERVICE_TOKEN,
+} from '@libs/organization/domain/team/contracts/team.service.contract';
 
 import { CreatePRCodeReviewUseCase } from './create-prs-code-review.use-case';
 import { GenerateKodyRulesUseCase } from '@libs/kodyRules/application/use-cases/generate-kody-rules.use-case';
@@ -24,6 +28,8 @@ export class FinishOnboardingUseCase {
     constructor(
         @Inject(PARAMETERS_SERVICE_TOKEN)
         private readonly parametersService: IParametersService,
+        @Inject(TEAM_SERVICE_TOKEN)
+        private readonly teamService: ITeamService,
         private readonly reviewPRUseCase: CreatePRCodeReviewUseCase,
         private readonly generateKodyRulesUseCase: GenerateKodyRulesUseCase,
         private readonly findKodyRulesUseCase: FindRulesInOrganizationByRuleFilterKodyRulesUseCase,
@@ -117,11 +123,37 @@ export class FinishOnboardingUseCase {
             const userId = this.request?.user?.uuid;
             const userEmail = this.request?.user?.email;
             if (userId) {
+                // Best-effort hydration for human-readable names in telemetry
+                // (Discord/Slack messages). If the lookup fails, telemetry
+                // still fires with just the IDs — `safeCall` covers it.
+                let teamName: string | undefined;
+                let organizationName: string | undefined;
+                try {
+                    const team = await this.teamService.findById(teamId);
+                    teamName = team?.name;
+                    organizationName = team?.organization?.name;
+                } catch (error) {
+                    this.logger.warn({
+                        message:
+                            'Failed to resolve team/org names for onboarding telemetry; falling back to IDs only',
+                        context: FinishOnboardingUseCase.name,
+                        metadata: {
+                            teamId,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        },
+                    });
+                }
+
                 void this.telemetry.onboardingCompleted({
                     userId,
                     email: userEmail,
                     organizationId,
+                    organizationName,
                     teamId,
+                    teamName,
                     reviewedPR: !!reviewPR,
                 });
 

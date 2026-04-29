@@ -19,6 +19,15 @@ import { OrganizationParametersKey } from '@libs/core/domain/enums';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { PipelineFactory } from '@libs/core/infrastructure/pipeline/services/pipeline-factory.service';
+import { Role } from '@libs/identity/domain/permissions/enums/permissions.enum';
+import {
+    IUsersService,
+    USER_SERVICE_TOKEN,
+} from '@libs/identity/domain/user/contracts/user.service.contract';
+import {
+    IOrganizationService,
+    ORGANIZATION_SERVICE_TOKEN,
+} from '@libs/organization/domain/organization/contracts/organization.service.contract';
 import {
     IOrganizationParametersService,
     ORGANIZATION_PARAMETERS_SERVICE_TOKEN,
@@ -65,6 +74,10 @@ export class CodeReviewHandlerService {
         @Inject(ORGANIZATION_PARAMETERS_SERVICE_TOKEN)
         private readonly organizationParametersService: IOrganizationParametersService,
         private readonly telemetry: TelemetryService,
+        @Inject(ORGANIZATION_SERVICE_TOKEN)
+        private readonly organizationService: IOrganizationService,
+        @Inject(USER_SERVICE_TOKEN)
+        private readonly usersService: IUsersService,
     ) {}
 
     /**
@@ -97,12 +110,32 @@ export class CodeReviewHandlerService {
                 { organizationId },
             );
 
+            // Best-effort hydration: org name + owner email/name make the
+            // milestone notification actionable (Discord/email). If any
+            // lookup fails we still fire telemetry with whatever we have —
+            // the milestone marker is the source of truth, names are gravy.
+            const [org, owner] = await Promise.all([
+                this.organizationService
+                    .findOne({ uuid: organizationId })
+                    .catch(() => undefined),
+                this.usersService
+                    .findOne({
+                        organization: { uuid: organizationId },
+                        role: Role.OWNER,
+                    } as any)
+                    .catch(() => undefined),
+            ]);
+
             await this.telemetry.firstReviewCompleted({
                 organizationId,
+                organizationName: org?.name,
                 teamId,
                 repositoryId: repository?.id,
+                repositoryName: repository?.name,
                 pullRequestNumber,
                 platform: platformType,
+                ownerEmail: owner?.email,
+                ownerId: owner?.uuid,
             });
         } catch (error) {
             this.logger.warn({

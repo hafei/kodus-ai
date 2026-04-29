@@ -23,19 +23,34 @@ jest.mock('@kodus/flow', () => ({
  * private methods on services.
  */
 describe('CodeReviewHandlerService.captureFirstReviewIfNeeded', () => {
-    const buildService = () => {
+    const buildService = (overrides: { org?: any; owner?: any } = {}) => {
         const orgParams = {
             findByKey: jest.fn(),
             createOrUpdateConfig: jest.fn().mockResolvedValue(true),
         };
         const telemetry = { firstReviewCompleted: jest.fn() };
+        const orgService = {
+            findOne: jest.fn().mockResolvedValue(
+                overrides.org ?? { uuid: 'org-1', name: 'Acme Corp' },
+            ),
+        };
+        const usersService = {
+            findOne: jest.fn().mockResolvedValue(
+                overrides.owner ?? {
+                    uuid: 'owner-1',
+                    email: 'owner@acme.com',
+                },
+            ),
+        };
         const service = new CodeReviewHandlerService(
             {} as any,
             {} as any,
             orgParams as any,
             telemetry as any,
+            orgService as any,
+            usersService as any,
         );
-        return { service, orgParams, telemetry };
+        return { service, orgParams, telemetry, orgService, usersService };
     };
 
     const orgAndTeam = { organizationId: 'org-1', teamId: 'team-1' };
@@ -46,7 +61,7 @@ describe('CodeReviewHandlerService.captureFirstReviewIfNeeded', () => {
     });
 
     describe('first review (no marker yet)', () => {
-        it('writes the marker, then fires telemetry with org/team/repo/pr/platform', async () => {
+        it('writes the marker, then fires telemetry hydrated with org name + owner email + repo name', async () => {
             const { service, orgParams, telemetry } = buildService();
             orgParams.findByKey.mockResolvedValueOnce(undefined);
 
@@ -66,15 +81,40 @@ describe('CodeReviewHandlerService.captureFirstReviewIfNeeded', () => {
             expect(typeof value).toBe('string');
             expect(new Date(value).toString()).not.toBe('Invalid Date');
 
-            // Telemetry fired with the right shape.
+            // Telemetry fired with the hydrated shape (names + owner contact).
             expect(telemetry.firstReviewCompleted).toHaveBeenCalledTimes(1);
             expect(telemetry.firstReviewCompleted).toHaveBeenCalledWith({
                 organizationId: 'org-1',
+                organizationName: 'Acme Corp',
                 teamId: 'team-1',
                 repositoryId: 'repo-1',
+                repositoryName: 'alpha',
                 pullRequestNumber: 42,
                 platform: 'github',
+                ownerId: 'owner-1',
+                ownerEmail: 'owner@acme.com',
             });
+        });
+
+        it('still fires telemetry with undefined names when hydration lookups fail', async () => {
+            const { service, orgParams, telemetry, orgService, usersService } =
+                buildService();
+            orgParams.findByKey.mockResolvedValueOnce(undefined);
+            orgService.findOne.mockRejectedValueOnce(new Error('db slow'));
+            usersService.findOne.mockRejectedValueOnce(new Error('db slow'));
+
+            await (service as any).captureFirstReviewIfNeeded(
+                orgAndTeam,
+                repository,
+                42,
+                'github',
+            );
+
+            expect(telemetry.firstReviewCompleted).toHaveBeenCalledTimes(1);
+            const arg = telemetry.firstReviewCompleted.mock.calls[0][0];
+            expect(arg.organizationId).toBe('org-1');
+            expect(arg.organizationName).toBeUndefined();
+            expect(arg.ownerEmail).toBeUndefined();
         });
     });
 

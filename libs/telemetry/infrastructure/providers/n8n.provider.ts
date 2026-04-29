@@ -14,7 +14,24 @@ import { ConfigService } from '@nestjs/config';
 export class N8nProvider {
     private readonly logger = createLogger(N8nProvider.name);
 
-    constructor(private readonly configService: ConfigService) {}
+    constructor(private readonly configService: ConfigService) {
+        const url = this.getUrl();
+        if (url) {
+            const source = this.configService.get<string>('N8N_WEBHOOK_URL')
+                ? 'N8N_WEBHOOK_URL'
+                : 'API_SIGNUP_NOTIFICATION_WEBHOOK (legacy fallback)';
+            this.logger.log({
+                message: `N8nProvider initialized → ${url} (from ${source})`,
+                context: N8nProvider.name,
+            });
+        } else {
+            this.logger.log({
+                message:
+                    'N8nProvider initialized — disabled (no N8N_WEBHOOK_URL / API_SIGNUP_NOTIFICATION_WEBHOOK)',
+                context: N8nProvider.name,
+            });
+        }
+    }
 
     private getUrl(): string | null {
         return (

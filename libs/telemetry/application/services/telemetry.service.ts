@@ -227,7 +227,9 @@ export class TelemetryService {
         userId: string;
         email?: string;
         organizationId: string;
+        organizationName?: string;
         teamId: string;
+        teamName?: string;
         reviewedPR: boolean;
     }): Promise<void> {
         await this.safeCall('onboardingCompleted', async () => {
@@ -236,7 +238,9 @@ export class TelemetryService {
                 'onboarding_completed',
                 {
                     organizationId: p.organizationId,
+                    organizationName: p.organizationName,
                     teamId: p.teamId,
+                    teamName: p.teamName,
                     reviewedPR: p.reviewedPR,
                 },
                 { organization: p.organizationId, team: p.teamId },
@@ -245,6 +249,7 @@ export class TelemetryService {
             if (p.email) {
                 await this.resend.send('onboarding.completed', p.email, {
                     userId: p.userId,
+                    organizationName: p.organizationName,
                     reviewedPR: p.reviewedPR,
                 });
             }
@@ -253,7 +258,9 @@ export class TelemetryService {
                 userId: p.userId,
                 email: p.email,
                 organizationId: p.organizationId,
+                organizationName: p.organizationName,
                 teamId: p.teamId,
+                teamName: p.teamName,
                 reviewedPR: p.reviewedPR,
             });
         });
@@ -326,21 +333,28 @@ export class TelemetryService {
      */
     async firstReviewCompleted(p: {
         organizationId: string;
+        organizationName?: string;
         teamId?: string;
         repositoryId?: string;
+        repositoryName?: string;
         pullRequestNumber?: number;
         platform?: string;
+        ownerId?: string;
+        ownerEmail?: string;
     }): Promise<void> {
         await this.safeCall('firstReviewCompleted', async () => {
             this.posthog.capture(
-                p.organizationId,
+                p.ownerId ?? p.organizationId,
                 'first_review_completed',
                 {
                     organizationId: p.organizationId,
+                    organizationName: p.organizationName,
                     teamId: p.teamId,
                     repositoryId: p.repositoryId,
+                    repositoryName: p.repositoryName,
                     pullRequestNumber: p.pullRequestNumber,
                     platform: p.platform,
+                    ownerEmail: p.ownerEmail,
                 },
                 {
                     organization: p.organizationId,
@@ -351,10 +365,14 @@ export class TelemetryService {
 
             await this.n8n.notify('first_review.completed', {
                 organizationId: p.organizationId,
+                organizationName: p.organizationName,
                 teamId: p.teamId,
                 repositoryId: p.repositoryId,
+                repositoryName: p.repositoryName,
                 pullRequestNumber: p.pullRequestNumber,
                 platform: p.platform,
+                ownerEmail: p.ownerEmail,
+                ownerId: p.ownerId,
             });
         });
     }
