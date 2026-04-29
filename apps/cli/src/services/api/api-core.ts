@@ -1,8 +1,22 @@
+import os from 'node:os';
 import { Agent, fetch as undiciFetch } from 'undici';
 import { ApiError } from '../../types/errors.js';
+import { CLI_VERSION } from '../../constants.js';
 import { loadConfig, type CliConfig } from '../../utils/config.js';
 import { getDeviceIdentity, updateDeviceToken } from '../../utils/device.js';
 import { cliDebug, cliError, isCliVerboseMode } from '../../utils/logger.js';
+
+/**
+ * Build the User-Agent string the CLI sends on every request. Includes the
+ * CLI version, runtime (node) version, and OS — enough to power the auth
+ * confirmation page ("Device: ...") and server-side dashboards without
+ * leaking anything sensitive.
+ */
+function cliUserAgent(): string {
+    const platform = `${os.platform()}/${os.release()}`;
+    const node = process.version.replace(/^v/, '');
+    return `KodusCLI/${CLI_VERSION} (${platform}; node ${node})`;
+}
 
 /**
  * Cached config loaded once at first request.
@@ -275,6 +289,12 @@ export async function request<T>(
             dispatcher: longLivedDispatcher,
             headers: {
                 'Content-Type': 'application/json',
+                // Identify the CLI explicitly. Without this header, fetch in
+                // Node ≥18 sends the default `undici/<v>` UA, which leaks
+                // through to the auth-confirmation page as a meaningless
+                // "Device: undici". Format mirrors the npm convention so
+                // backend logs/dashboards stay greppable per CLI version.
+                'User-Agent': cliUserAgent(),
                 ...cfHeaders,
                 ...(deviceIdentity?.deviceId
                     ? { 'X-Kodus-Device-Id': deviceIdentity.deviceId }
