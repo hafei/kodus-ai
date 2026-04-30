@@ -1,6 +1,6 @@
 {
     "name": "@kodus/cli",
-    "version": "0.4.14",
+    "version": "0.4.15",
     "description": "Kodus CLI - AI-powered code review from your terminal",
     "type": "module",
     "bin": {
@@ -9,11 +9,12 @@
     "main": "./dist/index.js",
     "repository": {
         "type": "git",
-        "url": "https://github.com/kodustech/cli.git"
+        "url": "git+https://github.com/kodustech/kodus-ai.git",
+        "directory": "apps/cli"
     },
     "homepage": "https://kodus.io",
     "bugs": {
-        "url": "https://github.com/kodustech/cli/issues"
+        "url": "https://github.com/kodustech/kodus-ai/issues"
     },
     "scripts": {
         "build": "yarn clean && tsc && chmod +x dist/index.js",
