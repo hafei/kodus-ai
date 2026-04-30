@@ -23,6 +23,7 @@ function resolveMcpUpstream(path: string, search: string): string {
  */
 export const { GET, POST, PUT, PATCH, DELETE } = createProxyHandler({
     resolveUpstream: resolveMcpUpstream,
+    proxyMountPath: "/api/proxy/mcp",
     resolveBearerToken: async () => {
         const session = await auth();
         return session?.user?.accessToken ?? null;

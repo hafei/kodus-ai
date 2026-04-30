@@ -23,9 +23,9 @@ import {
 } from "@services/ssoConfig/fetch";
 import { AlertCircle, Save, Upload } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import { useConfig } from "@providers/ConfigProvider";
 import { useAuth } from "src/core/providers/auth.provider";
 import { publicDomainsSet } from "src/core/utils/email";
-import { apiProxyPath } from "src/core/utils/api-proxy";
 import { revalidateServerSidePath } from "src/core/utils/revalidate-server-side";
 import {
     buildSSOConfigFingerprint,
@@ -156,6 +156,7 @@ export const ClientSsoOrganizationSettingsPage = (props: {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { organizationId } = useAuth();
+    const { apiPublicUrl } = useConfig();
     const ssoTestSessionId = searchParams.get("ssoTestSessionId");
     const domainVerificationToken = searchParams.get("domainVerificationToken");
     const [metadataUrl, setMetadataUrl] = useState<string>("");
@@ -175,9 +176,18 @@ export const ClientSsoOrganizationSettingsPage = (props: {
             : "",
     );
 
-    const callbackUrl = apiProxyPath(
-        `/auth/sso/saml/callback/${organizationId}`,
-    );
+    // SAML ACS URL displayed for the customer to paste into their IdP.
+    // Must be (1) absolute — the IdP is an external system and can't
+    // resolve relative paths — and (2) point at the API's public
+    // origin directly, NOT at the same-origin /api/proxy/api/*
+    // mount. The proxy is for browser fetches; SAML is a stateful
+    // server-side flow that requires session cookies on the API's
+    // own origin. See ssoLogin in lib/auth/fetchers.ts for the
+    // matching reasoning on the initiation side.
+    const callbackUrl =
+        apiPublicUrl && organizationId
+            ? `${apiPublicUrl.replace(/\/$/, "")}/auth/sso/saml/callback/${organizationId}`
+            : "";
 
     const userDomain = props.email.split("@")[1];
     const form = useForm<SsoFormData>({
@@ -680,7 +690,9 @@ export const ClientSsoOrganizationSettingsPage = (props: {
                             onClick={handleConnectionTest}
                             loading={isTestingConnection}
                             disabled={
-                                isLoadingSubmitButton || isTestingConnection
+                                isLoadingSubmitButton ||
+                                isTestingConnection ||
+                                (isEnabled && !callbackUrl)
                             }>
                             Test connection
                         </Button>
@@ -695,7 +707,8 @@ export const ClientSsoOrganizationSettingsPage = (props: {
                                 !isValid ||
                                 isLoadingSubmitButton ||
                                 (isEnabled && needsConnectionRetest) ||
-                                needsDomainVerification
+                                needsDomainVerification ||
+                                (isEnabled && !callbackUrl)
                             }
                             loading={isLoadingSubmitButton}>
                             Save settings
@@ -846,50 +859,76 @@ export const ClientSsoOrganizationSettingsPage = (props: {
                                                         <FormControl.Label>
                                                             Callback URL
                                                         </FormControl.Label>
-                                                        <div className="flex items-center space-x-2">
-                                                            <Input
-                                                                value={
-                                                                    callbackUrl
-                                                                }
-                                                                readOnly
-                                                                className="flex-1 font-mono text-sm"
-                                                                onClick={() => {
-                                                                    navigator.clipboard.writeText(
-                                                                        callbackUrl,
-                                                                    );
-                                                                    toast({
-                                                                        title: "Copied",
-                                                                        description:
-                                                                            "Callback URL copied to clipboard",
-                                                                        variant:
-                                                                            "success",
-                                                                    });
-                                                                }}
-                                                            />
-                                                            <Button
-                                                                type="button"
-                                                                variant="secondary"
-                                                                size="md"
-                                                                onClick={() => {
-                                                                    navigator.clipboard.writeText(
-                                                                        callbackUrl,
-                                                                    );
-                                                                    toast({
-                                                                        title: "Copied",
-                                                                        variant:
-                                                                            "success",
-                                                                        description:
-                                                                            "Callback URL copied to clipboard",
-                                                                    });
-                                                                }}>
-                                                                Copy
-                                                            </Button>
-                                                        </div>
-                                                        <FormControl.Helper>
-                                                            Provide this URL to
-                                                            your identity
-                                                            provider
-                                                        </FormControl.Helper>
+                                                        {callbackUrl ? (
+                                                            <>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <Input
+                                                                        value={
+                                                                            callbackUrl
+                                                                        }
+                                                                        readOnly
+                                                                        className="flex-1 font-mono text-sm"
+                                                                        onClick={() => {
+                                                                            navigator.clipboard.writeText(
+                                                                                callbackUrl,
+                                                                            );
+                                                                            toast({
+                                                                                title: "Copied",
+                                                                                description:
+                                                                                    "Callback URL copied to clipboard",
+                                                                                variant:
+                                                                                    "success",
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="secondary"
+                                                                        size="md"
+                                                                        onClick={() => {
+                                                                            navigator.clipboard.writeText(
+                                                                                callbackUrl,
+                                                                            );
+                                                                            toast({
+                                                                                title: "Copied",
+                                                                                variant:
+                                                                                    "success",
+                                                                                description:
+                                                                                    "Callback URL copied to clipboard",
+                                                                            });
+                                                                        }}>
+                                                                        Copy
+                                                                    </Button>
+                                                                </div>
+                                                                <FormControl.Helper>
+                                                                    Provide this
+                                                                    URL to your
+                                                                    identity
+                                                                    provider
+                                                                </FormControl.Helper>
+                                                            </>
+                                                        ) : (
+                                                            <Alert variant="danger">
+                                                                <AlertCircle />
+                                                                <AlertDescription>
+                                                                    SSO callback
+                                                                    URL is not
+                                                                    configured.
+                                                                    Set API_URL
+                                                                    to the
+                                                                    public,
+                                                                    browser-reachable
+                                                                    URL of the
+                                                                    API (e.g.
+                                                                    https://api.example.com)
+                                                                    so the IdP
+                                                                    can POST
+                                                                    SAMLResponse
+                                                                    to the API
+                                                                    directly.
+                                                                </AlertDescription>
+                                                            </Alert>
+                                                        )}
                                                     </FormControl.Root>
                                                 </div>
                                             </div>

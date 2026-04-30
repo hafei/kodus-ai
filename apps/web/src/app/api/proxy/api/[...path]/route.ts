@@ -15,6 +15,7 @@ import { createProxyHandler } from "../../_lib/create-proxy-handler";
  */
 export const { GET, POST, PUT, PATCH, DELETE } = createProxyHandler({
     resolveUpstream: (path, search) => pathToApiUrl(path + search),
+    proxyMountPath: "/api/proxy/api",
     denyPathPrefixes: [
         "/admin",
         "/internal",

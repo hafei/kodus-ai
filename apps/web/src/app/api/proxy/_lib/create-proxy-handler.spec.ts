@@ -56,6 +56,7 @@ describe("createProxyHandler", () => {
             async (badSegment) => {
                 const handler = createProxyHandler({
                     resolveUpstream: (p) => `http://upstream${p}`,
+                    proxyMountPath: "/api/proxy/test",
                 });
                 const res = await handler.GET(
                     mockReq("GET"),
@@ -81,6 +82,7 @@ describe("createProxyHandler", () => {
         it("blocks paths that start with a denied prefix (case-insensitive) with 404", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
                 denyPathPrefixes: ["/admin", "/internal"],
             });
 
@@ -108,6 +110,7 @@ describe("createProxyHandler", () => {
         it("allows paths that do not match any denied prefix", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
                 denyPathPrefixes: ["/admin"],
             });
 
@@ -122,6 +125,7 @@ describe("createProxyHandler", () => {
         it("denies BEFORE rate-limit check (so probers don't consume the budget)", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
                 denyPathPrefixes: ["/admin"],
             });
             // 200 deny responses with the same session — if this consumed the
@@ -144,6 +148,7 @@ describe("createProxyHandler", () => {
         it("returns 429 when the same session exceeds the window budget", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
             });
             const cookie = `authjs.session-token=rate-${Date.now()}`;
 
@@ -168,6 +173,7 @@ describe("createProxyHandler", () => {
         it("strips Host header before forwarding", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
             });
             await handler.GET(
                 mockReq("GET", { cookie: "authjs.session-token=hstrip" }),
@@ -180,6 +186,7 @@ describe("createProxyHandler", () => {
         it("preserves Cookie header", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
             });
             await handler.GET(
                 mockReq("GET", { cookie: "authjs.session-token=pres; a=b" }),
@@ -204,6 +211,7 @@ describe("createProxyHandler", () => {
 
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
             });
             const res = await handler.GET(
                 mockReq("GET", { cookie: "authjs.session-token=strip" }),
@@ -219,6 +227,7 @@ describe("createProxyHandler", () => {
         it("injects Bearer token from resolveBearerToken", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
                 resolveBearerToken: async () => "tok-123",
             });
             await handler.GET(
@@ -234,6 +243,7 @@ describe("createProxyHandler", () => {
         it("removes Authorization when token resolver returns null", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
                 resolveBearerToken: async () => null,
             });
             const req = mockReq("GET", {
@@ -251,10 +261,229 @@ describe("createProxyHandler", () => {
         });
     });
 
+    describe("3xx redirect handling", () => {
+        it("calls upstream fetch with redirect: 'manual' so the proxy never follows server-side", async () => {
+            // Locks in the SAML SSO fix: before this, fetch's default
+            // (`redirect: 'follow'`) made the proxy fetch the IdP page
+            // server-side and serve it on the proxy URL, breaking
+            // initiation entirely.
+            const handler = createProxyHandler({
+                resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
+            });
+            await handler.GET(
+                mockReq("GET", { cookie: "authjs.session-token=manual" }),
+                ctx(["x"]),
+            );
+            const [, init] = fetchMock.mock.calls[0];
+            expect((init as any).redirect).toBe("manual");
+        });
+        const redirectStatuses = [301, 302, 303, 307, 308];
+        it.each(redirectStatuses)(
+            "forwards %i status with empty body and rewritten Location",
+            async (status) => {
+                fetchMock.mockResolvedValueOnce(
+                    new Response("upstream body — should not be forwarded", {
+                        status,
+                        headers: {
+                            location: "https://idp.example.com/sso?req=abc",
+                        },
+                    }),
+                );
+
+                const handler = createProxyHandler({
+                    resolveUpstream: (p) => `http://upstream.internal${p}`,
+                    proxyMountPath: "/api/proxy/test",
+                });
+
+                const res = await handler.GET(
+                    mockReq("GET", {
+                        cookie: "authjs.session-token=redir-" + status,
+                    }),
+                    ctx(["auth", "sso", "login"]),
+                );
+
+                expect(res.status).toBe(status);
+                expect(res.headers.get("location")).toBe(
+                    "https://idp.example.com/sso?req=abc",
+                );
+                // Body must be null on a redirect — passing the
+                // upstream stream lets the browser render whatever the
+                // API attached, which is exactly the SAML SSO bug.
+                expect(await res.text()).toBe("");
+            },
+        );
+
+        it("rewrites internal-origin Location to a same-origin proxy path", async () => {
+            // The whole point of the proxy is to keep the internal
+            // hostname out of the browser. If the API redirects to
+            // its own internal origin, we must rewrite — otherwise
+            // the browser gets `http://kodus_api:3001/...`, which
+            // doesn't resolve from the user's machine.
+            fetchMock.mockResolvedValueOnce(
+                new Response(null, {
+                    status: 302,
+                    headers: {
+                        location:
+                            "http://upstream.internal:3001/auth/saml/callback?token=x",
+                    },
+                }),
+            );
+
+            const handler = createProxyHandler({
+                resolveUpstream: (p) => `http://upstream.internal:3001${p}`,
+                proxyMountPath: "/api/proxy/api",
+            });
+
+            const res = await handler.GET(
+                mockReq("GET", { cookie: "authjs.session-token=intern" }),
+                ctx(["auth", "saml", "callback"]),
+            );
+
+            expect(res.headers.get("location")).toBe(
+                "/api/proxy/api/auth/saml/callback?token=x",
+            );
+        });
+
+        it("rewrites relative Location through the proxy mount path", async () => {
+            // A relative Location like "/sso-callback" returned by
+            // the API resolves against the upstream URL — which means
+            // it points at the upstream origin, not the browser
+            // origin. Treat it the same as an internal absolute URL.
+            fetchMock.mockResolvedValueOnce(
+                new Response(null, {
+                    status: 302,
+                    headers: { location: "/sso-callback?session=abc" },
+                }),
+            );
+
+            const handler = createProxyHandler({
+                resolveUpstream: (p) => `http://upstream.internal:3001${p}`,
+                proxyMountPath: "/api/proxy/api",
+            });
+
+            const res = await handler.GET(
+                mockReq("GET", { cookie: "authjs.session-token=rel" }),
+                ctx(["auth", "login"]),
+            );
+
+            expect(res.headers.get("location")).toBe(
+                "/api/proxy/api/sso-callback?session=abc",
+            );
+        });
+
+        it("passes external-origin Location through unchanged", async () => {
+            // Redirects to genuinely external origins (IdP, S3 signed
+            // URL, OAuth provider) must be forwarded verbatim — the
+            // browser is the only correct participant for the next
+            // hop.
+            fetchMock.mockResolvedValueOnce(
+                new Response(null, {
+                    status: 302,
+                    headers: {
+                        location:
+                            "https://accounts.google.com/o/oauth2/auth?client_id=abc",
+                    },
+                }),
+            );
+
+            const handler = createProxyHandler({
+                resolveUpstream: (p) => `http://upstream.internal:3001${p}`,
+                proxyMountPath: "/api/proxy/api",
+            });
+
+            const res = await handler.GET(
+                mockReq("GET", { cookie: "authjs.session-token=ext" }),
+                ctx(["oauth", "start"]),
+            );
+
+            expect(res.headers.get("location")).toBe(
+                "https://accounts.google.com/o/oauth2/auth?client_id=abc",
+            );
+        });
+
+        it("drops Location header when upstream value is unparseable", async () => {
+            fetchMock.mockResolvedValueOnce(
+                new Response(null, {
+                    status: 302,
+                    // Unterminated IPv6 host — WHATWG URL parser
+                    // rejects this with TypeError.
+                    headers: { location: "http://[bad" },
+                }),
+            );
+
+            const handler = createProxyHandler({
+                resolveUpstream: (p) => `http://upstream.internal${p}`,
+                proxyMountPath: "/api/proxy/api",
+            });
+
+            const res = await handler.GET(
+                mockReq("GET", { cookie: "authjs.session-token=bad" }),
+                ctx(["weird"]),
+            );
+
+            expect(res.headers.get("location")).toBeNull();
+        });
+
+        describe("rewriteLocation helper", () => {
+            const upstream = "http://upstream.internal:3001/foo";
+            const mount = "/api/proxy/api";
+
+            it("rewrites same-origin absolute URL", () => {
+                expect(
+                    __testing.rewriteLocation(
+                        "http://upstream.internal:3001/bar?q=1",
+                        upstream,
+                        mount,
+                    ),
+                ).toBe("/api/proxy/api/bar?q=1");
+            });
+
+            it("rewrites relative URL", () => {
+                expect(
+                    __testing.rewriteLocation("/bar?q=1", upstream, mount),
+                ).toBe("/api/proxy/api/bar?q=1");
+            });
+
+            it("preserves hash fragments", () => {
+                expect(
+                    __testing.rewriteLocation("/bar#section", upstream, mount),
+                ).toBe("/api/proxy/api/bar#section");
+            });
+
+            it("passes external origins through unchanged", () => {
+                expect(
+                    __testing.rewriteLocation(
+                        "https://idp.example.com/sso",
+                        upstream,
+                        mount,
+                    ),
+                ).toBe("https://idp.example.com/sso");
+            });
+
+            it("treats malformed-looking strings as relative paths (URL parser is permissive)", () => {
+                // Worth locking in: the WHATWG URL parser percent-
+                // encodes spaces and resolves the result as a
+                // relative path, so this round-trips through the
+                // proxy mount instead of erroring out.
+                expect(
+                    __testing.rewriteLocation("not a url", upstream, mount),
+                ).toBe("/api/proxy/api/not%20a%20url");
+            });
+
+            it("returns null when the parser actually rejects the input", () => {
+                expect(
+                    __testing.rewriteLocation("http://[bad", upstream, mount),
+                ).toBeNull();
+            });
+        });
+    });
+
     describe("body streaming", () => {
         it("POST forwards body with duplex 'half'", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
             });
             const body = new ReadableStream();
             await handler.POST(
@@ -273,6 +502,7 @@ describe("createProxyHandler", () => {
         it("GET omits body/duplex", async () => {
             const handler = createProxyHandler({
                 resolveUpstream: (p) => `http://upstream${p}`,
+                proxyMountPath: "/api/proxy/test",
             });
             await handler.GET(
                 mockReq("GET", { cookie: "authjs.session-token=getnone" }),

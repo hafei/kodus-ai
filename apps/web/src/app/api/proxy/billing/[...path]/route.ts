@@ -27,5 +27,6 @@ function resolveBillingUpstream(path: string, search: string): string {
  */
 export const { GET, POST, PUT, PATCH, DELETE } = createProxyHandler({
     resolveUpstream: resolveBillingUpstream,
+    proxyMountPath: "/api/proxy/billing",
     denyPathPrefixes: ["/admin", "/internal", "/metrics", "/debug"],
 });

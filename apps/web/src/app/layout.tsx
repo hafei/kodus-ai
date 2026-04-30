@@ -58,6 +58,11 @@ export default function RootLayout({ children }: React.PropsWithChildren) {
         ruleFilesDocs: process.env.WEB_RULE_FILES_DOCS ?? "",
         releaseVersion: process.env.RELEASE_VERSION ?? "",
         nodeEnv: process.env.WEB_NODE_ENV ?? "",
+        // Same env the API uses to build the SAML ACS callback in
+        // libs/ee/sso/strategies/saml-auth.strategy.ts. Reusing it
+        // here guarantees the URL we display in the SSO settings is
+        // byte-for-byte the URL the API will accept on callback.
+        apiPublicUrl: process.env.API_URL ?? "",
     };
 
     // Expose publicConfig as window.__KODUS_PUBLIC_CONFIG__ so module-scope

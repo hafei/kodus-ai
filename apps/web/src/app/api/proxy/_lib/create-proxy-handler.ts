@@ -20,11 +20,24 @@ import { NextRequest, NextResponse } from "next/server";
  *  - Strip upstream Content-Encoding / Content-Length / Transfer-Encoding
  *    headers because undici auto-decompresses and the browser would
  *    otherwise reject with ERR_CONTENT_DECODING_FAILED.
+ *  - Forward 3xx redirects to the browser instead of letting Node's
+ *    fetch follow them server-side (which broke the SAML SSO
+ *    initiation: the API issued a 302 to the IdP and the proxy
+ *    silently fetched the IdP page). Internal-hostname Location
+ *    headers are rewritten to a same-origin path on this proxy so the
+ *    internal hostname never escapes the server.
  */
 
 export type ProxyHandlerOptions = {
     /** Resolve the upstream URL from the remaining path + query string. */
     resolveUpstream: (upstreamPath: string, search: string) => string;
+    /**
+     * Same-origin path where this proxy is mounted, e.g.
+     * "/api/proxy/api". Used to rewrite upstream Location headers that
+     * point back at the internal hostname so the browser never sees it.
+     * No trailing slash.
+     */
+    proxyMountPath: string;
     /**
      * Optional Bearer token resolver. The returned token replaces any
      * Authorization header already on the incoming request.
@@ -100,6 +113,55 @@ function normalizeUpstreamPath(segments: string[]): string | null {
     return "/" + segments.join("/");
 }
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Resolve and sanitize an upstream Location header for forwarding to
+ * the browser.
+ *
+ * The upstream may emit:
+ *   - A relative path ("/sso-callback") — pass through verbatim;
+ *     browser resolves it against the current proxy URL, which is
+ *     same-origin, so it just works.
+ *   - An absolute URL on the upstream's *internal* origin
+ *     ("http://kodus_api:3001/foo") — rewrite to a same-origin proxy
+ *     path so the internal hostname never escapes the server. The
+ *     browser will hit the proxy again on the next hop, which is what
+ *     we want.
+ *   - An absolute URL on a *different* origin — pass through (e.g.
+ *     302 to an IdP entry point during SAML initiation, or to an S3
+ *     signed URL during a download).
+ *
+ * Returns null only when the Location is unparseable; callers should
+ * drop the header in that case rather than forwarding garbage.
+ */
+function rewriteLocation(
+    location: string,
+    upstreamUrl: string,
+    proxyMountPath: string,
+): string | null {
+    try {
+        const upstream = new URL(upstreamUrl);
+        const resolved = new URL(location, upstream);
+
+        if (resolved.origin === upstream.origin) {
+            // Internal-origin redirect → keep path+query+hash, prepend
+            // the same-origin proxy mount so the browser stays inside
+            // the proxy chain.
+            return (
+                proxyMountPath +
+                resolved.pathname +
+                resolved.search +
+                resolved.hash
+            );
+        }
+
+        return resolved.toString();
+    } catch {
+        return null;
+    }
+}
+
 async function forward(
     req: NextRequest,
     pathSegments: string[],
@@ -151,7 +213,16 @@ async function forward(
         else headers.delete("authorization");
     }
 
-    const init: RequestInit = { method: req.method, headers };
+    const init: RequestInit = {
+        method: req.method,
+        headers,
+        // Forward 3xx to the browser instead of letting undici follow
+        // them server-side. Otherwise an API 302 to an IdP would have
+        // the proxy fetch the IdP HTML and return that on the proxy
+        // URL — which is exactly the bug that broke SAML SSO
+        // initiation after the runtime-config migration.
+        redirect: "manual",
+    };
     if (req.method !== "GET" && req.method !== "HEAD") {
         init.body = req.body;
         (init as RequestInit & { duplex?: string }).duplex = "half";
@@ -165,6 +236,29 @@ async function forward(
     outHeaders.delete("content-encoding");
     outHeaders.delete("content-length");
     outHeaders.delete("transfer-encoding");
+
+    if (REDIRECT_STATUSES.has(upstream.status)) {
+        const rawLocation = upstream.headers.get("location");
+        if (rawLocation) {
+            const rewritten = rewriteLocation(
+                rawLocation,
+                url,
+                options.proxyMountPath,
+            );
+            if (rewritten) {
+                outHeaders.set("location", rewritten);
+            } else {
+                outHeaders.delete("location");
+            }
+        }
+        // Redirect responses traditionally have no body; emit an empty
+        // body so the browser doesn't render whatever stream the
+        // upstream attached to a 3xx.
+        return new NextResponse(null, {
+            status: upstream.status,
+            headers: outHeaders,
+        });
+    }
 
     return new NextResponse(upstream.body, {
         status: upstream.status,
@@ -200,4 +294,8 @@ export function createProxyHandler(options: ProxyHandlerOptions): {
 
 // Exports kept in-file (rather than in sibling test helpers) so the
 // behaviour stays in one place. Tests import via the public factory.
-export const __testing = { normalizeUpstreamPath, pathIsDenied };
+export const __testing = {
+    normalizeUpstreamPath,
+    pathIsDenied,
+    rewriteLocation,
+};

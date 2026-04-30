@@ -2,6 +2,7 @@ import { typedFetch } from "@services/fetch";
 import type { AxiosResponse } from "axios";
 import { API_ROUTES } from "src/core/config/constants";
 import type { TODO } from "src/core/types";
+import { getApiPublicUrl } from "src/core/utils/api-public-url";
 import { apiProxyPath } from "src/core/utils/api-proxy";
 import { axiosApi, axiosAuthorized } from "src/core/utils/axios";
 import { pathToApiUrl } from "src/core/utils/helpers";
@@ -130,9 +131,25 @@ export const loginOAuth = (
 };
 
 export const ssoLogin = async (organizationId: string) => {
-    window.location.href = authUrl(
-        `${API_ROUTES.ssoLogin}/${organizationId}`,
-    );
+    // SAML initiation MUST hit the API on its own public origin —
+    // not the same-origin /api/proxy/api/* path. Two reasons:
+    //   1. The API stores SAML RelayState in a session cookie scoped
+    //      to its own host. If the browser navigates through the
+    //      proxy, that cookie is set on the *web* origin, and when
+    //      the IdP later POSTs the SAMLResponse to the API's ACS
+    //      URL, the API can't read it back — login fails.
+    //   2. The API issues a 302 to the IdP. Going through the proxy
+    //      means an extra hop with no benefit (we don't need to hide
+    //      the API hostname here — it's intentionally public for
+    //      external IdPs to reach the ACS endpoint anyway).
+    const apiPublicUrl = getApiPublicUrl();
+    if (!apiPublicUrl) {
+        throw new Error(
+            "API_URL is not configured. SSO login requires the API's " +
+                "public, browser-reachable URL.",
+        );
+    }
+    window.location.href = `${apiPublicUrl}${API_ROUTES.ssoLogin}/${organizationId}`;
 };
 
 export const ssoCheck = async (
