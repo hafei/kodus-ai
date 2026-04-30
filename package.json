@@ -1,6 +1,6 @@
 {
     "name": "kodus-orchestrator",
-    "version": "0.0.1",
+    "version": "2.1.7",
     "description": "",
     "author": "",
     "license": "UNLICENSED",
@@ -192,7 +192,7 @@
         "@gitbeaker/rest": "^43.8.0",
         "@golevelup/nestjs-rabbitmq": "^9.0.0",
         "@google/generative-ai": "^0.24.1",
-        "@kodus/flow": "0.1.49",
+        "@kodus/flow": "0.1.50",
         "@kodus/kodus-common": "1.3.18",
         "@langchain/anthropic": "^1.3.28",
         "@langchain/community": "1.1.27",

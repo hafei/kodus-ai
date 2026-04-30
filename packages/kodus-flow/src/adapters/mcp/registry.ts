@@ -193,8 +193,10 @@ export class MCPRegistry {
                                 ? reconnectError.message
                                 : String(reconnectError);
                         const reconnectCause =
-                            reconnectError instanceof Error && reconnectError.cause
-                                ? (reconnectError.cause as any).message || String(reconnectError.cause)
+                            reconnectError instanceof Error &&
+                            reconnectError.cause
+                                ? (reconnectError.cause as any).message ||
+                                  String(reconnectError.cause)
                                 : undefined;
 
                         this.logger.error({
@@ -212,7 +214,10 @@ export class MCPRegistry {
                                 errorCause: reconnectCause,
                                 errorStack:
                                     reconnectError instanceof Error
-                                        ? reconnectError.stack?.substring(0, 500)
+                                        ? reconnectError.stack?.substring(
+                                              0,
+                                              500,
+                                          )
                                         : undefined,
                             },
                         });
@@ -405,7 +410,8 @@ export class MCPRegistry {
                             errorMessage: execErrMsg,
                             errorCause:
                                 error instanceof Error && error.cause
-                                    ? (error.cause as any).message || String(error.cause)
+                                    ? (error.cause as any).message ||
+                                      String(error.cause)
                                     : undefined,
                         },
                     });

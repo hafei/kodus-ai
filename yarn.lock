@@ -1560,21 +1560,21 @@
   resolved "https://registry.npmjs.org/@keyv/serialize/-/serialize-1.1.1.tgz#0c01dd3a3483882af7cf3878d4e71d505c81fc4a"
   integrity sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==
 
-"@kodus/flow@0.1.49":
-  version "0.1.49"
-  resolved "https://us-central1-npm.pkg.dev/kodus-infra-prod/kodus-pkg/@kodus/flow/-/@kodus/flow-0.1.49.tgz#5d988c673a127126645f71833517c33f21a3e3bb"
-  integrity sha512-pe8nG7FhHsGWw5ECLsksULsjHnHXi/6G5nP7ejXftlpTj3NJjkit8M/Sq38X0EL99O0khMdKSacTeF4LtHXJeQ==
+"@kodus/flow@0.1.50":
+  version "0.1.50"
+  resolved "https://us-central1-npm.pkg.dev/kodus-infra-prod/kodus-pkg/@kodus/flow/-/@kodus/flow-0.1.50.tgz#6de7934b225bcc324eead0709780b4229950f0cc"
+  integrity sha512-e7Feb+6hpruKxjlj1rHxq2QSzf3/5tjyj9a/fB8nRdWFbNNKQ0kBVhDOsgGpBtpj5gOhioqgm4aiAOTYO/w89w==
   dependencies:
     "@google/generative-ai" "^0.24.1"
     "@modelcontextprotocol/sdk" "^1.29.0"
-    ajv "^8.18.0"
+    ajv "^8.20.0"
     ajv-formats "^3.0.1"
     dotenv "^17.4.2"
-    jose "^6.2.2"
+    jose "^6.2.3"
     json5 "^2.2.3"
     jsonrepair "^3.14.0"
     mongodb "^7.2.0"
-    openai "^6.34.0"
+    openai "^6.35.0"
     pino "^10.3.1"
     tslib "^2.8.1"
     zod "^4.3.6"
@@ -9067,7 +9067,7 @@ joi@^18.1.2:
     "@hapi/topo" "^6.0.2"
     "@standard-schema/spec" "^1.1.0"
 
-jose@^6.1.3, jose@^6.2.2:
+jose@^6.1.3, jose@^6.2.3:
   version "6.2.3"
   resolved "https://registry.npmjs.org/jose/-/jose-6.2.3.tgz#0975197ad973251221c658a3cddc4b951a250c2d"
   integrity sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==
@@ -10254,7 +10254,7 @@ openai@^5.0.1, openai@^5.23.2:
   resolved "https://registry.npmjs.org/openai/-/openai-5.23.2.tgz#f13e2dc2ef6b88aab6a9b97cdc68d41a1d083c68"
   integrity sha512-MQBzmTulj+MM5O8SKEk/gL8a7s5mktS9zUtAkU257WjvobGc9nKcBuVwjyEEcb9SI8a8Y2G/mzn3vm9n1Jlleg==
 
-openai@^6.32.0, openai@^6.34.0:
+openai@^6.32.0, openai@^6.34.0, openai@^6.35.0:
   version "6.35.0"
   resolved "https://registry.npmjs.org/openai/-/openai-6.35.0.tgz#3f3fdf2a03b9009b3c85d1b386f41ad0284d4b5d"
   integrity sha512-L/skwIGnt5xQZHb0UfTu9uAUKbis3ehKypOuJKi20QvG7UStV6C8IC3myGYHcdiF4kms/bAvOJ9UqqNWqi8x/Q==
