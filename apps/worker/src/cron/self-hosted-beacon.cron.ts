@@ -19,7 +19,6 @@ import { SelfHostedBeaconService } from '@libs/telemetry/application/services/se
 @Injectable()
 export class SelfHostedBeaconCron {
     private readonly logger = new Logger(SelfHostedBeaconCron.name);
-    private running = false;
 
     constructor(private readonly beacon: SelfHostedBeaconService) {}
 
@@ -31,22 +30,11 @@ export class SelfHostedBeaconCron {
         if (environment.API_CLOUD_MODE) {
             return;
         }
-        if (this.running) {
-            this.logger.warn(
-                'skipping self-hosted beacon — previous run still in flight',
-            );
-            return;
-        }
 
-        this.running = true;
         const start = Date.now();
-        try {
-            await this.beacon.run();
-            this.logger.log(
-                `self-hosted beacon done in ${Date.now() - start}ms`,
-            );
-        } finally {
-            this.running = false;
-        }
+        await this.beacon.run();
+        this.logger.log(
+            `self-hosted beacon done in ${Date.now() - start}ms`,
+        );
     }
 }
