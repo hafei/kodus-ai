@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CustomClient } from '../../../clients/custom';
 import {
@@ -19,6 +19,7 @@ import {
 } from '../interfaces/provider.interface';
 import { IntegrationDescriptionService } from '../services/integration-description.service';
 
+@Injectable()
 export class CustomProvider extends BaseProvider {
     statusMap: Record<string, MCPConnectionStatus> = {
         ACTIVE: MCPConnectionStatus.ACTIVE,

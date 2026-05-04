@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CustomClient } from '../../../clients/custom';
@@ -34,6 +34,7 @@ interface ManagedIntegrationConfig {
     } & MCPIntegrationAllUniqueFields;
 }
 
+@Injectable()
 export class KodusMCPProvider extends BaseProvider {
     private readonly client: KodusMCPClient;
     private readonly integrationDescriptionService: IntegrationDescriptionService;

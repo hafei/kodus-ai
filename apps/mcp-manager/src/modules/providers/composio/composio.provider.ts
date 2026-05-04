@@ -10,6 +10,7 @@ import {
     MCPTool,
     MCPProviderType,
 } from '../interfaces/provider.interface';
+import { Injectable } from '@nestjs/common';
 import { BaseProvider } from '../base.provider';
 import { ConfigService } from '@nestjs/config';
 import { MCPConnectionStatus } from '../../mcp/entities/mcp-connection.entity';
@@ -35,6 +36,7 @@ interface ActiveMCPServer {
     server_instance_count: number;
 }
 
+@Injectable()
 export class ComposioProvider extends BaseProvider {
     private readonly client: ComposioClient;
     private readonly config: MCPProviderConfig;

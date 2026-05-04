@@ -53,8 +53,10 @@ describe('docs-auth', () => {
         expect(ipInCidr('103.72.60.10', '103.72.59.0/24')).toBe(false);
     });
 
-    it('allows ip when allowlist empty', () => {
-        expect(isIpAllowed('10.0.0.1', [])).toBe(true);
+    it('blocks ip when allowlist empty (fail-closed)', () => {
+        // Empty allowlist means "no IPs are explicitly allowed" — the
+        // function fails closed rather than allowing all traffic.
+        expect(isIpAllowed('10.0.0.1', [])).toBe(false);
     });
 
     it('allows ip when in allowlist', () => {

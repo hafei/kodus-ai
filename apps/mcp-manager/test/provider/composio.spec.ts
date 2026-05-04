@@ -34,6 +34,7 @@ describe('ComposioProvider', () => {
         createMCPServer: jest.fn(),
         getConnectedAccounts: jest.fn(),
         getConnectedAccount: jest.fn(),
+        getActiveMCPServers: jest.fn().mockResolvedValue([]),
     };
 
     const mockIntegrationDescriptionService = {
@@ -129,10 +130,7 @@ describe('ComposioProvider', () => {
 
             const result = await provider.getIntegrations();
 
-            expect(mockComposioClient.getIntegrations).toHaveBeenCalledWith({
-                limit: 50,
-                cursor: '',
-            });
+            expect(mockComposioClient.getIntegrations).toHaveBeenCalledWith({});
 
             expect(result).toEqual([
                 {
@@ -503,7 +501,7 @@ describe('ComposioProvider', () => {
                 userId: 'org-1',
                 authScheme: 'OAUTH2',
                 callbackUrl:
-                    'https://test.com/callback?provider=composio&integrationId=auth-config-1',
+                    'http://localhost:3000/callback?provider=composio&integrationId=auth-config-1',
                 params: { apiKey: 'test-key' },
             });
 
@@ -512,7 +510,7 @@ describe('ComposioProvider', () => {
                 authUrl: 'https://redirect.url',
                 status: MCPConnectionStatus.PENDING,
                 appName: 'test-app',
-                mcpUrl: 'https://mcp.composio.dev/composio/server/server-1/mcp?connected_account_id=conn-1',
+                mcpUrl: 'https://backend.composio.dev/v3/mcp/server-1?connected_account_id=conn-1',
                 allowedTools: ['tool1', 'tool2'],
             });
         });
@@ -659,7 +657,7 @@ describe('ComposioProvider', () => {
                 id: 'server-1',
                 name: 'test-app-org-1',
                 authConfigIds: ['integration-1'],
-                mcpUrl: 'https://mcp.composio.dev/composio/server/server-1/mcp?connected_account_id=conn-1',
+                mcpUrl: 'https://backend.composio.dev/v3/mcp/server-1?connected_account_id=conn-1',
             });
         });
 
@@ -730,7 +728,7 @@ describe('ComposioProvider', () => {
         it('should generate correct MCP URL', () => {
             const url = (provider as any).getMCPUrl('server-1', 'auth-1');
             expect(url).toBe(
-                'https://mcp.composio.dev/composio/server/server-1/mcp?connected_account_id=auth-1',
+                'https://backend.composio.dev/v3/mcp/server-1?connected_account_id=auth-1',
             );
         });
     });
