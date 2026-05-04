@@ -8,11 +8,11 @@ import {
     IsString,
     ValidateNested,
 } from 'class-validator';
-import { StringRecordDto } from 'src/common/dto';
+import { StringRecordDto } from '../../../common/dto';
 import {
     MCPIntegrationAuthType,
     MCPIntegrationProtocol,
-} from 'src/modules/integrations/enums/integration.enum';
+} from '../../integrations/enums/integration.enum';
 
 export class CreateIntegrationDto {
     @ApiPropertyOptional({

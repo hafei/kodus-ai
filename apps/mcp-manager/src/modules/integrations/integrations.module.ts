@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { UtilsModule } from 'src/common/utils/utils.module';
+import { UtilsModule } from '../../common/utils/utils.module';
 import { MCPIntegrationOAuthEntity } from './entities/mcp-integration-oauth.entity';
 import { MCPIntegrationEntity } from './entities/mcp-integration.entity';
 import { IntegrationOAuthService } from './integration-oauth.service';

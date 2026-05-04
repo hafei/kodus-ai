@@ -1,10 +1,10 @@
 import { createMCPAdapter, MCPAdapter } from '@kodus/flow';
-import { MCPIntegrationAuthType } from 'src/modules/integrations/enums/integration.enum';
-import { MCPIntegrationInterface } from 'src/modules/integrations/interfaces/mcp-integration.interface';
+import { MCPIntegrationAuthType } from '../../modules/integrations/enums/integration.enum';
+import { MCPIntegrationInterface } from '../../modules/integrations/interfaces/mcp-integration.interface';
 import {
     MCPProviderType,
     MCPTool,
-} from 'src/modules/providers/interfaces/provider.interface';
+} from '../../modules/providers/interfaces/provider.interface';
 
 export class CustomClient {
     private readonly clientInstance: MCPAdapter;

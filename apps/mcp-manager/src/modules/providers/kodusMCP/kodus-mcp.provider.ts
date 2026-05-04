@@ -1,16 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { CustomClient } from 'src/clients/custom';
-import { KodusMCPClient } from 'src/clients/kodusMCP';
+import { CustomClient } from '../../../clients/custom';
+import { KodusMCPClient } from '../../../clients/kodusMCP';
 import {
     MCPIntegrationAuthType,
     MCPIntegrationOAuthStatus,
     MCPIntegrationProtocol,
-} from 'src/modules/integrations/enums/integration.enum';
-import { IntegrationOAuthService } from 'src/modules/integrations/integration-oauth.service';
-import { IntegrationsService } from 'src/modules/integrations/integrations.service';
-import { MCPIntegrationAllUniqueFields } from 'src/modules/integrations/interfaces/mcp-integration.interface';
-import { MCPConnectionStatus } from 'src/modules/mcp/entities/mcp-connection.entity';
+} from '../../integrations/enums/integration.enum';
+import { IntegrationOAuthService } from '../../integrations/integration-oauth.service';
+import { IntegrationsService } from '../../integrations/integrations.service';
+import { MCPIntegrationAllUniqueFields } from '../../integrations/interfaces/mcp-integration.interface';
+import { MCPConnectionStatus } from '../../mcp/entities/mcp-connection.entity';
 import { BaseProvider } from '../base.provider';
 import {
     MCPConnection,

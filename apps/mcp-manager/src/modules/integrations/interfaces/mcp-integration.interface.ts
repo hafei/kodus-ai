@@ -2,7 +2,7 @@ import {
     OAuthAuthorizationServerMetadata,
     OAuthProtectedResourceMetadata,
     TokenData,
-} from 'src/common/utils/oauth';
+} from '../../../common/utils/oauth';
 import { MCPIntegrationEntity } from '../entities/mcp-integration.entity';
 import { MCPIntegrationAuthType } from '../enums/integration.enum';
 

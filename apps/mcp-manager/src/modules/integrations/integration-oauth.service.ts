@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EncryptionUtils } from 'src/common/utils/encryption';
+import { EncryptionUtils } from '../../common/utils/encryption';
 import {
     buildAuthorizationUrl,
     checkAndRefreshOAuth,
@@ -14,7 +14,7 @@ import {
     OAuthProtectedResourceMetadata,
     registerOauthClient,
     TokenData,
-} from 'src/common/utils/oauth';
+} from '../../common/utils/oauth';
 import { Repository } from 'typeorm';
 import { MCPIntegrationOAuthEntity } from './entities/mcp-integration-oauth.entity';
 import { MCPIntegrationEntity } from './entities/mcp-integration.entity';

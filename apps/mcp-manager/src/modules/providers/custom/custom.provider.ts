@@ -1,12 +1,12 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CustomClient } from 'src/clients/custom';
+import { CustomClient } from '../../../clients/custom';
 import {
     MCPIntegrationAuthType,
     MCPIntegrationOAuthStatus,
-} from 'src/modules/integrations/enums/integration.enum';
-import { IntegrationOAuthService } from 'src/modules/integrations/integration-oauth.service';
-import { IntegrationsService } from 'src/modules/integrations/integrations.service';
+} from '../../integrations/enums/integration.enum';
+import { IntegrationOAuthService } from '../../integrations/integration-oauth.service';
+import { IntegrationsService } from '../../integrations/integrations.service';
 import { MCPConnectionStatus } from '../../mcp/entities/mcp-connection.entity';
 import { BaseProvider } from '../base.provider';
 import {

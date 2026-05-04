@@ -2,7 +2,7 @@ import {
     MCPIntegration,
     MCPProviderType,
     MCPTool,
-} from 'src/modules/providers/interfaces/provider.interface';
+} from '../../modules/providers/interfaces/provider.interface';
 
 export class KodusMCPClient {
     getIntegrations(): MCPIntegration {

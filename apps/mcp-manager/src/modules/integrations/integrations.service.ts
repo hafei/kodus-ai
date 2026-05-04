@@ -1,7 +1,7 @@
 import { InjectRepository } from '@nestjs/typeorm';
-import { CustomClient } from 'src/clients/custom';
-import { StringRecordDto } from 'src/common/dto';
-import { EncryptionUtils } from 'src/common/utils/encryption';
+import { CustomClient } from '../../clients/custom';
+import { StringRecordDto } from '../../common/dto';
+import { EncryptionUtils } from '../../common/utils/encryption';
 import { Repository } from 'typeorm';
 import { CreateIntegrationDto } from '../mcp/dto/create-integration.dto';
 import { MCPIntegrationEntity } from './entities/mcp-integration.entity';

@@ -1,7 +1,7 @@
 import {
     MCPIntegrationAuthType,
     MCPIntegrationProtocol,
-} from 'src/modules/integrations/enums/integration.enum';
+} from '../enums/integration.enum';
 import {
     Column,
     CreateDateColumn,
