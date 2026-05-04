@@ -1,0 +1,69 @@
+# Cross-repo sync: regenerate kodus-installer/.env.example and the docs
+# env-vars snippet from kodus-ai's schema, and open PRs in both repos.
+# Triggers on release tag — same cadence the Docker images ship.
+name: env-sync-release
+
+on:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch: # allow manual re-run if a PR was closed without merge
+
+jobs:
+    sync:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout kodus-ai
+              uses: actions/checkout@v4
+              with:
+                  path: kodus-ai
+
+            - name: Checkout kodus-installer
+              uses: actions/checkout@v4
+              with:
+                  repository: kodustech/kodus-installer
+                  path: kodus-installer
+                  token: ${{ secrets.CROSS_REPO_PAT }}
+
+            - name: Checkout docs
+              uses: actions/checkout@v4
+              with:
+                  repository: kodustech/docs
+                  path: docs
+                  token: ${{ secrets.CROSS_REPO_PAT }}
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: yarn
+                  cache-dependency-path: kodus-ai/yarn.lock
+
+            - name: Install deps
+              working-directory: kodus-ai
+              run: yarn install --frozen-lockfile
+
+            - name: Regenerate all targets from schema
+              working-directory: kodus-ai
+              run: yarn env:apply
+
+            - name: Open PR in kodus-installer (if drifted)
+              working-directory: kodus-installer
+              env:
+                  GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+                  TAG: ${{ github.ref_name }}
+                  SHA: ${{ github.sha }}
+              run: |
+                  ../kodus-ai/scripts/env/open-sync-pr.sh \
+                      kodus-installer \
+                      .env.example
+
+            - name: Open PR in docs (if drifted)
+              working-directory: docs
+              env:
+                  GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+                  TAG: ${{ github.ref_name }}
+                  SHA: ${{ github.sha }}
+              run: |
+                  ../kodus-ai/scripts/env/open-sync-pr.sh \
+                      docs \
+                      _snippets/env-vars-generated.mdx

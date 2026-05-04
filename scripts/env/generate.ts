@@ -1,0 +1,210 @@
+/**
+ * Generates env templates and docs from .env.schema.
+ *
+ * Usage:
+ *   yarn env:generate              # writes to poc-env/ (compare without overwriting)
+ *   yarn env:generate --apply      # writes to real targets
+ *
+ * Targets:
+ *   kodus-ai/.env.example
+ *   kodus-installer/.env.example
+ *   kodus/docs/_snippets/env-vars-generated.mdx
+ */
+
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+
+import {
+    flatten,
+    includesAudience,
+    parseSchema,
+    SchemaItem,
+    SchemaSection,
+} from './parse-schema';
+
+const REPO_ROOT = join(__dirname, '..', '..');
+const SCHEMA_PATH = join(REPO_ROOT, '.env.schema');
+
+const APPLY = process.argv.includes('--apply');
+const POC_DIR = join(REPO_ROOT, 'poc-env');
+
+const TARGETS = APPLY
+    ? {
+          envExample: join(REPO_ROOT, '.env.example'),
+          installerEnv: join(
+              REPO_ROOT,
+              '..',
+              'kodus-installer',
+              '.env.example',
+          ),
+          docsSnippet: join(
+              REPO_ROOT,
+              '..',
+              'docs',
+              '_snippets',
+              'env-vars-generated.mdx',
+          ),
+      }
+    : {
+          envExample: join(POC_DIR, 'kodus-ai.env.example'),
+          installerEnv: join(POC_DIR, 'kodus-installer.env.example'),
+          docsSnippet: join(POC_DIR, 'env-vars-generated.mdx'),
+      };
+
+const HEADER_KODUS_AI = `# AUTO-GENERATED from .env.schema. Do NOT edit by hand.
+# Run \`yarn env:generate --apply\` after editing the schema.
+# Source: kodus-ai/.env.schema
+`;
+
+const HEADER_INSTALLER = `# =============================================
+# Kodus self-hosted environment file
+# AUTO-GENERATED from kodus-ai/.env.schema. Do NOT edit by hand.
+# Run \`yarn env:generate --apply\` in kodus-ai after editing the schema.
+# =============================================
+`;
+
+function renderEnvExample(sections: SchemaSection[]): string {
+    const out: string[] = [HEADER_KODUS_AI];
+    for (const section of sections) {
+        const items = section.items.filter((it) =>
+            includesAudience(it, 'cloud'),
+        );
+        if (items.length === 0) continue;
+        out.push('');
+        out.push(`# ============================================================`);
+        out.push(`# ${section.title}`);
+        out.push(`# ============================================================`);
+        for (const item of items) {
+            out.push(...renderItem(item, item.value, false));
+        }
+    }
+    return out.join('\n') + '\n';
+}
+
+function renderInstallerEnv(sections: SchemaSection[]): string {
+    const out: string[] = [HEADER_INSTALLER];
+    for (const section of sections) {
+        const items = section.items.filter((it) =>
+            includesAudience(it, 'self-hosted'),
+        );
+        if (items.length === 0) continue;
+        out.push('');
+        out.push(`## ----  ${section.title.toUpperCase()}  ----`);
+        for (const item of items) {
+            const value = item.installerDefault ?? item.value;
+            out.push(...renderItem(item, value, item.installerComment));
+        }
+    }
+    return out.join('\n') + '\n';
+}
+
+function renderItem(
+    item: SchemaItem,
+    value: string,
+    commentOut: boolean,
+): string[] {
+    const lines: string[] = [''];
+    for (const desc of item.description) {
+        lines.push(`# ${desc}`.trimEnd());
+    }
+    const hints: string[] = [];
+    if (item.required) hints.push('required');
+    if (item.sensitive) hints.push('secret');
+    if (item.type) hints.push(`type: ${item.type}`);
+    if (commentOut) hints.push('opt-in: uncomment to enable');
+    if (hints.length > 0) {
+        lines.push(`# (${hints.join(', ')})`);
+    }
+    const quoted = needsQuotes(value) ? `"${value}"` : value;
+    const prefix = commentOut ? '# ' : '';
+    lines.push(`${prefix}${item.name}=${quoted}`);
+    return lines;
+}
+
+function needsQuotes(value: string): boolean {
+    return /[\s#"']/.test(value);
+}
+
+function audienceBadge(item: SchemaItem): string {
+    const isEE = item.audience.includes('self-hosted-enterprise');
+    const others = item.audience.filter((a) => a !== 'self-hosted-enterprise');
+    const eePrefix = isEE ? '🏢 ' : '';
+
+    let base: string;
+    if (others.length === 0) base = 'Self-hosted Enterprise';
+    else if (others.includes('both'))
+        base = item.installerComment ? '⚙️ Both (opt-in)' : '⚙️ Both';
+    else if (others.includes('cloud') && !others.includes('self-hosted'))
+        base = '☁️ Cloud';
+    else if (others.includes('self-hosted') && !others.includes('cloud'))
+        base = '🏠 Self-hosted';
+    else base = others.join(' + ');
+
+    return eePrefix + base;
+}
+
+function renderDocsSnippet(sections: SchemaSection[]): string {
+    const out: string[] = [];
+    out.push('{/* AUTO-GENERATED from kodus-ai/.env.schema. Do NOT edit. */}');
+    out.push('');
+    for (const section of sections) {
+        const items = section.items;
+        if (items.length === 0) continue;
+        out.push(`## ${section.title}`);
+        out.push('');
+        out.push('| Variable | Required | Type | Scope | Description |');
+        out.push('| --- | --- | --- | --- | --- |');
+        for (const item of items) {
+            const required = item.required ? '✅' : '–';
+            const type = item.sensitive
+                ? `secret${item.type ? ` (${item.type})` : ''}`
+                : item.type ?? 'string';
+            const desc = item.description.join(' ').replace(/\|/g, '\\|');
+            out.push(
+                `| \`${item.name}\` | ${required} | ${type} | ${audienceBadge(item)} | ${desc} |`,
+            );
+        }
+        out.push('');
+    }
+    return out.join('\n');
+}
+
+function ensureDir(filePath: string): void {
+    mkdirSync(dirname(filePath), { recursive: true });
+}
+
+function main(): void {
+    const sections = parseSchema(SCHEMA_PATH);
+    const items = flatten(sections);
+
+    const envExample = renderEnvExample(sections);
+    const installerEnv = renderInstallerEnv(sections);
+    const docs = renderDocsSnippet(sections);
+
+    ensureDir(TARGETS.envExample);
+    ensureDir(TARGETS.installerEnv);
+    ensureDir(TARGETS.docsSnippet);
+
+    writeFileSync(TARGETS.envExample, envExample);
+    writeFileSync(TARGETS.installerEnv, installerEnv);
+    writeFileSync(TARGETS.docsSnippet, docs);
+
+    const cloudCount = items.filter((it) => includesAudience(it, 'cloud')).length;
+    const selfHostedCount = items.filter((it) =>
+        includesAudience(it, 'self-hosted'),
+    ).length;
+    const requiredCount = items.filter((it) => it.required).length;
+    const sensitiveCount = items.filter((it) => it.sensitive).length;
+
+    console.log(`Parsed ${sections.length} sections, ${items.length} vars`);
+    console.log(
+        `  cloud:${cloudCount}  self-hosted:${selfHostedCount}  required:${requiredCount}  sensitive:${sensitiveCount}`,
+    );
+    console.log(`Mode: ${APPLY ? 'APPLY (real targets)' : 'POC (poc-env/)'}`);
+    console.log(`Wrote:`);
+    console.log(`  ${TARGETS.envExample}`);
+    console.log(`  ${TARGETS.installerEnv}`);
+    console.log(`  ${TARGETS.docsSnippet}`);
+}
+
+main();
