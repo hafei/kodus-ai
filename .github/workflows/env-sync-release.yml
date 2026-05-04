@@ -42,7 +42,7 @@ jobs:
             - name: Regenerate kodus-installer/.env.example from schema
               working-directory: kodus-ai
               run: |
-                  yarn ts-node scripts/env/generate.ts \
+                  npx ts-node scripts/env/generate.ts \
                       --apply \
                       --installer \
                       --installer-out=../kodus-installer/.env.example

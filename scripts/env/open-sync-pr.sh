@@ -22,19 +22,34 @@ if git diff --quiet -- "$file"; then
     exit 0
 fi
 
-git checkout -b "$branch"
+# -B (force) so reruns of the same tag (workflow_dispatch, retries) reset
+# the branch instead of erroring "branch already exists".
+git checkout -B "$branch"
 git add "$file"
 git commit -m "chore(env): sync from kodus-ai@${TAG}
 
 Auto-generated from kodus-ai/.env.schema at ${SHA}.
 Source: https://github.com/kodustech/kodus-ai/tree/${SHA}/.env.schema"
-git push -u origin "$branch"
+# --force so the same branch can be updated on reruns without manual cleanup.
+git push -u --force origin "$branch"
 
-gh pr create \
-    --title "chore(env): sync from kodus-ai@${TAG}" \
-    --label automated,env-sync \
-    --body "Auto-generated from \`kodus-ai/.env.schema\` at tag \`${TAG}\` ([\`${SHA:0:7}\`](https://github.com/kodustech/kodus-ai/tree/${SHA}/.env.schema)).
+# If a PR is already open for this branch, update its body instead of failing.
+existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+if [ -n "$existing_pr" ]; then
+    echo "PR #${existing_pr} already exists for ${branch}; refreshing body."
+    gh pr edit "$existing_pr" \
+        --body "Auto-generated from \`kodus-ai/.env.schema\` at tag \`${TAG}\` ([\`${SHA:0:7}\`](https://github.com/kodustech/kodus-ai/tree/${SHA}/.env.schema)).
 
 Review the diff — added/removed vars and changed defaults reflect schema edits in kodus-ai.
 
 Approve to keep \`${repo}\` in sync with this release cut."
+else
+    gh pr create \
+        --title "chore(env): sync from kodus-ai@${TAG}" \
+        --label automated,env-sync \
+        --body "Auto-generated from \`kodus-ai/.env.schema\` at tag \`${TAG}\` ([\`${SHA:0:7}\`](https://github.com/kodustech/kodus-ai/tree/${SHA}/.env.schema)).
+
+Review the diff — added/removed vars and changed defaults reflect schema edits in kodus-ai.
+
+Approve to keep \`${repo}\` in sync with this release cut."
+fi
