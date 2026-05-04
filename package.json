@@ -14,6 +14,7 @@
         "env:doctor:web": "./scripts/dev/env-doctor.sh --scope web",
         "env:generate": "ts-node scripts/env/generate.ts",
         "env:apply": "ts-node scripts/env/generate.ts --apply",
+        "env:check": "ts-node scripts/env/check-drift.ts",
         "env:validate": "varlock load --show-all",
         "env:audit": "ts-node scripts/env/build-audit-csv.ts",
         "env:review": "ts-node scripts/env/build-review-md.ts",
