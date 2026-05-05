@@ -28,20 +28,30 @@ export class SelfHostedBeaconCron implements OnModuleInit {
     constructor(private readonly beacon: SelfHostedBeaconService) {}
 
     onModuleInit(): void {
-        if (environment.API_CLOUD_MODE) {
-            return;
-        }
+        // Defensive: this is a transparency log, never a critical path.
+        // Anything throwing here would abort module boot and brick the
+        // worker — which violates the "telemetry never breaks the host"
+        // contract. Swallow everything.
+        try {
+            if (environment.API_CLOUD_MODE) {
+                return;
+            }
 
-        if (this.beacon.isDisabled()) {
+            if (this.beacon.isDisabled()) {
+                this.logger.log(
+                    'Anonymous usage telemetry is DISABLED (KODUS_TELEMETRY_DISABLED is set). No heartbeat will be sent.',
+                );
+                return;
+            }
+
             this.logger.log(
-                'Anonymous usage telemetry is DISABLED (KODUS_TELEMETRY_DISABLED is set). No heartbeat will be sent.',
+                'Anonymous usage telemetry is enabled. One heartbeat per UTC day to telemetry.kodus.io with aggregated counters only — no code, names, or identifiers. Inspect with `yarn telemetry:preview`. Disable with KODUS_TELEMETRY_DISABLED=true. Schema: https://github.com/kodustech/kodus-beacon/blob/main/docs/api.md',
             );
-            return;
+        } catch {
+            // Even logging is best-effort here. If the logger itself is
+            // somehow broken we'd rather lose the boot message than crash
+            // the worker.
         }
-
-        this.logger.log(
-            'Anonymous usage telemetry is enabled. One heartbeat per UTC day to telemetry.kodus.io with aggregated counters only — no code, names, or identifiers. Inspect with `yarn telemetry:preview`. Disable with KODUS_TELEMETRY_DISABLED=true. Schema: https://github.com/kodustech/kodus-beacon/blob/main/docs/api.md',
-        );
     }
 
     @Cron('17 3 * * *', {
