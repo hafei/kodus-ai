@@ -1,5 +1,5 @@
 import { PlatformType } from '@libs/core/domain/enums';
-import { RemoteCommands } from '../../infrastructure/adapters/services/collectCrossFileContexts.service';
+import { RemoteCommands } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 
 export interface CreateSandboxParams {
     cloneUrl: string;

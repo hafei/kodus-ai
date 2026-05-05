@@ -62,6 +62,9 @@ import { ValidateSuggestionsStage } from './stages/validate-suggestions.stage';
 import { CodeReviewPipelineStrategy } from './strategy/code-review-pipeline.strategy';
 import { CodeReviewAgentPipelineStrategy } from './strategy/code-review-agent-pipeline.strategy';
 
+// Sandbox (lease manager)
+import { SandboxModule } from '@libs/sandbox/modules/sandbox.module';
+
 // V3 Agent-First
 import { CreateSandboxStage } from './stages/create-sandbox.stage';
 import { AgentReviewStage } from './stages/agent-review.stage';
@@ -93,6 +96,7 @@ import { ReviewOrchestratorService } from '../infrastructure/agents/review-orche
         AstGraphModule,
         WorkflowCoreModule,
         DryRunCoreModule,
+        SandboxModule,
     ],
     providers: [
         // Strategy

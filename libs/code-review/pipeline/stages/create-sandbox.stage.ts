@@ -3,9 +3,9 @@ import { createLogger } from '@kodus/flow';
 import { Inject, Injectable } from '@nestjs/common';
 
 import {
-    ISandboxProvider,
-    SANDBOX_PROVIDER_TOKEN,
-} from '@libs/code-review/domain/contracts/sandbox.provider';
+    ISandboxLeaseManager,
+    SANDBOX_LEASE_MANAGER_TOKEN,
+} from '@libs/sandbox/domain/contracts/sandbox-lease-manager.contract';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
@@ -17,6 +17,10 @@ import { CliReviewPipelineContext } from '@libs/cli-review/pipeline/context/cli-
  * Extracted from CollectCrossFileContextStage so that the sandbox can be
  * shared across multiple downstream stages (agent review, safeguard, etc.)
  * without coupling sandbox lifecycle to cross-file context collection.
+ *
+ * After plan 01-04: delegates to SandboxLeaseManager instead of calling
+ * ISandboxProvider directly. Cleanup closes the lease (release) rather than
+ * killing the sandbox — enabling E2B pause/resume across reviews of the same PR.
  */
 @Injectable()
 export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineContext> {
@@ -27,8 +31,8 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
     private readonly logger = createLogger(CreateSandboxStage.name);
 
     constructor(
-        @Inject(SANDBOX_PROVIDER_TOKEN)
-        private readonly sandboxProvider: ISandboxProvider,
+        @Inject(SANDBOX_LEASE_MANAGER_TOKEN)
+        private readonly leaseManager: ISandboxLeaseManager,
         private readonly cloneParamsResolver: CloneParamsResolverService,
     ) {
         super();
@@ -71,15 +75,6 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
             return context;
         }
 
-        // Guard: skip if sandbox is not available
-        if (!this.sandboxProvider.isAvailable()) {
-            this.logger.log({
-                message: `Skipping sandbox creation: no sandbox provider configured for ${label}`,
-                context: this.stageName,
-            });
-            return context;
-        }
-
         // Guard (CLI): skip if no git remote available
         if (isCliMode && !cliContext?.gitContext?.remote) {
             this.logger.log({
@@ -88,6 +83,12 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
             });
             return context;
         }
+
+        // Build a stable per-PR key for lease coordination.
+        // CLI mode uses branch name instead of PR number.
+        const prKey = isCliMode
+            ? `${context.organizationAndTeamData?.organizationId}:${context.repository?.id}:cli:${cliContext?.gitContext?.branch ?? 'unknown'}`
+            : `${context.organizationAndTeamData?.organizationId}:${context.repository?.id}:${context.pullRequest?.number}`;
 
         let cleanup: (() => Promise<void>) | undefined;
 
@@ -105,9 +106,10 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
             }
 
             this.logger.log({
-                message: `Creating sandbox for ${label}`,
+                message: `Acquiring sandbox lease for ${label}`,
                 context: this.stageName,
                 metadata: {
+                    prKey,
                     cloneUrl: cloneInfo.url,
                     platform: cloneInfo.platform,
                     branch: cloneInfo.branch,
@@ -116,27 +118,22 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                 },
             });
 
-            const sandbox = await this.sandboxProvider.createSandboxWithRepo({
-                cloneUrl: cloneInfo.url,
-                authToken: cloneInfo.authToken,
-                authUsername: cloneInfo.authUsername,
-                branch: cloneInfo.branch,
-                baseBranch: cloneInfo.baseBranch,
-                prNumber: cloneInfo.prNumber,
-                platform: cloneInfo.platform,
-                checkoutSha: cloneInfo.checkoutSha,
-                unifiedDiff: cliContext?.cliRawDiff,
-                sandboxMetadata: { stage: 'agent-review' },
-            });
+            const { sandbox, leaseId } = await this.leaseManager.acquire(prKey, 'review');
 
+            // Override cleanup so the observer's context.sandboxHandle.cleanup()
+            // releases the lease (pause) rather than killing the sandbox.
+            sandbox.cleanup = async () => {
+                await this.leaseManager.release(leaseId);
+            };
             cleanup = sandbox.cleanup;
 
             this.logger.log({
-                message: `Sandbox created successfully for ${label} (type=${sandbox.type}, baseBranch=${sandbox.baseBranch || 'none'})`,
+                message: `Sandbox lease acquired for ${label} (type=${sandbox.type}, baseBranch=${sandbox.baseBranch || 'none'})`,
                 context: this.stageName,
                 metadata: {
                     sandboxType: sandbox.type,
                     baseBranch: sandbox.baseBranch,
+                    leaseId,
                 },
             });
 
@@ -170,7 +167,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
         } catch (firstError) {
             // Retry once — large repos may need a second attempt (network/timeout)
             this.logger.warn({
-                message: `Sandbox creation failed for ${label}, retrying once...`,
+                message: `Sandbox lease acquisition failed for ${label}, retrying once...`,
                 context: this.stageName,
                 error: firstError,
             });
@@ -184,41 +181,19 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                     }
                 }
 
-                // Second attempt with same params
-                const cliCtxRetry =
-                    context.origin === 'cli'
-                        ? (context as unknown as CliReviewPipelineContext)
-                        : undefined;
-                const cloneInfoRetry = await this.cloneParamsResolver.resolve(
-                    context,
-                    cliCtxRetry,
-                );
-                if (!cloneInfoRetry)
-                    throw new Error('Could not resolve clone params on retry', {
-                        cause: firstError,
-                    });
-
-                const retryResult =
-                    await this.sandboxProvider.createSandboxWithRepo({
-                        cloneUrl: cloneInfoRetry.url,
-                        authToken: cloneInfoRetry.authToken,
-                        authUsername: cloneInfoRetry.authUsername,
-                        branch: cloneInfoRetry.branch,
-                        baseBranch: cloneInfoRetry.baseBranch,
-                        prNumber: cloneInfoRetry.prNumber,
-                        platform: cloneInfoRetry.platform,
-                        checkoutSha: cloneInfoRetry.checkoutSha,
-                        unifiedDiff: cliCtxRetry?.cliRawDiff,
-                        sandboxMetadata: { stage: 'agent-review' },
-                    });
-                cleanup = retryResult.cleanup;
+                // Retry path: re-acquire via lease manager (has "create or reuse" semantics)
+                const retryResult = await this.leaseManager.acquire(prKey, 'review');
+                retryResult.sandbox.cleanup = async () => {
+                    await this.leaseManager.release(retryResult.leaseId);
+                };
+                cleanup = retryResult.sandbox.cleanup;
 
                 return this.updateContext(context, (draft) => {
-                    draft.sandboxHandle = retryResult;
+                    draft.sandboxHandle = retryResult.sandbox;
                 });
             } catch (retryError) {
                 this.logger.error({
-                    message: `Failed to create sandbox for ${label} after retry, continuing without it`,
+                    message: `Failed to acquire sandbox lease for ${label} after retry, continuing without it`,
                     context: this.stageName,
                     error: retryError,
                     metadata: {
@@ -234,7 +209,7 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                     await cleanup();
                 } catch (cleanupErr) {
                     this.logger.warn({
-                        message: `Sandbox cleanup failed after creation error`,
+                        message: `Sandbox cleanup failed after lease acquisition error`,
                         context: this.stageName,
                         error: cleanupErr,
                     });

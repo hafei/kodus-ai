@@ -9,7 +9,7 @@ import {
     ISandboxProvider,
     SandboxInstance,
     SandboxRunResult,
-} from '@libs/code-review/domain/contracts/sandbox.provider';
+} from '@libs/sandbox/domain/contracts/sandbox.provider';
 import { RemoteCommands } from './collectCrossFileContexts.service';
 import { shSingleQuote } from './shell-quote';
 
