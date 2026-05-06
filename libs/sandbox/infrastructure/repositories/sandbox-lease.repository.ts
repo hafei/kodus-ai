@@ -4,6 +4,48 @@ import { Model } from 'mongoose';
 
 import { SandboxLeaseModel } from './schemas/sandbox-lease.model';
 
+/**
+ * Decompose a prKey ("{orgId}:{repoId}:{prNumber}") into its parts.
+ *
+ * SECURITY: only accepts the canonical shape — a UUID organizationId in
+ * segment 0 is required. Anything else throws so a bad prKey can't taint
+ * the lease doc with the wrong organizationId. Caller is expected to have
+ * already validated via assertValidPrKey() in the lease manager.
+ */
+const ORG_UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function decomposePrKey(prKey: string): {
+    organizationId: string;
+    repositoryId: string;
+    prNumber?: string;
+} {
+    const parts = prKey.split(':');
+    if (parts.length < 3 || parts.length > 4) {
+        throw new Error(
+            `decomposePrKey: invalid shape, expected 3 or 4 segments, got ${parts.length}`,
+        );
+    }
+    if (!ORG_UUID_RE.test(parts[0])) {
+        throw new Error(
+            `decomposePrKey: first segment must be a UUID organizationId`,
+        );
+    }
+    // PR mode shape: <orgId>:<repoId>:<prNumber>
+    if (parts.length === 3) {
+        return {
+            organizationId: parts[0],
+            repositoryId: parts[1],
+            prNumber: parts[2],
+        };
+    }
+    // CLI mode shape: <orgId>:<repoId>:cli:<branch>
+    return {
+        organizationId: parts[0],
+        repositoryId: parts[1],
+    };
+}
+
 @Injectable()
 export class SandboxLeaseRepository {
     constructor(
@@ -31,9 +73,11 @@ export class SandboxLeaseRepository {
     async upsertAcquire(
         prKey: string,
         leaseTtlMs: number,
+        consumer?: string,
     ): Promise<SandboxLeaseModel> {
         const now = new Date();
         const expiresAt = new Date(now.getTime() + leaseTtlMs);
+        const decomposed = decomposePrKey(prKey);
 
         const doc = await this.leaseModel.findOneAndUpdate(
             { _id: prKey },
@@ -42,7 +86,12 @@ export class SandboxLeaseRepository {
                     state: 'CREATING',
                     createdAt: now,
                     expiresAt,
+                    ...decomposed,
                 },
+                // Track the most recent consumer label so it's queryable in
+                // Mongo without parsing logs. Updated on every acquire (both
+                // insert and update paths).
+                $set: consumer ? { consumer } : {},
                 $inc: { leaseCount: 1 },
             },
             { upsert: true, new: true },

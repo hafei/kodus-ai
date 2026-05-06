@@ -12,6 +12,16 @@ import { CodeReviewPipelineContext } from '../context/code-review-pipeline.conte
 import { CliReviewPipelineContext } from '@libs/cli-review/pipeline/context/cli-review-pipeline.context';
 
 /**
+ * After review finishes, only keep the sandbox warm for 30 seconds. Either
+ * `@kody` arrives in a hot window (likely seconds after the review comment
+ * lands) — and benefits from warm-resume — or the user takes their time and
+ * comes back well past the lease TTL anyway, where cold-start is unavoidable.
+ * 30s strikes the balance without keeping a paused sandbox occupying an E2B
+ * concurrent slot for the full default 5-min idle window.
+ */
+const REVIEW_IDLE_TIMEOUT_MS = 30_000;
+
+/**
  * Creates and stores a sandbox instance in the pipeline context.
  *
  * Extracted from CollectCrossFileContextStage so that the sandbox can be
@@ -90,8 +100,6 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
             ? `${context.organizationAndTeamData?.organizationId}:${context.repository?.id}:cli:${cliContext?.gitContext?.branch ?? 'unknown'}`
             : `${context.organizationAndTeamData?.organizationId}:${context.repository?.id}:${context.pullRequest?.number}`;
 
-        let cleanup: (() => Promise<void>) | undefined;
-
         try {
             const cloneInfo = await this.cloneParamsResolver.resolve(
                 context,
@@ -118,14 +126,35 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                 },
             });
 
-            const { sandbox, leaseId } = await this.leaseManager.acquire(prKey, 'review');
+            // The lease manager owns retry+backoff for the underlying provider
+            // call (3 attempts with 60s/120s backoffs). If acquire() throws here
+            // it means all attempts failed — review continues self-contained.
+            const { sandbox, leaseId } = await this.leaseManager.acquire(
+                prKey,
+                'review',
+                undefined,
+                {
+                    cloneUrl: cloneInfo.url,
+                    authToken: cloneInfo.authToken,
+                    authUsername: cloneInfo.authUsername,
+                    branch: cloneInfo.branch,
+                    baseBranch: cloneInfo.baseBranch,
+                    prNumber: cloneInfo.prNumber,
+                    platform: cloneInfo.platform,
+                    checkoutSha: cloneInfo.checkoutSha,
+                    unifiedDiff: cliContext?.cliRawDiff,
+                    sandboxMetadata: { stage: 'review' },
+                },
+            );
 
             // Override cleanup so the observer's context.sandboxHandle.cleanup()
             // releases the lease (pause) rather than killing the sandbox.
+            // 30s idle window — see REVIEW_IDLE_TIMEOUT_MS rationale.
             sandbox.cleanup = async () => {
-                await this.leaseManager.release(leaseId);
+                await this.leaseManager.release(leaseId, {
+                    idleMs: REVIEW_IDLE_TIMEOUT_MS,
+                });
             };
-            cleanup = sandbox.cleanup;
 
             this.logger.log({
                 message: `Sandbox lease acquired for ${label} (type=${sandbox.type}, baseBranch=${sandbox.baseBranch || 'none'})`,
@@ -164,57 +193,16 @@ export class CreateSandboxStage extends BasePipelineStage<CodeReviewPipelineCont
                     };
                 };
             });
-        } catch (firstError) {
-            // Retry once — large repos may need a second attempt (network/timeout)
-            this.logger.warn({
-                message: `Sandbox lease acquisition failed for ${label}, retrying once...`,
+        } catch (err) {
+            this.logger.error({
+                message: `Failed to acquire sandbox lease for ${label} (all retries exhausted), continuing without it`,
                 context: this.stageName,
-                error: firstError,
+                error: err,
+                metadata: {
+                    organizationAndTeamData: context?.organizationAndTeamData,
+                    prNumber: context?.pullRequest?.number,
+                },
             });
-
-            try {
-                if (cleanup) {
-                    try {
-                        await cleanup();
-                    } catch {
-                        // ignore cleanup errors on retry
-                    }
-                }
-
-                // Retry path: re-acquire via lease manager (has "create or reuse" semantics)
-                const retryResult = await this.leaseManager.acquire(prKey, 'review');
-                retryResult.sandbox.cleanup = async () => {
-                    await this.leaseManager.release(retryResult.leaseId);
-                };
-                cleanup = retryResult.sandbox.cleanup;
-
-                return this.updateContext(context, (draft) => {
-                    draft.sandboxHandle = retryResult.sandbox;
-                });
-            } catch (retryError) {
-                this.logger.error({
-                    message: `Failed to acquire sandbox lease for ${label} after retry, continuing without it`,
-                    context: this.stageName,
-                    error: retryError,
-                    metadata: {
-                        organizationAndTeamData:
-                            context?.organizationAndTeamData,
-                        prNumber: context?.pullRequest?.number,
-                    },
-                });
-            }
-
-            if (cleanup) {
-                try {
-                    await cleanup();
-                } catch (cleanupErr) {
-                    this.logger.warn({
-                        message: `Sandbox cleanup failed after lease acquisition error`,
-                        context: this.stageName,
-                        error: cleanupErr,
-                    });
-                }
-            }
             return context;
         }
     }

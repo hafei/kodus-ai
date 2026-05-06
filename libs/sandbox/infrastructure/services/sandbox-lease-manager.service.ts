@@ -1,6 +1,7 @@
 import { createLogger } from '@kodus/flow';
 import {
     AcquireResult,
+    assertValidPrKey,
     ISandboxLeaseManager,
     SANDBOX_LEASE_MANAGER_TOKEN,
 } from '@libs/sandbox/domain/contracts/sandbox-lease-manager.contract';
@@ -15,16 +16,22 @@ import { ConfigService } from '@nestjs/config';
 import { Sandbox } from 'e2b';
 import { randomUUID } from 'crypto';
 
+import { calculateBackoffInterval } from '@libs/common/utils/polling';
 import { SandboxLeaseRepository } from '../repositories/sandbox-lease.repository';
 import { NULL_SANDBOX_INSTANCE } from '../providers/null-sandbox.service';
 
 /**
- * Idle timeout applied when the last lease on a sandbox is released.
+ * Default idle timeout applied when the last lease on a sandbox is released.
  * After this window the E2B sandbox is paused automatically (not killed).
  * 5 minutes is generous enough for a second @kody comment in the same PR
  * to reuse the warm sandbox without paying cold-start.
+ *
+ * Callers (e.g. CreateSandboxStage for review) can override this via
+ * `release(leaseId, { idleMs })` when a shorter window makes more sense for
+ * their flow — review uses 30s because the agent's @kody flow either arrives
+ * within seconds (warm reuse) or much later (well past the TTL anyway).
  */
-const IDLE_TIMEOUT_MS = 300_000; // 5 minutes
+const IDLE_TIMEOUT_MS = 300_000; // 5 minutes — default for conversation flow
 
 /**
  * Default lease TTL: 30 minutes. The reaper will clean up any lease whose
@@ -44,6 +51,27 @@ const POLL_INTERVAL_MS = 500;
 const MAX_POLL_WAIT_MS = 30_000; // 30 seconds
 
 /**
+ * Sandbox creation retry budget. Three attempts total (initial + 2 retries).
+ * Backoff intervals are computed by the project's exponential-backoff lib
+ * (`@libs/common/utils/polling`) so this stays consistent with how other
+ * services pace retries. Configured to land at exactly 60s → 120s with no
+ * jitter (deterministic, easy to reason about under quota outages).
+ *
+ * The provider call is the only thing wrapped — other lease operations
+ * (Mongo upsert/update) are atomic and fast, so a retry there would mask
+ * real errors instead of fixing them.
+ *
+ * Total worst-case overhead from backoffs alone: 60 + 120 = 180s.
+ */
+const CREATE_MAX_ATTEMPTS = 3;
+const CREATE_BACKOFF_OPTIONS = {
+    baseInterval: 60_000, // 1 min
+    maxInterval: 120_000, // 2 min cap (so attempt-1 → 120s, not 240s)
+    multiplier: 2,
+    jitterFactor: 0,
+} as const;
+
+/**
  * Thrown when polling for a CREATING sandbox exceeds MAX_POLL_WAIT_MS.
  * Callers should treat this as a signal to fall back to self-contained mode.
  */
@@ -53,6 +81,21 @@ export class SandboxCreateTimeoutError extends Error {
             `SandboxLeaseManager: timed out waiting for sandbox to become READY for prKey="${prKey}"`,
         );
         this.name = 'SandboxCreateTimeoutError';
+    }
+}
+
+/**
+ * Thrown internally when Sandbox.connect() fails because the sandbox no
+ * longer exists in E2B (idle-kill, reaper, or external termination). The
+ * acquire() loop catches this, retries from scratch, and only surfaces it
+ * if the cold-start retry also fails.
+ */
+export class SandboxStaleConnectionError extends Error {
+    constructor(prKey: string, sandboxId: string) {
+        super(
+            `SandboxLeaseManager: stale sandbox connection — sandboxId="${sandboxId}" no longer exists for prKey="${prKey}"; lease cleaned, retry expected`,
+        );
+        this.name = 'SandboxStaleConnectionError';
     }
 }
 
@@ -66,6 +109,14 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
      * will replace this in a later plan when distributed release is needed.
      */
     private readonly leaseIdToPrKey = new Map<string, string>();
+
+    /**
+     * Pending kill timers keyed by prKey. Set when release() is called with a
+     * leaseCount=0; cleared when a new acquire reuses the lease before idle
+     * expires. NodeJS.Timeout type is intentionally loose (any) to keep the
+     * file portable across runtime targets.
+     */
+    private readonly pendingKills = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor(
         @Inject(SANDBOX_PROVIDER_TOKEN)
@@ -96,30 +147,74 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
         leaseTtlMs = DEFAULT_LEASE_TTL_MS,
         cloneParams?: CreateSandboxParams,
     ): Promise<AcquireResult> {
+        // SECURITY: validate prKey shape BEFORE any Mongo / E2B side-effect.
+        // A malformed key (missing UUID, extra ":" segments, etc.) MUST NOT
+        // produce a lease — otherwise a bad caller could poison the
+        // collection or accidentally cross-tenant.
+        assertValidPrKey(prKey);
+
         this.logger.log({
             message: `SandboxLeaseManager: acquire prKey="${prKey}" consumer="${consumer}"`,
             context: SandboxLeaseManager.name,
             metadata: { prKey, consumer },
         });
 
-        const doc = await this.leaseRepo.upsertAcquire(prKey, leaseTtlMs);
+        const doc = await this.leaseRepo.upsertAcquire(prKey, leaseTtlMs, consumer);
         const leaseId = randomUUID();
 
-        // --- Path A: We are the creator (leaseCount === 1 after upsert) ---
-        if (doc.leaseCount === 1) {
+        // A new acquire arrived — cancel any pending idle-kill so the warm
+        // sandbox isn't killed under us between this call and connect().
+        this.cancelPendingKill(prKey);
+
+        // --- Path A: We are the creator (we just inserted the doc) ---
+        // Both conditions are required:
+        //  - state === 'CREATING' is set only by $setOnInsert in upsertAcquire
+        //    (a doc that already existed in READY/PAUSED won't have its state
+        //    overwritten), so it filters out fresh acquires on existing leases.
+        //  - leaseCount === 1 distinguishes "we just inserted" from "we joined a
+        //    concurrent in-flight create" (where leaseCount would be > 1).
+        // Without state === 'CREATING', a release-then-reacquire (count back to
+        // 1 on an existing READY doc) would wrongly cold-create another sandbox
+        // instead of warm-resuming the one already on the lease doc.
+        if (doc.state === 'CREATING' && doc.leaseCount === 1) {
             return this.handleCreatorPath(prKey, leaseId, consumer, cloneParams);
         }
 
-        // --- Path B: Someone else created or is creating; state determines sub-path ---
-        return this.handleJoinerPath(prKey, leaseId, consumer, doc.state, doc.sandboxId);
+        // --- Path B: joiner — doc already existed or someone else is creating ---
+        try {
+            return await this.handleJoinerPath(prKey, leaseId, consumer, doc.state, doc.sandboxId);
+        } catch (err) {
+            if (err instanceof SandboxStaleConnectionError) {
+                // Lease referenced a sandbox that E2B no longer has (idle-
+                // kill timer, reaper, or external termination). The
+                // joiner path already deleted the stale lease — restart
+                // acquire from scratch so this caller becomes the creator.
+                this.logger.log({
+                    message: `SandboxLeaseManager: re-acquiring after stale sandbox prKey="${prKey}" consumer="${consumer}"`,
+                    context: SandboxLeaseManager.name,
+                    metadata: { prKey, consumer },
+                });
+                return this.acquire(prKey, consumer, leaseTtlMs, cloneParams);
+            }
+            throw err;
+        }
     }
 
     /**
      * Release a lease. Decrements leaseCount atomically.
-     * When leaseCount reaches 0, sets the E2B sandbox idle timeout to IDLE_TIMEOUT_MS
-     * so it pauses after 5 minutes of inactivity (does NOT kill).
+     * When leaseCount reaches 0, sets the E2B sandbox idle timeout to
+     * `opts.idleMs` (defaults to IDLE_TIMEOUT_MS = 5 min) so it pauses after
+     * that window of inactivity. The sandbox is never killed by release —
+     * kill happens via invalidate() (PR-close) or the reaper cron.
+     *
+     * Callers should choose `idleMs` based on the flow: review uses 30s
+     * because @kody arrives quickly or much later; conversation uses the
+     * 5min default because the user is interactive.
      */
-    async release(leaseId: string): Promise<void> {
+    async release(
+        leaseId: string,
+        opts?: { idleMs?: number },
+    ): Promise<void> {
         const prKey = this.leaseIdToPrKey.get(leaseId);
         if (!prKey) {
             this.logger.warn({
@@ -139,27 +234,92 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
             metadata: { leaseId, prKey, leaseCount: updated?.leaseCount },
         });
 
-        // When last lease released: shrink E2B idle window to IDLE_TIMEOUT_MS
-        // so the sandbox pauses quickly instead of running for 45 minutes.
+        // When last lease released: schedule an explicit kill after `idleMs`.
+        // The in-memory timer is the primary kill path (frees the E2B slot
+        // promptly). If a new acquire arrives before idleMs, the timer is
+        // cancelled and the sandbox stays warm.
+        //
+        // We also call Sandbox.setTimeout(idleMs) as defence-in-depth: the
+        // provider keeps `lifecycle: { onTimeout: 'pause' }`, so if our
+        // in-memory timer is lost (process crash), the E2B-side timer will
+        // pause the sandbox at the same idleMs window — billing stops, and
+        // the reaper picks up the orphaned lease doc on its next tick.
         if (updated && updated.leaseCount <= 0 && updated.sandboxId) {
+            const idleMs = opts?.idleMs ?? IDLE_TIMEOUT_MS;
+            this.schedulePendingKill(prKey, updated.sandboxId, idleMs);
+
             const apiKey = this.configService.get<string>('API_E2B_KEY');
             if (apiKey) {
                 try {
-                    await Sandbox.setTimeout(updated.sandboxId, IDLE_TIMEOUT_MS, { apiKey });
+                    await Sandbox.setTimeout(updated.sandboxId, idleMs, { apiKey });
                     this.logger.log({
-                        message: `SandboxLeaseManager: set idle timeout on sandboxId="${updated.sandboxId}"`,
+                        message: `SandboxLeaseManager: scheduled kill in ${idleMs}ms on sandboxId="${updated.sandboxId}"`,
                         context: SandboxLeaseManager.name,
-                        metadata: { prKey, sandboxId: updated.sandboxId, idleTimeoutMs: IDLE_TIMEOUT_MS },
+                        metadata: { prKey, sandboxId: updated.sandboxId, idleTimeoutMs: idleMs },
                     });
                 } catch (err) {
-                    // Non-fatal: sandbox will still time out at its original ceiling
                     this.logger.warn({
-                        message: `SandboxLeaseManager: failed to set idle timeout on sandboxId="${updated.sandboxId}"`,
+                        message: `SandboxLeaseManager: failed to set E2B-side idle timeout on sandboxId="${updated.sandboxId}" (in-memory timer still active)`,
                         context: SandboxLeaseManager.name,
                         error: err,
                     });
                 }
             }
+        }
+    }
+
+    /**
+     * Schedule an in-memory kill of the sandbox + lease doc deletion after
+     * `idleMs`. Cancels any previous pending kill for the same prKey so
+     * back-to-back releases don't trigger duplicate kills.
+     */
+    private schedulePendingKill(
+        prKey: string,
+        sandboxId: string,
+        idleMs: number,
+    ): void {
+        // Cancel any earlier pending kill on the same prKey (defensive — should
+        // not happen in normal flow because release is keyed by leaseId)
+        this.cancelPendingKill(prKey);
+
+        const timer = setTimeout(async () => {
+            this.pendingKills.delete(prKey);
+            const apiKey = this.configService.get<string>('API_E2B_KEY');
+            if (apiKey) {
+                try {
+                    await Sandbox.kill(sandboxId, { apiKey });
+                    this.logger.log({
+                        message: `SandboxLeaseManager: idle window expired — killed sandboxId="${sandboxId}" prKey="${prKey}"`,
+                        context: SandboxLeaseManager.name,
+                        metadata: { prKey, sandboxId },
+                    });
+                } catch (err) {
+                    this.logger.warn({
+                        message: `SandboxLeaseManager: idle-kill failed for sandboxId="${sandboxId}" — reaper will retry`,
+                        context: SandboxLeaseManager.name,
+                        error: err,
+                    });
+                }
+            }
+            await this.leaseRepo.delete(prKey).catch(() => {});
+        }, idleMs);
+
+        // Don't keep the Node event loop alive solely for this timer
+        if (typeof timer.unref === 'function') {
+            timer.unref();
+        }
+        this.pendingKills.set(prKey, timer);
+    }
+
+    /**
+     * Cancel a pending kill for `prKey` if one exists. Called by acquire()
+     * when a new caller joins before idle expires — keeps the sandbox warm.
+     */
+    private cancelPendingKill(prKey: string): void {
+        const existing = this.pendingKills.get(prKey);
+        if (existing) {
+            clearTimeout(existing);
+            this.pendingKills.delete(prKey);
         }
     }
 
@@ -177,6 +337,10 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
             context: SandboxLeaseManager.name,
             metadata: { prKey },
         });
+
+        // Cancel any pending idle-kill so we don't run the kill twice
+        // (invalidate already does its own kill via soft-drain + delete).
+        this.cancelPendingKill(prKey);
 
         const doc = await this.leaseRepo.findByPrKey(prKey);
         if (!doc) {
@@ -246,22 +410,20 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
             metadata: { prKey, consumer },
         });
 
-        try {
-            let sandbox: SandboxInstance;
-            let sandboxId = '';
+        // Hoisted out of the try so the catch can detect "sandbox was created
+        // but a later step failed" and kill the orphan before re-throwing.
+        let sandbox: SandboxInstance | undefined;
+        let sandboxId: string | undefined;
 
+        try {
             if (this.sandboxProvider.isAvailable() && cloneParams) {
-                sandbox = await this.sandboxProvider.createSandboxWithRepo(cloneParams);
-                // For E2B sandboxes the sandboxId comes from the provider result,
-                // but SandboxInstance does not currently expose it directly.
-                // Plan 01-04 will add sandboxId to SandboxInstance; for now use '' for
-                // non-E2B providers and resolve from the connected sandbox when possible.
-                sandboxId = '';
+                sandbox = await this.createWithRetry(cloneParams);
             } else {
                 // No provider configured or no clone params supplied — use null sandbox
                 sandbox = this.buildNullSandboxWithRelease(prKey, leaseId);
-                sandboxId = '';
             }
+
+            sandboxId = sandbox.sandboxId;
 
             await this.leaseRepo.updateReady(prKey, sandboxId);
 
@@ -306,10 +468,62 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
 
             return { sandbox, leaseId, sandboxId, wasCreated: true };
         } catch (err) {
-            // On create failure: remove the lease doc so other callers don't poll forever
+            // If a real E2B sandbox was created but a later step failed
+            // (Mongo update, mid-create invalidation, etc.), kill it so it
+            // doesn't run for the full ceiling burning quota. Null-sandbox
+            // doesn't need killing — its sandboxId is empty.
+            if (sandboxId) {
+                const apiKey = this.configService.get<string>('API_E2B_KEY');
+                if (apiKey) {
+                    this.logger.warn({
+                        message: `SandboxLeaseManager: killing orphaned sandbox after creator-path failure prKey="${prKey}" sandboxId="${sandboxId}"`,
+                        context: SandboxLeaseManager.name,
+                        metadata: { prKey, sandboxId },
+                    });
+                    await Sandbox.kill(sandboxId, { apiKey }).catch(() => {});
+                }
+            }
+            // Remove the lease doc so other callers don't poll forever
             await this.leaseRepo.delete(prKey).catch(() => {});
             throw err;
         }
+    }
+
+    /**
+     * Create a sandbox with retry + backoff. CREATE_MAX_ATTEMPTS attempts
+     * total; intervals come from the shared polling lib so cadence matches
+     * other services. Only the provider call is wrapped — Mongo lease ops
+     * are atomic and a retry there would hide real bugs (e.g. schema drift,
+     * validation).
+     */
+    private async createWithRetry(
+        cloneParams: CreateSandboxParams,
+    ): Promise<SandboxInstance> {
+        let lastErr: unknown;
+
+        for (let attempt = 0; attempt < CREATE_MAX_ATTEMPTS; attempt++) {
+            try {
+                return await this.sandboxProvider.createSandboxWithRepo(
+                    cloneParams,
+                );
+            } catch (err) {
+                lastErr = err;
+                if (attempt === CREATE_MAX_ATTEMPTS - 1) break;
+
+                const waitMs = calculateBackoffInterval(
+                    attempt,
+                    CREATE_BACKOFF_OPTIONS,
+                );
+                this.logger.warn({
+                    message: `SandboxLeaseManager: provider.createSandboxWithRepo failed (attempt ${attempt + 1}/${CREATE_MAX_ATTEMPTS}); retrying in ${waitMs}ms`,
+                    context: SandboxLeaseManager.name,
+                    error: err,
+                });
+                await sleep(waitMs);
+            }
+        }
+
+        throw lastErr;
     }
 
     private async handleJoinerPath(
@@ -382,7 +596,32 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
             metadata: { prKey, consumer, sandboxId },
         });
 
-        const e2bSandbox = await Sandbox.connect(sandboxId, { apiKey });
+        let e2bSandbox: Sandbox;
+        try {
+            e2bSandbox = await Sandbox.connect(sandboxId, { apiKey });
+        } catch (err) {
+            // Sandbox no longer exists in E2B (idle-kill timer fired,
+            // reaper killed it, or it hit ceiling). Clean up the stale
+            // lease and treat the caller as the creator of a fresh
+            // sandbox — preserving the "sempre tem sandbox válido"
+            // contract for the consumer.
+            this.logger.warn({
+                message: `SandboxLeaseManager: stale sandbox connect failed for sandboxId="${sandboxId}" prKey="${prKey}" — deleting lease and cold-starting`,
+                context: SandboxLeaseManager.name,
+                error: err,
+                metadata: { prKey, sandboxId },
+            });
+            // Drop the in-memory lease tracking before delete (release()
+            // would no-op without it; we want a clean slate)
+            this.leaseIdToPrKey.delete(leaseId);
+            await this.leaseRepo.delete(prKey).catch(() => {});
+            // Re-acquire from scratch. With doc deleted, upsertAcquire
+            // will hit creator path and cold-create. cloneParams must be
+            // passed by the original caller for cold-create to clone repo;
+            // the joiner here doesn't have them, so we throw a typed
+            // error and let the caller retry with full params.
+            throw new SandboxStaleConnectionError(prKey, sandboxId);
+        }
 
         const sandbox: SandboxInstance = this.buildSandboxInstance(e2bSandbox, prKey, leaseId);
         this.leaseIdToPrKey.set(leaseId, prKey);
@@ -434,6 +673,7 @@ export class SandboxLeaseManager implements ISandboxLeaseManager {
                 await this.release(leaseId);
             },
             type: 'e2b',
+            sandboxId: e2bSandbox.sandboxId,
             repoDir: '/home/user/repo',
             run: async (command: string, opts?: { timeoutMs?: number }) => {
                 const result = await e2bSandbox.commands.run(command, {

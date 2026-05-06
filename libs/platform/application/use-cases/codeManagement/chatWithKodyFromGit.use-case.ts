@@ -1889,9 +1889,24 @@ export class ChatWithKodyFromGitUseCase {
         }
 
         try {
+            // Webhook payloads for `pull_request_review_comment` and
+            // `issue_comment` give us { id, name, owner } but no `fullName`.
+            // GitHub's getCloneParams builds the clone URL from `fullName`,
+            // so we synthesize it here from owner/name when missing.
+            const enrichedRepository =
+                repository.fullName
+                    ? repository
+                    : {
+                          ...repository,
+                          fullName:
+                              repository.owner && repository.name
+                                  ? `${repository.owner}/${repository.name}`
+                                  : repository.name,
+                      };
+
             const cp = await this.codeManagementService.getCloneParams(
                 {
-                    repository,
+                    repository: enrichedRepository,
                     organizationAndTeamData,
                 },
                 platform,

@@ -13,13 +13,17 @@ import {
 import { RemoteCommands } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { shSingleQuote } from '@libs/code-review/infrastructure/adapters/services/shell-quote';
 
-// 45 minutes — upper bound for the longest possible review:
-// 3 agents in parallel (bug + security + performance) × ~25 min each,
-// plus coverage-recovery + synthesis-rescue + verify passes.
-// E2B bills by live-minute, not by the TTL ceiling — the pipeline's
+// 35 minutes — aligned with the lease lifecycle ceiling.
+// Lease docs expire at DEFAULT_LEASE_TTL_MS (30 min) and the reaper cron
+// runs every 5 min, so a sandbox is always explicitly killed by the reaper
+// within ≤35 min of creation regardless of E2B's own timeout. Setting
+// `timeoutMs` higher than that is dead weight. With `onTimeout: 'pause'`
+// + `autoResume: true`, hitting 35 min just pauses the sandbox — the
+// reaper then issues `Sandbox.kill` on the next cron tick.
+// E2B bills by live-minute, not by this ceiling — the pipeline's
 // onPipelineFinish observer calls sandbox.cleanup() on every exit path,
 // so this is a safety ceiling, not a cost floor.
-const SANDBOX_TIMEOUT_MS = 45 * 60 * 1000;
+const SANDBOX_TIMEOUT_MS = 35 * 60 * 1000;
 const REPO_DIR = '/home/user/repo';
 
 const TIMEOUTS = {
@@ -131,6 +135,7 @@ export class E2BSandboxService implements ISandboxProvider {
                 remoteCommands,
                 cleanup,
                 type: 'e2b' as const,
+                sandboxId: sandbox.sandboxId,
                 baseBranch: resolvedBaseBranch,
                 repoDir: REPO_DIR,
                 run: async (

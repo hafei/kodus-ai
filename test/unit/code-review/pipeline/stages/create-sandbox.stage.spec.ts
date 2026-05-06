@@ -45,6 +45,7 @@ describe('CreateSandboxStage', () => {
         },
         leaseId: 'test-lease-id',
         sandboxId: 'test-sandbox-id',
+        wasCreated: true,
     });
 
     const createBaseContext = (
@@ -53,7 +54,7 @@ describe('CreateSandboxStage', () => {
         ({
             dryRun: { enabled: false },
             organizationAndTeamData: {
-                organizationId: 'org-123',
+                organizationId: '7e2e97b8-aefa-422e-92d4-30b378c0332e',
                 teamId: 'team-456',
             } as any,
             repository: {
@@ -142,6 +143,7 @@ describe('CreateSandboxStage', () => {
                 changedFiles: [{ filename: 'test.ts' } as any],
                 sandboxHandle: {
                     type: 'e2b' as const,
+                    sandboxId: 'mock-sandbox-id',
                     remoteCommands: {
                         grep: jest.fn(),
                         read: jest.fn(),
@@ -176,6 +178,7 @@ describe('CreateSandboxStage', () => {
                 sandbox: { ...NULL_SANDBOX_INSTANCE, cleanup: jest.fn().mockResolvedValue(undefined) },
                 leaseId: 'null-lease-id',
                 sandboxId: '',
+                wasCreated: true,
             };
             mockLeaseManager.acquire.mockResolvedValue(nullAcquireResult);
 
@@ -186,8 +189,16 @@ describe('CreateSandboxStage', () => {
             const result = await (stage as any).executeStage(context);
 
             expect(mockLeaseManager.acquire).toHaveBeenCalledWith(
-                'org-123:repo-1:42',
+                '7e2e97b8-aefa-422e-92d4-30b378c0332e:repo-1:42',
                 'review',
+                undefined,
+                expect.objectContaining({
+                    cloneUrl: 'https://github.com/org/test-repo.git',
+                    platform: 'GITHUB',
+                    branch: 'feature-branch',
+                    prNumber: 42,
+                    sandboxMetadata: { stage: 'review' },
+                }),
             );
             // Null sandbox is stored in context — review runs in self-contained mode
             expect(result.sandboxHandle).toBeDefined();
@@ -204,8 +215,16 @@ describe('CreateSandboxStage', () => {
             const result = await (stage as any).executeStage(context);
 
             expect(mockLeaseManager.acquire).toHaveBeenCalledWith(
-                'org-123:repo-1:42',
+                '7e2e97b8-aefa-422e-92d4-30b378c0332e:repo-1:42',
                 'review',
+                undefined,
+                expect.objectContaining({
+                    cloneUrl: 'https://github.com/org/test-repo.git',
+                    platform: 'GITHUB',
+                    branch: 'feature-branch',
+                    prNumber: 42,
+                    sandboxMetadata: { stage: 'review' },
+                }),
             );
 
             expect(result.sandboxHandle).toBeDefined();
@@ -228,7 +247,12 @@ describe('CreateSandboxStage', () => {
             expect(result.sandboxHandle).toBeDefined();
             // Invoke cleanup — should call release, not kill
             await result.sandboxHandle.cleanup();
-            expect(mockLeaseManager.release).toHaveBeenCalledWith('test-lease-id');
+            // Review flow shrinks the idle window to 30s (REVIEW_IDLE_TIMEOUT_MS)
+            // so the sandbox pauses fast when no @kody arrives.
+            expect(mockLeaseManager.release).toHaveBeenCalledWith(
+                'test-lease-id',
+                { idleMs: 30_000 },
+            );
         });
 
         it('should handle lease acquisition failure gracefully', async () => {
@@ -246,12 +270,14 @@ describe('CreateSandboxStage', () => {
             expect(result.sandboxHandle).toBeUndefined();
         });
 
-        it('should retry once on first acquire failure', async () => {
-            const retryResult = makeMockAcquireResult();
-            retryResult.leaseId = 'retry-lease-id';
-            mockLeaseManager.acquire
-                .mockRejectedValueOnce(new Error('Network timeout'))
-                .mockResolvedValueOnce(retryResult);
+        it('does not retry acquire itself — retry+backoff lives inside the lease manager', async () => {
+            // The stage used to retry once on failure; that responsibility moved
+            // to SandboxLeaseManager.createWithRetry (3 attempts, 60s/120s backoff).
+            // The stage now makes a single acquire() call and falls back to a
+            // null context if it throws.
+            mockLeaseManager.acquire.mockRejectedValue(
+                new Error('Network timeout'),
+            );
 
             const context = createBaseContext({
                 changedFiles: [{ filename: 'test.ts' } as any],
@@ -259,12 +285,8 @@ describe('CreateSandboxStage', () => {
 
             const result = await (stage as any).executeStage(context);
 
-            expect(mockLeaseManager.acquire).toHaveBeenCalledTimes(2);
-            expect(result.sandboxHandle).toBeDefined();
-
-            // Cleanup from retry should release with retry leaseId
-            await result.sandboxHandle.cleanup();
-            expect(mockLeaseManager.release).toHaveBeenCalledWith('retry-lease-id');
+            expect(mockLeaseManager.acquire).toHaveBeenCalledTimes(1);
+            expect(result.sandboxHandle).toBeUndefined();
         });
     });
 });

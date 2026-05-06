@@ -23,6 +23,7 @@ export const NULL_SANDBOX_INSTANCE: SandboxInstance = {
     },
     cleanup: async () => {},
     type: 'null',
+    sandboxId: '',
     repoDir: '',
     run: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
     readFile: async () => { throw new Error('No sandbox configured'); },
