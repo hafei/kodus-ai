@@ -25,11 +25,13 @@ import { SharedPostgresModule } from '@libs/shared/database/shared-postgres.modu
 import { SharedConfigModule } from '@libs/shared/infrastructure/shared-config.module';
 import { SharedLogModule } from '@libs/shared/infrastructure/shared-log.module';
 import { SharedObservabilityModule } from '@libs/shared/infrastructure/shared-observability.module';
+import { SelfHostedBeaconModule } from '@libs/telemetry/modules/self-hosted-beacon.module';
 import { TelemetryModule } from '@libs/telemetry/modules/telemetry.module';
 import { SandboxModule } from '@libs/sandbox/modules/sandbox.module';
 
 import { AnalyticsClassifierCron } from './cron/analytics-classifier.cron';
 import { AnalyticsIngestionCron } from './cron/analytics-ingestion.cron';
+import { SelfHostedBeaconCron } from './cron/self-hosted-beacon.cron';
 import { WeeklyRecapCron } from './cron/weekly-recap.cron';
 import { resolveWorkerRole, type WorkerRole } from './worker-role';
 import { WorkerDrainService } from './worker-drain.service';
@@ -116,6 +118,7 @@ export class WorkerModule {
                 // and CockpitModule doesn't re-export that token.
                 CockpitModule,
                 OrganizationModule,
+                SelfHostedBeaconModule,
             ],
             providers: [
                 WorkerDrainService,
@@ -123,6 +126,7 @@ export class WorkerModule {
                 AnalyticsIngestionCron,
                 AnalyticsClassifierCron,
                 WeeklyRecapCron,
+                SelfHostedBeaconCron,
                 LangfuseShutdownProvider,
             ] satisfies Provider[],
         };

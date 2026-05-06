@@ -198,7 +198,7 @@
 | `WEB_HOSTNAME_API` | – | string | ⚙️ Both |  |
 | `WEB_PORT_API` | – | port | ⚙️ Both |  |
 | `WEB_PORT` | – | port | ⚙️ Both |  |
-| `WEB_NEXTAUTH_SECRET` | ✅ | secret | ⚙️ Both | Generate with: openssl rand -base64 32 |
+| `WEB_NEXTAUTH_SECRET` | ✅ | secret | ⚙️ Both | Generate with: openssl rand -base64 32. Must equal NEXTAUTH_SECRET — the installer's generate-secrets.sh mirrors them automatically. |
 | `NEXTAUTH_URL` | – | url | ⚙️ Both |  |
 | `WEB_GITHUB_INSTALL_URL` | – | url | ☁️ Cloud |  |
 | `WEB_OAUTH_GITHUB_CLIENT_ID` | – | string | ☁️ Cloud |  |
@@ -304,7 +304,7 @@
 
 | Variable | Required | Type | Scope | Description |
 | --- | --- | --- | --- | --- |
-| `NEXTAUTH_SECRET` | ✅ | secret | ⚙️ Both | NextAuth.js secret — separate from WEB_NEXTAUTH_SECRET. Some NextAuth code paths (server-side session, JWT signing) read NEXTAUTH_SECRET directly even when the rest of the app uses WEB_NEXTAUTH_SECRET. Set both to the same value to keep them aligned. |
+| `NEXTAUTH_SECRET` | ✅ | secret | ⚙️ Both | NextAuth.js secret — separate from WEB_NEXTAUTH_SECRET. Some NextAuth code paths (server-side session, JWT signing) read NEXTAUTH_SECRET directly even when the rest of the app uses WEB_NEXTAUTH_SECRET. Set both to the same value to keep them aligned (the installer's generate-secrets.sh does the mirroring automatically). |
 
 ## Postgres — extra flags
 
@@ -345,6 +345,12 @@
 | `API_AGENT_REVIEW_ENABLED` | – | boolean | ⚙️ Both | Force the new agent-based code review engine on for ALL orgs in this instance (bypasses the PostHog feature flag). Set "true" to enable. Read by libs/core/providers/code-review-pipeline.provider.ee.ts — .ee.ts file means it only takes effect in EE contexts. |
 | `API_RABBITMQ_WAIT` | – | boolean | ⚙️ Both | Wait for RabbitMQ to become reachable before completing app boot. |
 | `API_WORKER_DRAIN_TIMEOUT_MS` | – | number | ⚙️ Both | Worker drain timeout (ms) — how long to keep accepting in-flight jobs during graceful shutdown before forcing exit. |
+
+## Self-hosted telemetry
+
+| Variable | Required | Type | Scope | Description |
+| --- | --- | --- | --- | --- |
+| `KODUS_TELEMETRY_DISABLED` | – | boolean | ⚙️ Both | Opt out of the daily anonymous heartbeat sent to telemetry.kodus.io. Cloud is unaffected — the cron skips when API_CLOUD_MODE=true regardless. Self-hosted operators flip this to "true" to disable. The payload is aggregated counters (active users, PRs reviewed, repos connected, etc.) plus runtime metadata (Node version, OS, deployment). It never includes emails, repo/branch/PR names, code, or any identifying data. Full schema published at https://github.com/kodustech/kodus-beacon/blob/main/docs/api.md |
 
 ## MCP — additional client config
 
