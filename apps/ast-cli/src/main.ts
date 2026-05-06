@@ -156,11 +156,17 @@ async function main() {
             totals.teams += 1;
 
             // 2) Fetch the REPOSITORIES integration config + its platform.
+            //    `integration_config_id` is the FK target on `repositories`,
+            //    so we MUST carry ic.uuid through — using team_id there
+            //    causes a constraint violation on insert.
             const cfgRow = await client.query<{
+                integration_config_id: string;
                 config_value: Repo[];
                 platform: string;
             }>(
-                `SELECT ic."configValue" AS config_value, i.platform AS platform
+                `SELECT ic.uuid AS integration_config_id,
+                        ic."configValue" AS config_value,
+                        i.platform AS platform
                  FROM integration_configs ic
                  JOIN integrations i ON i.uuid = ic.integration_id
                  WHERE ic.team_id = $1 AND ic."configKey" = 'repositories'
@@ -175,7 +181,8 @@ async function main() {
                 continue;
             }
 
-            const { config_value, platform } = cfgRow.rows[0];
+            const { integration_config_id, config_value, platform } =
+                cfgRow.rows[0];
             const repos = (config_value || []).filter(
                 (r) => r?.id && r.selected !== false,
             );
@@ -211,7 +218,7 @@ async function main() {
                          DO UPDATE SET full_name = EXCLUDED.full_name
                          RETURNING uuid, ast_graph_status, default_branch`,
                         [
-                            team_id,
+                            integration_config_id,
                             String(repo.id),
                             repo.name || fullName,
                             fullName,

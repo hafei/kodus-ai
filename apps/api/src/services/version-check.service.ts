@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import { environment } from '@libs/ee/configs/environment';
+
 /**
  * Drives the self-hosted "update available" banner.
  *
@@ -10,7 +12,7 @@ import { Injectable, Logger } from '@nestjs/common';
  * comparison covers the whole stack.
  *
  * Behavior:
- *   - Cloud (`API_CLOUD_MODE=true`)              → always `unknown=true`
+ *   - Cloud (`environment.API_CLOUD_MODE`)       → always `unknown=true`
  *   - `RELEASE_VERSION` not in semver shape      → `unknown=true`
  *   - GitHub fetch fails / no matching tag       → `unknown=true`
  *   - Otherwise: compares and returns `updateAvailable` accordingly.
@@ -39,7 +41,7 @@ export class VersionCheckService {
     };
 
     async getStatus(): Promise<VersionStatus> {
-        if (process.env.API_CLOUD_MODE === 'true') {
+        if (environment.API_CLOUD_MODE) {
             return { unknown: true, reason: 'cloud' };
         }
 
