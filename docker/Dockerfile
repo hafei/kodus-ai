@@ -6,7 +6,7 @@
 # the `oven/bun:${BUN_VERSION}-debian` stage below.
 ARG BUN_VERSION=1.2.12
 
-FROM docker.io/library/node:22.22.0-slim AS base
+FROM docker.io/library/node:22.22.2-slim AS base
 WORKDIR /usr/src/app
 
 ARG API_CLOUD_MODE=false
@@ -135,7 +135,7 @@ RUN rm -rf node_modules/@kodus/flow && cp -r packages/kodus-flow node_modules/@k
 # BUN_VERSION is declared as a global ARG at the top of this file.
 FROM docker.io/oven/bun:${BUN_VERSION}-debian AS bun-source
 
-FROM docker.io/library/node:22.22.0-slim AS runtime-common
+FROM docker.io/library/node:22.22.2-slim AS runtime-common
 LABEL org.opencontainers.image.source="https://github.com/kodustech/kodus-ai"
 WORKDIR /usr/src/app
 ENV NODE_ENV=production
