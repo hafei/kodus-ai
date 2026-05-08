@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 
 import { createLogger } from '@kodus/flow';
-import { EmailService } from '@libs/common/email/services/email.service';
+import { NotificationService } from '@libs/notifications/application/notification.service';
+import { NotificationEvent } from '@libs/notifications/domain/catalog/events';
 import { CacheService } from '@libs/core/cache/cache.service';
 import { environment } from '@libs/ee/configs/environment';
 import {
@@ -34,7 +35,7 @@ export class SSODomainVerificationService {
 
     constructor(
         private readonly cacheService: CacheService,
-        private readonly emailService: EmailService,
+        private readonly notificationService: NotificationService,
     ) {}
 
     private tokenKey(token: string): string {
@@ -159,12 +160,17 @@ export class SSODomainVerificationService {
             DOMAIN_VERIFICATION_TOKEN_TTL_MS,
         );
 
-        await this.emailService.sendDomainVerificationEmail(
-            token,
-            normalizedEmail,
-            params.organizationName,
-            normalizedDomain,
-            this.logger,
+        await this.notificationService.emit(
+            NotificationEvent.SSO_DOMAIN_VERIFICATION,
+            {
+                token,
+                email: normalizedEmail,
+                organizationName: params.organizationName,
+                domain: normalizedDomain,
+            },
+            {
+                organizationId: params.organizationId,
+            },
         );
 
         return {

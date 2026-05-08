@@ -1,7 +1,6 @@
 import { createLogger } from '@kodus/flow';
 import { Inject, Injectable } from '@nestjs/common';
 
-import { EmailService } from '@libs/common/email/services/email.service';
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
 import {
     IUsersService,
@@ -11,6 +10,8 @@ import {
     IOrganizationService,
     ORGANIZATION_SERVICE_TOKEN,
 } from '@libs/organization/domain/organization/contracts/organization.service.contract';
+import { NotificationService } from '@libs/notifications/application/notification.service';
+import { NotificationEvent } from '@libs/notifications/domain/catalog/events';
 
 @Injectable()
 export class SendRulesNotificationUseCase {
@@ -20,7 +21,7 @@ export class SendRulesNotificationUseCase {
         private readonly usersService: IUsersService,
         @Inject(ORGANIZATION_SERVICE_TOKEN)
         private readonly organizationService: IOrganizationService,
-        private readonly emailService: EmailService,
+        private readonly notificationService: NotificationService,
     ) {}
 
     async execute(organizationId: string, rules: string[]): Promise<void> {
@@ -75,71 +76,40 @@ export class SendRulesNotificationUseCase {
                 return;
             }
 
-            // Formatar dados dos usuários para o email
+            // Formatar dados dos usuários para o notification payload
             const emailUsers = users.map((user) => ({
                 email: user.email,
                 name: this.extractUserName(user),
             }));
 
-            // Formatar dados das regras para o template
-            const emailRules = rules.map((rule) => rule);
-
             this.logger.log({
-                message: 'Sending email notifications',
+                message: 'Emitting Kody Rules notification',
                 context: SendRulesNotificationUseCase.name,
                 metadata: {
                     organizationId,
                     usersCount: emailUsers.length,
-                    rulesCount: emailRules.length,
+                    rulesCount: rules.length,
                     organizationName: organization.name,
                 },
             });
 
-            // Enviar emails
-            const emailResults = await this.emailService.sendKodyRulesNotification(
-                emailUsers,
-                emailRules,
-                organization.name,
-                this.logger,
+            // Emit via the centralized notification engine
+            // The dispatcher handles per-user fanout and channel routing
+            await this.notificationService.emit(
+                NotificationEvent.KODY_RULES_GENERATED,
+                {
+                    users: emailUsers,
+                    rules,
+                    organizationName: organization.name,
+                },
+                { organizationId },
             );
 
-            // Log dos resultados
-            const successCount = emailResults.filter(
-                (result) => result.status === 'fulfilled',
-            ).length;
-            const failureCount = emailResults.filter(
-                (result) => result.status === 'rejected',
-            ).length;
-
             this.logger.log({
-                message: 'Email notifications completed',
+                message: 'Kody Rules notification emitted successfully',
                 context: SendRulesNotificationUseCase.name,
-                metadata: {
-                    organizationId,
-                    totalEmails: emailResults.length,
-                    successCount,
-                    failureCount,
-                },
+                metadata: { organizationId },
             });
-
-            // Log detalhado dos erros, se houver
-            if (failureCount > 0) {
-                const failures = emailResults
-                    .filter((result) => result.status === 'rejected')
-                    .map((result, index) => ({
-                        userIndex: index,
-                        reason: (result as PromiseRejectedResult).reason,
-                    }));
-
-                this.logger.error({
-                    message: 'Some email notifications failed',
-                    context: SendRulesNotificationUseCase.name,
-                    metadata: {
-                        organizationId,
-                        failures,
-                    },
-                });
-            }
         } catch (error) {
             this.logger.error({
                 message: 'Error in Kody Rules notification process',
@@ -162,3 +132,4 @@ export class SendRulesNotificationUseCase {
         return user.email.split('@')[0];
     }
 }
+

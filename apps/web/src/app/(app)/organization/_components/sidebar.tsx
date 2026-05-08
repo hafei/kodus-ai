@@ -15,6 +15,7 @@ import {
     SidebarMenuItem,
 } from "@components/ui/sidebar";
 import {
+    BellIcon,
     CogIcon,
     GaugeIcon,
     KeyRoundIcon,
@@ -69,6 +70,12 @@ export const ConfigsSidebar = () => {
             label: "CLI keys",
             href: `/organization/cli-keys`,
             visible: cliKeys ?? false,
+        },
+        {
+            icon: BellIcon,
+            label: "Notifications",
+            href: `/organization/notifications`,
+            visible: true,
         },
     ] satisfies Array<{
         icon: React.ComponentType;

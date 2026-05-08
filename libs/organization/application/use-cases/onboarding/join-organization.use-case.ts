@@ -29,7 +29,8 @@ import {
 } from '@libs/identity/domain/user/contracts/user.service.contract';
 import { IUser } from '@libs/identity/domain/user/interfaces/user.interface';
 import { createLogger } from '@kodus/flow';
-import { EmailService } from '@libs/common/email/services/email.service';
+import { NotificationService } from '@libs/notifications/application/notification.service';
+import { NotificationEvent } from '@libs/notifications/domain/catalog/events';
 import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
 import { JoinOrganizationDto } from '@libs/identity/dtos/join-organization.dto';
 import { environment } from '@libs/ee/configs/environment';
@@ -64,7 +65,7 @@ export class JoinOrganizationUseCase implements IUseCase {
         @Inject(PARAMETERS_SERVICE_TOKEN)
         private readonly parametersService: IParametersService,
 
-        private readonly emailService: EmailService,
+        private readonly notificationService: NotificationService,
     ) {}
 
     public async execute(data: JoinOrganizationDto): Promise<IUser> {
@@ -157,13 +158,20 @@ export class JoinOrganizationUseCase implements IUseCase {
                     user.email,
                 );
 
-                await this.emailService.sendConfirmationEmail(
-                    token,
-                    user.email,
-                    organization.name,
+                await this.notificationService.emit(
+                    NotificationEvent.AUTH_EMAIL_CONFIRMATION,
+                    {
+                        token,
+                        email: user.email,
+                        organizationName: organization.name,
+                        organizationAndTeamData: {
+                            organizationId,
+                            teamId: team.uuid,
+                        },
+                    },
                     {
                         organizationId,
-                        teamId: team.uuid,
+                        userId: user.uuid,
                     },
                 );
             }

@@ -31,6 +31,7 @@ import { useSubscriptionContext } from "src/features/ee/subscription/_providers/
 import { GithubStars } from "./_components/github-stars";
 import { IssuesCount } from "./_components/issues-count";
 import { PendingRulesNotification } from "./_components/pending-rules-notification";
+import { NotificationBell } from "./_components/notification-bell";
 import { VERSION_QUERY } from "./_components/version-info";
 
 export const NavMenu = () => {
@@ -206,6 +207,7 @@ export const NavMenu = () => {
 
                 <div className="flex items-center gap-2">
                     <SubscriptionBadge />
+                    <NotificationBell />
                     <PendingRulesNotification />
                 </div>
 
