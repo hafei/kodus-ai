@@ -161,7 +161,7 @@ export class CliReviewRequestDto {
     @ApiPropertyOptional({
         description:
             "Optional GitHub Personal Access Token. Trial users (anonymous) need this to clone private repositories — for public repos it's not required. The token is held in memory for the pipeline run only and is never persisted.",
-        example: 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        example: '<your-github-personal-access-token>',
     })
     githubPat?: string;
 
