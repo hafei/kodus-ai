@@ -8,7 +8,6 @@ import { Heading } from "@components/ui/heading";
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import { useGetCodeReviewLabels } from "@services/parameters/hooks";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
-import { useFeatureFlags } from "src/app/(app)/settings/_components/context";
 import { useCurrentConfigLevel } from "src/app/(app)/settings/_hooks";
 
 import {
@@ -26,17 +25,15 @@ interface CheckboxCardOption {
 
 export const AnalysisTypes = () => {
     const currentLevel = useCurrentConfigLevel();
-    const { businessLogic } = useFeatureFlags();
     const form = useFormContext<CodeReviewFormType>();
     const reviewOptions = useWatch({
         control: form.control,
         name: "reviewOptions",
     });
     const { data: labels = [], isLoading } = useGetCodeReviewLabels("v2");
-    const isBusinessLogicEnabled = businessLogic === true;
     const visibleLabels = useMemo(
-        () => filterVisibleReviewLabels(labels, isBusinessLogicEnabled),
-        [isBusinessLogicEnabled, labels],
+        () => filterVisibleReviewLabels(labels, true),
+        [labels],
     );
     const visibleLabelTypes = useMemo(
         () => visibleLabels.map((label) => label.type),

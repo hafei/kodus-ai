@@ -15,6 +15,6 @@ import { ResendEventsProvider } from '../infrastructure/providers/resend-events.
         N8nProvider,
         TelemetryService,
     ],
-    exports: [TelemetryService],
+    exports: [TelemetryService, PostHogProvider],
 })
 export class TelemetryModule {}

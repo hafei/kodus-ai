@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PostHog } from 'posthog-node';
 
+import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
+
 @Injectable()
 export class PostHogProvider {
     private readonly logger = createLogger(PostHogProvider.name);
@@ -63,6 +65,38 @@ export class PostHogProvider {
             this.client.groupIdentify({ groupType, groupKey, properties });
         } catch (error) {
             this.swallow('groupIdentify', `${groupType}:${groupKey}`, error);
+        }
+    }
+
+    /**
+     * Evaluates a feature flag against PostHog with the org / repo group
+     * context. When no API key is configured (e.g. local dev or self-hosted
+     * without telemetry) returns `true` to preserve legacy permissive
+     * behavior — cloud-only callers should still gate via the catalog stage.
+     */
+    async isFeatureEnabled(
+        featureName: string,
+        identifier: string,
+        organizationAndTeamData: OrganizationAndTeamData,
+        repositoryId?: string,
+    ): Promise<boolean> {
+        if (!this.client) return true;
+
+        const groups: Record<string, string> = {
+            organization: organizationAndTeamData.organizationId,
+        };
+        if (repositoryId) groups.repository = repositoryId;
+
+        try {
+            const result = await this.client.isFeatureEnabled(
+                featureName,
+                identifier,
+                { groups },
+            );
+            return result === true;
+        } catch (error) {
+            this.swallow('isFeatureEnabled', featureName, error);
+            return false;
         }
     }
 
