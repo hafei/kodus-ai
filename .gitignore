@@ -192,8 +192,9 @@ parity-report.json
 # GSD planning workspace (local-only)
 .planning/
 
-# Local scratch / generated test artifacts (TLS certs, sanitized .env,
-# screenshots from the SSO E2E demo, etc). Always regenerated.
+.secrets/
+
+# Lscreenshots from the SSO E2E demo, etc). Always regenerated.
 .tmp/
 
 # Playwright MCP session snapshots (DOM dumps, console logs, screenshots)

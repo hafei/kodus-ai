@@ -13,6 +13,7 @@ import { Request, Response } from 'express';
 
 import { deriveSsoCookieDomain } from '../utils/derive-sso-cookie-domain';
 import { ConfirmEmailUseCase } from '@libs/identity/application/use-cases/auth/confirm-email.use-case';
+import { CreateHelpdeskTokenUseCase } from '@libs/identity/application/use-cases/auth/create-helpdesk-token.use-case';
 import { ForgotPasswordUseCase } from '@libs/identity/application/use-cases/auth/forgotPasswordUseCase';
 import { LoginUseCase } from '@libs/identity/application/use-cases/auth/login.use-case';
 import { LogoutUseCase } from '@libs/identity/application/use-cases/auth/logout.use-case';
@@ -74,6 +75,7 @@ export class AuthController {
         private readonly ssoLoginUseCase: SSOLoginUseCase,
         private readonly ssoCheckUseCase: SSOCheckUseCase,
         private readonly ssoTestSessionService: SSOTestSessionService,
+        private readonly createHelpdeskTokenUseCase: CreateHelpdeskTokenUseCase,
     ) {}
 
     @Post('login')
@@ -188,6 +190,25 @@ export class AuthController {
             email,
             refreshToken,
             authProvider,
+        );
+    }
+
+    @Get('helpdesk-token')
+    @ApiBearerAuth('jwt')
+    @ApiOperation({
+        summary: 'Generate helpdesk SSO token',
+        description:
+            'Generate a short-lived RS256 token for authenticating with kodus-helpdesk.',
+    })
+    @ApiOkResponse({
+        schema: {
+            type: 'object',
+            properties: { token: { type: 'string' } },
+        },
+    })
+    async getHelpdeskToken(@Req() req: Request) {
+        return this.createHelpdeskTokenUseCase.execute(
+            (req as any).user,
         );
     }
 
