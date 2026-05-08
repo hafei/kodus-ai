@@ -1,10 +1,4 @@
-import { CloneParamsResolverService } from '../services/clone-params-resolver.service';
 import { createLogger } from '@kodus/flow';
-import { CliReviewPipelineContext } from '@libs/cli-review/pipeline/context/cli-review-pipeline.context';
-import {
-    ISandboxProvider,
-    SANDBOX_PROVIDER_TOKEN,
-} from '@libs/code-review/domain/contracts/sandbox.provider';
 import { SUPPORTED_LANGUAGES } from '@libs/code-review/domain/contracts/SupportedLanguages';
 import {
     DOCUMENTATION_LLM_PLANNER_SERVICE_TOKEN,
@@ -25,31 +19,6 @@ import { ConfigService } from '@nestjs/config';
 import path from 'path';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 
-function parseGitRemoteUrl(
-    url: string,
-): { fullName: string; name: string } | null {
-    const extract = (path: string) => {
-        const fullName = path.replace(/\.git$/, '').replace(/\/+$/, '');
-        const name = fullName.split('/').pop() || '';
-        if (!fullName || !name) return null;
-        return { fullName, name };
-    };
-
-    const httpsMatch = url.match(/^https?:\/\/[^/]+\/(.+?)\/?$/);
-    if (httpsMatch) {
-        const parsed = extract(httpsMatch[1]);
-        if (parsed) return parsed;
-    }
-
-    const sshMatch = url.match(/^[^@\s]+@[^:]+:(.+?)\/?$/);
-    if (sshMatch) {
-        const parsed = extract(sshMatch[1]);
-        if (parsed) return parsed;
-    }
-
-    return null;
-}
-
 @Injectable()
 export class GatherDocumentationContextStage extends BasePipelineStage<CodeReviewPipelineContext> {
     readonly stageName = 'GatherDocumentationContextStage';
@@ -68,9 +37,6 @@ export class GatherDocumentationContextStage extends BasePipelineStage<CodeRevie
         private readonly llmPlannerService: DocumentationLLMPlannerService,
         @Inject(DOCUMENTATION_SEARCH_EXA_SERVICE_TOKEN)
         private readonly documentationSearchService: DocumentationSearchExaService,
-        @Inject(SANDBOX_PROVIDER_TOKEN)
-        private readonly sandboxProvider: ISandboxProvider,
-        private readonly cloneParamsResolver: CloneParamsResolverService,
     ) {
         super();
     }
@@ -126,47 +92,14 @@ export class GatherDocumentationContextStage extends BasePipelineStage<CodeRevie
             });
         }
 
-        let cleanup: (() => Promise<void>) | undefined;
-
         try {
-            let remoteCommands = context.sandboxHandle?.remoteCommands;
-
-            if (!remoteCommands && this.sandboxProvider.isAvailable()) {
-                try {
-                    const cloneInfo = await this.cloneParamsResolver.resolve(
-                        context,
-                        context as unknown as CliReviewPipelineContext,
-                    );
-
-                    if (cloneInfo) {
-                        const sandbox =
-                            await this.sandboxProvider.createSandboxWithRepo({
-                                cloneUrl: cloneInfo.url,
-                                authToken: cloneInfo.authToken,
-                                branch: cloneInfo.branch,
-                                prNumber: cloneInfo.prNumber,
-                                platform: cloneInfo.platform,
-                                sandboxMetadata: { stage: 'documentation' },
-                            });
-
-                        remoteCommands = sandbox.remoteCommands;
-                        cleanup = sandbox.cleanup;
-                    }
-                } catch (sandboxError) {
-                    this.logger.warn({
-                        message:
-                            'Failed to initialize sandbox for ripgrep manifest discovery, using fallback manifest resolution',
-                        context: this.stageName,
-                        metadata: {
-                            prNumber: context.pullRequest.number,
-                            repository: context.repository.name,
-                            organizationAndTeamData:
-                                context.organizationAndTeamData,
-                        },
-                        error: sandboxError,
-                    });
-                }
-            }
+            // Single-sandbox-per-PR: reuse the lease-managed sandbox set up by
+            // CreateSandboxStage (which runs earlier in the pipeline). When
+            // the sandbox isn't available (e.g. no E2B configured, or trial
+            // mode without auth) we fall back to manifest-only discovery via
+            // the package discovery service — same behavior as before, just
+            // without the redundant standalone sandbox creation.
+            const remoteCommands = context.sandboxHandle?.remoteCommands;
 
             const discovery =
                 await this.packageDiscoveryService.discoverPackages(context, {
@@ -272,26 +205,9 @@ export class GatherDocumentationContextStage extends BasePipelineStage<CodeRevie
             });
 
             return context;
-        } finally {
-            if (cleanup) {
-                try {
-                    await cleanup();
-                } catch (cleanupError) {
-                    this.logger.warn({
-                        message:
-                            'Sandbox cleanup failed after documentation manifest discovery',
-                        context: this.stageName,
-                        metadata: {
-                            prNumber: context.pullRequest.number,
-                            repository: context.repository.name,
-                            organizationAndTeamData:
-                                context.organizationAndTeamData,
-                        },
-                        error: cleanupError,
-                    });
-                }
-            }
         }
+        // Sandbox lifecycle is owned by SandboxLeaseManager (release →
+        // pause); this stage doesn't manage cleanup anymore.
     }
 
     private isCodeFile(filePath: string): boolean {

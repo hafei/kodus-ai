@@ -9,7 +9,7 @@
 #   SERVICE_TYPE=api | worker | webhooks
 # =============================================================================
 
-FROM docker.io/library/node:22.22.0-slim AS base
+FROM docker.io/library/node:22.22.2-slim AS base
 WORKDIR /usr/src/app
 
 ARG API_CLOUD_MODE=false
@@ -92,7 +92,7 @@ RUN rm -rf node_modules/@kodus/kodus-common && cp -r packages/kodus-common node_
 RUN rm -rf node_modules/@kodus/flow && cp -r packages/kodus-flow node_modules/@kodus/flow
 
 # Runtime stage — single stage, service selected via SERVICE_TYPE
-FROM docker.io/library/node:22.22.0-slim
+FROM docker.io/library/node:22.22.2-slim
 WORKDIR /usr/src/app
 ENV NODE_ENV=production
 

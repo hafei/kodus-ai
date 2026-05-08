@@ -6,7 +6,7 @@ import {
 import {
     ISandboxProvider,
     SANDBOX_PROVIDER_TOKEN,
-} from '@libs/code-review/domain/contracts/sandbox.provider';
+} from '@libs/sandbox/domain/contracts/sandbox.provider';
 import {
     DOCUMENTATION_LLM_PLANNER_SERVICE_TOKEN,
     DocumentationLLMPlannerService,

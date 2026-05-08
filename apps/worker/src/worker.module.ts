@@ -28,6 +28,7 @@ import { SharedObservabilityModule } from '@libs/shared/infrastructure/shared-ob
 import { SelfHostedBeaconModule } from '@libs/telemetry/modules/self-hosted-beacon.module';
 import { TelemetryModule } from '@libs/telemetry/modules/telemetry.module';
 import { FeatureGateModule } from '@libs/feature-gate/modules/feature-gate.module';
+import { SandboxModule } from '@libs/sandbox/modules/sandbox.module';
 
 import { AnalyticsClassifierCron } from './cron/analytics-classifier.cron';
 import { AnalyticsIngestionCron } from './cron/analytics-ingestion.cron';
@@ -74,6 +75,7 @@ export class WorkerModule {
                     CodeReviewFeedbackModule,
                     AutomationModule,
                     PlatformModule,
+                    SandboxModule, // provides SANDBOX_LEASE_MANAGER_TOKEN for OutboxRelayService
                 ],
                 providers: [
                     WorkerDrainService,
