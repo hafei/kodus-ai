@@ -24,13 +24,17 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { Client } from 'pg';
 
-import { evaluateCatalogGate } from '../../libs/feature-gate/domain/decision';
-import { loadSnapshot } from '../../libs/feature-gate/infrastructure/feature-snapshot.loader';
-
+// `dotenv` must run BEFORE the environment module is imported, because
+// the dev variant of environment.ts reads `process.env.API_CLOUD_MODE`
+// at module-load time.
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 if (process.env.API_PG_DB_HOST === 'db_postgres') {
     process.env.API_PG_DB_HOST = '127.0.0.1';
 }
+
+import { environment } from '../../libs/ee/configs/environment/environment';
+import { evaluateCatalogGate } from '../../libs/feature-gate/domain/decision';
+import { loadSnapshot } from '../../libs/feature-gate/infrastructure/feature-snapshot.loader';
 
 interface OrgRow {
     uuid: string;
@@ -88,16 +92,19 @@ async function main(): Promise<void> {
         entry: f,
     }));
 
-    const isCloud = (process.env.API_CLOUD_MODE ?? 'true') !== 'false';
-    const audience = isCloud ? 'cloud' : 'self-hosted';
+    // Read API_CLOUD_MODE through the canonical `environment` module so
+    // we exercise the same lookup path the runtime uses. The value is
+    // either resolved from `process.env` (dev variant) or baked at build
+    // time (prod / self-hosted bundle).
+    const audience = environment.API_CLOUD_MODE ? 'cloud' : 'self-hosted';
     const selfHostedBetaEnabled =
         process.env.BETA_FEATURES === 'true' ||
         process.env.BETA_FEATURES === '1';
 
     console.log('');
     console.log(
-        `Backend mode: ${isCloud ? 'cloud' : 'self-hosted'}` +
-            (!isCloud
+        `Backend mode: ${audience}` +
+            (audience === 'self-hosted'
                 ? ` (BETA_FEATURES=${selfHostedBetaEnabled ? 'on' : 'off'})`
                 : ''),
     );

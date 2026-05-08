@@ -41,8 +41,13 @@ export class AddOrganizationReleaseTrack2026050600000
             NOT NULL DEFAULT 'beta'
         `);
 
+        // CONCURRENTLY avoids the SHARE lock that a regular CREATE INDEX
+        // takes on `organizations`. The table is small in dev but on
+        // production it carries every customer org row and we don't want
+        // the deploy to block writes. Requires `transaction = false`
+        // (set above) — Postgres rejects CONCURRENTLY inside a tx.
         await queryRunner.query(`
-            CREATE INDEX IF NOT EXISTS "IDX_organizations_release_track"
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS "IDX_organizations_release_track"
             ON "organizations" ("release_track")
         `);
     }

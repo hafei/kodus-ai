@@ -20,6 +20,31 @@ export interface IsFeatureEnabledOptions {
 }
 
 /**
+ * Process-wide PostHog client. The previous implementation built and
+ * shut down a fresh client on every `isFeatureEnabled` call, which:
+ *
+ *   1. Forced a synchronous network roundtrip per check because the
+ *      local flag-evaluation cache never had time to warm up.
+ *   2. Defeated `posthog-node`'s background polling for flag definitions.
+ *
+ * One singleton per Node process gives the SDK a long-lived cache and
+ * lets `isFeatureEnabled` resolve in microseconds for known flags. We
+ * never call `shutdown()` — we don't capture events from this resolver,
+ * only flag reads, so there's nothing pending to flush on process exit.
+ */
+let posthogSingleton: PostHog | null = null;
+function getPostHog(): PostHog | null {
+    const apiKey = process.env.WEB_POSTHOG_KEY;
+    if (!apiKey) return null;
+    if (!posthogSingleton) {
+        posthogSingleton = new PostHog(apiKey, {
+            host: "https://us.i.posthog.com",
+        });
+    }
+    return posthogSingleton;
+}
+
+/**
  * Next.js adapter around the pure `evaluateCatalogGate` decision in
  * `libs/feature-gate/domain/decision.ts`. Web is always cloud, so the
  * audience is hardcoded; runtime specifics are next-auth + posthog-node
@@ -47,7 +72,8 @@ export const isFeatureEnabled = async ({
         // Self-hosted web bundles run without a PostHog key. After the
         // catalog already passed us, fall through to the legacy
         // permissive behavior so the app keeps working.
-        if (!process.env.WEB_POSTHOG_KEY) return true;
+        const posthog = getPostHog();
+        if (!posthog) return true;
 
         const jwtPayload = await auth();
         const orgId = jwtPayload?.user?.organizationId;
@@ -55,21 +81,12 @@ export const isFeatureEnabled = async ({
             identifier === "user" ? jwtPayload?.user?.userId : orgId;
         if (!id) return false;
 
-        const posthog = new PostHog(process.env.WEB_POSTHOG_KEY, {
-            flushAt: 1,
-            flushInterval: 0,
-            host: "https://us.i.posthog.com",
-        });
-        try {
-            const value = await posthog
-                .isFeatureEnabled(feature, id, {
-                    groups: { organization: orgId || "" },
-                })
-                .catch(() => false);
-            return value === true;
-        } finally {
-            await posthog.shutdown();
-        }
+        const value = await posthog
+            .isFeatureEnabled(feature, id, {
+                groups: { organization: orgId || "" },
+            })
+            .catch(() => false);
+        return value === true;
     } catch (error) {
         console.error("Error checking feature flag:", error);
         return false;
