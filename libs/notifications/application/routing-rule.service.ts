@@ -63,7 +63,7 @@ export class RoutingRuleService {
 
         return this.routingRuleRepo.upsertBatch(
             rules.map((r) => ({
-                organizationId,
+                organization: { uuid: organizationId },
                 event: r.event,
                 role: r.role,
                 category:
@@ -91,7 +91,7 @@ export class RoutingRuleService {
 
             // Seed for wildcard role — applies to all roles by default
             rules.push({
-                organizationId,
+                organization: { uuid: organizationId },
                 event,
                 category: defaults.category,
                 role: '*',

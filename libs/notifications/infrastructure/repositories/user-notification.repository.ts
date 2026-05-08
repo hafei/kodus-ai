@@ -2,11 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
+import { mapSimpleModelToEntity } from '@libs/core/infrastructure/repositories/mappers';
+
 import {
     IUserNotificationRepository,
     UserNotificationWithDelivery,
 } from '../../domain/contracts/user-notification.repository.contract';
 import { IUserNotification } from '../../domain/interfaces/user-notification.interface';
+import { UserNotificationEntity } from '../../domain/entities/user-notification.entity';
 import { UserNotificationModel } from './schemas/user-notification.model';
 
 @Injectable()
@@ -21,15 +24,25 @@ export class UserNotificationRepository
     async create(
         notification: Omit<IUserNotification, 'uuid'>,
     ): Promise<IUserNotification> {
-        const entity = this.repo.create(notification);
-        return this.repo.save(entity);
+        const entity = this.repo.create({
+            user: { uuid: notification.userId },
+            delivery: { uuid: notification.deliveryId },
+            readAt: notification.readAt,
+        });
+        const saved = await this.repo.save(entity);
+        return mapSimpleModelToEntity<
+            UserNotificationModel,
+            UserNotificationEntity
+        >(saved, UserNotificationEntity).toObject();
     }
 
     async findByUser(
         userId: string,
         options: { limit: number; offset: number; unreadOnly?: boolean },
     ): Promise<{ data: UserNotificationWithDelivery[]; total: number }> {
-        const where: Record<string, unknown> = { userId };
+        const where: Record<string, unknown> = {
+            user: { uuid: userId },
+        };
         if (options.unreadOnly) {
             where.readAt = IsNull();
         }
@@ -44,20 +57,20 @@ export class UserNotificationRepository
 
         const data: UserNotificationWithDelivery[] = rows.map((row) => ({
             uuid: row.uuid,
-            userId: row.userId,
-            deliveryId: row.deliveryId,
+            userId: row.user?.uuid ?? '',
+            deliveryId: row.delivery?.uuid ?? '',
             readAt: row.readAt,
             createdAt: row.createdAt,
             delivery: {
-                uuid: row.delivery!.uuid,
-                event: row.delivery!.event,
-                criticality: row.delivery!.criticality,
-                title: row.delivery!.title,
-                body: row.delivery!.body,
-                ctaUrl: row.delivery!.ctaUrl,
-                category: row.delivery!.category,
-                metadata: row.delivery!.metadata,
-                createdAt: row.delivery!.createdAt,
+                uuid: row.delivery.uuid,
+                event: row.delivery.event,
+                criticality: row.delivery.criticality,
+                title: row.delivery.title,
+                body: row.delivery.body,
+                ctaUrl: row.delivery.ctaUrl,
+                category: row.delivery.category,
+                metadata: row.delivery.metadata,
+                createdAt: row.delivery.createdAt,
             },
         }));
 
@@ -66,20 +79,20 @@ export class UserNotificationRepository
 
     async countUnread(userId: string): Promise<number> {
         return this.repo.count({
-            where: { userId, readAt: IsNull() },
+            where: { user: { uuid: userId }, readAt: IsNull() },
         });
     }
 
     async markAsRead(notificationId: string, userId: string): Promise<void> {
         await this.repo.update(
-            { uuid: notificationId, userId },
+            { uuid: notificationId, user: { uuid: userId } },
             { readAt: new Date() },
         );
     }
 
     async markAllAsRead(userId: string): Promise<number> {
         const result = await this.repo.update(
-            { userId, readAt: IsNull() },
+            { user: { uuid: userId }, readAt: IsNull() },
             { readAt: new Date() },
         );
         return result.affected ?? 0;

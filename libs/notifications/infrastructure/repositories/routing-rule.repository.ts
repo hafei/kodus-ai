@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { mapSimpleModelToEntity } from '@libs/core/infrastructure/repositories/mappers';
+
 import {
     IRoutingRuleRepository,
 } from '../../domain/contracts/routing-rule.repository.contract';
 import { IRoutingRule } from '../../domain/interfaces/routing-rule.interface';
+import { RoutingRuleEntity } from '../../domain/entities/routing-rule.entity';
 import { RoutingRuleModel } from './schemas/routing-rule.model';
 
 @Injectable()
@@ -16,10 +19,17 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
     ) {}
 
     async findByOrganization(organizationId: string): Promise<IRoutingRule[]> {
-        return this.repo.find({
-            where: { organizationId },
+        const rows = await this.repo.find({
+            where: { organization: { uuid: organizationId } },
             order: { event: 'ASC', role: 'ASC' },
         });
+        return rows.map(
+            (r) =>
+                mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
+                    r,
+                    RoutingRuleEntity,
+                ).toObject(),
+        );
     }
 
     /**
@@ -34,12 +44,13 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
         event: string,
         role: string,
     ): Promise<IRoutingRule | null> {
+        const orgWhere = { organization: { uuid: organizationId } };
         const candidates = await this.repo.find({
             where: [
-                { organizationId, event, role },
-                { organizationId, event, role: '*' },
-                { organizationId, event: '*', role },
-                { organizationId, event: '*', role: '*' },
+                { ...orgWhere, event, role },
+                { ...orgWhere, event, role: '*' },
+                { ...orgWhere, event: '*', role },
+                { ...orgWhere, event: '*', role: '*' },
             ],
         });
 
@@ -47,12 +58,15 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
 
         // Pick best match by specificity
         const prioritized = candidates.sort((a, b) => {
-            const specificity = (r: IRoutingRule) =>
+            const specificity = (r: RoutingRuleModel) =>
                 (r.event === '*' ? 0 : 2) + (r.role === '*' ? 0 : 1);
             return specificity(b) - specificity(a);
         });
 
-        return prioritized[0];
+        return mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
+            prioritized[0],
+            RoutingRuleEntity,
+        ).toObject();
     }
 
     async upsert(
@@ -60,7 +74,7 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
     ): Promise<IRoutingRule> {
         const existing = await this.repo.findOne({
             where: {
-                organizationId: rule.organizationId,
+                organization: { uuid: rule.organization?.uuid },
                 event: rule.event,
                 role: rule.role,
             },
@@ -69,11 +83,27 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
         if (existing) {
             existing.channels = rule.channels;
             existing.category = rule.category;
-            return this.repo.save(existing);
+            const saved = await this.repo.save(existing);
+            return mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
+                saved,
+                RoutingRuleEntity,
+            ).toObject();
         }
 
-        const entity = this.repo.create(rule);
-        return this.repo.save(entity);
+        const entity = this.repo.create({
+            organization: rule.organization
+                ? { uuid: rule.organization.uuid }
+                : undefined,
+            event: rule.event,
+            category: rule.category,
+            role: rule.role,
+            channels: rule.channels,
+        });
+        const saved = await this.repo.save(entity);
+        return mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
+            saved,
+            RoutingRuleEntity,
+        ).toObject();
     }
 
     async upsertBatch(
@@ -87,7 +117,9 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
     }
 
     async deleteByOrganization(organizationId: string): Promise<number> {
-        const result = await this.repo.delete({ organizationId });
+        const result = await this.repo.delete({
+            organization: { uuid: organizationId },
+        });
         return result.affected ?? 0;
     }
 }

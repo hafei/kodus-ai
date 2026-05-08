@@ -1,8 +1,11 @@
+import { IOrganization } from '@libs/organization/domain/organization/interfaces/organization.interface';
+import { IUser } from '@libs/identity/domain/user/interfaces/user.interface';
 import { Criticality, DeliveryStatus, NotificationChannel } from '../enums';
 
 export interface INotificationDelivery {
     uuid?: string;
-    organizationId: string;
+    organization?: Partial<IOrganization>;
+    recipientUser?: Partial<IUser>;
     event: string;
     criticality: Criticality;
     channel: NotificationChannel;
@@ -11,7 +14,6 @@ export interface INotificationDelivery {
     ctaUrl?: string;
     category: string;
     recipientEmail?: string;
-    recipientUserId?: string;
     deliveryStatus: DeliveryStatus;
     metadata: Record<string, unknown>;
     correlationId: string;

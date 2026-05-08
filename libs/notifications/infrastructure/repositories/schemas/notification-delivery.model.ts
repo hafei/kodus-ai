@@ -1,22 +1,29 @@
-import { Column, Entity, Index, OneToMany } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 
 import { CoreModel } from '@libs/core/infrastructure/repositories/model/typeOrm';
+import { OrganizationModel } from '@libs/organization/infrastructure/adapters/repositories/schemas/organization.model';
+import { UserModel } from '@libs/identity/infrastructure/adapters/repositories/schemas/user.model';
 
 import { Criticality } from '../../../domain/enums/criticality.enum';
 import { DeliveryStatus } from '../../../domain/enums/delivery-status.enum';
 import { NotificationChannel } from '../../../domain/enums/channel.enum';
 import type { UserNotificationModel } from './user-notification.model';
 
-@Entity({ name: 'notification_deliveries', schema: 'kodus_notifications' })
-@Index('IDX_nd_org_event', ['organizationId', 'event'])
+@Entity({ name: 'notification_deliveries' })
+@Index('IDX_nd_org_event', ['organization', 'event'])
 @Index('IDX_nd_channel_status', ['channel', 'deliveryStatus'])
 @Index('IDX_nd_correlation', ['correlationId'])
 @Index('IDX_nd_created', ['createdAt'])
 export class NotificationDeliveryModel extends CoreModel {
-    @Column({ type: 'uuid' })
-    organizationId: string;
+    @ManyToOne(() => OrganizationModel, { nullable: false })
+    @JoinColumn({ name: 'organization_id', referencedColumnName: 'uuid' })
+    organization: OrganizationModel;
 
-    @Column({ type: 'varchar', length: 100 })
+    @ManyToOne(() => UserModel, { nullable: true })
+    @JoinColumn({ name: 'recipient_user_id', referencedColumnName: 'uuid' })
+    recipientUser?: UserModel;
+
+    @Column({ type: 'text' })
     event: string;
 
     @Column({ type: 'enum', enum: Criticality })
@@ -25,23 +32,20 @@ export class NotificationDeliveryModel extends CoreModel {
     @Column({ type: 'enum', enum: NotificationChannel })
     channel: NotificationChannel;
 
-    @Column({ type: 'varchar', length: 255 })
+    @Column({ type: 'text' })
     title: string;
 
     @Column({ type: 'text' })
     body: string;
 
-    @Column({ type: 'varchar', length: 512, nullable: true })
+    @Column({ type: 'text', nullable: true })
     ctaUrl?: string;
 
-    @Column({ type: 'varchar', length: 50 })
+    @Column({ type: 'text' })
     category: string;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
+    @Column({ type: 'text', nullable: true })
     recipientEmail?: string;
-
-    @Column({ type: 'uuid', nullable: true })
-    recipientUserId?: string;
 
     @Column({
         type: 'enum',
@@ -53,7 +57,7 @@ export class NotificationDeliveryModel extends CoreModel {
     @Column({ type: 'jsonb', default: {} })
     metadata: Record<string, unknown>;
 
-    @Column({ type: 'varchar', length: 100 })
+    @Column({ type: 'text' })
     correlationId: string;
 
     @Column({ type: 'text', nullable: true })

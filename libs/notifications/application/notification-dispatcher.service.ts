@@ -137,7 +137,7 @@ export class NotificationDispatcherService {
 
             // Create delivery record (pending)
             const delivery = await this.deliveryRepo.create({
-                organizationId,
+                organization: { uuid: organizationId },
                 event,
                 criticality: defaults.criticality,
                 channel,
@@ -149,7 +149,9 @@ export class NotificationDispatcherService {
                     channel === NotificationChannel.EMAIL
                         ? recipient.email
                         : undefined,
-                recipientUserId: recipient.userId,
+                recipientUser: recipient.userId
+                    ? { uuid: recipient.userId }
+                    : undefined,
                 deliveryStatus: DeliveryStatus.PENDING,
                 metadata: payload,
                 correlationId,

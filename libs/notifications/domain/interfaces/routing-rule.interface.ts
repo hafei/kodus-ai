@@ -1,6 +1,8 @@
+import { IOrganization } from '@libs/organization/domain/organization/interfaces/organization.interface';
+
 export interface IRoutingRule {
     uuid?: string;
-    organizationId: string;
+    organization?: Partial<IOrganization>;
     /** Event enum value or '*' for wildcard. */
     event: string;
     /** Category group or null for all. */
