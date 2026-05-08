@@ -5,9 +5,10 @@ export interface IRoutingRuleRepository {
 
     /**
      * Resolve the routing rule for a specific (org, event, role) tuple.
-     * Falls back through the wildcard chain:
-     *   (org, event, role) → (org, event, '*') → (org, '*', role) → (org, '*', '*')
-     * Returns null if no rule matches.
+     * Falls back through the wildcard-role chain:
+     *   1. (org, event, role)  — per-role override
+     *   2. (org, event, '*')   — All Roles config
+     *   3. null                — caller uses catalog defaults
      */
     resolve(
         organizationId: string,
@@ -22,6 +23,17 @@ export interface IRoutingRuleRepository {
     ): Promise<IRoutingRule[]>;
 
     deleteByOrganization(organizationId: string): Promise<number>;
+
+    /**
+     * Remove a single (org, event, role) routing rule. Used to revert a
+     * per-role override so the rule falls back to the wildcard config.
+     * Returns the number of rows affected (0 or 1).
+     */
+    deleteByOrgEventRole(
+        organizationId: string,
+        event: string,
+        role: string,
+    ): Promise<number>;
 }
 
 export const ROUTING_RULE_REPOSITORY_TOKEN = Symbol.for(

@@ -33,11 +33,12 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
     }
 
     /**
-     * Resolve routing for (org, event, role) with wildcard fallback:
-     *   1. (org, event, role)
-     *   2. (org, event, '*')
-     *   3. (org, '*',   role)
-     *   4. (org, '*',   '*')
+     * Resolve routing for (org, event, role) with wildcard-role fallback:
+     *   1. Per-role override:    (org, event, role)
+     *   2. All Roles ('*'):      (org, event, '*')
+     *   3. Otherwise:            null  (caller falls back to catalog defaults)
+     *
+     * Event names are always concrete — no wildcard-event support.
      */
     async resolve(
         organizationId: string,
@@ -45,28 +46,28 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
         role: string,
     ): Promise<IRoutingRule | null> {
         const orgWhere = { organization: { uuid: organizationId } };
-        const candidates = await this.repo.find({
-            where: [
-                { ...orgWhere, event, role },
-                { ...orgWhere, event, role: '*' },
-                { ...orgWhere, event: '*', role },
-                { ...orgWhere, event: '*', role: '*' },
-            ],
+
+        const specific = await this.repo.findOne({
+            where: { ...orgWhere, event, role },
         });
+        if (specific) {
+            return mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
+                specific,
+                RoutingRuleEntity,
+            ).toObject();
+        }
 
-        if (candidates.length === 0) return null;
-
-        // Pick best match by specificity
-        const prioritized = candidates.sort((a, b) => {
-            const specificity = (r: RoutingRuleModel) =>
-                (r.event === '*' ? 0 : 2) + (r.role === '*' ? 0 : 1);
-            return specificity(b) - specificity(a);
+        const wildcard = await this.repo.findOne({
+            where: { ...orgWhere, event, role: '*' },
         });
+        if (wildcard) {
+            return mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
+                wildcard,
+                RoutingRuleEntity,
+            ).toObject();
+        }
 
-        return mapSimpleModelToEntity<RoutingRuleModel, RoutingRuleEntity>(
-            prioritized[0],
-            RoutingRuleEntity,
-        ).toObject();
+        return null;
     }
 
     async upsert(
@@ -119,6 +120,19 @@ export class RoutingRuleRepository implements IRoutingRuleRepository {
     async deleteByOrganization(organizationId: string): Promise<number> {
         const result = await this.repo.delete({
             organization: { uuid: organizationId },
+        });
+        return result.affected ?? 0;
+    }
+
+    async deleteByOrgEventRole(
+        organizationId: string,
+        event: string,
+        role: string,
+    ): Promise<number> {
+        const result = await this.repo.delete({
+            organization: { uuid: organizationId },
+            event,
+            role,
         });
         return result.affected ?? 0;
     }

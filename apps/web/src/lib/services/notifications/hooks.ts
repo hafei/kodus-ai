@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+    getEventCatalog,
     getNotifications,
     getUnreadCount,
     markAllNotificationsRead,
@@ -14,6 +15,7 @@ import {
     upsertRoutingRules,
     resetRoutingRules,
 } from "./fetch";
+import { NOTIFICATION_PATHS } from ".";
 import type {
     NotificationListResponse,
     UpsertRoutingRulePayload,
@@ -26,6 +28,7 @@ const KEYS = {
         ["notifications", page, unreadOnly] as const,
     unreadCount: ["notifications", "unread-count"] as const,
     routingRules: ["notifications", "routing-rules"] as const,
+    eventCatalog: ["notifications", "event-catalog"] as const,
 };
 
 // ── Notification list ──────────────────────────────────────────
@@ -58,17 +61,10 @@ export const useUnreadCount = () => {
             if (res?.count !== undefined) setCount(res.count);
         });
 
-        // SSE connection
-        const baseUrl =
-            typeof window !== "undefined"
-                ? (window as any).__NEXT_DATA__?.runtimeConfig?.apiUrl ??
-                  process.env.NEXT_PUBLIC_API_URL ??
-                  ""
-                : "";
-        const url = `${baseUrl}/notifications/stream`;
-
         try {
-            const es = new EventSource(url, { withCredentials: true });
+            const es = new EventSource(NOTIFICATION_PATHS.STREAM, {
+                withCredentials: true,
+            });
             eventSourceRef.current = es;
 
             es.addEventListener("unread-count", (e: MessageEvent) => {
@@ -163,5 +159,13 @@ export const useResetRoutingRules = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: KEYS.routingRules });
         },
+    });
+};
+
+export const useEventCatalog = () => {
+    return useQuery({
+        queryKey: KEYS.eventCatalog,
+        queryFn: getEventCatalog,
+        staleTime: Infinity,
     });
 };

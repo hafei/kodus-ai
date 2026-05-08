@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 import { Button } from "@components/ui/button";
 import {
     Sheet,
@@ -8,7 +9,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from "@components/ui/sheet";
-import { Spinner } from "@components/ui/spinner";
+import { Skeleton } from "@components/ui/skeleton";
 import {
     useMarkAllNotificationsRead,
     useMarkNotificationRead,
@@ -20,10 +21,13 @@ import {
     CheckCheck,
     ExternalLinkIcon,
     InfoIcon,
+    SettingsIcon,
     ShieldAlertIcon,
     ZapIcon,
 } from "lucide-react";
 import { cn } from "src/core/utils/components";
+import { usePermission } from "@services/permissions/hooks";
+import { Action, ResourceType } from "@services/permissions/types";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
     auth: ShieldAlertIcon,
@@ -33,7 +37,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
     cockpit: InfoIcon,
 };
 
-const CRITICALITY_STYLES: Record<string, string> = {
+const CRITICALITY_BAR: Record<string, string> = {
     critical: "border-l-red-500",
     transactional: "border-l-amber-500",
     informational: "border-l-blue-500",
@@ -92,17 +96,16 @@ export const NotificationDrawer = ({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="bg-card-lv1 border-primary-dark flex w-full max-w-md flex-col border-l p-0">
-                <SheetHeader className="border-primary-dark flex flex-row items-center justify-between border-b px-6 py-4">
-                    <SheetTitle className="text-base font-semibold text-white">
+                className="bg-card-lv1 flex w-full max-w-md flex-col p-0">
+                <SheetHeader className=" flex flex-row items-center justify-between gap-4 border-b px-6 py-4">
+                    <SheetTitle className="text-text-primary text-base">
                         Notifications
                     </SheetTitle>
                     {notifications.length > 0 && (
                         <Button
-                            size="sm"
-                            variant="secondary"
-                            className="text-text-tertiary text-xs hover:text-white"
-                            leftIcon={<CheckCheck className="size-3.5" />}
+                            size="xs"
+                            variant="cancel"
+                            leftIcon={<CheckCheck />}
                             onClick={() => markAllRead.mutate()}
                             disabled={markAllRead.isPending}>
                             Mark all as read
@@ -111,25 +114,20 @@ export const NotificationDrawer = ({
                 </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto">
-                    {isLoading && (
-                        <div className="flex items-center justify-center py-12">
-                            <Spinner className="size-6" />
-                        </div>
-                    )}
+                    {isLoading && <NotificationListSkeleton />}
 
                     {!isLoading && notifications.length === 0 && (
-                        <div className="text-text-tertiary flex flex-col items-center justify-center gap-2 py-16">
-                            <BellIcon className="size-10 opacity-30" />
-                            <p className="text-sm">No notifications yet</p>
-                        </div>
+                        <NotificationEmptyState
+                            onAction={() => onOpenChange(false)}
+                        />
                     )}
 
                     {!isLoading &&
                         notifications.map((n) => {
                             const Icon =
                                 CATEGORY_ICONS[n.delivery.category] ?? BellIcon;
-                            const critStyle =
-                                CRITICALITY_STYLES[n.delivery.criticality] ??
+                            const critBar =
+                                CRITICALITY_BAR[n.delivery.criticality] ??
                                 "border-l-transparent";
 
                             return (
@@ -138,16 +136,17 @@ export const NotificationDrawer = ({
                                     type="button"
                                     onClick={() => handleNotificationClick(n)}
                                     className={cn(
-                                        "border-primary-dark group flex w-full items-start gap-3 border-b border-l-2 px-6 py-4 text-left transition-colors hover:bg-[#1a1a2e]",
-                                        critStyle,
-                                        !n.readAt && "bg-[#12122088]",
+                                        "ring-card-lv3 group flex w-full items-start gap-3 border-b border-l-2 px-6 py-4 text-left outline-hidden transition-colors duration-150 ease-out focus-visible:bg-card-lv2 focus-visible:ring-1 focus-visible:ring-inset",
+                                        critBar,
+                                        "hover:bg-card-lv2",
+                                        !n.readAt && "bg-card-lv2/50",
                                     )}>
                                     <div
                                         className={cn(
                                             "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
                                             !n.readAt
                                                 ? "bg-primary-light/10 text-primary-light"
-                                                : "bg-[#202032] text-[#cdcddf]",
+                                                : "bg-card-lv3 text-text-secondary",
                                         )}>
                                         <Icon className="size-4" />
                                     </div>
@@ -158,19 +157,22 @@ export const NotificationDrawer = ({
                                                 className={cn(
                                                     "truncate text-sm",
                                                     !n.readAt
-                                                        ? "font-semibold text-white"
+                                                        ? "text-text-primary font-semibold"
                                                         : "text-text-secondary font-medium",
                                                 )}>
                                                 {n.delivery.title}
                                             </p>
                                             {!n.readAt && (
-                                                <span className="bg-primary-light size-2 shrink-0 rounded-full" />
+                                                <span
+                                                    aria-label="Unread"
+                                                    className="bg-primary-light size-2 shrink-0 rounded-full"
+                                                />
                                             )}
                                         </div>
-                                        <p className="text-text-tertiary mt-0.5 line-clamp-2 text-xs">
+                                        <p className="text-text-tertiary mt-0.5 line-clamp-2 text-pretty text-xs">
                                             {n.delivery.body}
                                         </p>
-                                        <p className="text-text-tertiary mt-1 text-[10px]">
+                                        <p className="text-text-tertiary mt-1 text-xs tabular-nums">
                                             {formatRelativeTime(
                                                 n.delivery.createdAt,
                                             )}
@@ -178,7 +180,7 @@ export const NotificationDrawer = ({
                                     </div>
 
                                     {n.delivery.ctaUrl && (
-                                        <ExternalLinkIcon className="text-text-tertiary mt-1 size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+                                        <ExternalLinkIcon className="text-text-tertiary mt-1 size-3.5 shrink-0 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100" />
                                     )}
                                 </button>
                             );
@@ -188,8 +190,7 @@ export const NotificationDrawer = ({
                         <div className="flex justify-center py-4">
                             <Button
                                 size="sm"
-                                variant="secondary"
-                                className="text-text-tertiary text-xs"
+                                variant="cancel"
                                 onClick={() => setPage((p) => p + 1)}>
                                 Load more
                             </Button>
@@ -200,3 +201,55 @@ export const NotificationDrawer = ({
         </Sheet>
     );
 };
+
+function NotificationListSkeleton() {
+    return (
+        <div className="flex flex-col">
+            {[0, 1, 2, 3].map((i) => (
+                <div
+                    key={i}
+                    className="flex items-start gap-3 border-b px-6 py-4">
+                    <Skeleton className="size-8 shrink-0 rounded-full" />
+                    <div className="flex flex-1 flex-col gap-2">
+                        <Skeleton className="h-4 w-2/3" />
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-12" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function NotificationEmptyState({ onAction }: { onAction: () => void }) {
+    const router = useRouter();
+    const canManageOrg = usePermission(Action.Manage, ResourceType.OrganizationSettings);
+
+    return (
+        <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+            <div className="bg-card-lv2 text-text-tertiary flex size-12 items-center justify-center rounded-full">
+                <BellIcon className="size-5" />
+            </div>
+            <div className="flex flex-col gap-1">
+                <p className="text-text-primary text-sm font-semibold text-balance">
+                    You&apos;re all caught up
+                </p>
+                <p className="text-text-tertiary text-pretty text-xs">
+                    New notifications will appear here.
+                </p>
+            </div>
+            {canManageOrg && (
+            <Button
+                size="sm"
+                variant="helper"
+                leftIcon={<SettingsIcon />}
+                onClick={() => {
+                    onAction();
+                    router.push("/organization/notifications");
+                }}>
+                Manage preferences
+            </Button>
+            )}
+        </div>
+    );
+}

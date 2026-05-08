@@ -1,6 +1,7 @@
 import {
     Body,
     Controller,
+    ForbiddenException,
     Get,
     Param,
     Patch,
@@ -117,7 +118,30 @@ export class NotificationController {
         return { marked: count };
     }
 
+    @Post('dev/seed')
+    @ApiOperation({
+        summary: 'Dev-only: seed mock notifications for the current user',
+    })
+    async seedFakeNotifications(@Req() req: Request) {
+        if (process.env.NODE_ENV === 'production') {
+            throw new ForbiddenException(
+                'Mock notification seeding is disabled in production.',
+            );
+        }
+        const userId = (req as any).user?.uuid;
+        const organizationId = (req as any).user?.organization?.uuid;
+        return this.queryService.seedFakeNotifications(userId, organizationId);
+    }
+
     // ── Admin endpoints (owner-only) ──────────────────────────
+
+    @Get('event-catalog')
+    @ApiOperation({
+        summary: 'List notification events with catalog defaults',
+    })
+    async getEventCatalog() {
+        return this.routingRuleService.getCatalog();
+    }
 
     @Get('routing-rules')
     @UseGuards(PolicyGuard)
@@ -129,7 +153,7 @@ export class NotificationController {
     )
     @ApiOperation({ summary: 'List notification routing rules for the org' })
     async getRoutingRules(@Req() req: Request) {
-        const organizationId = (req as any).user?.organizationId;
+        const organizationId = (req as any).user?.organization?.uuid;
         return this.routingRuleService.findByOrganization(organizationId);
     }
 
@@ -146,7 +170,7 @@ export class NotificationController {
         @Req() req: Request,
         @Body() body: { rules: UpsertRuleDto[] },
     ) {
-        const organizationId = (req as any).user?.organizationId;
+        const organizationId = (req as any).user?.organization?.uuid;
         return this.routingRuleService.upsertRules(
             organizationId,
             body.rules,
@@ -163,7 +187,7 @@ export class NotificationController {
     )
     @ApiOperation({ summary: 'Reset routing rules to catalog defaults' })
     async resetRoutingRules(@Req() req: Request) {
-        const organizationId = (req as any).user?.organizationId;
+        const organizationId = (req as any).user?.organization?.uuid;
         return this.routingRuleService.resetToDefaults(organizationId);
     }
 }

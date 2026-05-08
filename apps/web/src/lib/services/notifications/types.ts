@@ -45,4 +45,21 @@ export interface UpsertRoutingRulePayload {
     event: string;
     role: string;
     channels: Record<string, boolean>;
+    /** When true, removes this (event, role) row so it inherits from '*'. */
+    delete?: boolean;
+}
+
+export type EventCriticality =
+    | "system"
+    | "critical"
+    | "transactional"
+    | "informational";
+
+export interface EventCatalogEntry {
+    event: string;
+    label: string;
+    category: string;
+    criticality: EventCriticality;
+    /** Channels delivered to when no routing rule exists for the event. */
+    defaultChannels: Record<string, boolean>;
 }

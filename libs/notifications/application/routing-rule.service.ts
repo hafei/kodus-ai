@@ -17,6 +17,12 @@ export interface UpsertRuleDto {
     event: string;
     role: string;
     channels: Record<string, boolean>;
+    /**
+     * When true, removes the (event, role) routing rule for this org so it
+     * inherits from the wildcard rule. Used by the admin UI to revert a
+     * per-role override.
+     */
+    delete?: boolean;
 }
 
 /**
@@ -33,18 +39,56 @@ export class RoutingRuleService {
         return this.routingRuleRepo.findByOrganization(organizationId);
     }
 
+    /**
+     * Static catalog metadata for the admin UI: every known event with its
+     * label, category, criticality and the channels enabled by default when
+     * no routing rule exists. The dispatcher uses these same defaults at
+     * runtime — so the UI can reflect actual delivery behaviour for events
+     * with no explicit rule.
+     */
+    getCatalog(): Array<{
+        event: string;
+        label: string;
+        category: string;
+        criticality: Criticality;
+        defaultChannels: Record<string, boolean>;
+    }> {
+        return Object.entries(EVENT_DEFAULTS).map(([event, defaults]) => {
+            const defaultChannels: Record<string, boolean> = {};
+            for (const ch of ACTIVE_CHANNELS) {
+                defaultChannels[ch] = defaults.defaultChannels.has(ch);
+            }
+            return {
+                event,
+                label: defaults.label,
+                category: defaults.category,
+                criticality: defaults.criticality,
+                defaultChannels,
+            };
+        });
+    }
+
     async upsertRules(
         organizationId: string,
         rules: UpsertRuleDto[],
     ): Promise<IRoutingRule[]> {
-        // Enforce critical events: cannot disable any channel
         for (const rule of rules) {
             const eventDefaults =
                 EVENT_DEFAULTS[rule.event as NotificationEvent];
-            if (
-                eventDefaults &&
-                eventDefaults.criticality === Criticality.CRITICAL
-            ) {
+            if (!eventDefaults) continue;
+
+            // System events are non-configurable: always email-only.
+            if (eventDefaults.criticality === Criticality.SYSTEM) {
+                throw new BadRequestException(
+                    `Cannot configure routing for system event "${rule.event}". System notifications are always delivered via email.`,
+                );
+            }
+
+            // Skip channel checks for deletes — the row is going away.
+            if (rule.delete) continue;
+
+            // Critical events: cannot disable any active channel.
+            if (eventDefaults.criticality === Criticality.CRITICAL) {
                 const disabledChannels = Object.entries(rule.channels)
                     .filter(
                         ([ch, enabled]) =>
@@ -61,8 +105,30 @@ export class RoutingRuleService {
             }
         }
 
+        const toDelete = rules.filter((r) => r.delete);
+        const toUpsert = rules.filter((r) => !r.delete);
+
+        for (const r of toDelete) {
+            // Wildcard rules are the global config and cannot be "removed" via
+            // override-revert — only specific-role rows are deletable here.
+            if (r.role === '*') {
+                throw new BadRequestException(
+                    `Cannot delete wildcard routing rule for "${r.event}". The All Roles config is the global default.`,
+                );
+            }
+            await this.routingRuleRepo.deleteByOrgEventRole(
+                organizationId,
+                r.event,
+                r.role,
+            );
+        }
+
+        if (toUpsert.length === 0) {
+            return this.findByOrganization(organizationId);
+        }
+
         return this.routingRuleRepo.upsertBatch(
-            rules.map((r) => ({
+            toUpsert.map((r) => ({
                 organization: { uuid: organizationId },
                 event: r.event,
                 role: r.role,
@@ -76,7 +142,8 @@ export class RoutingRuleService {
 
     /**
      * Seed default routing rules for a new organization.
-     * Called once when the org is created.
+     * Called once when the org is created. System events are skipped — they
+     * are non-configurable and the dispatcher hardcodes them to email-only.
      */
     async seedDefaults(organizationId: string): Promise<IRoutingRule[]> {
         const rules: Array<
@@ -84,6 +151,8 @@ export class RoutingRuleService {
         > = [];
 
         for (const [event, defaults] of Object.entries(EVENT_DEFAULTS)) {
+            if (defaults.criticality === Criticality.SYSTEM) continue;
+
             const channels: Record<string, boolean> = {};
             for (const ch of ACTIVE_CHANNELS) {
                 channels[ch] = defaults.defaultChannels.has(ch);

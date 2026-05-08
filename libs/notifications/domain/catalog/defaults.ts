@@ -19,19 +19,19 @@ export const EVENT_DEFAULTS: Readonly<
     Record<NotificationEvent, EventDefaults>
 > = {
     [NotificationEvent.AUTH_EMAIL_CONFIRMATION]: {
-        criticality: Criticality.TRANSACTIONAL,
+        criticality: Criticality.SYSTEM,
         category: 'auth',
         label: 'Email Confirmation',
         defaultChannels: new Set([NotificationChannel.EMAIL]),
     },
     [NotificationEvent.AUTH_FORGOT_PASSWORD]: {
-        criticality: Criticality.TRANSACTIONAL,
+        criticality: Criticality.SYSTEM,
         category: 'auth',
         label: 'Forgot Password',
         defaultChannels: new Set([NotificationChannel.EMAIL]),
     },
     [NotificationEvent.TEAM_MEMBER_INVITED]: {
-        criticality: Criticality.TRANSACTIONAL,
+        criticality: Criticality.SYSTEM,
         category: 'team',
         label: 'Team Invite',
         defaultChannels: new Set([NotificationChannel.EMAIL]),
@@ -46,7 +46,7 @@ export const EVENT_DEFAULTS: Readonly<
         ]),
     },
     [NotificationEvent.SSO_DOMAIN_VERIFICATION]: {
-        criticality: Criticality.TRANSACTIONAL,
+        criticality: Criticality.SYSTEM,
         category: 'sso',
         label: 'SSO Domain Verification',
         defaultChannels: new Set([NotificationChannel.EMAIL]),

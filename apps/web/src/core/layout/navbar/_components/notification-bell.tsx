@@ -23,11 +23,16 @@ export const NotificationBell = () => {
                     <button
                         id="notification-bell"
                         type="button"
+                        aria-label={
+                            unreadCount > 0
+                                ? `Notifications (${unreadCount} unread)`
+                                : "Notifications"
+                        }
                         onClick={() => setOpen(true)}
                         className="relative flex size-9 items-center justify-center rounded-full text-[#cdcddf] transition-colors hover:bg-[#202032] hover:text-white">
                         <Bell className="size-5" />
                         {unreadCount > 0 && (
-                            <span className="absolute top-1 right-1 flex size-[18px] items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-[#101019]">
+                            <span className="ring-background absolute top-1 right-1 flex size-[18px] items-center justify-center rounded-full bg-red-500 text-xs font-bold tabular-nums text-white ring-2">
                                 {unreadCount > 99 ? "99+" : unreadCount}
                             </span>
                         )}

@@ -5,7 +5,7 @@ export class NotificationEngine1778260101100 implements MigrationInterface {
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`
-            CREATE TYPE "public"."notification_deliveries_criticality_enum" AS ENUM('critical', 'transactional', 'informational')
+            CREATE TYPE "public"."notification_deliveries_criticality_enum" AS ENUM('system', 'critical', 'transactional', 'informational')
         `);
         await queryRunner.query(`
             CREATE TYPE "public"."notification_deliveries_channel_enum" AS ENUM('email', 'in_app', 'slack', 'discord', 'webhook')

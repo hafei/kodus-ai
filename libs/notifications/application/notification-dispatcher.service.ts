@@ -114,17 +114,21 @@ export class NotificationDispatcherService {
         organizationId: string,
         correlationId: string,
     ): Promise<void> {
-        // Resolve which channels are enabled for this user's role
-        let enabledChannels = await this.resolveChannels(
-            organizationId,
-            event,
-            recipient.role,
-            defaults,
-        );
-
-        // Critical enforcement: force all active channels ON
-        if (defaults.criticality === Criticality.CRITICAL) {
+        // System events are hardcoded to email-only and bypass routing
+        // rules entirely. Critical events are forced to fan out across all
+        // active channels regardless of stored configuration.
+        let enabledChannels: NotificationChannel[];
+        if (defaults.criticality === Criticality.SYSTEM) {
+            enabledChannels = [NotificationChannel.EMAIL];
+        } else if (defaults.criticality === Criticality.CRITICAL) {
             enabledChannels = [...ACTIVE_CHANNELS];
+        } else {
+            enabledChannels = await this.resolveChannels(
+                organizationId,
+                event,
+                recipient.role,
+                defaults,
+            );
         }
 
         const title = this.resolveTitle(event, payload);
@@ -301,6 +305,17 @@ export class NotificationDispatcherService {
         return [];
     }
 
+    /**
+     * Resolution priority for (event, role) channels:
+     *   1. Per-role override row    (org, event, role)   — wins if present
+     *   2. All Roles ('*') row      (org, event, '*')    — wins if present
+     *   3. Catalog defaults         EVENT_DEFAULTS[event].defaultChannels
+     *
+     * The repository handles steps 1–2; this method handles step 3.
+     * In all cases the result is intersected with ACTIVE_CHANNELS so
+     * channels that exist in config but aren't built (slack, discord,
+     * webhook) are dropped.
+     */
     private async resolveChannels(
         organizationId: string,
         event: string,
@@ -317,12 +332,12 @@ export class NotificationDispatcherService {
             return Object.entries(rule.channels)
                 .filter(
                     ([ch, enabled]) =>
-                        enabled && ACTIVE_CHANNELS.has(ch as NotificationChannel),
+                        enabled &&
+                        ACTIVE_CHANNELS.has(ch as NotificationChannel),
                 )
                 .map(([ch]) => ch as NotificationChannel);
         }
 
-        // No rule found — use catalog defaults
         return [...defaults.defaultChannels].filter((ch) =>
             ACTIVE_CHANNELS.has(ch),
         );
