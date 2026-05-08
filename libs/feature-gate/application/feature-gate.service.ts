@@ -1,9 +1,12 @@
 import { createLogger } from '@kodus/flow';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 import { environment } from '@libs/ee/configs/environment/environment';
-import { PostHogProvider } from '@libs/telemetry/infrastructure/providers/posthog.provider';
+import {
+    IPostHogProvider,
+    POSTHOG_PROVIDER_TOKEN,
+} from '@libs/telemetry/infrastructure/providers/posthog.provider';
 
 import {
     cloudFallbackOnPosthogError,
@@ -44,7 +47,10 @@ export class FeatureGateService {
     private readonly snapshot: FeaturesSnapshot;
     private readonly betaFeaturesEnabled: boolean;
 
-    constructor(private readonly posthog: PostHogProvider) {
+    constructor(
+        @Inject(POSTHOG_PROVIDER_TOKEN)
+        private readonly posthog: IPostHogProvider,
+    ) {
         this.snapshot = loadSnapshot();
         this.betaFeaturesEnabled = process.env.BETA_FEATURES === 'true';
     }

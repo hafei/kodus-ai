@@ -5,8 +5,46 @@ import { PostHog } from 'posthog-node';
 
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 
+/**
+ * NestJS DI token for the PostHog provider. Consumers inject the
+ * interface via `@Inject(POSTHOG_PROVIDER_TOKEN) posthog: IPostHogProvider`
+ * so the concrete class can be swapped in tests without rewriting every
+ * call site (see kody rule "Inject services and repositories via DI
+ * tokens, not by class").
+ */
+export const POSTHOG_PROVIDER_TOKEN = Symbol.for('PostHogProvider');
+
+export interface IPostHogProvider {
+    readonly isEnabled: boolean;
+
+    capture(
+        distinctId: string,
+        event: string,
+        properties?: Record<string, unknown>,
+        groups?: Record<string, string | undefined>,
+    ): void;
+
+    identify(
+        distinctId: string,
+        properties?: Record<string, unknown>,
+    ): void;
+
+    groupIdentify(
+        groupType: 'organization' | 'team' | 'repository',
+        groupKey: string,
+        properties?: Record<string, unknown>,
+    ): void;
+
+    isFeatureEnabled(
+        featureName: string,
+        identifier: string,
+        organizationAndTeamData: OrganizationAndTeamData,
+        repositoryId?: string,
+    ): Promise<boolean>;
+}
+
 @Injectable()
-export class PostHogProvider {
+export class PostHogProvider implements IPostHogProvider {
     private readonly logger = createLogger(PostHogProvider.name);
     private readonly client: PostHog | null = null;
 
