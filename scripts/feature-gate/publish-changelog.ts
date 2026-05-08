@@ -894,7 +894,7 @@ function buildDiscordContent(
 }
 
 function escapeQuote(value: string): string {
-    return value.replace(/"/g, '\\"');
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 async function postDiscord(
