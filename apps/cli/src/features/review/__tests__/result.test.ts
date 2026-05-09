@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     formatFailOnExitMessage,
     formatTrialCompletionMessage,
+    isHunkPlatformSupported,
     shouldFailReview,
     shouldUseHunkViewer,
     shouldUseInteractiveReview,
@@ -78,7 +79,7 @@ describe('review result helpers', () => {
         expect(formatFailOnExitMessage(result, 'critical')).toBeNull();
     });
 
-    it('routes to hunk viewer only for fully interactive humans on supported scopes', () => {
+    it('routes to hunk viewer only for fully interactive humans on supported scopes and platforms', () => {
         const baseline = {
             isAgent: false,
             interactive: undefined,
@@ -87,6 +88,7 @@ describe('review result helpers', () => {
             format: 'terminal',
             ttyOut: true,
             scopeSupported: true,
+            platformSupported: true,
         } as const;
 
         expect(shouldUseHunkViewer(baseline)).toBe(true);
@@ -105,6 +107,16 @@ describe('review result helpers', () => {
         expect(
             shouldUseHunkViewer({ ...baseline, scopeSupported: false }),
         ).toBe(false);
+        expect(
+            shouldUseHunkViewer({ ...baseline, platformSupported: false }),
+        ).toBe(false);
+    });
+
+    it('treats Windows as an unsupported hunk platform', () => {
+        // hunkdiff currently ships prebuilt binaries for darwin/linux only.
+        expect(isHunkPlatformSupported('win32')).toBe(false);
+        expect(isHunkPlatformSupported('darwin')).toBe(true);
+        expect(isHunkPlatformSupported('linux')).toBe(true);
     });
 
     it('formats trial completion message from trial info or rate limit', () => {

@@ -16,8 +16,10 @@ export function shouldUseInteractiveReview(params: {
  * Whether `kodus review` should hand the result off to the hunk TUI viewer
  * instead of the legacy inquirer menu / flat formatter. We only auto-promote
  * when every signal points to "interactive human": real TTY, no agent envelope,
- * no file output, default terminal format, and the review scope maps cleanly
- * onto something hunk can render (working tree or staged index).
+ * no file output, default terminal format, the review scope maps cleanly onto
+ * something hunk can render (working tree or staged index), and the host
+ * platform actually has a hunk binary (hunkdiff currently ships prebuilt
+ * binaries for darwin/linux × x64/arm64; Windows is unsupported upstream).
  *
  * `--no-hunk` is the explicit escape hatch; `--interactive` keeps the legacy
  * navigation+fix UI for users who rely on it.
@@ -30,15 +32,45 @@ export function shouldUseHunkViewer(params: {
     format?: string;
     ttyOut: boolean;
     scopeSupported: boolean;
+    platformSupported: boolean;
 }): boolean {
-    if (params.isAgent) {return false;}
-    if (params.noHunk) {return false;}
-    if (params.interactive === true) {return false;}
-    if (params.output) {return false;}
-    if (params.format && params.format !== 'terminal') {return false;}
-    if (!params.ttyOut) {return false;}
-    if (!params.scopeSupported) {return false;}
+    if (params.isAgent) {
+        return false;
+    }
+    if (params.noHunk) {
+        return false;
+    }
+    if (params.interactive === true) {
+        return false;
+    }
+    if (params.output) {
+        return false;
+    }
+    if (params.format && params.format !== 'terminal') {
+        return false;
+    }
+    if (!params.ttyOut) {
+        return false;
+    }
+    if (!params.platformSupported) {
+        return false;
+    }
+    if (!params.scopeSupported) {
+        return false;
+    }
     return true;
+}
+
+/**
+ * Whether the current host has a usable hunk binary. hunkdiff prebuilt
+ * binaries cover darwin/linux × x64/arm64; everything else (notably Windows)
+ * has no binary, so spawning hunk would crash. We skip the routing rather
+ * than letting the user pay for a full review that ends in an empty viewer.
+ */
+export function isHunkPlatformSupported(
+    platform: NodeJS.Platform = process.platform,
+): boolean {
+    return platform !== 'win32';
 }
 
 export function shouldFailReview(

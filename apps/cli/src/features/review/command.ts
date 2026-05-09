@@ -33,6 +33,7 @@ import { validateReviewOptions } from './options.js';
 import {
     formatFailOnExitMessage,
     formatTrialCompletionMessage,
+    isHunkPlatformSupported,
     shouldFailReview,
     shouldUseHunkViewer,
     shouldUseInteractiveReview,
@@ -355,21 +356,30 @@ async function reviewAction(
 
         const selectedResult = fields ? applyFieldMask(result, fields) : result;
         const ttyOut = Boolean(process.stdout.isTTY);
+        const platformSupported = isHunkPlatformSupported();
         const scopeSupported = canRenderScopeInHunk({
             files,
             commit: options.commit,
             branch: options.branch,
         });
-        const wouldUseHunkButForScope =
+        // The user is in an "interactive human" context where we'd otherwise
+        // route to hunk; we use this to decide whether to surface a one-line
+        // hint explaining why hunk was skipped.
+        const interactiveHumanContext =
             !ctx.isAgent &&
             options.hunk !== false &&
             options.interactive !== true &&
             !globalOpts.output &&
             (!globalOpts.format || globalOpts.format === 'terminal') &&
-            ttyOut &&
-            !scopeSupported;
+            ttyOut;
 
-        if (wouldUseHunkButForScope) {
+        if (interactiveHumanContext && !platformSupported) {
+            cliInfo(
+                chalk.dim(
+                    'ℹ Hunk viewer skipped: not yet supported on this platform (Windows). Showing the interactive list instead. Pass --no-hunk to silence this hint.',
+                ),
+            );
+        } else if (interactiveHumanContext && !scopeSupported) {
             cliInfo(
                 chalk.dim(
                     'ℹ Hunk viewer skipped: --branch / --commit / explicit files have no direct hunk scope yet. Showing the interactive list instead. Pass --no-hunk to silence this hint.',
@@ -385,12 +395,13 @@ async function reviewAction(
             format: globalOpts.format,
             ttyOut,
             scopeSupported,
+            platformSupported,
         });
 
         if (globalOpts.verbose) {
             cliDebug(
                 chalk.dim(
-                    `[verbose] hunk routing: useHunkViewer=${useHunkViewer} ttyOut=${ttyOut} scopeSupported=${scopeSupported} format=${globalOpts.format} output=${globalOpts.output ?? '∅'} agent=${ctx.isAgent} interactive=${options.interactive ?? false} hunkOpt=${options.hunk}`,
+                    `[verbose] hunk routing: useHunkViewer=${useHunkViewer} ttyOut=${ttyOut} platformSupported=${platformSupported} scopeSupported=${scopeSupported} format=${globalOpts.format} output=${globalOpts.output ?? '∅'} agent=${ctx.isAgent} interactive=${options.interactive ?? false} hunkOpt=${options.hunk}`,
                 ),
             );
         }
