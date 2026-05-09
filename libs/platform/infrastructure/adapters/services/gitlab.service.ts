@@ -298,6 +298,23 @@ export class GitlabService implements Omit<
         });
     }
 
+    private normalizeGitlabHost(host?: string): string | undefined {
+        if (!host?.trim()) {
+            return undefined;
+        }
+
+        const normalized = host.trim().replace(/\/+$/, '');
+        const withProtocol = /^https?:\/\//i.test(normalized)
+            ? normalized
+            : `https://${normalized}`;
+
+        return withProtocol.replace(/\/+$/, '');
+    }
+
+    private getGitlabWebBaseUrl(host?: string): string {
+        return this.normalizeGitlabHost(host) || 'https://gitlab.com';
+    }
+
     async findRepositoryByName(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         name: string;
@@ -791,12 +808,11 @@ export class GitlabService implements Omit<
 
     async authenticateWithToken(params: any): Promise<any> {
         try {
-            let host = 'https://gitlab.com/api/v4/user';
             const { token, host: hostParam } = params;
+            const normalizedHost = this.normalizeGitlabHost(hostParam);
+            const userApiUrl = `${this.getGitlabWebBaseUrl(hostParam)}/api/v4/user`;
 
-            host = hostParam ? `${hostParam}/api/v4/user` : host;
-
-            const testResponse = await axios.get(host, {
+            const testResponse = await axios.get(userApiUrl, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
@@ -810,7 +826,7 @@ export class GitlabService implements Omit<
             const authDetails = {
                 accessToken: encrypt(token),
                 authMode: params?.authMode || AuthMode.OAUTH,
-                host: hostParam ?? '',
+                host: normalizedHost ?? '',
             };
 
             const checkRepos = await this.checkRepositoryPermissions({
@@ -3123,12 +3139,11 @@ export class GitlabService implements Omit<
                 throw new Error('GitLab authentication details not found');
             }
 
-            const gitlabHost = gitlabAuthDetail.host || 'gitlab.com';
             const encodedPath = (params?.repository?.fullName || '')
                 .split('/')
                 .map(encodeURIComponent)
                 .join('/');
-            const fullGitlabUrl = `https://${gitlabHost}/${encodedPath}`;
+            const fullGitlabUrl = `${this.getGitlabWebBaseUrl(gitlabAuthDetail.host)}/${encodedPath}`;
 
             return {
                 organizationId: params.organizationAndTeamData.organizationId,
