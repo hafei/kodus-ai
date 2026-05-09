@@ -1227,7 +1227,7 @@ hunkdiff-linux-x64@0.10.0:
   resolved "https://registry.yarnpkg.com/hunkdiff-linux-x64/-/hunkdiff-linux-x64-0.10.0.tgz#906bbee2a6c259b66ce7ab0d67688ec8b0b9a0b2"
   integrity sha512-me3Pl6Tqb46yoZP930iCUdE3pE5lDOtfsWUcCZXqEpsg0WPbW6PjO6tjX7MRnkLFPacPDrqfPZpEHr2bxK0X9A==
 
-hunkdiff@^0.10.0:
+hunkdiff@0.10.0:
   version "0.10.0"
   resolved "https://registry.yarnpkg.com/hunkdiff/-/hunkdiff-0.10.0.tgz#e587b17f692834a47cd86e6a9ad16d2cff64a8f5"
   integrity sha512-GfUYNCzEnZ0OTdg340YRFbW1SvvwgRMyQmn44t2GKoSjYqiXGaDCeOG66fpIzU8WRdbUi2uzdGIVkEsCps8TeA==
