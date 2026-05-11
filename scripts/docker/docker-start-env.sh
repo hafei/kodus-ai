@@ -30,7 +30,7 @@ case "$ENVIRONMENT" in
     # up: `ENABLE_PROFILING=true yarn docker:start`, or use the
     # `yarn docker:start:profiling` shortcut, or `yarn docker:start:full`
     # (which activates the `extras` profile that includes Pyroscope).
-    PROFILE_ARGS=(--profile local-db)
+    PROFILE_ARGS=()
     if [ "${ENABLE_PROFILING:-false}" = "true" ]; then
       PROFILE_ARGS+=(--profile profiling)
     fi
