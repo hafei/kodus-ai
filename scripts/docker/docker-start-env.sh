@@ -30,6 +30,19 @@ case "$ENVIRONMENT" in
     if [ "${ENABLE_PROFILING:-true}" != "false" ]; then
       PROFILE_ARGS+=(--profile profiling)
     fi
+    # Opt-in extras: webhooks, mcp, analytics, or `extras` (all three).
+    # Default `yarn docker:start` brings up api + worker + web only; pass
+    # KODUS_DEV_EXTRAS=mcp (or comma-separated list, or `extras`) to add.
+    # Empty/unset = none added.
+    if [ -n "${KODUS_DEV_EXTRAS:-}" ]; then
+      IFS=',' read -ra _EXTRA_PROFILES <<< "$KODUS_DEV_EXTRAS"
+      for _p in "${_EXTRA_PROFILES[@]}"; do
+        _p_trimmed=$(echo "$_p" | tr -d '[:space:]')
+        if [ -n "$_p_trimmed" ]; then
+          PROFILE_ARGS+=(--profile "$_p_trimmed")
+        fi
+      done
+    fi
     ENV_LABEL="local"
     ;;
   qa|homolog)

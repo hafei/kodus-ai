@@ -151,6 +151,14 @@ services:
     worker-analytics:
         <<: *app-service-defaults
         container_name: kodus_analytics_worker
+        # Opt-in. Default `yarn docker:start` leaves this off — the cockpit
+        # ingestion cron isn't useful for most dev flows and costs ~700 MiB
+        # idle (Nest DI + ts-node-dev watch). Bring it up explicitly via
+        # `KODUS_DEV_EXTRAS=analytics yarn docker:start` (or `=extras` for
+        # all opt-in services).
+        profiles:
+            - analytics
+            - extras
         depends_on:
             rabbitmq:
                 condition: service_healthy
@@ -246,6 +254,13 @@ services:
         <<: *app-service-defaults
         image: kodus-ai-mcp-manager:latest
         container_name: kodus-mcp-manager
+        # Opt-in. Default `yarn docker:start` leaves this off — the web UI
+        # degrades gracefully (MCP setup/plugins pages show empty state).
+        # Bring it up via `KODUS_DEV_EXTRAS=mcp yarn docker:start` (or
+        # `=extras` for all opt-in services).
+        profiles:
+            - mcp
+            - extras
         ports:
             - '${API_MCP_MANAGER_PORT:-3101}:${API_MCP_MANAGER_PORT:-3101}'
             - '9230:9230'
