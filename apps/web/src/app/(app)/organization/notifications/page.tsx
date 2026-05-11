@@ -31,72 +31,36 @@ import {
 import { cn } from "src/core/utils/components";
 
 import {
-    useEventCatalog,
+    useNotificationConfig,
     useRoutingRules,
     useUpsertRoutingRules,
 } from "@services/notifications/hooks";
 import type {
     EventCatalogEntry,
     EventCriticality,
+    NotificationConfig,
     RoutingRule,
     UpsertRoutingRulePayload,
 } from "@services/notifications/types";
 
 type EventDef = EventCatalogEntry;
-type Channel = (typeof CHANNELS)[number];
-type Role = (typeof ROLES)[number]["value"];
 
-const CHANNELS = ["email", "in_app"] as const;
-const CHANNEL_LABELS: Record<Channel, string> = {
-    email: "Email",
-    in_app: "In-App",
+/**
+ * Presentational map for criticality badges. The labels themselves
+ * come from the backend; only the Tailwind color classes live here
+ * since they're pure presentation tokens.
+ */
+const CRITICALITY_BADGE_CLASS: Record<EventCriticality, string> = {
+    system: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+    critical: "bg-red-500/15 text-red-400 border-red-500/30",
+    transactional: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    informational: "bg-blue-500/15 text-blue-400 border-blue-500/30",
 };
 
-const ROLES = [
-    { value: "*", label: "All Roles" },
-    { value: "owner", label: "Owner" },
-    { value: "billing_manager", label: "Billing Manager" },
-    { value: "repo_admin", label: "Repo Admin" },
-    { value: "contributor", label: "Contributor" },
-] as const;
+const ROW_GRID =
+    "grid items-center gap-4 px-4 py-3";
 
-const CRITICALITY_BADGE: Record<EventCriticality, { label: string; className: string }> =
-    {
-        system: {
-            label: "System",
-            className: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
-        },
-        critical: {
-            label: "Critical",
-            className: "bg-red-500/15 text-red-400 border-red-500/30",
-        },
-        transactional: {
-            label: "Transactional",
-            className: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-        },
-        informational: {
-            label: "Informational",
-            className: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-        },
-    };
-
-const PRETTY_CATEGORY: Record<string, string> = {
-    auth: "Auth",
-    team: "Team",
-    kody_rules: "Kody Rules",
-    sso: "SSO",
-    cockpit: "Cockpit",
-};
-const prettifyCategory = (category: string) =>
-    PRETTY_CATEGORY[category] ??
-    category
-        .split("_")
-        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(" ");
-
-const ROW_GRID = "grid grid-cols-[1fr_repeat(2,100px)] items-center gap-4 px-4 py-3";
-
-type ChannelMap = Record<Channel, boolean>;
+type ChannelMap = Record<string, boolean>;
 type EventMap = Record<string, ChannelMap>;
 type FormValues = {
     rules: Record<string, EventMap>;
@@ -111,6 +75,8 @@ const fromFormKey = (key: string) => key.replaceAll("__", ".");
 const buildDefaults = (
     rules: RoutingRule[],
     configurableEvents: EventDef[],
+    roles: NotificationConfig["roles"],
+    channels: NotificationConfig["channels"],
 ): FormValues => {
     const byEvent: Record<string, Record<string, Record<string, boolean>>> = {};
     for (const rule of rules) {
@@ -119,7 +85,7 @@ const buildDefaults = (
     }
 
     const result: FormValues = { rules: {} };
-    for (const role of ROLES) {
+    for (const role of roles) {
         const roleEntry: EventMap = {};
         for (const ev of configurableEvents) {
             const eventRules = byEvent[ev.event] ?? {};
@@ -132,11 +98,11 @@ const buildDefaults = (
                 eventRules[role.value] ??
                 eventRules["*"] ??
                 ev.defaultChannels;
-            const channels = {} as ChannelMap;
-            for (const ch of CHANNELS) {
-                channels[ch] = source[ch] ?? false;
+            const channelValues: ChannelMap = {};
+            for (const ch of channels) {
+                channelValues[ch.value] = source[ch.value] ?? false;
             }
-            roleEntry[toFormKey(ev.event)] = channels;
+            roleEntry[toFormKey(ev.event)] = channelValues;
         }
         result.rules[role.value] = roleEntry;
     }
@@ -145,13 +111,13 @@ const buildDefaults = (
 
 export default function NotificationsConfigPage() {
     const { data: rules, isLoading: rulesLoading } = useRoutingRules();
-    const { data: catalog, isLoading: catalogLoading } = useEventCatalog();
+    const { data: config, isLoading: configLoading } = useNotificationConfig();
 
-    if (rulesLoading || catalogLoading || !rules || !catalog) {
+    if (rulesLoading || configLoading || !rules || !config) {
         return <NotificationsSkeleton />;
     }
 
-    return <NotificationsForm rules={rules} catalog={catalog} />;
+    return <NotificationsForm rules={rules} config={config} />;
 }
 
 function NotificationsSkeleton() {
@@ -191,17 +157,38 @@ function NotificationsSkeleton() {
 
 function NotificationsForm({
     rules,
-    catalog,
+    config,
 }: {
     rules: RoutingRule[];
-    catalog: EventCatalogEntry[];
+    config: NotificationConfig;
 }) {
     const upsertMutation = useUpsertRoutingRules();
-    const [selectedRole, setSelectedRole] = useState<Role>("*");
+    const [selectedRole, setSelectedRole] = useState<string>(
+        config.roles[0]?.value ?? "*",
+    );
+
+    const { channels, roles, criticalityLabels } = useMemo(
+        () => ({
+            channels: config.channels,
+            roles: config.roles,
+            criticalityLabels: Object.fromEntries(
+                config.criticalities.map((c) => [c.value, c.label]),
+            ) as Record<EventCriticality, string>,
+        }),
+        [config],
+    );
+
+    const categoryLabels = useMemo(
+        () =>
+            Object.fromEntries(
+                config.categories.map((c) => [c.value, c.label]),
+            ) as Record<string, string>,
+        [config.categories],
+    );
 
     const { configurableEvents, groupedEvents } = useMemo(() => {
         const configurableEvents: EventDef[] = [];
-        for (const ev of catalog) {
+        for (const ev of config.events) {
             if (ev.criticality === "system") continue;
             configurableEvents.push(ev);
         }
@@ -217,11 +204,11 @@ function NotificationsForm({
             configurableEvents,
             groupedEvents: [...groups.entries()],
         };
-    }, [catalog]);
+    }, [config.events]);
 
     const defaults = useMemo(
-        () => buildDefaults(rules, configurableEvents),
-        [rules, configurableEvents],
+        () => buildDefaults(rules, configurableEvents, roles, channels),
+        [rules, configurableEvents, roles, channels],
     );
 
     // Set of "${role}|${event}" pairs that currently have an explicit DB row.
@@ -256,18 +243,24 @@ function NotificationsForm({
                     const dirtyEvents = dirtyRules[role] ?? {};
                     for (const key of Object.keys(dirtyEvents)) {
                         const event = fromFormKey(key);
-                        const channels = data.rules[role][key];
+                        const channelValues = data.rules[role][key];
 
                         if (role === "*") {
-                            payload.push({ event, role, channels });
+                            payload.push({
+                                event,
+                                role,
+                                channels: channelValues,
+                            });
                             continue;
                         }
 
                         const wildcardChannels = data.rules["*"]?.[key];
                         const matchesWildcard =
                             wildcardChannels &&
-                            CHANNELS.every(
-                                (ch) => channels[ch] === wildcardChannels[ch],
+                            channels.every(
+                                (ch) =>
+                                    channelValues[ch.value] ===
+                                    wildcardChannels[ch.value],
                             );
 
                         if (matchesWildcard) {
@@ -278,14 +271,18 @@ function NotificationsForm({
                                 payload.push({
                                     event,
                                     role,
-                                    channels,
+                                    channels: channelValues,
                                     delete: true,
                                 });
                             }
                             continue;
                         }
 
-                        payload.push({ event, role, channels });
+                        payload.push({
+                            event,
+                            role,
+                            channels: channelValues,
+                        });
                     }
                 }
 
@@ -309,6 +306,16 @@ function NotificationsForm({
                 });
             }
         },
+    );
+
+    // Grid template for table rows: event-label column flex + one fixed
+    // column per channel. Re-uses the standard row padding/gap from
+    // ROW_GRID. Computed once per render of the form.
+    const rowGridStyle = useMemo(
+        () => ({
+            gridTemplateColumns: `1fr repeat(${channels.length}, 100px)`,
+        }),
+        [channels.length],
     );
 
     return (
@@ -348,9 +355,9 @@ function NotificationsForm({
                     <Page.Content className="mt-4">
                         <Tabs
                             value={selectedRole}
-                            onValueChange={(v) => setSelectedRole(v as Role)}>
+                            onValueChange={setSelectedRole}>
                             <TabsList>
-                                {ROLES.map((role) => (
+                                {roles.map((role) => (
                                     <TabsTrigger
                                         key={role.value}
                                         value={role.value}
@@ -360,13 +367,17 @@ function NotificationsForm({
                                 ))}
                             </TabsList>
 
-                            {ROLES.map((role) => (
+                            {roles.map((role) => (
                                 <TabsContent
                                     key={role.value}
                                     value={role.value}>
                                     <RolePanel
                                         role={role.value}
                                         groupedEvents={groupedEvents}
+                                        channels={channels}
+                                        categoryLabels={categoryLabels}
+                                        criticalityLabels={criticalityLabels}
+                                        rowGridStyle={rowGridStyle}
                                     />
                                 </TabsContent>
                             ))}
@@ -378,12 +389,23 @@ function NotificationsForm({
     );
 }
 
+interface RowProps {
+    channels: NotificationConfig["channels"];
+    rowGridStyle: React.CSSProperties;
+}
+
 function RolePanel({
     role,
     groupedEvents,
-}: {
-    role: Role;
+    channels,
+    categoryLabels,
+    criticalityLabels,
+    rowGridStyle,
+}: RowProps & {
+    role: string;
     groupedEvents: Array<[string, EventDef[]]>;
+    categoryLabels: Record<string, string>;
+    criticalityLabels: Record<EventCriticality, string>;
 }) {
     return (
         <div className="mt-4 flex flex-col gap-6">
@@ -391,8 +413,14 @@ function RolePanel({
                 <CategorySection
                     key={category}
                     role={role}
-                    category={category}
+                    categoryValue={category}
+                    categoryLabel={
+                        categoryLabels[category] ?? prettifyFallback(category)
+                    }
                     events={events}
+                    channels={channels}
+                    criticalityLabels={criticalityLabels}
+                    rowGridStyle={rowGridStyle}
                 />
             ))}
         </div>
@@ -401,50 +429,77 @@ function RolePanel({
 
 function CategorySection({
     role,
-    category,
+    categoryLabel,
     events,
-}: {
-    role: Role;
-    category: string;
+    channels,
+    criticalityLabels,
+    rowGridStyle,
+}: RowProps & {
+    role: string;
+    categoryValue: string;
+    categoryLabel: string;
     events: EventDef[];
+    criticalityLabels: Record<EventCriticality, string>;
 }) {
     return (
         <section className="flex flex-col gap-3">
-            <Heading variant="h3">{prettifyCategory(category)}</Heading>
+            <Heading variant="h3">{categoryLabel}</Heading>
 
             <div className="bg-card-lv2 divide-y rounded-xl">
-                <CategoryHeaderRow />
+                <CategoryHeaderRow
+                    channels={channels}
+                    rowGridStyle={rowGridStyle}
+                />
                 {events.map((ev) => (
-                    <EventRow key={ev.event} role={role} event={ev} />
+                    <EventRow
+                        key={ev.event}
+                        role={role}
+                        event={ev}
+                        channels={channels}
+                        criticalityLabels={criticalityLabels}
+                        rowGridStyle={rowGridStyle}
+                    />
                 ))}
             </div>
         </section>
     );
 }
 
-function CategoryHeaderRow() {
+function CategoryHeaderRow({ channels, rowGridStyle }: RowProps) {
     return (
-        <div className={ROW_GRID}>
+        <div className={ROW_GRID} style={rowGridStyle}>
             <span className="text-text-tertiary text-xs font-medium">
                 Event
             </span>
-            {CHANNELS.map((ch) => (
+            {channels.map((ch) => (
                 <span
-                    key={ch}
+                    key={ch.value}
                     className="text-text-tertiary text-center text-xs font-medium">
-                    {CHANNEL_LABELS[ch]}
+                    {ch.label}
                 </span>
             ))}
         </div>
     );
 }
 
-function EventRow({ role, event }: { role: Role; event: EventDef }) {
-    const badge = CRITICALITY_BADGE[event.criticality];
+function EventRow({
+    role,
+    event,
+    channels,
+    criticalityLabels,
+    rowGridStyle,
+}: RowProps & {
+    role: string;
+    event: EventDef;
+    criticalityLabels: Record<EventCriticality, string>;
+}) {
     const isCritical = event.criticality === "critical";
+    const badgeLabel =
+        criticalityLabels[event.criticality] ?? event.criticality;
+    const badgeClass = CRITICALITY_BADGE_CLASS[event.criticality];
 
     return (
-        <div className={ROW_GRID}>
+        <div className={ROW_GRID} style={rowGridStyle}>
             <div className="flex items-center gap-2">
                 <span className="text-text-primary text-pretty text-sm">
                     {event.label}
@@ -452,15 +507,19 @@ function EventRow({ role, event }: { role: Role; event: EventDef }) {
                 <span
                     className={cn(
                         "rounded-full px-2 py-0.5 text-xs font-medium",
-                        badge.className,
+                        badgeClass,
                     )}>
-                    {badge.label}
+                    {badgeLabel}
                 </span>
-                <OverrideIndicator role={role} event={event} />
+                <OverrideIndicator
+                    role={role}
+                    event={event}
+                    channels={channels}
+                />
             </div>
 
-            {CHANNELS.map((ch) => (
-                <div key={ch} className="flex justify-center">
+            {channels.map((ch) => (
+                <div key={ch.value} className="flex justify-center">
                     {isCritical ? (
                         <LockedChannelIndicator />
                     ) : (
@@ -485,7 +544,15 @@ function LockedChannelIndicator() {
     );
 }
 
-function OverrideIndicator({ role, event }: { role: Role; event: EventDef }) {
+function OverrideIndicator({
+    role,
+    event,
+    channels,
+}: {
+    role: string;
+    event: EventDef;
+    channels: NotificationConfig["channels"];
+}) {
     const form = useFormContext<FormValues>();
     const eventKey = toFormKey(event.event);
 
@@ -501,8 +568,8 @@ function OverrideIndicator({ role, event }: { role: Role; event: EventDef }) {
 
     if (role === "*" || !wildcardChannels || !roleChannels) return null;
 
-    const isOverridden = CHANNELS.some(
-        (ch) => roleChannels[ch] !== wildcardChannels[ch],
+    const isOverridden = channels.some(
+        (ch) => roleChannels[ch.value] !== wildcardChannels[ch.value],
     );
     if (!isOverridden) return null;
 
@@ -547,21 +614,34 @@ function ChannelToggle({
     event,
     channel,
 }: {
-    role: Role;
+    role: string;
     event: EventDef;
-    channel: Channel;
+    channel: NotificationConfig["channels"][number];
 }) {
     return (
         <Controller<FormValues>
-            name={`rules.${role}.${toFormKey(event.event)}.${channel}`}
+            name={`rules.${role}.${toFormKey(event.event)}.${channel.value}`}
             render={({ field }) => (
                 <Switch
                     size="sm"
-                    aria-label={`${CHANNEL_LABELS[channel]} for ${event.label}`}
+                    aria-label={`${channel.label} for ${event.label}`}
                     checked={field.value as unknown as boolean}
                     onCheckedChange={field.onChange}
                 />
             )}
         />
     );
+}
+
+/**
+ * Fallback for unrecognized category values returned by the backend.
+ * The backend already declares labels for every known category; this
+ * exists so a newly-added category without an explicit label still
+ * renders somewhat readably until the catalog is updated.
+ */
+function prettifyFallback(value: string) {
+    return value
+        .split("_")
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(" ");
 }

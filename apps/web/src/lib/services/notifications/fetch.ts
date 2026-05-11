@@ -3,7 +3,7 @@ import { axiosAuthorized } from "src/core/utils/axios";
 
 import { NOTIFICATION_PATHS } from ".";
 import type {
-    EventCatalogEntry,
+    NotificationConfig,
     NotificationListResponse,
     RoutingRule,
     UnreadCountResponse,
@@ -60,8 +60,6 @@ export const resetRoutingRules = async () => {
     );
 };
 
-export const getEventCatalog = async () => {
-    return authorizedFetch<EventCatalogEntry[]>(
-        NOTIFICATION_PATHS.EVENT_CATALOG,
-    );
+export const getNotificationConfig = async () => {
+    return authorizedFetch<NotificationConfig>(NOTIFICATION_PATHS.CONFIG);
 };

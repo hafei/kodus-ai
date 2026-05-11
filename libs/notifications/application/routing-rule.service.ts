@@ -1,7 +1,16 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 
+import { Role } from '@libs/identity/domain/permissions/enums/permissions.enum';
+
 import { NotificationEvent } from '../domain/catalog/events';
-import { EVENT_DEFAULTS } from '../domain/catalog/defaults';
+import {
+    CATEGORY_LABELS,
+    CHANNEL_LABELS,
+    CRITICALITY_LABELS,
+    EVENT_DEFAULTS,
+    ROLE_LABELS,
+    ROLE_WILDCARD,
+} from '../domain/catalog/defaults';
 import {
     Criticality,
     ACTIVE_CHANNELS,
@@ -12,6 +21,25 @@ import {
     ROUTING_RULE_REPOSITORY_TOKEN,
 } from '../domain/contracts/routing-rule.repository.contract';
 import { IRoutingRule } from '../domain/interfaces/routing-rule.interface';
+
+export interface NotificationConfigEvent {
+    event: string;
+    label: string;
+    category: string;
+    criticality: Criticality;
+    defaultChannels: Record<string, boolean>;
+    icon?: string;
+    pageSeverity?: boolean;
+    actionLabel?: string;
+}
+
+export interface NotificationConfig {
+    events: NotificationConfigEvent[];
+    channels: Array<{ value: NotificationChannel; label: string }>;
+    criticalities: Array<{ value: Criticality; label: string }>;
+    categories: Array<{ value: string; label: string }>;
+    roles: Array<{ value: string; label: string }>;
+}
 
 export interface UpsertRuleDto {
     event: string;
@@ -40,20 +68,22 @@ export class RoutingRuleService {
     }
 
     /**
-     * Static catalog metadata for the admin UI: every known event with its
-     * label, category, criticality and the channels enabled by default when
-     * no routing rule exists. The dispatcher uses these same defaults at
-     * runtime — so the UI can reflect actual delivery behaviour for events
-     * with no explicit rule.
+     * Full notification configuration consumed by the in-app UI:
+     *
+     *  - events: per-event catalog metadata (label, category,
+     *    criticality, defaults, icon hint, banner-severity flag, CTA
+     *    label).
+     *  - channels / criticalities / categories / roles: display labels
+     *    for the four axes the settings UI renders.
+     *
+     * Everything the frontend needs to render notifications and the
+     * settings page is here — adding a new event or a new channel
+     * never requires a frontend change.
      */
-    getCatalog(): Array<{
-        event: string;
-        label: string;
-        category: string;
-        criticality: Criticality;
-        defaultChannels: Record<string, boolean>;
-    }> {
-        return Object.entries(EVENT_DEFAULTS).map(([event, defaults]) => {
+    getConfig(): NotificationConfig {
+        const events: NotificationConfigEvent[] = Object.entries(
+            EVENT_DEFAULTS,
+        ).map(([event, defaults]) => {
             const defaultChannels: Record<string, boolean> = {};
             for (const ch of ACTIVE_CHANNELS) {
                 defaultChannels[ch] = defaults.defaultChannels.has(ch);
@@ -64,8 +94,51 @@ export class RoutingRuleService {
                 category: defaults.category,
                 criticality: defaults.criticality,
                 defaultChannels,
+                icon: defaults.icon,
+                // Only meaningful when criticality === CRITICAL; the
+                // catalog declaration is responsible for not setting it
+                // on lower severities.
+                pageSeverity:
+                    defaults.criticality === Criticality.CRITICAL
+                        ? defaults.pageSeverity
+                        : undefined,
+                actionLabel: defaults.actionLabel,
             };
         });
+
+        const channels = [...ACTIVE_CHANNELS].map((value) => ({
+            value,
+            label: CHANNEL_LABELS[value] ?? value,
+        }));
+
+        const criticalities = Object.values(Criticality).map((value) => ({
+            value,
+            label: CRITICALITY_LABELS[value] ?? value,
+        }));
+
+        const presentCategories = [
+            ...new Set(events.map((e) => e.category)),
+        ];
+        const categories = presentCategories.map((value) => ({
+            value,
+            label: CATEGORY_LABELS[value] ?? value,
+        }));
+
+        // Wildcard first so the settings UI renders it as the leading
+        // "All Roles" tab without needing client-side sorting.
+        const roleOrder: string[] = [
+            ROLE_WILDCARD,
+            Role.OWNER,
+            Role.BILLING_MANAGER,
+            Role.REPO_ADMIN,
+            Role.CONTRIBUTOR,
+        ];
+        const roles = roleOrder.map((value) => ({
+            value,
+            label: ROLE_LABELS[value] ?? value,
+        }));
+
+        return { events, channels, criticalities, categories, roles };
     }
 
     async upsertRules(

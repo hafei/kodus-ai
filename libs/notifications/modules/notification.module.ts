@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
@@ -21,6 +22,7 @@ import { ROUTING_RULE_REPOSITORY_TOKEN } from '../domain/contracts/routing-rule.
 import { NotificationService } from '../application/notification.service';
 import { NotificationDispatcherService } from '../application/notification-dispatcher.service';
 import { NotificationQueryService } from '../application/notification-query.service';
+import { NotificationRetryService } from '../application/notification-retry.service';
 import { NotificationSseService } from '../application/notification-sse.service';
 import { RoutingRuleService } from '../application/routing-rule.service';
 
@@ -30,9 +32,7 @@ import { InAppChannelAdapter } from '../infrastructure/adapters/channels/in-app-
 import { CHANNEL_ADAPTERS_TOKEN } from '../domain/contracts/channel-adapter.contract';
 
 // Email providers
-import {
-    EMAIL_PROVIDER_TOKEN,
-} from '../infrastructure/adapters/email-providers/email-provider.contract';
+import { EMAIL_PROVIDER_TOKEN } from '../infrastructure/adapters/email-providers/email-provider.contract';
 import { ResendEmailProvider } from '../infrastructure/adapters/email-providers/resend-email.provider';
 import { SmtpEmailProvider } from '../infrastructure/adapters/email-providers/smtp-email.provider';
 
@@ -51,6 +51,11 @@ import { UserCoreModule } from '@libs/identity/modules/user-core.module';
     imports: [
         ConfigModule,
         UserCoreModule,
+        // ScheduleModule.forRoot() is idempotent across the dependency
+        // graph — Nest only registers the scheduler once. Importing it
+        // here means the notifications module's @Cron-driven worker
+        // runs even in deployments that don't pull in CronModule.
+        ScheduleModule.forRoot(),
         TypeOrmModule.forFeature([
             NotificationDeliveryModel,
             UserNotificationModel,
@@ -77,7 +82,7 @@ import { UserCoreModule } from '@libs/identity/modules/user-core.module';
             provide: EMAIL_PROVIDER_TOKEN,
             useFactory: (configService: ConfigService) => {
                 const provider = configService.get<string>(
-                    'NOTIFICATION_EMAIL_PROVIDER',
+                    'API_NOTIFICATION_EMAIL_PROVIDER',
                     'resend',
                 );
                 if (provider === 'smtp') {
@@ -104,6 +109,7 @@ import { UserCoreModule } from '@libs/identity/modules/user-core.module';
         NotificationService,
         NotificationDispatcherService,
         NotificationQueryService,
+        NotificationRetryService,
         NotificationSseService,
         RoutingRuleService,
 

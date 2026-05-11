@@ -1,5 +1,5 @@
 import { createLogger } from '@kodus/flow';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
 
 import {
@@ -10,7 +10,9 @@ import {
     IOutboxMessageRepository,
     OUTBOX_MESSAGE_REPOSITORY_TOKEN,
 } from '@libs/core/workflow/domain/contracts/outbox-message.repository.contract';
+import { MetricsCollectorService } from '@libs/core/infrastructure/metrics/metrics-collector.service';
 
+import { EVENT_DEFAULTS } from '../domain/catalog/defaults';
 import {
     NotificationEvent,
     NotificationPayloadMap,
@@ -62,6 +64,8 @@ export class NotificationService {
         private readonly messageBroker: IMessageBrokerService,
         @Inject(OUTBOX_MESSAGE_REPOSITORY_TOKEN)
         private readonly outboxRepository: IOutboxMessageRepository,
+        @Optional()
+        private readonly metricsCollector?: MetricsCollectorService,
     ) {}
 
     async emit<E extends NotificationEvent>(
@@ -106,6 +110,13 @@ export class NotificationService {
             exchange,
             routingKey,
             payload: messagePayload as unknown as Record<string, unknown>,
+        });
+
+        const criticality =
+            EVENT_DEFAULTS[input.event]?.criticality ?? 'unknown';
+        this.metricsCollector?.recordCounter('notifications_emitted_total', 1, {
+            event: input.event,
+            criticality: String(criticality),
         });
 
         this.logger.log({

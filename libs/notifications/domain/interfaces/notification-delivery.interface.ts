@@ -14,11 +14,18 @@ export interface INotificationDelivery {
     ctaUrl?: string;
     category: string;
     recipientEmail?: string;
+    /** Snapshot of recipient role for retry context reconstruction. */
+    recipientRole?: string;
     deliveryStatus: DeliveryStatus;
     metadata: Record<string, unknown>;
     correlationId: string;
     lastError?: string;
     deliveredAt?: Date;
+    /** Number of delivery attempts (0 before first call). */
+    attempts?: number;
+    nextAttemptAt?: Date | null;
+    lockedAt?: Date | null;
+    lockedBy?: string | null;
     createdAt?: Date;
     updatedAt?: Date;
 }

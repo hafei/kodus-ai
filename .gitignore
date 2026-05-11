@@ -199,3 +199,6 @@ parity-report.json
 
 # Playwright MCP session snapshots (DOM dumps, console logs, screenshots)
 .playwright-mcp/
+
+# IDE - Zed
+.zed/

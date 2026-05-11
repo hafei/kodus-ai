@@ -10,5 +10,5 @@ export const NOTIFICATION_PATHS = {
     MARK_ALL_READ: pathToApiUrl(`${API_PREFIX}/mark-all-read`),
     ROUTING_RULES: pathToApiUrl(`${API_PREFIX}/routing-rules`),
     ROUTING_RULES_RESET: pathToApiUrl(`${API_PREFIX}/routing-rules/reset`),
-    EVENT_CATALOG: pathToApiUrl(`${API_PREFIX}/event-catalog`),
+    CONFIG: pathToApiUrl(`${API_PREFIX}/config`),
 } as const;

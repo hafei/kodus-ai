@@ -1,11 +1,16 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class NotificationEngine1778260101100 implements MigrationInterface {
-    name = 'NotificationEngine1778260101100'
+export class NotificationEngine1778522682376 implements MigrationInterface {
+    name = 'NotificationEngine1778522682376'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`
-            CREATE TYPE "public"."notification_deliveries_criticality_enum" AS ENUM('system', 'critical', 'transactional', 'informational')
+            CREATE TYPE "public"."notification_deliveries_criticality_enum" AS ENUM(
+                'system',
+                'critical',
+                'transactional',
+                'informational'
+            )
         `);
         await queryRunner.query(`
             CREATE TYPE "public"."notification_deliveries_channel_enum" AS ENUM('email', 'in_app', 'slack', 'discord', 'webhook')
@@ -26,15 +31,25 @@ export class NotificationEngine1778260101100 implements MigrationInterface {
                 "ctaUrl" text,
                 "category" text NOT NULL,
                 "recipientEmail" text,
+                "recipientRole" text,
                 "deliveryStatus" "public"."notification_deliveries_deliverystatus_enum" NOT NULL DEFAULT 'pending',
                 "metadata" jsonb NOT NULL DEFAULT '{}',
                 "correlationId" text NOT NULL,
                 "lastError" text,
                 "deliveredAt" TIMESTAMP,
+                "attempts" integer NOT NULL DEFAULT '0',
+                "nextAttemptAt" TIMESTAMP,
+                "lockedAt" TIMESTAMP,
+                "lockedBy" character varying(255),
                 "organization_id" uuid NOT NULL,
                 "recipient_user_id" uuid,
                 CONSTRAINT "PK_bba06c20dfde205865d43744f67" PRIMARY KEY ("uuid")
             )
+        `);
+        await queryRunner.query(`
+            CREATE INDEX "IDX_nd_retry_ready" ON "notification_deliveries" ("nextAttemptAt")
+            WHERE "deliveryStatus" = 'pending'
+                AND "attempts" > 0
         `);
         await queryRunner.query(`
             CREATE INDEX "IDX_nd_created" ON "notification_deliveries" ("createdAt")
@@ -205,6 +220,9 @@ export class NotificationEngine1778260101100 implements MigrationInterface {
         `);
         await queryRunner.query(`
             DROP INDEX "public"."IDX_nd_created"
+        `);
+        await queryRunner.query(`
+            DROP INDEX "public"."IDX_nd_retry_ready"
         `);
         await queryRunner.query(`
             DROP TABLE "notification_deliveries"

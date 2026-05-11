@@ -135,12 +135,13 @@ export class NotificationController {
 
     // ── Admin endpoints (owner-only) ──────────────────────────
 
-    @Get('event-catalog')
+    @Get('config')
     @ApiOperation({
-        summary: 'List notification events with catalog defaults',
+        summary:
+            'Notification system configuration consumed by the in-app UI (events, channels, criticalities, categories, roles)',
     })
-    async getEventCatalog() {
-        return this.routingRuleService.getCatalog();
+    async getNotificationConfig() {
+        return this.routingRuleService.getConfig();
     }
 
     @Get('routing-rules')

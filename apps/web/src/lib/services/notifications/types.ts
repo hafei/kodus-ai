@@ -1,7 +1,7 @@
 export interface NotificationDelivery {
     uuid: string;
     event: string;
-    criticality: 'critical' | 'transactional' | 'informational';
+    criticality: EventCriticality;
     title: string;
     body: string;
     ctaUrl?: string;
@@ -55,6 +55,13 @@ export type EventCriticality =
     | "transactional"
     | "informational";
 
+export type CatalogIcon =
+    | "bell"
+    | "shield-alert"
+    | "zap"
+    | "info"
+    | "credit-card";
+
 export interface EventCatalogEntry {
     event: string;
     label: string;
@@ -62,4 +69,30 @@ export interface EventCatalogEntry {
     criticality: EventCriticality;
     /** Channels delivered to when no routing rule exists for the event. */
     defaultChannels: Record<string, boolean>;
+    /** Lucide icon name surfaced in the drawer; defaults to 'bell'. */
+    icon?: CatalogIcon;
+    /**
+     * Critical events with this flag render a sticky non-dismissible
+     * banner in the app shell. Only meaningful when criticality is 'critical'.
+     */
+    pageSeverity?: boolean;
+    /**
+     * Label for the CTA button when `delivery.ctaUrl` is present
+     * (drawer + banner). Defaults to 'View' when absent.
+     */
+    actionLabel?: string;
+}
+
+/**
+ * Full notification system configuration the UI consumes. Everything
+ * needed to render the drawer, the banner, and the settings page lives
+ * here — there are no hardcoded channel/role/criticality/category
+ * lists on the frontend.
+ */
+export interface NotificationConfig {
+    events: EventCatalogEntry[];
+    channels: Array<{ value: string; label: string }>;
+    criticalities: Array<{ value: EventCriticality; label: string }>;
+    categories: Array<{ value: string; label: string }>;
+    roles: Array<{ value: string; label: string }>;
 }

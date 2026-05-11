@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@components/ui/button";
 import {
     Sheet,
@@ -13,31 +13,34 @@ import { Skeleton } from "@components/ui/skeleton";
 import {
     useMarkAllNotificationsRead,
     useMarkNotificationRead,
+    useNotificationConfig,
     useNotifications,
 } from "@services/notifications/hooks";
-import type { UserNotification } from "@services/notifications/types";
+import type {
+    CatalogIcon,
+    EventCatalogEntry,
+    UserNotification,
+} from "@services/notifications/types";
 import {
     BellIcon,
     CheckCheck,
     ExternalLinkIcon,
-    InfoIcon,
     SettingsIcon,
-    ShieldAlertIcon,
-    ZapIcon,
 } from "lucide-react";
 import { cn } from "src/core/utils/components";
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 
-const CATEGORY_ICONS: Record<string, React.ElementType> = {
-    auth: ShieldAlertIcon,
-    team: ZapIcon,
-    kody_rules: BellIcon,
-    sso: ShieldAlertIcon,
-    cockpit: InfoIcon,
-};
+import { resolveNotificationIcon } from "./notification-icons";
 
+/**
+ * Tailwind border classes per criticality. Pure presentation — the
+ * label/text for each criticality comes from the backend config. Static
+ * because the criticality enum itself is fixed and changes only with a
+ * PR.
+ */
 const CRITICALITY_BAR: Record<string, string> = {
+    system: "border-l-transparent",
     critical: "border-l-red-500",
     transactional: "border-l-amber-500",
     informational: "border-l-blue-500",
@@ -72,8 +75,19 @@ export const NotificationDrawer = ({
 }: NotificationDrawerProps) => {
     const [page, setPage] = useState(1);
     const { data, isLoading } = useNotifications(page, 20);
+    const { data: config } = useNotificationConfig();
     const markRead = useMarkNotificationRead();
     const markAllRead = useMarkAllNotificationsRead();
+
+    // Lookup table: event name → CatalogIcon hint. Built from the
+    // catalog so drawer icons follow whatever the backend declares.
+    const iconByEvent = useMemo(() => {
+        const map = new Map<string, CatalogIcon | undefined>();
+        for (const entry of (config?.events ?? []) as EventCatalogEntry[]) {
+            map.set(entry.event, entry.icon);
+        }
+        return map;
+    }, [config]);
 
     const handleNotificationClick = useCallback(
         (notification: UserNotification) => {
@@ -124,8 +138,9 @@ export const NotificationDrawer = ({
 
                     {!isLoading &&
                         notifications.map((n) => {
-                            const Icon =
-                                CATEGORY_ICONS[n.delivery.category] ?? BellIcon;
+                            const Icon = resolveNotificationIcon(
+                                iconByEvent.get(n.delivery.event),
+                            );
                             const critBar =
                                 CRITICALITY_BAR[n.delivery.criticality] ??
                                 "border-l-transparent";

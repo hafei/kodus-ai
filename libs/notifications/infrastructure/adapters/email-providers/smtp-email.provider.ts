@@ -3,48 +3,37 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { IEmailProvider, SendEmailPayload } from './email-provider.contract';
+import { createTransport, Transporter } from 'nodemailer';
 
 /**
  * SMTP email provider using nodemailer.
- *
- * Only loaded when NOTIFICATION_EMAIL_PROVIDER=smtp.
- * Requires `nodemailer` to be installed: `yarn add nodemailer @types/nodemailer`
  */
 @Injectable()
 export class SmtpEmailProvider implements IEmailProvider {
     private readonly logger = createLogger(SmtpEmailProvider.name);
-    private transporter: any;
+    private transporter: Transporter | null = null;
     private readonly from: string;
 
     constructor(private readonly configService: ConfigService) {
         this.from =
-            configService.get<string>('SMTP_FROM') ??
+            configService.get<string>('API_SMTP_FROM') ??
             'noreply@notifications.kodus.io';
     }
 
-    private async getTransporter(): Promise<any> {
+    private async getTransporter(): Promise<Transporter> {
         if (this.transporter) return this.transporter;
 
-        let nodemailer: any;
-        try {
-            // @ts-ignore — nodemailer is an optional peer dependency
-            nodemailer = await import('nodemailer');
-        } catch {
-            throw new Error(
-                'nodemailer is not installed. Run: yarn add nodemailer @types/nodemailer',
-            );
-        }
-
-        this.transporter = nodemailer.createTransport({
-            host: this.configService.get<string>('SMTP_HOST'),
+        this.transporter = createTransport({
+            host: this.configService.get<string>('API_SMTP_HOST'),
             port: parseInt(
-                this.configService.get<string>('SMTP_PORT', '587'),
+                this.configService.get<string>('API_SMTP_PORT', '587'),
                 10,
             ),
-            secure: this.configService.get<string>('SMTP_SECURE') === 'true',
+            secure:
+                this.configService.get<string>('API_SMTP_SECURE') === 'true',
             auth: {
-                user: this.configService.get<string>('SMTP_USER'),
-                pass: this.configService.get<string>('SMTP_PASS'),
+                user: this.configService.get<string>('API_SMTP_USER'),
+                pass: this.configService.get<string>('API_SMTP_PASS'),
             },
         });
 
@@ -76,7 +65,8 @@ export class SmtpEmailProvider implements IEmailProvider {
         } catch (error) {
             this.logger.error({
                 message: 'SMTP email send failed',
-                error: error instanceof Error ? error : new Error(String(error)),
+                error:
+                    error instanceof Error ? error : new Error(String(error)),
                 context: SmtpEmailProvider.name,
                 metadata: {
                     to: payload.to,

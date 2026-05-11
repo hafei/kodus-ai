@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
-    getEventCatalog,
+    getNotificationConfig,
     getNotifications,
     getUnreadCount,
     markAllNotificationsRead,
@@ -28,7 +28,7 @@ const KEYS = {
         ["notifications", page, unreadOnly] as const,
     unreadCount: ["notifications", "unread-count"] as const,
     routingRules: ["notifications", "routing-rules"] as const,
-    eventCatalog: ["notifications", "event-catalog"] as const,
+    config: ["notifications", "config"] as const,
 };
 
 // ── Notification list ──────────────────────────────────────────
@@ -162,10 +162,10 @@ export const useResetRoutingRules = () => {
     });
 };
 
-export const useEventCatalog = () => {
+export const useNotificationConfig = () => {
     return useQuery({
-        queryKey: KEYS.eventCatalog,
-        queryFn: getEventCatalog,
+        queryKey: KEYS.config,
+        queryFn: getNotificationConfig,
         staleTime: Infinity,
     });
 };

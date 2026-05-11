@@ -1,7 +1,8 @@
 import { createLogger } from '@kodus/flow';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
+import { MetricsCollectorService } from '@libs/core/infrastructure/metrics/metrics-collector.service';
 import {
     IUsersService,
     USER_SERVICE_TOKEN,
@@ -24,12 +25,14 @@ import {
     INotificationDeliveryRepository,
     NOTIFICATION_DELIVERY_REPOSITORY_TOKEN,
 } from '../domain/contracts/notification-delivery.repository.contract';
+import { INotificationDelivery } from '../domain/interfaces/notification-delivery.interface';
 import {
     IRoutingRuleRepository,
     ROUTING_RULE_REPOSITORY_TOKEN,
 } from '../domain/contracts/routing-rule.repository.contract';
 import { NotificationRecipient } from '../domain/recipient';
 import { NotificationSseService } from './notification-sse.service';
+import { decideRetry } from './retry-policy';
 
 export interface NotificationMessage {
     event: NotificationEvent;
@@ -70,6 +73,8 @@ export class NotificationDispatcherService {
         @Inject(USER_SERVICE_TOKEN)
         private readonly usersService: IUsersService,
         private readonly sseService: NotificationSseService,
+        @Optional()
+        private readonly metricsCollector?: MetricsCollectorService,
     ) {
         this.adapterMap = new Map(
             adapters
@@ -165,10 +170,17 @@ export class NotificationDispatcherService {
                         correlationId,
                     },
                 });
+                this.metricsCollector?.recordCounter(
+                    'notification_deliveries_total',
+                    1,
+                    { channel, status: 'skipped' },
+                );
                 continue;
             }
 
-            // Create delivery record (pending)
+            // Create delivery record (pending). `recipientRole` is
+            // captured as a snapshot so the retry worker can rebuild the
+            // adapter context without re-querying the user.
             const delivery = await this.deliveryRepo.create({
                 organization: { uuid: organizationId },
                 event,
@@ -182,6 +194,7 @@ export class NotificationDispatcherService {
                     channel === NotificationChannel.EMAIL
                         ? recipient.email
                         : undefined,
+                recipientRole: recipient.role,
                 recipientUser: recipient.userId
                     ? { uuid: recipient.userId }
                     : undefined,
@@ -212,6 +225,11 @@ export class NotificationDispatcherService {
                     delivery.uuid!,
                     DeliveryStatus.DELIVERED,
                 );
+                this.metricsCollector?.recordCounter(
+                    'notification_deliveries_total',
+                    1,
+                    { channel, status: 'delivered' },
+                );
 
                 // Push SSE event for in-app channel
                 if (channel === NotificationChannel.IN_APP) {
@@ -228,26 +246,219 @@ export class NotificationDispatcherService {
             } catch (error) {
                 const errMsg =
                     error instanceof Error ? error.message : String(error);
-                await this.deliveryRepo.updateStatus(
-                    delivery.uuid!,
-                    DeliveryStatus.FAILED,
+                await this.handleDeliveryFailure({
+                    delivery,
+                    error,
                     errMsg,
-                );
-                this.logger.error({
-                    message: `Channel delivery failed: ${channel}`,
-                    error: error instanceof Error ? error : new Error(errMsg),
-                    context: NotificationDispatcherService.name,
-                    metadata: {
-                        event,
-                        channel,
-                        userId: recipient.userId,
-                        deliveryId: delivery.uuid,
-                        correlationId,
-                    },
+                    attemptsSoFar: 1,
+                    event,
+                    channel,
+                    criticality: defaults.criticality,
+                    userId: recipient.userId,
+                    correlationId,
                 });
-                // Isolated failure: don't block other channels
+                // Isolated failure: don't block other channels.
             }
         }
+    }
+
+    /**
+     * Re-attempt a previously failed delivery. Called by the
+     * NotificationRetryService for rows the worker has claimed.
+     *
+     * Reconstructs the adapter context from the stored row (no
+     * additional DB lookups), runs the channel's adapter once, and
+     * either marks DELIVERED or routes through {@link handleDeliveryFailure}.
+     */
+    async redeliver(
+        delivery: INotificationDelivery,
+        attemptsSoFar: number,
+    ): Promise<void> {
+        const adapter = this.adapterMap.get(delivery.channel);
+        if (!adapter) {
+            await this.deliveryRepo.updateStatus(
+                delivery.uuid!,
+                DeliveryStatus.FAILED,
+                `No adapter registered for channel ${delivery.channel}`,
+            );
+            return;
+        }
+
+        const context: NotificationDeliveryContext = {
+            deliveryId: delivery.uuid!,
+            userId: delivery.recipientUser?.uuid ?? '',
+            userEmail: delivery.recipientEmail ?? '',
+            userRole: delivery.recipientRole ?? 'contributor',
+            organizationId: delivery.organization?.uuid ?? '',
+            event: delivery.event as NotificationEvent,
+            criticality: delivery.criticality,
+            title: delivery.title,
+            body: delivery.body,
+            ctaUrl: delivery.ctaUrl,
+            category: delivery.category,
+            metadata: delivery.metadata ?? {},
+            correlationId: delivery.correlationId,
+        };
+
+        try {
+            await adapter.deliver(context);
+            await this.deliveryRepo.updateStatus(
+                delivery.uuid!,
+                DeliveryStatus.DELIVERED,
+            );
+            this.metricsCollector?.recordCounter(
+                'notification_deliveries_total',
+                1,
+                { channel: delivery.channel, status: 'delivered' },
+            );
+
+            if (delivery.channel === NotificationChannel.IN_APP) {
+                this.sseService.pushEvent(context.userId, {
+                    type: 'notification',
+                    data: {
+                        id: delivery.uuid,
+                        title: delivery.title,
+                        category: delivery.category,
+                        criticality: delivery.criticality,
+                    },
+                });
+            }
+        } catch (error) {
+            const errMsg =
+                error instanceof Error ? error.message : String(error);
+            await this.handleDeliveryFailure({
+                delivery: { uuid: delivery.uuid },
+                error,
+                errMsg,
+                attemptsSoFar,
+                event: delivery.event as NotificationEvent,
+                channel: delivery.channel,
+                criticality: delivery.criticality,
+                userId: context.userId,
+                correlationId: delivery.correlationId,
+            });
+        }
+    }
+
+    /**
+     * Shared failure handler used by both the initial dispatch path and
+     * the retry worker. Schedules another attempt with backoff when the
+     * criticality's retry budget allows; otherwise marks the row FAILED
+     * and emits a structured alert log line for CRITICAL terminal
+     * failures so the ops pipeline can page on it.
+     */
+    async handleDeliveryFailure(input: {
+        delivery: { uuid?: string };
+        error: unknown;
+        errMsg: string;
+        attemptsSoFar: number;
+        event: NotificationEvent;
+        channel: NotificationChannel;
+        criticality: Criticality;
+        userId: string;
+        correlationId: string;
+    }): Promise<void> {
+        const decision = decideRetry(input.criticality, input.attemptsSoFar);
+        const reason =
+            (input.error as { name?: string })?.name || 'UnknownError';
+
+        // Every failed attempt — retry-scheduled or terminal — bumps
+        // the failures counter so we can chart failure rates by
+        // channel/reason without losing transient ones to retry.
+        this.metricsCollector?.recordCounter(
+            'notification_delivery_failures_total',
+            1,
+            {
+                channel: input.channel,
+                reason,
+                terminal: decision.shouldRetry ? 'false' : 'true',
+            },
+        );
+
+        if (decision.shouldRetry) {
+            await this.deliveryRepo.scheduleRetry(
+                input.delivery.uuid!,
+                decision.nextAttemptAt,
+                input.errMsg,
+            );
+            this.logger.warn({
+                message: `Channel delivery failed — scheduled retry: ${input.channel}`,
+                error:
+                    input.error instanceof Error
+                        ? input.error
+                        : new Error(input.errMsg),
+                context: NotificationDispatcherService.name,
+                metadata: {
+                    event: input.event,
+                    channel: input.channel,
+                    criticality: input.criticality,
+                    attemptsSoFar: input.attemptsSoFar,
+                    maxAttempts: decision.maxAttempts,
+                    nextAttemptAt: decision.nextAttemptAt,
+                    userId: input.userId,
+                    deliveryId: input.delivery.uuid,
+                    correlationId: input.correlationId,
+                },
+            });
+            return;
+        }
+
+        await this.deliveryRepo.updateStatus(
+            input.delivery.uuid!,
+            DeliveryStatus.FAILED,
+            input.errMsg,
+        );
+        this.metricsCollector?.recordCounter(
+            'notification_deliveries_total',
+            1,
+            { channel: input.channel, status: 'failed' },
+        );
+
+        if (input.criticality === Criticality.CRITICAL) {
+            // Structured alert log line: terminal failure of a critical
+            // notification. Picked up by the ops alerting pipeline via
+            // the `alert: 'critical_notification_terminal_failure'` tag.
+            this.logger.error({
+                message:
+                    'CRITICAL notification terminally failed after exhausting retries',
+                error:
+                    input.error instanceof Error
+                        ? input.error
+                        : new Error(input.errMsg),
+                context: NotificationDispatcherService.name,
+                metadata: {
+                    alert: 'critical_notification_terminal_failure',
+                    severity: 'page',
+                    event: input.event,
+                    channel: input.channel,
+                    attempts: input.attemptsSoFar,
+                    maxAttempts: decision.maxAttempts,
+                    userId: input.userId,
+                    deliveryId: input.delivery.uuid,
+                    correlationId: input.correlationId,
+                },
+            });
+            return;
+        }
+
+        this.logger.error({
+            message: `Channel delivery failed permanently: ${input.channel}`,
+            error:
+                input.error instanceof Error
+                    ? input.error
+                    : new Error(input.errMsg),
+            context: NotificationDispatcherService.name,
+            metadata: {
+                event: input.event,
+                channel: input.channel,
+                criticality: input.criticality,
+                attempts: input.attemptsSoFar,
+                maxAttempts: decision.maxAttempts,
+                userId: input.userId,
+                deliveryId: input.delivery.uuid,
+                correlationId: input.correlationId,
+            },
+        });
     }
 
     /**

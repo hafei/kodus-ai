@@ -16,11 +16,16 @@ export class NotificationDeliveryEntity
     private _ctaUrl?: string;
     private _category: string;
     private _recipientEmail?: string;
+    private _recipientRole?: string;
     private _deliveryStatus: DeliveryStatus;
     private _metadata: Record<string, unknown>;
     private _correlationId: string;
     private _lastError?: string;
     private _deliveredAt?: Date;
+    private _attempts: number;
+    private _nextAttemptAt?: Date | null;
+    private _lockedAt?: Date | null;
+    private _lockedBy?: string | null;
     private _createdAt?: Date;
     private _updatedAt?: Date;
 
@@ -38,11 +43,16 @@ export class NotificationDeliveryEntity
         this._ctaUrl = data.ctaUrl;
         this._category = data.category;
         this._recipientEmail = data.recipientEmail;
+        this._recipientRole = data.recipientRole;
         this._deliveryStatus = data.deliveryStatus;
         this._metadata = data.metadata;
         this._correlationId = data.correlationId;
         this._lastError = data.lastError;
         this._deliveredAt = data.deliveredAt;
+        this._attempts = data.attempts ?? 0;
+        this._nextAttemptAt = data.nextAttemptAt;
+        this._lockedAt = data.lockedAt;
+        this._lockedBy = data.lockedBy;
         this._createdAt = data.createdAt;
         this._updatedAt = data.updatedAt;
     }
@@ -86,6 +96,9 @@ export class NotificationDeliveryEntity
     public get recipientEmail() {
         return this._recipientEmail;
     }
+    public get recipientRole() {
+        return this._recipientRole;
+    }
     public get deliveryStatus() {
         return this._deliveryStatus;
     }
@@ -100,6 +113,18 @@ export class NotificationDeliveryEntity
     }
     public get deliveredAt() {
         return this._deliveredAt;
+    }
+    public get attempts() {
+        return this._attempts;
+    }
+    public get nextAttemptAt() {
+        return this._nextAttemptAt;
+    }
+    public get lockedAt() {
+        return this._lockedAt;
+    }
+    public get lockedBy() {
+        return this._lockedBy;
     }
     public get createdAt() {
         return this._createdAt;
@@ -121,11 +146,16 @@ export class NotificationDeliveryEntity
             ctaUrl: this._ctaUrl,
             category: this._category,
             recipientEmail: this._recipientEmail,
+            recipientRole: this._recipientRole,
             deliveryStatus: this._deliveryStatus,
             metadata: this._metadata,
             correlationId: this._correlationId,
             lastError: this._lastError,
             deliveredAt: this._deliveredAt,
+            attempts: this._attempts,
+            nextAttemptAt: this._nextAttemptAt,
+            lockedAt: this._lockedAt,
+            lockedBy: this._lockedBy,
             createdAt: this._createdAt,
             updatedAt: this._updatedAt,
         };
