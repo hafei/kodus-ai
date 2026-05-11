@@ -180,7 +180,14 @@ services:
         deploy:
             resources:
                 limits:
-                    memory: 1G
+                    # Bumped from 1G after a smoke test on the heap-fixed
+                    # config showed steady-state RSS around 900MiB (~90%
+                    # of a 1G cap) — too tight for the cron-driven
+                    # analytics ingestion pipeline to absorb spikes.
+                    # Heap remains capped at 768M (see env block below);
+                    # the extra 0.5G is headroom for native modules,
+                    # thread stacks, and ingestion buffers.
+                    memory: 1.5G
                 reservations:
                     memory: 256M
         healthcheck:
