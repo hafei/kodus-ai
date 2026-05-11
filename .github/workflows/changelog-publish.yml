@@ -83,6 +83,11 @@ jobs:
                   ref: ${{ needs.validate.outputs.tag }}
                   fetch-depth: 0
                   fetch-tags: true
+                  # `Commit changelog entry` later pushes to main, which
+                  # is protected by a ruleset that requires PRs. The
+                  # default GITHUB_TOKEN cannot bypass it; use the PAT
+                  # whose owner is an OrganizationAdmin bypass actor.
+                  token: ${{ secrets.RELEASE_BOT_TOKEN }}
 
             - name: Set up Node
               uses: actions/setup-node@v4

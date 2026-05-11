@@ -309,7 +309,13 @@ jobs:
                   ref: main
                   fetch-depth: 0
                   fetch-tags: true
-                  token: ${{ secrets.GITHUB_TOKEN }}
+                  # Main is protected by a ruleset that requires PRs.
+                  # The default GITHUB_TOKEN cannot bypass it; only the
+                  # OrganizationAdmin actor can. RELEASE_BOT_TOKEN must
+                  # be a fine-grained PAT minted by an org admin with
+                  # `contents: write` on this repo — its bypass rights
+                  # are inherited from the underlying admin user.
+                  token: ${{ secrets.RELEASE_BOT_TOKEN }}
 
             - name: Detect CLI changes
               id: detect
