@@ -431,6 +431,36 @@ jobs:
             tag: ${{ needs.create-release.outputs.release_tag }}
         secrets: inherit
 
+    trigger-installer-e2e:
+        name: Trigger self-hosted E2E in kodus-installer
+        needs:
+            - create-release
+            - build-and-push
+        if: needs.build-and-push.result == 'success'
+        runs-on: ubuntu-latest
+        # GITHUB_TOKEN only scopes to this repo, so a separate PAT is needed
+        # to fire repository_dispatch into kodustech/kodus-installer. The
+        # PAT must have `repo` scope on the installer (or fine-grained:
+        # Contents=read + Actions=write).
+        steps:
+            - name: Fire repository_dispatch into kodus-installer
+              env:
+                  GH_TOKEN: ${{ secrets.KODUS_INSTALLER_DISPATCH_TOKEN }}
+                  RELEASE_TAG: ${{ needs.create-release.outputs.release_tag }}
+              run: |
+                  if [ -z "$GH_TOKEN" ]; then
+                      echo "::warning::KODUS_INSTALLER_DISPATCH_TOKEN is not set — skipping E2E dispatch."
+                      exit 0
+                  fi
+                  gh api \
+                      --method POST \
+                      "repos/kodustech/kodus-installer/dispatches" \
+                      -f event_type=selfhosted-image-published \
+                      -f client_payload[release_tag]="$RELEASE_TAG" \
+                      -f client_payload[image_tag]=latest \
+                      -f client_payload[source_run_url]="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  echo "::notice::Dispatched selfhosted-image-published to kodustech/kodus-installer for tag $RELEASE_TAG"
+
     notify-discord-failure:
         name: Notify Discord (failure only)
         needs:
