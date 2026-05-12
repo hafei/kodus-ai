@@ -1,6 +1,6 @@
 import { EmailModule } from '@libs/common/email/email.module';
 import { AuthModule } from '@libs/identity/modules/auth.module';
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SSO_CONFIG_REPOSITORY_TOKEN } from './domain/contracts/ssoConfig.repository.contract';
 import { SSO_CONFIG_SERVICE_TOKEN } from './domain/contracts/ssoConfig.service.contract';
@@ -15,12 +15,14 @@ import { SSOConfigService } from './services/ssoConfig.service';
 import { SSOTestSessionService } from './services/sso-test-session.service';
 import { SamlStrategy } from './strategies/saml-auth.strategy';
 import { UseCases } from './use-cases';
+import { NotificationModule } from '@libs/notifications/modules/notification.module';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([SSOConfigModel, SSOTestSessionModel]),
         AuthModule,
         EmailModule,
+        forwardRef(() => NotificationModule),
     ],
     providers: [
         SamlStrategy,

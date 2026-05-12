@@ -60,6 +60,7 @@ import { McpCoreModule } from '@libs/mcp-server/mcp-core.module';
 import { KodyRulesSyncListener } from '../infrastructure/adapters/listeners/kody-rules-sync.listener';
 import { CodeReviewConfigurationModule } from '@libs/code-review/modules/code-review-configuration.module';
 import { CentralizedConfigModule } from '@libs/centralized-config/modules/centralized-config.module';
+import { NotificationModule } from '@libs/notifications/modules/notification.module';
 
 @Module({
     imports: [
@@ -88,6 +89,7 @@ import { CentralizedConfigModule } from '@libs/centralized-config/modules/centra
         forwardRef(() => CodeReviewConfigurationModule),
         forwardRef(() => CentralizedConfigModule),
         EmailModule,
+        forwardRef(() => NotificationModule),
     ],
     providers: [
         {

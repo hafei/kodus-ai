@@ -176,12 +176,19 @@
 | `API_CRON_CHECK_IF_PR_SHOULD_BE_APPROVED` | – | cron | ⚙️ Both | Every 2 minutes. |
 | `API_CRON_WEEKLY_RECAP` | – | cron | ⚙️ Both | Friday at 09:00 UTC — weekly recap email. |
 
-## Email (Resend — https://resend.com)
+## Email (Resend — https://resend.com / SMTP)
 
 | Variable | Required | Type | Scope | Description |
 | --- | --- | --- | --- | --- |
-| `RESEND_API_KEY` | – | secret | ☁️ Cloud | Resend — Kodus-managed email sender. Cloud-only. |
+| `API_NOTIFICATION_EMAIL_PROVIDER` | – | enum(resend,smtp) | ⚙️ Both | Notifications email provider |
+| `RESEND_API_KEY` | – | secret | ⚙️ Both | Resend — Kodus-managed email sender. |
 | `API_USER_INVITE_BASE_URL` | – | url | ⚙️ Both |  |
+| `API_SMTP_HOST` | – | string | 🏠 Self-hosted | SMTP host |
+| `API_SMTP_PORT` | – | number | 🏠 Self-hosted | SMTP port |
+| `API_SMTP_SECURE` | – | boolean | 🏠 Self-hosted | SMTP secure mode |
+| `API_SMTP_USER` | – | string | 🏠 Self-hosted | SMTP user |
+| `API_SMTP_PASS` | – | secret | 🏠 Self-hosted | SMTP password |
+| `API_SMTP_FROM` | – | email | 🏠 Self-hosted | SMTP notifications sender email |
 
 ## AWS / S3
 
