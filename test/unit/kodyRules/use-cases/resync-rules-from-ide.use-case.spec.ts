@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { Role } from '@libs/identity/domain/permissions/enums/permissions.enum';
 import { ResyncRulesFromIdeUseCase } from '@libs/kodyRules/application/use-cases/resync-rules-from-ide.use-case';
+import { ValidateRuleFileReferencesUseCase } from '@libs/kodyRules/application/use-cases/validate-rule-file-references.use-case';
 import { KodyRulesSyncService } from '@libs/kodyRules/infrastructure/adapters/services/kodyRulesSync.service';
 import { NotificationService } from '@libs/notifications/application/notification.service';
 import { NotificationEvent } from '@libs/notifications/domain/catalog/events';
@@ -22,6 +23,7 @@ describe('ResyncRulesFromIdeUseCase', () => {
     let kodyRulesSyncServiceMock: { syncRepositoryMain: jest.Mock };
     let codeManagementServiceMock: { getRepositories: jest.Mock };
     let notificationServiceMock: { emit: jest.Mock };
+    let validateRuleFileReferencesMock: { execute: jest.Mock };
 
     beforeEach(async () => {
         kodyRulesSyncServiceMock = {
@@ -44,6 +46,12 @@ describe('ResyncRulesFromIdeUseCase', () => {
             emit: jest.fn().mockResolvedValue(undefined),
         };
 
+        validateRuleFileReferencesMock = {
+            execute: jest
+                .fn()
+                .mockResolvedValue({ invalidCount: 0, issues: [] }),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 ResyncRulesFromIdeUseCase,
@@ -58,6 +66,10 @@ describe('ResyncRulesFromIdeUseCase', () => {
                 {
                     provide: NotificationService,
                     useValue: notificationServiceMock,
+                },
+                {
+                    provide: ValidateRuleFileReferencesUseCase,
+                    useValue: validateRuleFileReferencesMock,
                 },
                 {
                     provide: REQUEST,
