@@ -14,9 +14,20 @@ export enum NotificationEvent {
 
     // ── Organization / Team ────────────────────────────────────
     TEAM_MEMBER_INVITED = 'team.member_invited',
+    ORG_MEMBER_REMOVED = 'org.member_removed',
+    ORG_ROLE_CHANGED = 'org.role_changed',
 
     // ── Kody Rules ─────────────────────────────────────────────
     KODY_RULES_GENERATED = 'kody_rules.generated',
+
+    // ── IDE rule sync ──────────────────────────────────────────
+    IDE_RULES_SYNCED = 'ide.rules_synced',
+    IDE_RULES_SYNC_FAILED = 'ide.rules_sync_failed',
+
+    // ── Code review ────────────────────────────────────────────
+    REVIEW_AUTO_APPROVED = 'review.auto_approved',
+    REVIEW_FAILED = 'review.failed',
+    REVIEW_SKIPPED_NO_LICENSE = 'review.skipped_no_license',
 
     // ── SSO ────────────────────────────────────────────────────
     SSO_DOMAIN_VERIFICATION = 'sso.domain_verification',
@@ -78,5 +89,56 @@ export interface NotificationPayloadMap {
     [NotificationEvent.WEEKLY_RECAP]: {
         recipient: { email: string; name: string };
         props: Record<string, unknown>;
+    };
+
+    // ── Organization / Team ────────────────────────────────────
+
+    [NotificationEvent.ORG_MEMBER_REMOVED]: {
+        removedUser: { name?: string; email?: string };
+        removedBy: string;
+        removedAt: string;
+        organizationName: string;
+    };
+
+    [NotificationEvent.ORG_ROLE_CHANGED]: {
+        previousRole: string;
+        newRole: string;
+        changedBy: string;
+        organizationName: string;
+    };
+
+    // ── IDE rule sync ──────────────────────────────────────────
+
+    [NotificationEvent.IDE_RULES_SYNCED]: {
+        repoName: string;
+        rulesCount: number;
+        syncMode: 'fast' | 'full' | 'changed-files';
+    };
+
+    [NotificationEvent.IDE_RULES_SYNC_FAILED]: {
+        repoName: string;
+        reason: string;
+        correlationId: string;
+    };
+
+    // ── Code review ────────────────────────────────────────────
+
+    [NotificationEvent.REVIEW_AUTO_APPROVED]: {
+        prUrl: string;
+        repoName: string;
+        approvedAt: string;
+    };
+
+    [NotificationEvent.REVIEW_FAILED]: {
+        prUrl: string;
+        repoName: string;
+        reason: string;
+        correlationId: string;
+    };
+
+    [NotificationEvent.REVIEW_SKIPPED_NO_LICENSE]: {
+        prUrl: string;
+        repoName: string;
+        ownerContact?: string;
     };
 }

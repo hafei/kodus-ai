@@ -22,8 +22,10 @@ import { ROUTING_RULE_REPOSITORY_TOKEN } from '../domain/contracts/routing-rule.
 import { NotificationService } from '../application/notification.service';
 import { NotificationDispatcherService } from '../application/notification-dispatcher.service';
 import { NotificationQueryService } from '../application/notification-query.service';
+import { NotificationRateLimiter } from '../application/notification-rate-limiter.service';
 import { NotificationRetryService } from '../application/notification-retry.service';
 import { NotificationSseService } from '../application/notification-sse.service';
+import { PrAuthorRecipientResolver } from '../application/pr-author-recipient.resolver';
 import { RoutingRuleService } from '../application/routing-rule.service';
 
 // Channel adapters
@@ -109,8 +111,10 @@ import { UserCoreModule } from '@libs/identity/modules/user-core.module';
         NotificationService,
         NotificationDispatcherService,
         NotificationQueryService,
+        NotificationRateLimiter,
         NotificationRetryService,
         NotificationSseService,
+        PrAuthorRecipientResolver,
         RoutingRuleService,
 
         // ── Consumer ──────────────────────────────────────────
@@ -119,7 +123,9 @@ import { UserCoreModule } from '@libs/identity/modules/user-core.module';
     exports: [
         NotificationService,
         NotificationQueryService,
+        NotificationRateLimiter,
         NotificationSseService,
+        PrAuthorRecipientResolver,
         RoutingRuleService,
     ],
 })

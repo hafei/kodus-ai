@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { ResyncRulesFromIdeUseCase } from '@libs/kodyRules/application/use-cases/resync-rules-from-ide.use-case';
 import { KodyRulesSyncService } from '@libs/kodyRules/infrastructure/adapters/services/kodyRulesSync.service';
+import { NotificationService } from '@libs/notifications/application/notification.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 
 jest.mock('@kodus/flow', () => ({
@@ -18,6 +19,7 @@ describe('ResyncRulesFromIdeUseCase', () => {
     let useCase: ResyncRulesFromIdeUseCase;
     let kodyRulesSyncServiceMock: { syncRepositoryMain: jest.Mock };
     let codeManagementServiceMock: { getRepositories: jest.Mock };
+    let notificationServiceMock: { emit: jest.Mock };
 
     beforeEach(async () => {
         kodyRulesSyncServiceMock = {
@@ -36,6 +38,10 @@ describe('ResyncRulesFromIdeUseCase', () => {
             ]),
         };
 
+        notificationServiceMock = {
+            emit: jest.fn().mockResolvedValue(undefined),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 ResyncRulesFromIdeUseCase,
@@ -48,9 +54,14 @@ describe('ResyncRulesFromIdeUseCase', () => {
                     useValue: codeManagementServiceMock,
                 },
                 {
+                    provide: NotificationService,
+                    useValue: notificationServiceMock,
+                },
+                {
                     provide: REQUEST,
                     useValue: {
                         user: {
+                            uuid: 'user-1',
                             organization: {
                                 uuid: 'org-1',
                             },

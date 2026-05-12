@@ -95,6 +95,76 @@ export const EVENT_DEFAULTS: Readonly<
         defaultChannels: new Set([NotificationChannel.EMAIL]),
         icon: 'info',
     },
+
+    // ── Organization / Team ────────────────────────────────────
+
+    [NotificationEvent.ORG_MEMBER_REMOVED]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'team',
+        label: 'Member Removed',
+        // Default channels cover both audiences; per-recipient channel
+        // overrides (set by the call site) restrict the removed user to
+        // email and the surviving owners to in-app.
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'zap',
+    },
+    [NotificationEvent.ORG_ROLE_CHANGED]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'team',
+        label: 'Role Changed',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'zap',
+    },
+
+    // ── IDE rule sync ──────────────────────────────────────────
+
+    [NotificationEvent.IDE_RULES_SYNCED]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'kody_rules',
+        label: 'IDE Rules Synced',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'bell',
+    },
+    [NotificationEvent.IDE_RULES_SYNC_FAILED]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'kody_rules',
+        label: 'IDE Rule Sync Failed',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'shield-alert',
+    },
+
+    // ── Code review ────────────────────────────────────────────
+
+    [NotificationEvent.REVIEW_AUTO_APPROVED]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'review',
+        label: 'Pull Request Auto-Approved',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'bell',
+    },
+    [NotificationEvent.REVIEW_FAILED]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'review',
+        label: 'Code Review Failed',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'shield-alert',
+    },
+    [NotificationEvent.REVIEW_SKIPPED_NO_LICENSE]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'review',
+        label: 'Review Skipped (No License)',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'info',
+    },
 };
 
 /** All event categories, derived from the catalog. */
@@ -131,6 +201,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
     sso: 'SSO',
     cockpit: 'Cockpit',
     billing: 'Billing',
+    review: 'Code Review',
 };
 
 /**

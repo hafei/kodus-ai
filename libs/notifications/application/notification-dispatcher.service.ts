@@ -3,6 +3,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
 import { MetricsCollectorService } from '@libs/core/infrastructure/metrics/metrics-collector.service';
+import { Role } from '@libs/identity/domain/permissions/enums/permissions.enum';
 import {
     IUsersService,
     USER_SERVICE_TOKEN,
@@ -31,6 +32,7 @@ import {
     ROUTING_RULE_REPOSITORY_TOKEN,
 } from '../domain/contracts/routing-rule.repository.contract';
 import { NotificationRecipient } from '../domain/recipient';
+import { IN_APP_TEMPLATE_REGISTRY } from '../infrastructure/adapters/channels/in-app-template.registry';
 import { NotificationSseService } from './notification-sse.service';
 import { decideRetry } from './retry-policy';
 
@@ -47,6 +49,14 @@ interface ResolvedRecipient {
     userId: string;
     email: string;
     role: string;
+    /**
+     * Optional per-recipient channel restriction copied from the
+     * originating NotificationRecipient. When set, dispatch only
+     * targets the intersection of this list with the event's resolved
+     * channels — used by events like org.member_removed where one
+     * recipient gets email and another gets in-app.
+     */
+    channels?: NotificationChannel[];
 }
 
 /**
@@ -166,9 +176,21 @@ export class NotificationDispatcherService {
             );
         }
 
-        const title = this.resolveTitle(event, payload);
-        const body = this.resolveBody(event, payload);
-        const ctaUrl = (payload.ctaUrl as string) ?? undefined;
+        // Per-recipient channel override: when the originating
+        // NotificationRecipient declared `channels`, intersect with the
+        // event-resolved channels. Used by events that need a
+        // recipient-specific channel mix (e.g. org.member_removed sends
+        // email to the removed user and in-app to the surviving owners).
+        if (recipient.channels?.length) {
+            const allowed = new Set(recipient.channels);
+            enabledChannels = enabledChannels.filter((ch) => allowed.has(ch));
+        }
+
+        const template = this.resolveInAppTemplate(event, payload);
+        const title = template.title;
+        const body = template.body;
+        const ctaUrl =
+            template.ctaUrl ?? (payload.ctaUrl as string) ?? undefined;
 
         for (const channel of enabledChannels) {
             const adapter = this.adapterMap.get(channel);
@@ -540,15 +562,84 @@ export class NotificationDispatcherService {
             return [];
         }
 
-        const resolved: ResolvedRecipient[] = [];
+        // Dedup map keyed by userId. When the same user is referenced
+        // from multiple recipient entries (e.g. pr_author who is also a
+        // role:OWNER), we keep the *first* channel override so the
+        // semantics of the first match win. Email-only fallbacks live
+        // under a "EMAIL:<addr>" pseudo-key.
+        const byKey = new Map<string, ResolvedRecipient>();
+        const remember = (
+            entry: ResolvedRecipient | null,
+            channels?: NotificationChannel[],
+        ) => {
+            if (!entry) return;
+            const key = entry.userId ? entry.userId : `EMAIL:${entry.email}`;
+            if (byKey.has(key)) return;
+            byKey.set(key, channels ? { ...entry, channels } : entry);
+        };
+
         for (const r of message.recipients) {
-            const entry =
-                r.kind === 'user'
-                    ? await this.resolveByUserId(r.userId)
-                    : await this.resolveByEmail(r.email, organizationId);
-            if (entry) resolved.push(entry);
+            switch (r.kind) {
+                case 'user':
+                    remember(
+                        await this.resolveByUserId(r.userId),
+                        r.channels,
+                    );
+                    break;
+                case 'email':
+                    remember(
+                        await this.resolveByEmail(r.email, organizationId),
+                        r.channels,
+                    );
+                    break;
+                case 'role':
+                    for (const entry of await this.resolveByRole(
+                        r.role,
+                        organizationId,
+                    )) {
+                        remember(entry, r.channels);
+                    }
+                    break;
+                case 'all_org_members':
+                    for (const entry of await this.resolveAllOrgMembers(
+                        organizationId,
+                    )) {
+                        remember(entry, r.channels);
+                    }
+                    break;
+            }
         }
-        return resolved;
+
+        return [...byKey.values()];
+    }
+
+    private async resolveByRole(
+        role: Role,
+        organizationId: string,
+    ): Promise<ResolvedRecipient[]> {
+        const users = await this.usersService.find(
+            { organization: { uuid: organizationId }, role },
+            [STATUS.ACTIVE],
+        );
+        return (users ?? []).map((u) => ({
+            userId: u.uuid,
+            email: u.email,
+            role: u.role ?? role,
+        }));
+    }
+
+    private async resolveAllOrgMembers(
+        organizationId: string,
+    ): Promise<ResolvedRecipient[]> {
+        const users = await this.usersService.find(
+            { organization: { uuid: organizationId } },
+            [STATUS.ACTIVE],
+        );
+        return (users ?? []).map((u) => ({
+            userId: u.uuid,
+            email: u.email,
+            role: u.role ?? 'contributor',
+        }));
     }
 
     private async resolveByUserId(
@@ -651,34 +742,30 @@ export class NotificationDispatcherService {
         );
     }
 
-    private resolveTitle(
-        event: NotificationEvent,
-        _payload: Record<string, unknown>,
-    ): string {
-        const defaults = EVENT_DEFAULTS[event];
-        return defaults?.label ?? event;
-    }
-
-    private resolveBody(
+    /**
+     * Resolve the in-app title/body/ctaUrl for an event from the
+     * {@link IN_APP_TEMPLATE_REGISTRY}. Falls back to the catalog label
+     * when no entry is registered. Used both to populate the
+     * notification_deliveries row (for tracing / drawer) and to compose
+     * SSE push payloads.
+     */
+    private resolveInAppTemplate(
         event: NotificationEvent,
         payload: Record<string, unknown>,
-    ): string {
-        // For in-app display. Email has its own template rendering.
-        switch (event) {
-            case NotificationEvent.AUTH_EMAIL_CONFIRMATION:
-                return `Confirm your email for ${payload.organizationName ?? 'your organization'}.`;
-            case NotificationEvent.AUTH_FORGOT_PASSWORD:
-                return 'A password reset was requested for your account.';
-            case NotificationEvent.TEAM_MEMBER_INVITED:
-                return `You've been invited to join a team.`;
-            case NotificationEvent.KODY_RULES_GENERATED:
-                return `New Kody rules have been generated for ${payload.organizationName ?? 'your organization'}.`;
-            case NotificationEvent.SSO_DOMAIN_VERIFICATION:
-                return `Verify your SSO domain: ${payload.domain ?? ''}`;
-            case NotificationEvent.WEEKLY_RECAP:
-                return 'Your weekly engineering recap is ready.';
-            default:
-                return '';
+    ): { title: string; body: string; ctaUrl?: string } {
+        const builder = IN_APP_TEMPLATE_REGISTRY[event];
+        const defaults = EVENT_DEFAULTS[event];
+        if (!builder) {
+            return {
+                title: defaults?.label ?? event,
+                body: '',
+            };
         }
+        const tpl = builder(payload);
+        return {
+            title: tpl.title ?? defaults?.label ?? event,
+            body: tpl.body ?? '',
+            ctaUrl: tpl.ctaUrl,
+        };
     }
 }

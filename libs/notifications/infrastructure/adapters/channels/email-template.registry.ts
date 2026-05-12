@@ -10,12 +10,21 @@ import DomainVerificationEmail, {
 import ForgotPasswordEmail, {
     forgotPasswordEmailMeta,
 } from '@libs/common/email/templates/forgot-password';
+import IdeRulesSyncFailedEmail, {
+    ideRulesSyncFailedEmailMeta,
+} from '@libs/common/email/templates/ide-rules-sync-failed';
 import InviteEmail, {
     inviteEmailMeta,
 } from '@libs/common/email/templates/invite';
 import KodyRulesEmail, {
     kodyRulesEmailMeta,
 } from '@libs/common/email/templates/kody-rules';
+import MemberRemovedEmail, {
+    memberRemovedEmailMeta,
+} from '@libs/common/email/templates/member-removed';
+import ReviewFailedEmail, {
+    reviewFailedEmailMeta,
+} from '@libs/common/email/templates/review-failed';
 import WeeklyRecapEmail, {
     weeklyRecapEmailMeta,
 } from '@libs/common/email/templates/weekly-recap';
@@ -144,6 +153,54 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
                 criticalIssues: (props.criticalIssues as number) ?? 0,
             }),
             react: WeeklyRecapEmail(props as any),
+        };
+    },
+
+    [NotificationEvent.ORG_MEMBER_REMOVED]: (metadata) => {
+        const removed = (metadata.removedUser as
+            | { name?: string; email?: string }
+            | undefined) ?? {};
+        const removedUserName =
+            removed.name ?? removed.email ?? 'there';
+        const organizationName = metadata.organizationName as string;
+        const removedBy = metadata.removedBy as string;
+        return {
+            ...memberRemovedEmailMeta({ organizationName }),
+            react: MemberRemovedEmail({
+                removedUserName,
+                organizationName,
+                removedBy,
+            }),
+        };
+    },
+
+    [NotificationEvent.REVIEW_FAILED]: (metadata) => {
+        const prUrl = metadata.prUrl as string;
+        const repoName = metadata.repoName as string;
+        const reason = metadata.reason as string;
+        const correlationId = metadata.correlationId as string;
+        return {
+            ...reviewFailedEmailMeta({ repoName }),
+            react: ReviewFailedEmail({
+                prUrl,
+                repoName,
+                reason,
+                correlationId,
+            }),
+        };
+    },
+
+    [NotificationEvent.IDE_RULES_SYNC_FAILED]: (metadata) => {
+        const repoName = metadata.repoName as string;
+        const reason = metadata.reason as string;
+        const correlationId = metadata.correlationId as string;
+        return {
+            ...ideRulesSyncFailedEmailMeta({ repoName }),
+            react: IdeRulesSyncFailedEmail({
+                repoName,
+                reason,
+                correlationId,
+            }),
         };
     },
 };
