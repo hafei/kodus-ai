@@ -19,8 +19,20 @@ on:
         # selfhosted-build-push.yml). The legacy `v*` pattern only ever
         # matched `v0.0.1`, so the cross-repo sync never fired and
         # kodus-installer/.env.example drifted hundreds of lines.
+        #
+        # Heads up: this `push: tags` trigger does NOT fire when the tag
+        # is created by GITHUB_TOKEN inside another workflow run (Actions
+        # cascade-prevention). `selfhosted-build-push.yml` therefore
+        # invokes this workflow explicitly via `workflow_call` — same
+        # pattern as cli-release / changelog-publish.
         tags:
             - 'selfhosted-*'
+    workflow_call:
+        inputs:
+            tag:
+                description: "Self-hosted release tag this sync is associated with (e.g. selfhosted-2.1.13). Used in the PR body."
+                required: false
+                type: string
     workflow_dispatch: # allow manual re-run if a PR was closed without merge
 
 jobs:
