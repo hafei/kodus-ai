@@ -415,6 +415,22 @@ jobs:
             tag: ${{ needs.create-release.outputs.release_tag }}
         secrets: inherit
 
+    env-sync-installer:
+        name: Sync .env.example to kodus-installer
+        needs:
+            - create-release
+            - build-and-push
+        if: needs.build-and-push.result == 'success'
+        # Same cascading-events restriction as cli-release / changelog-
+        # publish: the selfhosted-X.Y.Z tag pushed by GITHUB_TOKEN above
+        # would not fire env-sync-release.yml's `push: tags` trigger.
+        # Invoke it explicitly so .env.example + schema-vars.sh in
+        # kodus-installer get regenerated for every self-hosted release.
+        uses: ./.github/workflows/env-sync-release.yml
+        with:
+            tag: ${{ needs.create-release.outputs.release_tag }}
+        secrets: inherit
+
     notify-discord-failure:
         name: Notify Discord (failure only)
         needs:
