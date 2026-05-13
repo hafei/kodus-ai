@@ -438,18 +438,20 @@ jobs:
             - build-and-push
         if: needs.build-and-push.result == 'success'
         runs-on: ubuntu-latest
-        # GITHUB_TOKEN only scopes to this repo, so a separate PAT is needed
-        # to fire repository_dispatch into kodustech/kodus-installer. The
-        # PAT must have `repo` scope on the installer (or fine-grained:
-        # Contents=read + Actions=write).
+        # GITHUB_TOKEN only scopes to this repo, so a cross-repo PAT is
+        # needed to fire repository_dispatch into kodustech/kodus-installer.
+        # We reuse CROSS_REPO_PAT (already used by env-sync-release.yml to
+        # checkout + push + open PRs in the installer). It needs
+        # `Contents: Read and write` on kodus-installer — same permission
+        # env-sync already requires, so no new secret to manage.
         steps:
             - name: Fire repository_dispatch into kodus-installer
               env:
-                  GH_TOKEN: ${{ secrets.KODUS_INSTALLER_DISPATCH_TOKEN }}
+                  GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
                   RELEASE_TAG: ${{ needs.create-release.outputs.release_tag }}
               run: |
                   if [ -z "$GH_TOKEN" ]; then
-                      echo "::warning::KODUS_INSTALLER_DISPATCH_TOKEN is not set — skipping E2E dispatch."
+                      echo "::warning::CROSS_REPO_PAT is not set — skipping E2E dispatch."
                       exit 0
                   fi
                   gh api \
