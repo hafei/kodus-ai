@@ -888,9 +888,17 @@ export abstract class BaseCodeReviewAgentProvider {
                 // Observability is best-effort
             }
 
-            // Map findings to CodeSuggestion format
-            const validFiles = new Set(
-                input.changedFiles.map((f) => normalizeRepoPath(f.filename)),
+            // Map findings to CodeSuggestion format.
+            // The map keys on the normalized path so we tolerate LLM-emitted
+            // variations (missing leading slash, backslashes), but the value
+            // preserves the provider's original filename so downstream calls
+            // (e.g. Azure threadContext.filePath) get the exact path the
+            // provider gave us.
+            const validFilesByNormalized = new Map<string, string>(
+                input.changedFiles.map((f) => [
+                    normalizeRepoPath(f.filename),
+                    f.filename,
+                ]),
             );
             const isKodyRules = this.getCategoryLabel() === 'kody_rules';
             const kodyRulesByUuid = new Map(
@@ -935,7 +943,7 @@ export abstract class BaseCodeReviewAgentProvider {
                         return false;
                     }
                     // PR-level kody_rules omit relevantFile by design.
-                    const kodyRulePathMatch = !s.relevantFile || validFiles.has(normalizeRepoPath(s.relevantFile));
+                    const kodyRulePathMatch = !s.relevantFile || validFilesByNormalized.has(normalizeRepoPath(s.relevantFile));
                     if (!kodyRulePathMatch) {
                         this.agentLogger.warn({
                             message: `@@PATH_MISMATCH@@ Dropping kody_rules suggestion — relevantFile not in changedFiles after normalization`,
@@ -944,7 +952,7 @@ export abstract class BaseCodeReviewAgentProvider {
                                 prNumber: input.prNumber,
                                 relevantFile: s.relevantFile,
                                 normalizedRelevantFile: normalizeRepoPath(s.relevantFile),
-                                changedFiles: [...validFiles],
+                                changedFiles: [...validFilesByNormalized.values()],
                                 suggestionPreview: (s.oneSentenceSummary || s.suggestionContent || '').slice(0, 140),
                             },
                         });
@@ -952,7 +960,7 @@ export abstract class BaseCodeReviewAgentProvider {
                     return kodyRulePathMatch;
                 }
 
-                const pathMatch = !!s.relevantFile && validFiles.has(normalizeRepoPath(s.relevantFile));
+                const pathMatch = !!s.relevantFile && validFilesByNormalized.has(normalizeRepoPath(s.relevantFile));
                 if (!pathMatch && s.relevantFile) {
                     this.agentLogger.warn({
                         message: `@@PATH_MISMATCH@@ Dropping suggestion — relevantFile not in changedFiles after normalization`,
@@ -961,7 +969,7 @@ export abstract class BaseCodeReviewAgentProvider {
                             prNumber: input.prNumber,
                             relevantFile: s.relevantFile,
                             normalizedRelevantFile: normalizeRepoPath(s.relevantFile),
-                            changedFiles: [...validFiles],
+                            changedFiles: [...validFilesByNormalized.values()],
                             severity: s.severity,
                             suggestionPreview: (s.oneSentenceSummary || s.suggestionContent || '').slice(0, 140),
                         },
@@ -975,8 +983,18 @@ export abstract class BaseCodeReviewAgentProvider {
                     ? kodyRulesByUuid.get(s.ruleUuid)
                     : undefined;
 
+                // Replace the LLM-emitted relevantFile with the provider's
+                // original filename so downstream comment posting uses the
+                // exact path shape the provider expects (e.g. Azure requires
+                // the leading slash it returns from its API).
+                const canonicalRelevantFile = s.relevantFile
+                    ? validFilesByNormalized.get(
+                          normalizeRepoPath(s.relevantFile),
+                      ) ?? s.relevantFile
+                    : s.relevantFile;
+
                 return {
-                    relevantFile: s.relevantFile,
+                    relevantFile: canonicalRelevantFile,
                     language: s.language || '',
                     suggestionContent: s.suggestionContent,
                     existingCode: s.existingCode || '',
