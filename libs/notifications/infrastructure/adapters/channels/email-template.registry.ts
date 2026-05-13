@@ -1,6 +1,9 @@
 import * as React from 'react';
 
 import { EmailFrom } from '@libs/common/email/from';
+import ByokErrorsThresholdEmail, {
+    byokErrorsThresholdEmailMeta,
+} from '@libs/common/email/templates/byok-errors-threshold';
 import ConfirmationEmail, {
     confirmationEmailMeta,
 } from '@libs/common/email/templates/confirmation';
@@ -10,12 +13,30 @@ import DomainVerificationEmail, {
 import ForgotPasswordEmail, {
     forgotPasswordEmailMeta,
 } from '@libs/common/email/templates/forgot-password';
+import IdeRulesSyncFailedEmail, {
+    ideRulesSyncFailedEmailMeta,
+} from '@libs/common/email/templates/ide-rules-sync-failed';
 import InviteEmail, {
     inviteEmailMeta,
 } from '@libs/common/email/templates/invite';
 import KodyRulesEmail, {
     kodyRulesEmailMeta,
 } from '@libs/common/email/templates/kody-rules';
+import MemberRemovedEmail, {
+    memberRemovedEmailMeta,
+} from '@libs/common/email/templates/member-removed';
+import PaymentFailedEmail, {
+    paymentFailedEmailMeta,
+} from '@libs/common/email/templates/payment-failed';
+import ReviewFailedEmail, {
+    reviewFailedEmailMeta,
+} from '@libs/common/email/templates/review-failed';
+import RuleFileReferencesInvalidEmail, {
+    ruleFileReferencesInvalidEmailMeta,
+} from '@libs/common/email/templates/rule-file-references-invalid';
+import TrialExpiringEmail, {
+    trialExpiringEmailMeta,
+} from '@libs/common/email/templates/trial-expiring';
 import WeeklyRecapEmail, {
     weeklyRecapEmailMeta,
 } from '@libs/common/email/templates/weekly-recap';
@@ -144,6 +165,158 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
                 criticalIssues: (props.criticalIssues as number) ?? 0,
             }),
             react: WeeklyRecapEmail(props as any),
+        };
+    },
+
+    [NotificationEvent.ORG_MEMBER_REMOVED]: (metadata) => {
+        const removed = (metadata.removedUser as
+            | { name?: string; email?: string }
+            | undefined) ?? {};
+        const removedUserName =
+            removed.name ?? removed.email ?? 'there';
+        const organizationName = metadata.organizationName as string;
+        const removedBy = metadata.removedBy as string;
+        return {
+            ...memberRemovedEmailMeta({ organizationName }),
+            react: MemberRemovedEmail({
+                removedUserName,
+                organizationName,
+                removedBy,
+            }),
+        };
+    },
+
+    [NotificationEvent.REVIEW_FAILED]: (metadata) => {
+        const prUrl = metadata.prUrl as string;
+        const repoName = metadata.repoName as string;
+        const reason = metadata.reason as string;
+        const correlationId = metadata.correlationId as string;
+        return {
+            ...reviewFailedEmailMeta({ repoName }),
+            react: ReviewFailedEmail({
+                prUrl,
+                repoName,
+                reason,
+                correlationId,
+            }),
+        };
+    },
+
+    [NotificationEvent.IDE_RULES_SYNC_FAILED]: (metadata) => {
+        const repoName = metadata.repoName as string;
+        const reason = metadata.reason as string;
+        const correlationId = metadata.correlationId as string;
+        return {
+            ...ideRulesSyncFailedEmailMeta({ repoName }),
+            react: IdeRulesSyncFailedEmail({
+                repoName,
+                reason,
+                correlationId,
+            }),
+        };
+    },
+
+    [NotificationEvent.BILLING_PAYMENT_FAILED]: (metadata) => {
+        const amount = (metadata.amount as number | undefined) ?? 0;
+        const currency =
+            (metadata.currency as string | undefined)?.toUpperCase() ?? '';
+        const failureReason =
+            (metadata.failureReason as string) ?? 'Unknown error';
+        const nextRetryAt = metadata.nextRetryAt as string | undefined;
+        const updatePaymentUrl = metadata.updatePaymentUrl as
+            | string
+            | undefined;
+        const formattedAmount = currency
+            ? `${currency} ${(amount / 100).toFixed(2)}`
+            : `${(amount / 100).toFixed(2)}`;
+        const nextRetryAtLabel = nextRetryAt
+            ? new Date(nextRetryAt).toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+              })
+            : undefined;
+        return {
+            ...paymentFailedEmailMeta,
+            react: PaymentFailedEmail({
+                formattedAmount,
+                failureReason,
+                nextRetryAtLabel,
+                updatePaymentUrl,
+            }),
+        };
+    },
+
+    [NotificationEvent.BILLING_TRIAL_EXPIRING]: (metadata) => {
+        const daysRemaining =
+            (metadata.daysRemaining as number | undefined) ?? 0;
+        const trialEndsAt = metadata.trialEndsAt as string | undefined;
+        const upgradeUrl = metadata.upgradeUrl as string | undefined;
+        const trialEndsAtLabel = trialEndsAt
+            ? new Date(trialEndsAt).toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+              })
+            : 'soon';
+        return {
+            ...trialExpiringEmailMeta({ daysRemaining }),
+            react: TrialExpiringEmail({
+                daysRemaining,
+                trialEndsAtLabel,
+                upgradeUrl,
+            }),
+        };
+    },
+
+    [NotificationEvent.BYOK_LLM_ERRORS_THRESHOLD]: (metadata) => {
+        const provider = (metadata.provider as string) ?? 'BYOK';
+        const errorCount = (metadata.errorCount as number | undefined) ?? 0;
+        const windowStart = metadata.windowStart as string | undefined;
+        const windowEnd = metadata.windowEnd as string | undefined;
+        const sampleError =
+            (metadata.sampleError as string) ?? 'see logs for details';
+        const labelFormat = (iso?: string) =>
+            iso
+                ? new Date(iso).toLocaleString('en-US', {
+                      timeZone: 'UTC',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                  }) + ' UTC'
+                : 'n/a';
+        return {
+            ...byokErrorsThresholdEmailMeta({ provider }),
+            react: ByokErrorsThresholdEmail({
+                provider,
+                errorCount,
+                windowStartLabel: labelFormat(windowStart),
+                windowEndLabel: labelFormat(windowEnd),
+                sampleError,
+            }),
+        };
+    },
+
+    [NotificationEvent.RULE_FILE_REFERENCES_INVALID]: (metadata) => {
+        const repoName = (metadata.repoName as string) ?? '';
+        const issues =
+            (metadata.issues as Array<{
+                ruleId: string;
+                ruleName: string;
+                filePath: string;
+                reason: string;
+            }>) ?? [];
+        const invalidCount =
+            (metadata.invalidCount as number | undefined) ?? issues.length;
+        return {
+            ...ruleFileReferencesInvalidEmailMeta({ repoName, invalidCount }),
+            react: RuleFileReferencesInvalidEmail({
+                repoName,
+                invalidCount,
+                issues: issues.map(({ ruleName, filePath, reason }) => ({
+                    ruleName,
+                    filePath,
+                    reason,
+                })),
+            }),
         };
     },
 };

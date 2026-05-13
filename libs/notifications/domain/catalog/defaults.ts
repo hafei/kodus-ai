@@ -95,6 +95,129 @@ export const EVENT_DEFAULTS: Readonly<
         defaultChannels: new Set([NotificationChannel.EMAIL]),
         icon: 'info',
     },
+
+    // ── Organization / Team ────────────────────────────────────
+
+    [NotificationEvent.ORG_MEMBER_REMOVED]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'team',
+        label: 'Member Removed',
+        // Default channels cover both audiences; per-recipient channel
+        // overrides (set by the call site) restrict the removed user to
+        // email and the surviving owners to in-app.
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'zap',
+    },
+    [NotificationEvent.ORG_ROLE_CHANGED]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'team',
+        label: 'Role Changed',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'zap',
+    },
+
+    // ── IDE rule sync ──────────────────────────────────────────
+
+    [NotificationEvent.IDE_RULES_SYNCED]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'kody_rules',
+        label: 'IDE Rules Synced',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'bell',
+    },
+    [NotificationEvent.IDE_RULES_SYNC_FAILED]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'kody_rules',
+        label: 'IDE Rule Sync Failed',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'shield-alert',
+    },
+
+    // ── Code review ────────────────────────────────────────────
+
+    [NotificationEvent.REVIEW_AUTO_APPROVED]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'review',
+        label: 'Pull Request Auto-Approved',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'bell',
+    },
+    [NotificationEvent.REVIEW_FAILED]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'review',
+        label: 'Code Review Failed',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'shield-alert',
+    },
+    [NotificationEvent.REVIEW_SKIPPED_NO_LICENSE]: {
+        criticality: Criticality.INFORMATIONAL,
+        category: 'review',
+        label: 'Review Skipped (No License)',
+        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        icon: 'info',
+    },
+
+    // ── Billing ────────────────────────────────────────────────
+
+    [NotificationEvent.BILLING_PAYMENT_FAILED]: {
+        criticality: Criticality.CRITICAL,
+        category: 'billing',
+        label: 'Payment Failed',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'credit-card',
+        pageSeverity: true,
+        actionLabel: 'Update payment',
+    },
+    [NotificationEvent.BILLING_TRIAL_EXPIRING]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'billing',
+        label: 'Trial Expiring',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'credit-card',
+        actionLabel: 'Upgrade plan',
+    },
+
+    // ── BYOK ───────────────────────────────────────────────────
+
+    [NotificationEvent.BYOK_LLM_ERRORS_THRESHOLD]: {
+        criticality: Criticality.CRITICAL,
+        category: 'byok',
+        label: 'BYOK LLM Errors Exceeded Threshold',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'shield-alert',
+        pageSeverity: true,
+    },
+
+    // ── Kody Rules (file reference validation) ────────────────
+
+    [NotificationEvent.RULE_FILE_REFERENCES_INVALID]: {
+        criticality: Criticality.TRANSACTIONAL,
+        category: 'kody_rules',
+        label: 'Rule File References Invalid',
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
+        icon: 'shield-alert',
+    },
 };
 
 /** All event categories, derived from the catalog. */
@@ -131,6 +254,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
     sso: 'SSO',
     cockpit: 'Cockpit',
     billing: 'Billing',
+    review: 'Code Review',
+    byok: 'BYOK',
 };
 
 /**

@@ -10,6 +10,9 @@ import { CreatePrLevelCommentsStage } from './stages/create-pr-level-comments.st
 import { FetchChangedFilesStage } from './stages/fetch-changed-files.stage';
 import { FileContextGateStage } from './stages/file-context-gate.stage';
 import { UpdateCommentsAndGenerateSummaryStage } from './stages/finish-comments.stage';
+import { NotificationModule } from '@libs/notifications/modules/notification.module';
+import { UserCoreModule } from '@libs/identity/modules/user-core.module';
+
 import { RequestChangesOrApproveStage } from './stages/finish-process-review.stage';
 import { GatherDocumentationContextStage } from './stages/gather-documentation-context.stage';
 import { InitialCommentStage } from './stages/initial-comment.stage';
@@ -99,6 +102,8 @@ import { ReviewOrchestratorService } from '../infrastructure/agents/review-orche
         WorkflowCoreModule,
         DryRunCoreModule,
         SandboxModule,
+        NotificationModule,
+        UserCoreModule,
     ],
     providers: [
         // Strategy
