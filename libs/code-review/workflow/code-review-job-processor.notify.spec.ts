@@ -39,6 +39,8 @@ describe('CodeReviewJobProcessorService — review.failed emit', () => {
             { tryEnter: jest.fn(), deferJob: jest.fn() } as any,
             notificationService as unknown as NotificationService,
             prAuthorResolver as unknown as PrAuthorRecipientResolver,
+            // rateLimitGate — not used by notifyReviewFailed
+            { check: jest.fn().mockResolvedValue(undefined) } as any,
         );
     });
 

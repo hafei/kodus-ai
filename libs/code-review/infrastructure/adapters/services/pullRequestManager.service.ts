@@ -15,8 +15,17 @@ import { PullRequestAuthor } from '@libs/platform/domain/platformIntegrations/ty
 export class PullRequestHandlerService implements IPullRequestManagerService {
     private readonly logger = createLogger(PullRequestHandlerService.name);
 
-    /** Limite de concorrência para requisições de conteúdo de arquivos à API do GitHub */
-    private readonly FILE_CONTENT_CONCURRENCY = 100;
+    /**
+     * Limite de concorrência para requisições de conteúdo de arquivos.
+     *
+     * Foi reduzido de 100 para 30 após incidente em que uma única
+     * instalação saturou o bucket horário da GitHub App (5k-15k req/h)
+     * e bloqueou code-review + webhook por ~1h em todos os jobs daquela
+     * org. Com prefetch=20 por worker e 15 workers, 30 já permite até
+     * 9000 chamadas simultâneas no cluster — qualquer valor maior só
+     * acelera a saturação sem ganho proporcional de throughput.
+     */
+    private readonly FILE_CONTENT_CONCURRENCY = 30;
 
     constructor(
         private readonly codeManagementService: CodeManagementService,
@@ -71,17 +80,27 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                         },
                     );
             } else {
-                // Retrieve all files changed in the pull request
+                // Retrieve all files changed in the pull request. Pass
+                // `headSha` so the GitHub adapter can memoize by (PR, SHA)
+                // — `getChangedFilesMetadata` will hit the same key in the
+                // same job, halving the GitHub fan-out.
                 changedFiles =
                     await this.codeManagementService.getFilesByPullRequestId({
                         organizationAndTeamData,
                         repository,
                         prNumber: pullRequest?.number,
+                        headSha: pullRequest?.head?.sha,
                     });
             }
 
-            // Filter files based on ignorePaths and retrieve their content
+            // Filter files based on ignorePaths and retrieve their content.
+            // Also skip `removed` files: they don't exist in the head ref,
+            // so `getRepositoryContentFile` would 404 + fall back to base
+            // ref — wasting two GitHub requests for content we'll never
+            // review. Real impact: ~10-20% of /contents calls on PRs with
+            // file deletions.
             const filteredFiles = changedFiles?.filter((file) => {
+                if (file.status === 'removed') return false;
                 return !isFileMatchingGlob(file.filename, ignorePaths);
             });
 
@@ -221,6 +240,10 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                         organizationAndTeamData,
                         repository,
                         prNumber: pullRequest?.number,
+                        // Memoize by (PR, SHA) — CommentManagerService hits
+                        // the same call during comment threading, so this
+                        // dedups the second fetch in the same pipeline.
+                        headSha: pullRequest?.head?.sha,
                     },
                 )) as Commit[];
 
@@ -294,6 +317,11 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                         organizationAndTeamData,
                         repository,
                         prNumber: pullRequest?.number,
+                        // Memoization key (see GithubService.getFilesByPullRequestId).
+                        // The same call lands in `getChangedFiles` earlier in
+                        // the pipeline; same (PR, SHA) → cache hit, no extra
+                        // GitHub round-trip on this second hop.
+                        headSha: pullRequest?.head?.sha,
                     });
             }
 

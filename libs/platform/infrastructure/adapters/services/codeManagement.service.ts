@@ -419,6 +419,11 @@ export class CodeManagementService implements ICodeManagementService {
             organizationAndTeamData: OrganizationAndTeamData;
             repository: { name: string; id: string };
             prNumber: number;
+            // Optional — when present, providers that implement caching
+            // (currently GitHub) key their cache entry by it. Other
+            // providers ignore it. Should be the head sha of the PR ref
+            // so the cache invalidates when new commits are pushed.
+            headSha?: string;
         },
         type?: PlatformType,
     ) {
@@ -540,6 +545,8 @@ export class CodeManagementService implements ICodeManagementService {
             organizationAndTeamData: OrganizationAndTeamData;
             repository: { name: string; id: string };
             prNumber: number;
+            // Same pattern as getFilesByPullRequestId — optional cache key.
+            headSha?: string;
         },
         type?: PlatformType,
     ) {

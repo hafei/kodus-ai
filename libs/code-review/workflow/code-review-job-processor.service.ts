@@ -18,6 +18,13 @@ import { NotificationRecipient } from '@libs/notifications/domain/recipient';
 import { Role } from '@libs/identity/domain/permissions/enums/permissions.enum';
 import { ByokConcurrencyGateService } from './byok-concurrency-gate.service';
 import { DistributedLock } from '@libs/core/workflow/infrastructure/distributed-lock.service';
+import { raceWithAbortSignal } from '@libs/core/workflow/infrastructure/abort-signal-race';
+import {
+    IRateLimitGateService,
+    RATE_LIMIT_GATE_SERVICE_TOKEN,
+} from '@libs/core/workflow/domain/contracts/rate-limit-gate.service.contract';
+import { isRateLimitError } from '@libs/core/workflow/domain/errors/rate-limit.error';
+import { classifyGitHubError } from '@libs/core/workflow/domain/errors/classify-github-error';
 
 @Injectable()
 export class CodeReviewJobProcessorService implements IJobProcessorService {
@@ -30,6 +37,8 @@ export class CodeReviewJobProcessorService implements IJobProcessorService {
         private readonly byokConcurrencyGateService: ByokConcurrencyGateService,
         private readonly notificationService: NotificationService,
         private readonly prAuthorRecipientResolver: PrAuthorRecipientResolver,
+        @Inject(RATE_LIMIT_GATE_SERVICE_TOKEN)
+        private readonly rateLimitGate: IRateLimitGateService,
         @Optional()
         private readonly metricsCollector?: MetricsCollectorService,
     ) {}
@@ -76,6 +85,18 @@ export class CodeReviewJobProcessorService implements IJobProcessorService {
                 throw new Error('Invalid payload: missing required fields');
             }
 
+            // Short-circuit when the installation's GitHub bucket is
+            // already below the safety threshold. The gate throws
+            // RateLimitError(resetAt), and the consumer error handler
+            // republishes with a delay aligned to the bucket reset
+            // (instead of burning the full router timeout watching
+            // octokit sleep retry-after). Cheap call: /rate_limit does
+            // not consume quota.
+            await this.rateLimitGate.check(
+                organizationAndTeamData,
+                platformType,
+            );
+
             const admission =
                 await this.byokConcurrencyGateService.tryEnter(job);
 
@@ -94,16 +115,27 @@ export class CodeReviewJobProcessorService implements IJobProcessorService {
                 metadata: this.removeByokConcurrencyGateMetadata(job.metadata),
             });
 
-            await this.runCodeReviewAutomationUseCase.execute(
-                {
-                    codeManagementPayload,
-                    event,
-                    platformType,
-                    correlationId,
-                    organizationAndTeamData,
-                    teamAutomationId,
-                    workflowJobId: jobId,
-                },
+            // Race the use-case against the parent's AbortSignal. The use
+            // case already receives `signal` (PR #1 wired it down to the
+            // LLM agent loop), but any link of the chain that does NOT
+            // honor it — an octokit sleep, a downstream service stuck on
+            // retry-after, a synchronous CPU section — keeps the promise
+            // pending past the 1h45min router timeout, holding the worker
+            // slot zombie. The race guarantees the processor unblocks
+            // when the signal fires regardless of how deep the stall is.
+            await raceWithAbortSignal(
+                this.runCodeReviewAutomationUseCase.execute(
+                    {
+                        codeManagementPayload,
+                        event,
+                        platformType,
+                        correlationId,
+                        organizationAndTeamData,
+                        teamAutomationId,
+                        workflowJobId: jobId,
+                    },
+                    signal,
+                ),
                 signal,
             );
 
@@ -115,13 +147,21 @@ export class CodeReviewJobProcessorService implements IJobProcessorService {
                 durationMs,
                 { status: 'success' },
             );
-        } catch (error) {
+        } catch (rawError) {
+            // Wrap octokit 403/429 in RateLimitError so the consumer
+            // error handler can apply the smart delay. If the error
+            // wasn't a GitHub rate-limit, classifyGitHubError returns
+            // it unchanged. We also defer-re-throw the classified
+            // version so the consumer (RabbitMQErrorHandler) sees the
+            // typed error, not the raw octokit shape.
+            const error = classifyGitHubError(rawError) as Error;
+
             if (error.name === 'WorkflowPausedError') {
                 await this.jobRepository.update(jobId, {
                     status: JobStatus.WAITING_FOR_EVENT,
                     waitingForEvent: {
-                        eventType: error.eventType,
-                        eventKey: error.eventKey,
+                        eventType: (error as any).eventType,
+                        eventKey: (error as any).eventKey,
                     },
                 });
                 return;
@@ -134,7 +174,13 @@ export class CodeReviewJobProcessorService implements IJobProcessorService {
             });
 
             await this.handleFailure(jobId, error);
-            await this.notifyReviewFailed(job, error, correlationId);
+            // Don't spam the author with a failure notification when we
+            // know the job is going to retry on its own (rate-limit will
+            // resolve when the GitHub bucket resets). They'd get one
+            // email per retry otherwise.
+            if (!isRateLimitError(error)) {
+                await this.notifyReviewFailed(job, error, correlationId);
+            }
             throw error;
         } finally {
             if (acquiredLock && !acquiredLock.isReleased()) {
@@ -163,9 +209,18 @@ export class CodeReviewJobProcessorService implements IJobProcessorService {
             errorType: error.name || 'UnknownError',
         });
 
+        // Surface RATE_LIMITED in the job row so the dashboard / DB
+        // queries can distinguish "stuck on GitHub quota, will retry"
+        // from a genuine permanent failure. The consumer error handler
+        // computes the smart delay from the error object itself; this
+        // classification on the job row is purely informational.
+        const classification = isRateLimitError(error)
+            ? ErrorClassification.RATE_LIMITED
+            : ErrorClassification.PERMANENT;
+
         await this.jobRepository.update(jobId, {
             status: JobStatus.FAILED,
-            errorClassification: ErrorClassification.PERMANENT,
+            errorClassification: classification,
             lastError: error.message,
             failedAt: new Date(),
         });
