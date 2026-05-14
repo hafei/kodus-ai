@@ -4401,41 +4401,65 @@ This is an experimental feature that generates committable changes. Review the d
                         },
                     });
                     if (pullRequest) {
-                        for (const { file } of batch) {
-                            try {
-                                const fallback =
-                                    await this.getRepositoryContentFile({
-                                        organizationAndTeamData,
-                                        repository,
-                                        file,
-                                        pullRequest,
-                                    });
-                                if (fallback)
-                                    result.set(file.filename, fallback);
-                            } catch {
-                                /* skip */
-                            }
-                        }
+                        // Concurrent fallback with pLimit — sequential
+                        // would 50× a single GraphQL hiccup into a
+                        // 15s+ stall on the FetchChangedFiles stage.
+                        // Same concurrency cap as the original
+                        // pullRequestManager `enrichFilesWithContent`.
+                        const limit = pLimit(30);
+                        await Promise.all(
+                            batch.map(({ file }) =>
+                                limit(async () => {
+                                    try {
+                                        const fallback =
+                                            await this.getRepositoryContentFile(
+                                                {
+                                                    organizationAndTeamData,
+                                                    repository,
+                                                    file,
+                                                    pullRequest,
+                                                },
+                                            );
+                                        if (fallback)
+                                            result.set(
+                                                file.filename,
+                                                fallback,
+                                            );
+                                    } catch {
+                                        /* skip */
+                                    }
+                                }),
+                            ),
+                        );
                     }
                 }
             }
         }
 
-        // 4. Files without usable blob sha — REST fallback only
+        // 4. Files without usable blob sha — REST fallback only.
+        //    Concurrent with pLimit, same rationale as the in-batch
+        //    catch above: avoid serializing N round-trips when GraphQL
+        //    isn't usable for these entries.
         if (pullRequest && restOnly.length > 0) {
-            for (const { file } of restOnly) {
-                try {
-                    const fallback = await this.getRepositoryContentFile({
-                        organizationAndTeamData,
-                        repository,
-                        file,
-                        pullRequest,
-                    });
-                    if (fallback) result.set(file.filename, fallback);
-                } catch {
-                    /* skip */
-                }
-            }
+            const limit = pLimit(30);
+            await Promise.all(
+                restOnly.map(({ file }) =>
+                    limit(async () => {
+                        try {
+                            const fallback =
+                                await this.getRepositoryContentFile({
+                                    organizationAndTeamData,
+                                    repository,
+                                    file,
+                                    pullRequest,
+                                });
+                            if (fallback) result.set(file.filename, fallback);
+                        } catch {
+                            /* skip */
+                        }
+                    }),
+                ),
+            );
         }
 
         return result;
