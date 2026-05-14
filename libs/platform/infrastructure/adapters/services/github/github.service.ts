@@ -4152,16 +4152,18 @@ This is an experimental feature that generates committable changes. Review the d
                 })) as any;
 
                 if (cacheKey && lines) {
-                    // 15 min TTL. The cache key already contains the
-                    // blob sha, so stale-on-content-change is impossible
-                    // — a TTL longer than `getFileWithContent`'s 5 min
-                    // is safe and gives more cross-retry hits on the
-                    // same job (router timeout retries can land 30s+
-                    // apart with backoff).
+                    // 24h TTL. The cache key includes the blob sha, and
+                    // a blob's content is immutable in Git by design —
+                    // the same sha always resolves to the same bytes
+                    // forever — so there is no stale-cache risk. Long
+                    // TTL maximizes cross-PR hits when reviews touch
+                    // overlapping unchanged files (cross-file context,
+                    // documentation manifests, retried/duplicated
+                    // webhooks, manual reruns).
                     await this.cacheService.addToCache(
                         cacheKey,
                         lines,
-                        15 * 60 * 1000,
+                        24 * 60 * 60 * 1000,
                     );
                 }
                 return lines;
@@ -4204,6 +4206,239 @@ This is an experimental feature that generates committable changes. Review the d
                 metadata: { ...params },
             });
         }
+    }
+
+    // Fetch many file contents in a single GraphQL request, keyed by blob
+    // SHA. Each PR file from `pulls.listFiles` already carries its blob
+    // sha, so we can resolve N files in 1 GraphQL point instead of N REST
+    // points (~5000/h on the installation bucket). Cache key shape is
+    // identical to `getRepositoryContentFile`, so warm entries from
+    // either path are reused.
+    //
+    // Falls back to per-file REST for: missing/invalid sha, binary
+    // blobs, blobs over ~1 MB (GraphQL returns text=null in both cases),
+    // and any GraphQL-side error (whole-batch fallback).
+    public async getRepositoryContentBatch(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { name: string; id: any };
+        files: Array<{ filename: string; sha?: string; [key: string]: any }>;
+        pullRequest?: any;
+    }): Promise<Map<string, any>> {
+        const { organizationAndTeamData, repository, files, pullRequest } =
+            params;
+        const result = new Map<string, any>();
+
+        if (!files?.length) return result;
+
+        const githubAuthDetail = await this.getGithubAuthDetails(
+            organizationAndTeamData,
+        );
+        if (!githubAuthDetail) return result;
+
+        const makeCacheKey = (file: { filename: string; sha?: string }) =>
+            file?.sha
+                ? `gh:contents:${githubAuthDetail?.org}/${repository.name}:${file.sha}:${file.filename}`
+                : undefined;
+
+        // 1. Cache lookup — collect hits, queue misses
+        const misses: Array<{ file: any; cacheKey?: string }> = [];
+        for (const file of files) {
+            const cacheKey = makeCacheKey(file);
+            if (cacheKey) {
+                const cached =
+                    await this.cacheService.getFromCache<any>(cacheKey);
+                if (cached) {
+                    result.set(file.filename, cached);
+                    continue;
+                }
+            }
+            misses.push({ file, cacheKey });
+        }
+
+        if (misses.length === 0) return result;
+
+        // 2. Split: batchable (valid 40-hex blob sha) vs REST-only
+        const SHA_RE = /^[a-f0-9]{40}$/i;
+        const batchable: Array<{ file: any; cacheKey?: string }> = [];
+        const restOnly: Array<{ file: any; cacheKey?: string }> = [];
+        for (const m of misses) {
+            if (SHA_RE.test(m.file?.sha || '')) batchable.push(m);
+            else restOnly.push(m);
+        }
+
+        // 3. GraphQL batch fetch (size 50 — conservative; GitHub accepts
+        //    up to ~100 aliases but 50 keeps payloads small and limits
+        //    blast radius on transient errors)
+        if (batchable.length > 0) {
+            const graphqlClient =
+                await this.instanceGraphQL(organizationAndTeamData);
+            const BATCH_SIZE = 50;
+
+            for (let i = 0; i < batchable.length; i += BATCH_SIZE) {
+                const batch = batchable.slice(i, i + BATCH_SIZE);
+                const varDefs = ['$owner: String!', '$repo: String!'];
+                const fields: string[] = [];
+                const variables: Record<string, any> = {
+                    owner: githubAuthDetail.org,
+                    repo: repository.name,
+                };
+
+                batch.forEach(({ file }, idx) => {
+                    varDefs.push(`$sha${idx}: GitObjectID!`);
+                    fields.push(
+                        `f${idx}: object(oid: $sha${idx}) { ... on Blob { text isBinary byteSize } }`,
+                    );
+                    variables[`sha${idx}`] = file.sha;
+                });
+
+                const query = `
+                    query(${varDefs.join(', ')}) {
+                        repository(owner: $owner, name: $repo) {
+                            ${fields.join('\n                            ')}
+                        }
+                        rateLimit {
+                            cost
+                            remaining
+                            limit
+                            resetAt
+                        }
+                    }
+                `;
+
+                try {
+                    const response: any = await graphqlClient(
+                        query,
+                        variables,
+                    );
+                    const repoNode = response?.repository;
+
+                    // Temporary instrumentation: log the actual GraphQL
+                    // cost reported by GitHub for this batch. Distinct
+                    // tag for easy `docker logs ... | grep` lookup.
+                    // Remove once we've validated the cost model.
+                    const rl = response?.rateLimit;
+                    if (rl) {
+                        this.logger.log({
+                            message: `[GRAPHQL_BATCH_COST] files=${batch.length} cost=${rl.cost} remaining=${rl.remaining} limit=${rl.limit} resetAt=${rl.resetAt}`,
+                            context: GithubService.name,
+                            metadata: {
+                                instrumentation:
+                                    'graphql_batch_content_cost',
+                                batchSize: batch.length,
+                                cost: rl.cost,
+                                remaining: rl.remaining,
+                                limit: rl.limit,
+                                resetAt: rl.resetAt,
+                                organizationAndTeamData,
+                                repositoryName: repository?.name,
+                            },
+                        });
+                    }
+
+                    for (let j = 0; j < batch.length; j++) {
+                        const { file, cacheKey } = batch[j];
+                        const blob = repoNode?.[`f${j}`];
+
+                        if (
+                            blob &&
+                            blob.isBinary === false &&
+                            typeof blob.text === 'string'
+                        ) {
+                            // Shape mirrors octokit's `repos.getContent`
+                            // response so `enrichFilesWithContent` reads
+                            // it transparently. Encoding `utf-8` skips
+                            // the base64 decode path on the caller.
+                            const fileContent = {
+                                data: {
+                                    content: blob.text,
+                                    encoding: 'utf-8',
+                                },
+                            };
+                            result.set(file.filename, fileContent);
+                            if (cacheKey) {
+                                // 24h TTL — see `getRepositoryContentFile`
+                                // for the immutability argument. Same
+                                // cache key shape, same safety guarantees.
+                                await this.cacheService.addToCache(
+                                    cacheKey,
+                                    fileContent,
+                                    24 * 60 * 60 * 1000,
+                                );
+                            }
+                        } else {
+                            // Binary, oversize, or missing — fall back
+                            // to REST single-file (which handles both
+                            // base64 binary returns and the head→base
+                            // ref fallback). Skip silently if we don't
+                            // have the PR refs available.
+                            if (pullRequest) {
+                                try {
+                                    const fallback =
+                                        await this.getRepositoryContentFile({
+                                            organizationAndTeamData,
+                                            repository,
+                                            file,
+                                            pullRequest,
+                                        });
+                                    if (fallback)
+                                        result.set(file.filename, fallback);
+                                } catch {
+                                    /* keep result without this file */
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    this.logger.warn({
+                        message:
+                            'GraphQL batch content fetch failed — falling back to REST per-file for the batch',
+                        context: GithubService.name,
+                        error: err,
+                        metadata: {
+                            organizationAndTeamData,
+                            repositoryName: repository?.name,
+                            batchSize: batch.length,
+                        },
+                    });
+                    if (pullRequest) {
+                        for (const { file } of batch) {
+                            try {
+                                const fallback =
+                                    await this.getRepositoryContentFile({
+                                        organizationAndTeamData,
+                                        repository,
+                                        file,
+                                        pullRequest,
+                                    });
+                                if (fallback)
+                                    result.set(file.filename, fallback);
+                            } catch {
+                                /* skip */
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Files without usable blob sha — REST fallback only
+        if (pullRequest && restOnly.length > 0) {
+            for (const { file } of restOnly) {
+                try {
+                    const fallback = await this.getRepositoryContentFile({
+                        organizationAndTeamData,
+                        repository,
+                        file,
+                        pullRequest,
+                    });
+                    if (fallback) result.set(file.filename, fallback);
+                } catch {
+                    /* skip */
+                }
+            }
+        }
+
+        return result;
     }
 
     async getCommitsForPullRequestForCodeReview(
@@ -5552,19 +5787,28 @@ This is an experimental feature that generates committable changes. Review the d
 
             const userData = userResponse.data;
 
+            // 24h TTL. User identity (login, name, email) changes rarely
+            // — and when it does, our save flow doesn't depend on
+            // realtime freshness. A long TTL lets follow-up saves of
+            // the same PR (webhook handler + pipeline-internal save)
+            // hit cache instead of refetching 4× per review.
             await this.cacheService.addToCache(
                 cacheKey,
                 userData,
-                10 * 60 * 1000,
+                24 * 60 * 60 * 1000,
             );
 
             return userData;
         } catch (error) {
             if (error?.response?.status === 404) {
+                // 24h null-cache: a deleted/nonexistent GitHub user
+                // doesn't reappear within a working day, and a cached
+                // null saves the round-trip when a stale reviewer is
+                // referenced repeatedly across saves.
                 await this.cacheService.addToCache(
                     cacheKey,
                     null,
-                    60 * 60 * 1000,
+                    24 * 60 * 60 * 1000,
                 );
                 this.logger.warn({
                     message: `Github user not found: ${username}`,
@@ -5583,6 +5827,156 @@ This is an experimental feature that generates committable changes. Review the d
             });
             throw error;
         }
+    }
+
+    // Batch-fetch many users in a single GraphQL request using login
+    // aliases. Reads from the same Redis cache as `getUserByUsername`
+    // (key `gh:user:{orgId}:{login}`), so an entry warmed by either
+    // path is reused by both. Designed to be called as a pre-flight
+    // before extractUser/extractUsers fans out per-user, eliminating
+    // the N parallel REST round-trips during PR saves.
+    //
+    // Failure mode is opportunistic: on any GraphQL error this method
+    // logs and returns whatever it has so far. Callers proceed to
+    // their per-user REST path; uncached users pay the original cost.
+    public async getUsersByUsername(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        usernames: string[];
+    }): Promise<Map<string, any>> {
+        const { organizationAndTeamData, usernames } = params;
+        const result = new Map<string, any>();
+
+        if (!usernames?.length) return result;
+
+        // Dedupe & normalize. GitHub usernames are case-insensitive.
+        const normalized = Array.from(
+            new Set(
+                usernames
+                    .filter((u) => typeof u === 'string' && u.length > 0)
+                    .map((u) => u.toLowerCase()),
+            ),
+        );
+
+        const makeCacheKey = (login: string) =>
+            `gh:user:${organizationAndTeamData?.organizationId}:${login}`;
+
+        // 1. Cache lookup. Matches existing getUserByUsername semantics:
+        //    cached null falls through to refetch (the function reads
+        //    it as "absent"), so we re-batch nulls. With the 24h TTL
+        //    that's still much cheaper than the original 10min churn.
+        const misses: string[] = [];
+        for (const login of normalized) {
+            const cached = await this.cacheService.getFromCache<any | null>(
+                makeCacheKey(login),
+            );
+            if (cached !== null && cached !== undefined) {
+                result.set(login, cached);
+            } else {
+                misses.push(login);
+            }
+        }
+
+        if (misses.length === 0) return result;
+
+        // 2. GraphQL batch fetch. Aliases u0..uN; GitHub allows up to
+        //    ~100 in one query but we cap at 50 to stay consistent with
+        //    the file-content batch (smaller payload, less blast radius
+        //    on transient errors).
+        const BATCH_SIZE = 50;
+        let graphqlClient: any;
+        try {
+            graphqlClient = await this.instanceGraphQL(
+                organizationAndTeamData,
+            );
+        } catch (err) {
+            this.logger.warn({
+                message:
+                    'instanceGraphQL failed for getUsersByUsername — skipping batch (caller falls back to per-user REST)',
+                context: GithubService.name,
+                error: err,
+                metadata: { organizationAndTeamData },
+            });
+            return result;
+        }
+
+        for (let i = 0; i < misses.length; i += BATCH_SIZE) {
+            const batch = misses.slice(i, i + BATCH_SIZE);
+            const varDefs: string[] = [];
+            const fields: string[] = [];
+            const variables: Record<string, any> = {};
+
+            batch.forEach((login, idx) => {
+                varDefs.push(`$u${idx}: String!`);
+                fields.push(
+                    `u${idx}: user(login: $u${idx}) { login databaseId name email }`,
+                );
+                variables[`u${idx}`] = login;
+            });
+
+            const query = `
+                query(${varDefs.join(', ')}) {
+                    ${fields.join('\n                    ')}
+                }
+            `;
+
+            try {
+                const response: any = await graphqlClient(query, variables);
+
+                for (let j = 0; j < batch.length; j++) {
+                    const login = batch[j];
+                    const gqlUser = response?.[`u${j}`];
+                    const cacheKey = makeCacheKey(login);
+
+                    if (gqlUser) {
+                        // Map GraphQL shape → REST-like minimal shape
+                        // so downstream consumers (`extractUser` reads
+                        // `.email`, `.name`, `.id`) see what they
+                        // expect from `getUserByUsername`.
+                        const userData = {
+                            login: gqlUser.login,
+                            id: gqlUser.databaseId,
+                            name: gqlUser.name,
+                            email: gqlUser.email,
+                            type: 'User',
+                        };
+                        result.set(login, userData);
+                        await this.cacheService.addToCache(
+                            cacheKey,
+                            userData,
+                            24 * 60 * 60 * 1000,
+                        );
+                    } else {
+                        // Null result = user not found. Cache the null
+                        // with the same 24h TTL as getUserByUsername's
+                        // 404 path so future per-user lookups also
+                        // short-circuit (matching shape).
+                        await this.cacheService.addToCache(
+                            cacheKey,
+                            null,
+                            24 * 60 * 60 * 1000,
+                        );
+                    }
+                }
+            } catch (err) {
+                this.logger.warn({
+                    message:
+                        'GraphQL batch user fetch failed — partial results returned; caller falls back to per-user REST for the rest',
+                    context: GithubService.name,
+                    error: err,
+                    metadata: {
+                        organizationAndTeamData,
+                        batchSize: batch.length,
+                    },
+                });
+                // Don't process more batches if one fails — they're
+                // independent but a single GraphQL error usually
+                // indicates auth/quota issue that won't recover within
+                // the same request.
+                break;
+            }
+        }
+
+        return result;
     }
 
     getUserByEmailOrName(_params: {

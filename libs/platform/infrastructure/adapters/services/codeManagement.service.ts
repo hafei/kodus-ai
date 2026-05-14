@@ -495,6 +495,46 @@ export class CodeManagementService implements ICodeManagementService {
         return codeManagementService.getRepositoryContentFile(params);
     }
 
+    async getRepositoryContentBatch(
+        params: {
+            organizationAndTeamData: OrganizationAndTeamData;
+            repository: { name: string; id: any };
+            files: Array<{ filename: string; sha?: string }>;
+            pullRequest?: any;
+        },
+        type?: PlatformType,
+    ): Promise<Map<string, any> | null> {
+        if (!type) {
+            type = await this.getTypeIntegration(
+                extractOrganizationAndTeamData(params),
+            );
+        }
+
+        const codeManagementService =
+            this.platformIntegrationFactory.getCodeManagementService(type);
+
+        return codeManagementService.getRepositoryContentBatch(params);
+    }
+
+    async getUsersByUsername(
+        params: {
+            organizationAndTeamData: OrganizationAndTeamData;
+            usernames: string[];
+        },
+        type?: PlatformType,
+    ): Promise<Map<string, any> | null> {
+        if (!type) {
+            type = await this.getTypeIntegration(
+                extractOrganizationAndTeamData(params),
+            );
+        }
+
+        const codeManagementService =
+            this.platformIntegrationFactory.getCodeManagementService(type);
+
+        return codeManagementService.getUsersByUsername(params);
+    }
+
     async getPullRequestByNumber(
         params: {
             organizationAndTeamData: OrganizationAndTeamData;
