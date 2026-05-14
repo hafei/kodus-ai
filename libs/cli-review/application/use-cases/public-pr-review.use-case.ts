@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
-import {
-    GitHubPublicPrService,
-    PublicPrFetchError,
-} from '@libs/cli-review/infrastructure/services/github-public-pr.service';
+import { PublicPrFetchError } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
 import { PublicPrAiSummaryService } from '@libs/cli-review/infrastructure/services/public-pr-ai-summary.service';
 import { PublicPrGroupingService } from '@libs/cli-review/infrastructure/services/public-pr-grouping.service';
-import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
+import {
+    ITrialRateLimiterService,
+    TRIAL_RATE_LIMITER_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/trial-rate-limiter.service.contract';
+import {
+    IGitHubPublicPrService,
+    GITHUB_PUBLIC_PR_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/github-public-pr.service.contract';
 import { EnqueueCliReviewUseCase } from './enqueue-cli-review.use-case';
 
 export interface PublicPrReviewInput {
@@ -54,8 +58,10 @@ export type PublicPrReviewResult =
 @Injectable()
 export class PublicPrReviewUseCase {
     constructor(
-        private readonly trialRateLimiter: TrialRateLimiterService,
-        private readonly githubPublicPrService: GitHubPublicPrService,
+        @Inject(TRIAL_RATE_LIMITER_SERVICE_TOKEN)
+        private readonly trialRateLimiter: ITrialRateLimiterService,
+        @Inject(GITHUB_PUBLIC_PR_SERVICE_TOKEN)
+        private readonly githubPublicPrService: IGitHubPublicPrService,
         private readonly enqueueCliReviewUseCase: EnqueueCliReviewUseCase,
         private readonly publicPrAiSummaryService: PublicPrAiSummaryService,
         private readonly publicPrGroupingService: PublicPrGroupingService,
@@ -80,7 +86,7 @@ export class PublicPrReviewUseCase {
             };
         }
 
-        let pr: Awaited<ReturnType<GitHubPublicPrService['fetch']>>;
+        let pr: Awaited<ReturnType<IGitHubPublicPrService['fetch']>>;
         try {
             pr = await this.githubPublicPrService.fetch(prUrl);
         } catch (err) {

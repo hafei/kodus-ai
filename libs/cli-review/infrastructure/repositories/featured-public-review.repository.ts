@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import type { IFeaturedPublicReviewRepository } from '@libs/cli-review/domain/contracts/featured-public-review.repository.contract';
 import { FeaturedPublicReviewModel } from './schemas/featured-public-review.model';
 
 export type FeaturedPublicReviewListItem = Pick<
@@ -11,7 +12,9 @@ export type FeaturedPublicReviewListItem = Pick<
 };
 
 @Injectable()
-export class FeaturedPublicReviewRepository {
+export class FeaturedPublicReviewRepository
+    implements IFeaturedPublicReviewRepository
+{
     constructor(
         @InjectModel(FeaturedPublicReviewModel.name)
         private readonly model: Model<FeaturedPublicReviewModel>,

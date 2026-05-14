@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { createLogger } from '@kodus/flow';
 import { CacheService } from '@libs/core/cache/cache.service';
+import type { IAuthenticatedRateLimiterService } from '@libs/cli-review/domain/contracts/authenticated-rate-limiter.service.contract';
 
 export interface AuthenticatedRateLimitResult {
     allowed: boolean;
@@ -13,7 +14,9 @@ export interface AuthenticatedRateLimitResult {
  * Uses cache to track request counts per team
  */
 @Injectable()
-export class AuthenticatedRateLimiterService {
+export class AuthenticatedRateLimiterService
+    implements IAuthenticatedRateLimiterService
+{
     private readonly logger = createLogger(
         AuthenticatedRateLimiterService.name,
     );

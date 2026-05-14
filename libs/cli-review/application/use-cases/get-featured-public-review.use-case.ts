@@ -1,5 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { FeaturedPublicReviewRepository } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
+import { Inject, Injectable } from '@nestjs/common';
+import {
+    IFeaturedPublicReviewRepository,
+    FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN,
+} from '@libs/cli-review/domain/contracts/featured-public-review.repository.contract';
 
 export interface GetFeaturedPublicReviewInput {
     slug: string;
@@ -23,7 +26,8 @@ export interface GetFeaturedPublicReviewResult {
 @Injectable()
 export class GetFeaturedPublicReviewUseCase {
     constructor(
-        private readonly featuredPublicReviewRepository: FeaturedPublicReviewRepository,
+        @Inject(FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN)
+        private readonly featuredPublicReviewRepository: IFeaturedPublicReviewRepository,
     ) {}
 
     async execute(

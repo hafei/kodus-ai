@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createLogger } from '@kodus/flow';
+import type { IGitHubPublicPrService } from '@libs/cli-review/domain/contracts/github-public-pr.service.contract';
 
 export interface ParsedPrUrl {
     owner: string;
@@ -117,7 +118,7 @@ export class PublicPrFetchError extends Error {
 }
 
 @Injectable()
-export class GitHubPublicPrService {
+export class GitHubPublicPrService implements IGitHubPublicPrService {
     private readonly logger = createLogger(GitHubPublicPrService.name);
     private readonly apiBase = 'https://api.github.com';
 

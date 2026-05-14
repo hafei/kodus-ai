@@ -46,6 +46,12 @@ import { PublicPrAiSummaryService } from './infrastructure/services/public-pr-ai
 import { PublicPrGroupingService } from './infrastructure/services/public-pr-grouping.service';
 import { TrialRateLimiterService } from './infrastructure/services/trial-rate-limiter.service';
 
+// Contracts (DI tokens)
+import { TRIAL_RATE_LIMITER_SERVICE_TOKEN } from './domain/contracts/trial-rate-limiter.service.contract';
+import { AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN } from './domain/contracts/authenticated-rate-limiter.service.contract';
+import { GITHUB_PUBLIC_PR_SERVICE_TOKEN } from './domain/contracts/github-public-pr.service.contract';
+import { FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN } from './domain/contracts/featured-public-review.repository.contract';
+
 // External dependencies
 import { AutomationModule } from '@libs/automation/modules/automation.module';
 import { CodeReviewCoreModule } from '@libs/code-review/modules/code-review-core.module';
@@ -144,14 +150,28 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
 
         // Services
         CliInputConverter,
-        TrialRateLimiterService,
-        AuthenticatedRateLimiterService,
-        GitHubPublicPrService,
         PublicPrAiSummaryService,
         PublicPrGroupingService,
         CliSessionCaptureRepository,
-        FeaturedPublicReviewRepository,
         SessionEventRepository,
+        // Services + repos that must be consumed via DI tokens
+        // (Kody rule: don't inject services/repos by concrete class).
+        {
+            provide: TRIAL_RATE_LIMITER_SERVICE_TOKEN,
+            useClass: TrialRateLimiterService,
+        },
+        {
+            provide: AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN,
+            useClass: AuthenticatedRateLimiterService,
+        },
+        {
+            provide: GITHUB_PUBLIC_PR_SERVICE_TOKEN,
+            useClass: GitHubPublicPrService,
+        },
+        {
+            provide: FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN,
+            useClass: FeaturedPublicReviewRepository,
+        },
     ],
     exports: [
         // Export use case and services for controllers
@@ -169,15 +189,14 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
         ClassifySessionUseCase,
         CliReviewJobProcessorService,
         SessionEventRepository,
-        TrialRateLimiterService,
-        AuthenticatedRateLimiterService,
-        GitHubPublicPrService,
         PublicPrAiSummaryService,
         PublicPrGroupingService,
-        FeaturedPublicReviewRepository,
-        SessionEventRepository,
         ClassifySessionUseCase,
         JOB_QUEUE_SERVICE_TOKEN,
+        TRIAL_RATE_LIMITER_SERVICE_TOKEN,
+        AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN,
+        GITHUB_PUBLIC_PR_SERVICE_TOKEN,
+        FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN,
     ],
 })
 export class CliReviewModule {}

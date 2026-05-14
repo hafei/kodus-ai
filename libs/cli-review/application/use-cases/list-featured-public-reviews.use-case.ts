@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { FeaturedPublicReviewListItem } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
 import {
-    FeaturedPublicReviewListItem,
-    FeaturedPublicReviewRepository,
-} from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
+    IFeaturedPublicReviewRepository,
+    FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN,
+} from '@libs/cli-review/domain/contracts/featured-public-review.repository.contract';
 
 /**
  * Reads the curated home-grid list. Pulled out of the controller so
@@ -12,7 +13,8 @@ import {
 @Injectable()
 export class ListFeaturedPublicReviewsUseCase {
     constructor(
-        private readonly featuredPublicReviewRepository: FeaturedPublicReviewRepository,
+        @Inject(FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN)
+        private readonly featuredPublicReviewRepository: IFeaturedPublicReviewRepository,
     ) {}
 
     async execute(): Promise<{ items: FeaturedPublicReviewListItem[] }> {

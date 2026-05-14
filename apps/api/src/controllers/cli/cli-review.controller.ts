@@ -5,14 +5,21 @@ import { GetCliReviewJobStatusUseCase } from '@libs/cli-review/application/use-c
 import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
 import { SubmitCliSessionCaptureUseCase } from '@libs/cli-review/application/use-cases/submit-cli-session-capture.use-case';
 import { WaitForCliReviewJobUseCase } from '@libs/cli-review/application/use-cases/wait-for-cli-review-job.use-case';
-import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
-import {
-    GitHubPublicPrService,
-    PublicPrFetchError,
-} from '@libs/cli-review/infrastructure/services/github-public-pr.service';
-import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
+import { PublicPrFetchError } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
 import { ListFeaturedPublicReviewsUseCase } from '@libs/cli-review/application/use-cases/list-featured-public-reviews.use-case';
 import { GetFeaturedPublicReviewUseCase } from '@libs/cli-review/application/use-cases/get-featured-public-review.use-case';
+import {
+    ITrialRateLimiterService,
+    TRIAL_RATE_LIMITER_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/trial-rate-limiter.service.contract';
+import {
+    IAuthenticatedRateLimiterService,
+    AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/authenticated-rate-limiter.service.contract';
+import {
+    IGitHubPublicPrService,
+    GITHUB_PUBLIC_PR_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/github-public-pr.service.contract';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
 import { CliReviewResponse } from '@libs/cli-review/domain/types/cli-review.types';
 import {
@@ -103,9 +110,12 @@ export class CliReviewController {
         private readonly waitForCliReviewJobUseCase: WaitForCliReviewJobUseCase,
         private readonly ingestSessionEventUseCase: IngestSessionEventUseCase,
         private readonly submitCliSessionCaptureUseCase: SubmitCliSessionCaptureUseCase,
-        private readonly trialRateLimiter: TrialRateLimiterService,
-        private readonly authenticatedRateLimiter: AuthenticatedRateLimiterService,
-        private readonly githubPublicPrService: GitHubPublicPrService,
+        @Inject(TRIAL_RATE_LIMITER_SERVICE_TOKEN)
+        private readonly trialRateLimiter: ITrialRateLimiterService,
+        @Inject(AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN)
+        private readonly authenticatedRateLimiter: IAuthenticatedRateLimiterService,
+        @Inject(GITHUB_PUBLIC_PR_SERVICE_TOKEN)
+        private readonly githubPublicPrService: IGitHubPublicPrService,
         private readonly publicPrReviewUseCase: PublicPrReviewUseCase,
         private readonly listFeaturedPublicReviewsUseCase: ListFeaturedPublicReviewsUseCase,
         private readonly getFeaturedPublicReviewUseCase: GetFeaturedPublicReviewUseCase,

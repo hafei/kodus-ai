@@ -14,8 +14,9 @@ import { GetCliReviewJobStatusUseCase } from '@libs/cli-review/application/use-c
 import { WaitForCliReviewJobUseCase } from '@libs/cli-review/application/use-cases/wait-for-cli-review-job.use-case';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
 import { SubmitCliSessionCaptureUseCase } from '@libs/cli-review/application/use-cases/submit-cli-session-capture.use-case';
-import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
-import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
+import { AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN } from '@libs/cli-review/domain/contracts/authenticated-rate-limiter.service.contract';
+import { TRIAL_RATE_LIMITER_SERVICE_TOKEN } from '@libs/cli-review/domain/contracts/trial-rate-limiter.service.contract';
+import { GITHUB_PUBLIC_PR_SERVICE_TOKEN } from '@libs/cli-review/domain/contracts/github-public-pr.service.contract';
 import { TEAM_CLI_KEY_SERVICE_TOKEN } from '@libs/organization/domain/team-cli-key/contracts/team-cli-key.service.contract';
 import { TEAM_SERVICE_TOKEN } from '@libs/organization/domain/team/contracts/team.service.contract';
 import { AUTH_SERVICE_TOKEN } from '@libs/identity/domain/auth/contracts/auth.service.contracts';
@@ -25,7 +26,6 @@ import { TeamEntity } from '@libs/organization/domain/team/entities/team.entity'
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
 import { CliReviewRequestDto } from '@/core/infrastructure/http/dtos/cli-review.dto';
 import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
-import { GitHubPublicPrService } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
 import { PublicPrReviewUseCase } from '@libs/cli-review/application/use-cases/public-pr-review.use-case';
 import { ListFeaturedPublicReviewsUseCase } from '@libs/cli-review/application/use-cases/list-featured-public-reviews.use-case';
 import { GetFeaturedPublicReviewUseCase } from '@libs/cli-review/application/use-cases/get-featured-public-review.use-case';
@@ -214,18 +214,18 @@ describe('CliReviewController', () => {
                     useValue: mockTriggerBusinessValidation,
                 },
                 {
-                    provide: AuthenticatedRateLimiterService,
+                    provide: AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN,
                     useValue: mockRateLimiter,
                 },
                 {
-                    provide: TrialRateLimiterService,
+                    provide: TRIAL_RATE_LIMITER_SERVICE_TOKEN,
                     useValue: mockTrialRateLimiter,
                 },
                 // Public-demo deps — only the trial endpoints touch
                 // these, but Nest needs every constructor arg resolved
                 // even when the test never calls those routes.
                 {
-                    provide: GitHubPublicPrService,
+                    provide: GITHUB_PUBLIC_PR_SERVICE_TOKEN,
                     useValue: { fetch: jest.fn() },
                 },
                 {
