@@ -118,7 +118,7 @@ describe('GithubService — cache behavior', () => {
             expect(cacheService.addToCache).toHaveBeenCalledWith(
                 'gh:user:org-1:octocat',
                 { id: 1, login: 'octocat' },
-                10 * 60 * 1000,
+                24 * 60 * 60 * 1000,
             );
         });
 
@@ -136,12 +136,15 @@ describe('GithubService — cache behavior', () => {
 
             expect(result).toBeNull();
             expect(octokit.rest.users.getByUsername).toHaveBeenCalled();
-            // Negative cache stored for 1h — much longer than the positive
-            // TTL because 404s rarely "become 200" within a review window.
+            // Negative cache stored for 24h — same TTL as the positive
+            // path. A deleted/nonexistent GitHub user doesn't reappear
+            // within a working day, and a long null-cache saves the
+            // round-trip when a stale reviewer is referenced repeatedly
+            // across saves.
             expect(cacheService.addToCache).toHaveBeenCalledWith(
                 'gh:user:org-1:ghost',
                 null,
-                60 * 60 * 1000,
+                24 * 60 * 60 * 1000,
             );
         });
 

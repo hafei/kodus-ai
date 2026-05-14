@@ -353,7 +353,7 @@ describe('GithubService — cache layer (commit b7606bb5c)', () => {
             expect(cache.addToCache).toHaveBeenCalledWith(
                 expect.stringContaining(`:${fileWithSha.sha}:`),
                 fakeContentResponse,
-                15 * 60 * 1000,
+                24 * 60 * 60 * 1000,
             );
         });
 
