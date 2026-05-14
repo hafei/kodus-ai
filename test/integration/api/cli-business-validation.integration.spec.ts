@@ -36,6 +36,9 @@ import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import { TriggerBusinessValidationUseCase } from '@libs/platform/application/use-cases/codeManagement/trigger-business-validation.use-case';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
+import { GitHubPublicPrService } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
+import { PublicPrReviewUseCase } from '@libs/cli-review/application/use-cases/public-pr-review.use-case';
+import { FeaturedPublicReviewRepository } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
 
 describe('CLI business-validation integration', () => {
     let controller: CliReviewController;
@@ -96,6 +99,23 @@ describe('CLI business-validation integration', () => {
                 {
                     provide: AuthenticatedRateLimiterService,
                     useValue: mockRateLimiter,
+                },
+                // Public-demo deps — only the trial endpoints touch
+                // these; mocked so Nest can resolve the constructor.
+                {
+                    provide: GitHubPublicPrService,
+                    useValue: { fetch: jest.fn() },
+                },
+                {
+                    provide: PublicPrReviewUseCase,
+                    useValue: { execute: jest.fn() },
+                },
+                {
+                    provide: FeaturedPublicReviewRepository,
+                    useValue: {
+                        listActive: jest.fn().mockResolvedValue([]),
+                        findBySlug: jest.fn().mockResolvedValue(null),
+                    },
                 },
                 {
                     provide: TEAM_CLI_KEY_SERVICE_TOKEN,

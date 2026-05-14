@@ -25,6 +25,9 @@ import { TeamEntity } from '@libs/organization/domain/team/entities/team.entity'
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
 import { CliReviewRequestDto } from '@/core/infrastructure/http/dtos/cli-review.dto';
 import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
+import { GitHubPublicPrService } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
+import { PublicPrReviewUseCase } from '@libs/cli-review/application/use-cases/public-pr-review.use-case';
+import { FeaturedPublicReviewRepository } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
 
 jest.mock('@kodus/flow', () => ({
     createLogger: () => ({
@@ -216,6 +219,24 @@ describe('CliReviewController', () => {
                 {
                     provide: TrialRateLimiterService,
                     useValue: mockTrialRateLimiter,
+                },
+                // Public-demo deps — only the trial endpoints touch
+                // these, but Nest needs every constructor arg resolved
+                // even when the test never calls those routes.
+                {
+                    provide: GitHubPublicPrService,
+                    useValue: { fetch: jest.fn() },
+                },
+                {
+                    provide: PublicPrReviewUseCase,
+                    useValue: { execute: jest.fn() },
+                },
+                {
+                    provide: FeaturedPublicReviewRepository,
+                    useValue: {
+                        listActive: jest.fn().mockResolvedValue([]),
+                        findBySlug: jest.fn().mockResolvedValue(null),
+                    },
                 },
                 {
                     provide: TEAM_CLI_KEY_SERVICE_TOKEN,
