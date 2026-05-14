@@ -58,7 +58,8 @@ describe('CliReviewController.ingestSessionEvent', () => {
             authenticatedRateLimiter as any, // authenticatedRateLimiter
             {} as any, // githubPublicPrService
             {} as any, // publicPrReviewUseCase
-            {} as any, // featuredPublicReviewRepository
+            {} as any, // listFeaturedPublicReviewsUseCase
+            {} as any, // getFeaturedPublicReviewUseCase
             teamCliKeyService as any, // teamCliKeyService
             {} as any, // teamService
             {} as any, // authService

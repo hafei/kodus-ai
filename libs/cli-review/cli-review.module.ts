@@ -13,6 +13,8 @@ import { ClassifyCliSessionCaptureUseCase } from './application/use-cases/classi
 import { ClassifySessionUseCase } from './application/use-cases/classify-session.use-case';
 import { EnqueueCliReviewUseCase } from './application/use-cases/enqueue-cli-review.use-case';
 import { PublicPrReviewUseCase } from './application/use-cases/public-pr-review.use-case';
+import { ListFeaturedPublicReviewsUseCase } from './application/use-cases/list-featured-public-reviews.use-case';
+import { GetFeaturedPublicReviewUseCase } from './application/use-cases/get-featured-public-review.use-case';
 import { ExecuteCliReviewUseCase } from './application/use-cases/execute-cli-review.use-case';
 import { GetCliReviewByIdUseCase } from './application/use-cases/dashboard/get-cli-review-by-id.use-case';
 import { GetCliReviewsUseCase } from './application/use-cases/dashboard/get-cli-reviews.use-case';
@@ -110,6 +112,8 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
         EnqueueCliReviewUseCase,
         ExecuteCliReviewUseCase,
         PublicPrReviewUseCase,
+        ListFeaturedPublicReviewsUseCase,
+        GetFeaturedPublicReviewUseCase,
         GetCliReviewByIdUseCase,
         GetCliReviewsUseCase,
         GetCliReviewJobStatusUseCase,
@@ -154,6 +158,8 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
         EnqueueCliReviewUseCase,
         ExecuteCliReviewUseCase,
         PublicPrReviewUseCase,
+        ListFeaturedPublicReviewsUseCase,
+        GetFeaturedPublicReviewUseCase,
         GetCliReviewByIdUseCase,
         GetCliReviewsUseCase,
         GetCliReviewJobStatusUseCase,

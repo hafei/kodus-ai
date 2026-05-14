@@ -27,7 +27,8 @@ import { CliReviewRequestDto } from '@/core/infrastructure/http/dtos/cli-review.
 import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
 import { GitHubPublicPrService } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
 import { PublicPrReviewUseCase } from '@libs/cli-review/application/use-cases/public-pr-review.use-case';
-import { FeaturedPublicReviewRepository } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
+import { ListFeaturedPublicReviewsUseCase } from '@libs/cli-review/application/use-cases/list-featured-public-reviews.use-case';
+import { GetFeaturedPublicReviewUseCase } from '@libs/cli-review/application/use-cases/get-featured-public-review.use-case';
 
 jest.mock('@kodus/flow', () => ({
     createLogger: () => ({
@@ -232,10 +233,15 @@ describe('CliReviewController', () => {
                     useValue: { execute: jest.fn() },
                 },
                 {
-                    provide: FeaturedPublicReviewRepository,
+                    provide: ListFeaturedPublicReviewsUseCase,
                     useValue: {
-                        listActive: jest.fn().mockResolvedValue([]),
-                        findBySlug: jest.fn().mockResolvedValue(null),
+                        execute: jest.fn().mockResolvedValue({ items: [] }),
+                    },
+                },
+                {
+                    provide: GetFeaturedPublicReviewUseCase,
+                    useValue: {
+                        execute: jest.fn().mockResolvedValue(null),
                     },
                 },
                 {

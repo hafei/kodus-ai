@@ -11,7 +11,8 @@ import {
     PublicPrFetchError,
 } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
 import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
-import { FeaturedPublicReviewRepository } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
+import { ListFeaturedPublicReviewsUseCase } from '@libs/cli-review/application/use-cases/list-featured-public-reviews.use-case';
+import { GetFeaturedPublicReviewUseCase } from '@libs/cli-review/application/use-cases/get-featured-public-review.use-case';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
 import { CliReviewResponse } from '@libs/cli-review/domain/types/cli-review.types';
 import {
@@ -106,7 +107,8 @@ export class CliReviewController {
         private readonly authenticatedRateLimiter: AuthenticatedRateLimiterService,
         private readonly githubPublicPrService: GitHubPublicPrService,
         private readonly publicPrReviewUseCase: PublicPrReviewUseCase,
-        private readonly featuredPublicReviewRepository: FeaturedPublicReviewRepository,
+        private readonly listFeaturedPublicReviewsUseCase: ListFeaturedPublicReviewsUseCase,
+        private readonly getFeaturedPublicReviewUseCase: GetFeaturedPublicReviewUseCase,
         @Inject(TEAM_CLI_KEY_SERVICE_TOKEN)
         private readonly teamCliKeyService: ITeamCliKeyService,
         @Inject(TEAM_SERVICE_TOKEN)
@@ -1380,8 +1382,7 @@ export class CliReviewController {
             'Lightweight metadata for the public-demo home grid. Each item links to /cli/public/featured-reviews/:slug for the full snapshot.',
     })
     async listFeaturedReviews() {
-        const items = await this.featuredPublicReviewRepository.listPublished();
-        return { items };
+        return this.listFeaturedPublicReviewsUseCase.execute();
     }
 
     @Get('public/featured-reviews/:slug')
@@ -1391,21 +1392,14 @@ export class CliReviewController {
             'Returns the full review (PR metadata, raw diff, issues). Slug is the URL-safe identifier assigned at curation time (e.g. "vercel-nextjs-93759").',
     })
     async getFeaturedReview(@Param('slug') slug: string) {
-        const doc =
-            await this.featuredPublicReviewRepository.findBySlug(slug);
-        if (!doc) {
+        const review = await this.getFeaturedPublicReviewUseCase.execute({
+            slug,
+        });
+        if (!review) {
             throw new NotFoundException(
                 `Featured review "${slug}" not found`,
             );
         }
-        return {
-            slug: doc.slug,
-            tags: doc.tags,
-            highlight: doc.highlight,
-            prUrl: doc.prUrl,
-            pr: doc.pr,
-            diff: doc.diff,
-            result: doc.result,
-        };
+        return review;
     }
 }

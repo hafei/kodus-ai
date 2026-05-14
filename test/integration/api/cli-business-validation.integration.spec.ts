@@ -38,7 +38,8 @@ import { CodeManagementService } from '@libs/platform/infrastructure/adapters/se
 import { IngestSessionEventUseCase } from '@libs/cli-review/application/use-cases/ingest-session-event.use-case';
 import { GitHubPublicPrService } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
 import { PublicPrReviewUseCase } from '@libs/cli-review/application/use-cases/public-pr-review.use-case';
-import { FeaturedPublicReviewRepository } from '@libs/cli-review/infrastructure/repositories/featured-public-review.repository';
+import { ListFeaturedPublicReviewsUseCase } from '@libs/cli-review/application/use-cases/list-featured-public-reviews.use-case';
+import { GetFeaturedPublicReviewUseCase } from '@libs/cli-review/application/use-cases/get-featured-public-review.use-case';
 
 describe('CLI business-validation integration', () => {
     let controller: CliReviewController;
@@ -111,10 +112,15 @@ describe('CLI business-validation integration', () => {
                     useValue: { execute: jest.fn() },
                 },
                 {
-                    provide: FeaturedPublicReviewRepository,
+                    provide: ListFeaturedPublicReviewsUseCase,
                     useValue: {
-                        listActive: jest.fn().mockResolvedValue([]),
-                        findBySlug: jest.fn().mockResolvedValue(null),
+                        execute: jest.fn().mockResolvedValue({ items: [] }),
+                    },
+                },
+                {
+                    provide: GetFeaturedPublicReviewUseCase,
+                    useValue: {
+                        execute: jest.fn().mockResolvedValue(null),
                     },
                 },
                 {
