@@ -3,6 +3,7 @@ import { createLogger } from '@kodus/flow';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { byokToVercelModel } from '@libs/code-review/infrastructure/agents/llm/byok-to-vercel';
+import type { IPublicPrGroupingService } from '@libs/cli-review/domain/contracts/public-pr-grouping.service.contract';
 import type { PublicPrMetadata } from './github-public-pr.service';
 
 const GROUPING_MODEL = 'gemini-3-flash-preview';
@@ -60,7 +61,7 @@ export type PublicPrGrouping = {
  * is non-blocking — the sidebar falls back to the tree view.
  */
 @Injectable()
-export class PublicPrGroupingService {
+export class PublicPrGroupingService implements IPublicPrGroupingService {
     private readonly logger = createLogger(PublicPrGroupingService.name);
 
     async generate(

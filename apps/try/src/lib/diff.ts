@@ -41,7 +41,13 @@ export function parseUnifiedDiff(diffText: string): DiffFile[] {
 
     for (const line of lines) {
         if (line.startsWith("diff --git")) {
-            const match = line.match(/diff --git a\/(.+) b\/(.+)$/);
+            // Git wraps paths with spaces / special chars in double
+            // quotes: `diff --git "a/file with space" "b/file with space"`.
+            // The optional `"a\/` branch (and trailing `"?`) catches that
+            // form so those files don't fall through as "(unknown)".
+            const match = line.match(
+                /diff --git (?:"a\/|a\/)(.+?)"? (?:"b\/|b\/)(.+?)"?$/,
+            );
             const oldPath = match?.[1] ?? null;
             const newPath = match?.[2] ?? oldPath ?? "(unknown)";
             current = {

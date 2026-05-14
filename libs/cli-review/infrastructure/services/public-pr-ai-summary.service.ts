@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { createLogger } from '@kodus/flow';
 import { generateText } from 'ai';
 import { byokToVercelModel } from '@libs/code-review/infrastructure/agents/llm/byok-to-vercel';
+import type { IPublicPrAiSummaryService } from '@libs/cli-review/domain/contracts/public-pr-ai-summary.service.contract';
 import type { PublicPrMetadata } from './github-public-pr.service';
 
 const SUMMARY_MODEL = 'gemini-3-flash-preview';
@@ -18,7 +19,7 @@ const MAX_OUTPUT_TOKENS = 600;
  * latency to the diff/suggestions flow.
  */
 @Injectable()
-export class PublicPrAiSummaryService {
+export class PublicPrAiSummaryService implements IPublicPrAiSummaryService {
     private readonly logger = createLogger(PublicPrAiSummaryService.name);
 
     async generate(

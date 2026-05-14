@@ -51,6 +51,8 @@ import { TRIAL_RATE_LIMITER_SERVICE_TOKEN } from './domain/contracts/trial-rate-
 import { AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN } from './domain/contracts/authenticated-rate-limiter.service.contract';
 import { GITHUB_PUBLIC_PR_SERVICE_TOKEN } from './domain/contracts/github-public-pr.service.contract';
 import { FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN } from './domain/contracts/featured-public-review.repository.contract';
+import { PUBLIC_PR_AI_SUMMARY_SERVICE_TOKEN } from './domain/contracts/public-pr-ai-summary.service.contract';
+import { PUBLIC_PR_GROUPING_SERVICE_TOKEN } from './domain/contracts/public-pr-grouping.service.contract';
 
 // External dependencies
 import { AutomationModule } from '@libs/automation/modules/automation.module';
@@ -150,8 +152,6 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
 
         // Services
         CliInputConverter,
-        PublicPrAiSummaryService,
-        PublicPrGroupingService,
         CliSessionCaptureRepository,
         SessionEventRepository,
         // Services + repos that must be consumed via DI tokens
@@ -172,6 +172,14 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
             provide: FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN,
             useClass: FeaturedPublicReviewRepository,
         },
+        {
+            provide: PUBLIC_PR_AI_SUMMARY_SERVICE_TOKEN,
+            useClass: PublicPrAiSummaryService,
+        },
+        {
+            provide: PUBLIC_PR_GROUPING_SERVICE_TOKEN,
+            useClass: PublicPrGroupingService,
+        },
     ],
     exports: [
         // Export use case and services for controllers
@@ -189,14 +197,14 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
         ClassifySessionUseCase,
         CliReviewJobProcessorService,
         SessionEventRepository,
-        PublicPrAiSummaryService,
-        PublicPrGroupingService,
         ClassifySessionUseCase,
         JOB_QUEUE_SERVICE_TOKEN,
         TRIAL_RATE_LIMITER_SERVICE_TOKEN,
         AUTHENTICATED_RATE_LIMITER_SERVICE_TOKEN,
         GITHUB_PUBLIC_PR_SERVICE_TOKEN,
         FEATURED_PUBLIC_REVIEW_REPOSITORY_TOKEN,
+        PUBLIC_PR_AI_SUMMARY_SERVICE_TOKEN,
+        PUBLIC_PR_GROUPING_SERVICE_TOKEN,
     ],
 })
 export class CliReviewModule {}

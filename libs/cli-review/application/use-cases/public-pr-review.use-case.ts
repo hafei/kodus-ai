@@ -1,8 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
 import { PublicPrFetchError } from '@libs/cli-review/infrastructure/services/github-public-pr.service';
-import { PublicPrAiSummaryService } from '@libs/cli-review/infrastructure/services/public-pr-ai-summary.service';
-import { PublicPrGroupingService } from '@libs/cli-review/infrastructure/services/public-pr-grouping.service';
 import {
     ITrialRateLimiterService,
     TRIAL_RATE_LIMITER_SERVICE_TOKEN,
@@ -11,6 +9,14 @@ import {
     IGitHubPublicPrService,
     GITHUB_PUBLIC_PR_SERVICE_TOKEN,
 } from '@libs/cli-review/domain/contracts/github-public-pr.service.contract';
+import {
+    IPublicPrAiSummaryService,
+    PUBLIC_PR_AI_SUMMARY_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/public-pr-ai-summary.service.contract';
+import {
+    IPublicPrGroupingService,
+    PUBLIC_PR_GROUPING_SERVICE_TOKEN,
+} from '@libs/cli-review/domain/contracts/public-pr-grouping.service.contract';
 import { EnqueueCliReviewUseCase } from './enqueue-cli-review.use-case';
 
 export interface PublicPrReviewInput {
@@ -63,8 +69,10 @@ export class PublicPrReviewUseCase {
         @Inject(GITHUB_PUBLIC_PR_SERVICE_TOKEN)
         private readonly githubPublicPrService: IGitHubPublicPrService,
         private readonly enqueueCliReviewUseCase: EnqueueCliReviewUseCase,
-        private readonly publicPrAiSummaryService: PublicPrAiSummaryService,
-        private readonly publicPrGroupingService: PublicPrGroupingService,
+        @Inject(PUBLIC_PR_AI_SUMMARY_SERVICE_TOKEN)
+        private readonly publicPrAiSummaryService: IPublicPrAiSummaryService,
+        @Inject(PUBLIC_PR_GROUPING_SERVICE_TOKEN)
+        private readonly publicPrGroupingService: IPublicPrGroupingService,
     ) {}
 
     async execute(input: PublicPrReviewInput): Promise<PublicPrReviewResult> {
