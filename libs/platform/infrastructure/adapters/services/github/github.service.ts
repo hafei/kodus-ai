@@ -2379,6 +2379,16 @@ export class GithubService
 
                             // Log do Pino (integração com sistema de logging)
                             this.logger.warn({
+                                // Retries within octokit are intentionally
+                                // disabled below: each retry would dorme
+                                // for `retryAfter` (up to ~59 min on an
+                                // exhausted installation bucket) while
+                                // holding the worker slot. We instead let
+                                // the request throw immediately and have
+                                // the consumer error handler republish the
+                                // job with a delay aligned to the bucket
+                                // reset — that's what RateLimitError +
+                                // RabbitMQErrorHandler do.
                                 message: `RATE-LIMIT ${rateResource ?? 'core'}: ${options.method} ${options.url} — retryAfter=${retryAfter}s attempts=${attempts} limit=${rateLimit ?? '?'} remaining=${rateRemaining ?? '?'}`,
                                 context: GithubService.name,
                                 metadata: {
@@ -2405,25 +2415,19 @@ export class GithubService
                                 },
                             });
 
-                            if (attempts < 2) {
-                                octokit.log.info(
-                                    `Retrying after ~${retryAfter}s (+${jitter}ms jitter)`,
-                                );
-
-                                this.logger.log({
-                                    message: `Retrying after ~${retryAfter}s (+${jitter}ms jitter)`,
-                                    context: GithubService.name,
-                                    metadata: {
-                                        method: options.method,
-                                        url: options.url,
-                                        retryAfter,
-                                        jitter,
-                                        attempts,
-                                    },
-                                });
-                                return true;
-                            }
-
+                            // Zero in-octokit retries. Returning false
+                            // here makes the throttling plugin re-throw
+                            // the original 403 immediately, which the
+                            // calling processor catches and converts to
+                            // `RateLimitError(resetAt)`. The RabbitMQ
+                            // error handler then republishes the job
+                            // with a delay aligned to the bucket reset.
+                            // The previous behavior (up to 2 retries
+                            // dorme by `retryAfter` each = up to ~3h
+                            // pinned inside a single octokit call) is
+                            // strictly worse: the same wait happens, but
+                            // the worker slot is held the entire time.
+                            void jitter; // kept for log shape parity
                             return false;
                         },
                         onSecondaryRateLimit: (

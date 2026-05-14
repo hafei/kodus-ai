@@ -60,6 +60,8 @@ import { PullRequestsModule } from '../modules/pull-requests.module';
 import { PullRequestMessagesModule } from '../modules/pullRequestMessages.module';
 import { CodeReviewJobProcessorService } from '../workflow/code-review-job-processor.service';
 import { ByokConcurrencyGateService } from '../workflow/byok-concurrency-gate.service';
+import { GitHubRateLimitGateService } from '@libs/platform/infrastructure/adapters/services/github/github-rate-limit-gate.service';
+import { RATE_LIMIT_GATE_SERVICE_TOKEN } from '@libs/core/workflow/domain/contracts/rate-limit-gate.service.contract';
 import { ImplementationVerificationProcessor } from '../workflow/implementation-verification.processor';
 import { LOAD_EXTERNAL_CONTEXT_STAGE_TOKEN } from './stages/contracts/loadExternalContextStage.contract';
 import { ValidateSuggestionsStage } from './stages/validate-suggestions.stage';
@@ -115,6 +117,16 @@ import { ReviewOrchestratorService } from '../infrastructure/agents/review-orche
         CodeReviewJobProcessorService,
         ByokConcurrencyGateService,
         DistributedLockService,
+        // GitHub rate-limit gate — pre-check before burning slot on a
+        // job whose installation bucket is already exhausted. Same
+        // instance shared via both the token (for processors that
+        // inject by abstraction) and the concrete class (for any
+        // direct consumer).
+        GitHubRateLimitGateService,
+        {
+            provide: RATE_LIMIT_GATE_SERVICE_TOKEN,
+            useExisting: GitHubRateLimitGateService,
+        },
 
         // Services
         CloneParamsResolverService,

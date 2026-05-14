@@ -108,6 +108,7 @@ describe('CodeReviewJobProcessorService — AbortSignal propagation', () => {
             mockByokGate as ByokConcurrencyGateService,
             mockNotificationService,
             mockPrAuthorResolver,
+            { check: jest.fn().mockResolvedValue(undefined) } as any,
         );
 
         (mockJobRepository.findOne as jest.Mock).mockResolvedValue(makeJob());

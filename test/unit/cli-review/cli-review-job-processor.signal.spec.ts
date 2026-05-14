@@ -71,6 +71,7 @@ describe('CliReviewJobProcessorService — AbortSignal propagation', () => {
         processor = new CliReviewJobProcessorService(
             mockJobRepository,
             mockUseCase,
+            { check: jest.fn().mockResolvedValue(undefined) } as any,
         );
 
         (mockJobRepository.findOne as jest.Mock).mockResolvedValue(makeJob());
