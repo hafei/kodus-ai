@@ -1034,6 +1034,16 @@ export class CliReviewController {
      * Rate-limited by device fingerprint (same bucket as /cli/trial/review).
      * Repos that return 404/403 surface as 403 { code: 'requires_auth' } so
      * the frontend can redirect to signup.
+     *
+     * NOTE on DoS protection. The fingerprint check here is a soft
+     * per-browser dedup, not the abuse defense. An attacker can rotate
+     * the fingerprint trivially. The real per-IP rate limit lives in
+     * the AWS WAF rule attached to the ALB in front of this service
+     * (rate-based, scoped to `/cli/public/*`) where the source IP is
+     * trusted and not spoofable. We deliberately don't read req.ip
+     * here because without a tightly scoped `trust proxy` config it's
+     * either useless (ALB IP for everyone) or spoofable
+     * (X-Forwarded-For). See the deployment runbook for the WAF rule.
      */
     @Post('public/review-pr')
     @ApiOperation({

@@ -204,7 +204,11 @@ export class PublicPrReviewUseCase {
  */
 function extractChangedFiles(diff: string): string[] {
     const paths: string[] = [];
-    const re = /^diff --git a\/.+? b\/(.+)$/gm;
+    // Git wraps paths with spaces / special chars in double quotes, e.g.
+    // `diff --git "a/file with space" "b/file with space"`. Accept both
+    // forms so those files reach the grouping LLM instead of silently
+    // falling into the "Other changes" bucket.
+    const re = /^diff --git (?:"a\/|a\/).+?"? (?:"b\/|b\/)(.+?)"?$/gm;
     let match: RegExpExecArray | null;
     while ((match = re.exec(diff)) !== null) {
         paths.push(match[1]);
