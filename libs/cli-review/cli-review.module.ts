@@ -64,6 +64,9 @@ import { LicenseModule } from '@libs/ee/license/license.module';
 import { KodyRulesModule } from '@libs/kodyRules/modules/kodyRules.module';
 import { ParametersModule } from '@libs/organization/modules/parameters.module';
 import { TeamModule } from '@libs/organization/modules/team.module';
+// Needed by ValidateCliKeyUseCase — exports AUTH_SERVICE_TOKEN +
+// re-exports JwtModule (so JwtService resolves transitively).
+import { AuthModule } from '@libs/identity/modules/auth.module';
 
 // Workflow infra (provided locally to avoid an ESM circular import with
 // WorkflowModule, which itself imports CliReviewModule on the worker side).
@@ -104,6 +107,7 @@ import { OutboxMessageModel } from '@libs/core/workflow/infrastructure/repositor
         forwardRef(() => CodeReviewCoreModule), // For CODE_REVIEW_EXECUTION_SERVICE
         forwardRef(() => ParametersModule), // For config loading
         forwardRef(() => TeamModule), // For Team CLI Key validation
+        forwardRef(() => AuthModule), // For ValidateCliKeyUseCase (AUTH_SERVICE_TOKEN + JwtService)
         forwardRef(() => GlobalCacheModule), // For rate limiting
         forwardRef(() => AutomationModule), // For tracking executions
         forwardRef(() => LicenseModule), // For license validation and auto-assign
