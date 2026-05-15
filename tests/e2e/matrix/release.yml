@@ -1,0 +1,48 @@
+id: release
+description: |
+    Full release matrix. Run before retagging an RC to the customer-visible
+    semver tag. Includes upgrade testing for self-hosted.
+
+scenarios:
+    - code-review-basic
+    - kody-rules-create-and-apply
+    - license-attribution
+    - upgrade-n-1-to-n
+
+cells:
+    # ---------- self-hosted ----------
+    - target: self-hosted
+      provider: github
+      license: license-paid
+    - target: self-hosted
+      provider: gitlab
+      license: license-paid
+    - target: self-hosted
+      provider: bitbucket
+      license: license-paid
+    - target: self-hosted
+      provider: azure-devops
+      license: license-paid
+    - target: self-hosted
+      provider: github
+      license: license-free
+
+    # ---------- cloud ----------
+    - target: cloud
+      provider: github
+      license: paid
+    - target: cloud
+      provider: gitlab
+      license: paid
+    - target: cloud
+      provider: bitbucket
+      license: paid
+    - target: cloud
+      provider: azure-devops
+      license: paid
+    - target: cloud
+      provider: github
+      license: free
+    - target: cloud
+      provider: github
+      license: trial

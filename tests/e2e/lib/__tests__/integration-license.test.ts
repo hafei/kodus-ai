@@ -1,0 +1,231 @@
+import { strict as assert } from "node:assert";
+import { test } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runMatrix } from "../runner.js";
+import { resolveScenarios } from "../../scenarios/index.js";
+import {
+    json,
+    kodusRoutes,
+    startMockServer,
+    type RouteHandler,
+} from "./mock-server.js";
+
+const TEST_PR_NUMBER = 77;
+const TEST_REPO = "kodustech/qa-fixture";
+const ORG_ID = "org-license-test";
+const TEAM_ID = "team-license-test";
+
+interface RunOpts {
+    license: "paid" | "license-paid" | "free" | "license-free" | "trial";
+    target: "cloud" | "self-hosted";
+    /** If true, the mock returns a Kody response; if false, it stays silent. */
+    kodyResponds: boolean;
+}
+
+async function runLicenseScenario(opts: RunOpts): Promise<{
+    status: string;
+    errorMessage?: string;
+    evidence: Record<string, unknown>;
+}> {
+    const reviewWindow = { triggeredAt: "" };
+
+    const ghRoutes: RouteHandler[] = [
+        {
+            method: "POST",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/issues\/\d+\/comments$/,
+            handler: (_req, res) => {
+                const created = new Date().toISOString();
+                reviewWindow.triggeredAt = created;
+                json(res, 201, { id: 1001, created_at: created, body: "@kody review" });
+            },
+        },
+        {
+            method: "GET",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/pulls\/\d+\/comments/,
+            handler: (_req, res) => json(res, 200, []),
+        },
+        {
+            method: "GET",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/issues\/\d+\/comments/,
+            handler: (_req, res) => {
+                if (!opts.kodyResponds) {
+                    json(res, 200, []);
+                    return;
+                }
+                const responseTime = new Date(
+                    new Date(reviewWindow.triggeredAt).getTime() + 1000,
+                ).toISOString();
+                json(res, 200, [
+                    {
+                        id: 2002,
+                        body: "Kody mock: 1 issue.",
+                        created_at: responseTime,
+                    },
+                ]);
+            },
+        },
+        {
+            method: "GET",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/pulls\/\d+\/reviews/,
+            handler: (_req, res) => json(res, 200, []),
+        },
+        {
+            method: "GET",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+(?:\?|$)/,
+            handler: (_req, res) =>
+                json(res, 200, { id: 9999, full_name: TEST_REPO, name: "qa-fixture" }),
+        },
+    ];
+
+    const kodusServer = await startMockServer(
+        kodusRoutes({
+            orgId: ORG_ID,
+            teamId: TEAM_ID,
+            repoId: 9999,
+            repoFullName: TEST_REPO,
+            repoName: "qa-fixture",
+        }),
+    );
+    const ghServer = await startMockServer(ghRoutes);
+    const artifactRoot = mkdtempSync(join(tmpdir(), "e2e-lic-"));
+    const originalEnv = { ...process.env };
+    const originalFetch = global.fetch;
+
+    try {
+        process.env.TARGET_BASE_URL = kodusServer.baseUrl;
+        process.env.TARGET_WEB_URL = kodusServer.baseUrl;
+        process.env.TARGET_TUNNEL_URL = "https://dummy.trycloudflare.com";
+        if (opts.target === "self-hosted") {
+            process.env.SH_TENANT_EMAIL = "test@kodus.test";
+            process.env.SH_TENANT_PASSWORD = "secret";
+        } else {
+            const map = {
+                free: "CLOUD_TENANT_FREE",
+                trial: "CLOUD_TENANT_TRIAL",
+                paid: "CLOUD_TENANT_PAID",
+            } as const;
+            const prefix = map[opts.license as keyof typeof map];
+            if (prefix) {
+                process.env[`${prefix}_EMAIL`] = `${opts.license}@kodus.test`;
+                process.env[`${prefix}_PASSWORD`] = "secret";
+            }
+        }
+        process.env.GH_TEST_TOKEN = "fake-token";
+        process.env.GH_TEST_REPO = TEST_REPO;
+        process.env.GH_TEST_PR_NUMBER = String(TEST_PR_NUMBER);
+
+        // Speed up polls so the test doesn't block for the scenario's
+        // production timeout. These envs are read by pollUntil.
+        process.env.E2E_POLL_INTERVAL_OVERRIDE_SEC = "0.05";
+        process.env.E2E_POLL_TIMEOUT_OVERRIDE_SEC = "3";
+
+        global.fetch = async (input, init) => {
+            const url = typeof input === "string" ? input : input.toString();
+            return originalFetch(
+                url.replace("https://api.github.com", ghServer.baseUrl),
+                init,
+            );
+        };
+
+        const outcome = await runMatrix({
+            artifactRoot,
+            runId: `license-${opts.license}-${opts.kodyResponds}`,
+            target: opts.target,
+            cells: [
+                { target: opts.target, provider: "github", license: opts.license },
+            ],
+            scenarios: resolveScenarios(["license-attribution"]),
+        });
+
+        const result = outcome.results[0];
+        return {
+            status: result?.status ?? "no-result",
+            errorMessage: result?.errorMessage,
+            evidence: (result?.evidence ?? {}) as Record<string, unknown>,
+        };
+    } finally {
+        global.fetch = originalFetch;
+        process.env = originalEnv;
+        await kodusServer.close();
+        await ghServer.close();
+        rmSync(artifactRoot, { recursive: true, force: true });
+    }
+}
+
+test("integration license: self-hosted license-paid expects review and gets it → passes", async () => {
+    const r = await runLicenseScenario({
+        target: "self-hosted",
+        license: "license-paid",
+        kodyResponds: true,
+    });
+    assert.equal(r.status, "passed", `expected passed, got ${r.status}: ${r.errorMessage}`);
+    assert.equal((r.evidence as { expectReview?: boolean }).expectReview, true);
+    assert.equal(
+        (r.evidence as { actuallySawReview?: boolean }).actuallySawReview,
+        true,
+    );
+});
+
+test("integration license: self-hosted license-paid expects review but none arrives → fails", async () => {
+    const r = await runLicenseScenario({
+        target: "self-hosted",
+        license: "license-paid",
+        kodyResponds: false,
+    });
+    assert.equal(r.status, "failed", `expected failed, got ${r.status}`);
+    assert.ok(
+        r.errorMessage?.includes("Expected review for license=license-paid"),
+        `error should mention paid-but-no-review; got: ${r.errorMessage}`,
+    );
+});
+
+test("integration license: self-hosted license-free expects no review and gets none → passes", async () => {
+    const r = await runLicenseScenario({
+        target: "self-hosted",
+        license: "license-free",
+        kodyResponds: false,
+    });
+    assert.equal(r.status, "passed", `expected passed, got ${r.status}: ${r.errorMessage}`);
+    assert.equal((r.evidence as { expectReview?: boolean }).expectReview, false);
+    assert.equal(
+        (r.evidence as { actuallySawReview?: boolean }).actuallySawReview,
+        false,
+    );
+});
+
+test("integration license: self-hosted license-free expects no review but Kody answers → fails (entitlement leak)", async () => {
+    const r = await runLicenseScenario({
+        target: "self-hosted",
+        license: "license-free",
+        kodyResponds: true,
+    });
+    assert.equal(
+        r.status,
+        "failed",
+        `expected failed (free leaked review), got ${r.status}`,
+    );
+    assert.ok(
+        r.errorMessage?.includes("Expected NO review for license=license-free"),
+        `error should mention free-with-review; got: ${r.errorMessage}`,
+    );
+});
+
+test("integration license: cloud free expects no review and gets none → passes", async () => {
+    const r = await runLicenseScenario({
+        target: "cloud",
+        license: "free",
+        kodyResponds: false,
+    });
+    assert.equal(r.status, "passed", `expected passed, got ${r.status}: ${r.errorMessage}`);
+});
+
+test("integration license: cloud paid expects review and gets it → passes", async () => {
+    const r = await runLicenseScenario({
+        target: "cloud",
+        license: "paid",
+        kodyResponds: true,
+    });
+    assert.equal(r.status, "passed", `expected passed, got ${r.status}: ${r.errorMessage}`);
+});

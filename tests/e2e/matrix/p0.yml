@@ -1,0 +1,48 @@
+id: p0
+description: |
+    P0 gates that block every release. Covers code-review on all four providers
+    in both targets, license attribution gates, and the kody-rules apply flow
+    on the primary provider. Run before promoting any RC tag to client-visible.
+
+scenarios:
+    - code-review-basic
+    - kody-rules-create-and-apply
+    - license-attribution
+
+cells:
+    # ---------- self-hosted ----------
+    - target: self-hosted
+      provider: github
+      license: license-paid
+    - target: self-hosted
+      provider: gitlab
+      license: license-paid
+    - target: self-hosted
+      provider: bitbucket
+      license: license-paid
+    - target: self-hosted
+      provider: azure-devops
+      license: license-paid
+    - target: self-hosted
+      provider: github
+      license: license-free
+
+    # ---------- cloud ----------
+    - target: cloud
+      provider: github
+      license: paid
+    - target: cloud
+      provider: gitlab
+      license: paid
+    - target: cloud
+      provider: bitbucket
+      license: paid
+    - target: cloud
+      provider: azure-devops
+      license: paid
+    - target: cloud
+      provider: github
+      license: free
+    - target: cloud
+      provider: github
+      license: trial
