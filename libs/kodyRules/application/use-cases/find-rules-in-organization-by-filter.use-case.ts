@@ -18,6 +18,7 @@ import {
 import {
     IKodyRule,
     KodyRulesStatus,
+    KodyRulesType,
 } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 
 import { createLogger } from '@kodus/flow';
@@ -116,7 +117,14 @@ export class FindRulesInOrganizationByRuleFilterKodyRulesUseCase implements IUse
 
             const rules = filteredByStatus.filter((rule) => {
                 for (const key in filter) {
-                    if (rule[key] !== filter[key]) {
+                    // Rules sem `type` são tratadas como STANDARD (alinhado
+                    // com o `getRuleType` do front), pra cobrir dados legados
+                    // anteriores ao campo.
+                    const actual =
+                        key === 'type'
+                            ? (rule.type ?? KodyRulesType.STANDARD)
+                            : rule[key];
+                    if (actual !== filter[key]) {
                         return false;
                     }
                 }
