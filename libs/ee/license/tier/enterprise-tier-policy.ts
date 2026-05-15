@@ -10,30 +10,32 @@ import {
  * (`isEnterprisePlan`) aligned with this when the rule changes.
  *
  * Allowed:
- *   - self-hosted (any) — historically full feature set
- *   - licensed self-hosted (any)
+ *   - cloud paid (`active`) on enterprise plans
+ *   - licensed self-hosted with `plan: enterprise*` in the signed JWT
  *   - trial (treated as enterprise preview)
- *   - cloud paid (active) on enterprise plans
  *
  * Blocked:
- *   - canceled / expired / payment_failed
- *   - cloud paid (active) on non-enterprise plans
- *   - invalid licenses
+ *   - invalid / canceled / expired / payment_failed
+ *   - CE self-hosted (no key) — `validateOrganizationLicense` returns
+ *     `{ valid: false }`, caught by the early short-circuit
+ *   - cloud paid on non-enterprise plans
+ *   - licensed self-hosted with a non-enterprise `plan` in the JWT
  */
 export function isEnterpriseTierAllowed(
     license: OrganizationLicenseValidationResult | null | undefined,
 ): boolean {
-    if (!license) return false;
+    if (!license || !license.valid) return false;
+    const plan = license.planType ?? '';
+    const isEnterprise =
+        plan.startsWith('enterprise_') || plan === 'enterprise';
 
     switch (license.subscriptionStatus) {
-        case SubscriptionStatus.SELF_HOSTED:
+        case SubscriptionStatus.ACTIVE:
+            return isEnterprise;
         case SubscriptionStatus.LICENSED_SELF_HOSTED:
+            return isEnterprise;
         case SubscriptionStatus.TRIAL:
             return true;
-        case SubscriptionStatus.ACTIVE: {
-            const plan = license.planType ?? '';
-            return plan.startsWith('enterprise');
-        }
         default:
             return false;
     }
