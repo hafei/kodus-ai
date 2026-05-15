@@ -4705,4 +4705,20 @@ ${copyPrompt}
 
         return copyPrompt;
     }
+
+    async getRepositoryContentBatch(
+        _params: any,
+    ): Promise<Map<string, any> | null> {
+        // Not implemented for GitLab — callers fall back to per-file
+        // `getRepositoryContentFile`.
+        return null;
+    }
+
+    async getUsersByUsername(
+        _params: any,
+    ): Promise<Map<string, any> | null> {
+        // Not implemented for GitLab — callers fall back to per-user
+        // `getUserByUsername`.
+        return null;
+    }
 }

@@ -519,6 +519,24 @@ export class PullRequestsService implements IPullRequestsService {
             enrichedPullRequest.reviewers = foundReviewers;
         }
 
+        // Pre-flight user batch fetch: warms the Redis cache used by
+        // `getUserByUsername` in a single GraphQL call (GitHub only).
+        // The downstream extractUser/extractUsers (both in the update
+        // branch below and in initializeCodeReviewStructure via the
+        // initial branch) read from that cache, so this collapses up
+        // to 1+N+M parallel REST calls into 1 GraphQL request per save.
+        await this.prefetchUsersForExtraction(
+            [
+                enrichedPullRequest.user,
+                enrichedPullRequest.reviewers ??
+                    enrichedPullRequest.requested_reviewers,
+                enrichedPullRequest.assignees ??
+                    enrichedPullRequest.participants,
+            ],
+            organizationAndTeamData,
+            platformType,
+        );
+
         const existingPR =
             await this.pullRequestsRepository.findByNumberAndRepositoryName(
                 pullRequest?.number,
@@ -1179,6 +1197,76 @@ export class PullRequestsService implements IPullRequestsService {
                 },
             });
             return [];
+        }
+    }
+
+    /**
+     * Pre-flight: batch-fetch user data for all candidate user inputs
+     * (author + reviewers + assignees) via the platform's batch API
+     * (GitHub GraphQL today) and warm the `getUserByUsername` Redis
+     * cache. The per-user extractUser/extractUsers calls that follow
+     * then hit cache instead of fanning out N parallel REST round-trips.
+     *
+     * Opportunistic: silent no-op for non-GitHub platforms (the
+     * CodeManagementService wrapper returns null) and on any batch
+     * failure. The fallback path — per-user REST via extractUser — is
+     * always available.
+     */
+    private async prefetchUsersForExtraction(
+        inputs: Array<any | undefined>,
+        organizationAndTeamData: OrganizationAndTeamData,
+        platformType: PlatformType,
+    ): Promise<void> {
+        try {
+            const usernames = new Set<string>();
+
+            // Mirror the discriminator from extractUser: only users
+            // whose branch would call `getUserByUsername` are worth
+            // pre-fetching. Users with a valid email skip the lookup
+            // entirely and would just add noise to the batch.
+            const visit = (data: any) => {
+                if (!data) return;
+                const needsLookup =
+                    data?.role || (!data?.email && !data?.uniqueName);
+                if (!needsLookup) return;
+
+                const login =
+                    data?.login ||
+                    data?.username ||
+                    data?.nickname ||
+                    data?.descriptor ||
+                    '';
+                if (typeof login === 'string' && login.length > 0) {
+                    usernames.add(login);
+                }
+            };
+
+            for (const input of inputs) {
+                if (!input) continue;
+                if (Array.isArray(input)) {
+                    for (const u of input) visit(u);
+                } else {
+                    visit(input);
+                }
+            }
+
+            if (usernames.size === 0) return;
+
+            await this.codeManagement.getUsersByUsername(
+                {
+                    organizationAndTeamData,
+                    usernames: Array.from(usernames),
+                },
+                platformType,
+            );
+        } catch (err) {
+            this.logger.warn({
+                message:
+                    'User batch prefetch failed — falling back to per-user enrichment',
+                context: PullRequestsService.name,
+                error: err,
+                metadata: { organizationAndTeamData, platformType },
+            });
         }
     }
 

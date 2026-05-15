@@ -344,7 +344,12 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
     /**
      * Enriquece arquivos com conteúdo.
      * Usado para buscar conteúdo apenas dos arquivos que passaram pelo filtro ignorePaths.
-     * Usa p-limit para controlar concorrência e evitar secondary rate limit do GitHub.
+     *
+     * GitHub: 1 GraphQL request por batch de 50 arquivos (custa 1 ponto no
+     * bucket graphql), vs N REST `repos.getContent` (1 ponto cada no
+     * bucket core). Cai pra REST per-file quando a plataforma não suporta
+     * batch ou quando o batch falha. Demais plataformas: REST per-file
+     * com pLimit (comportamento original preservado).
      */
     async enrichFilesWithContent(
         organizationAndTeamData: OrganizationAndTeamData,
@@ -356,9 +361,75 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
             return [];
         }
 
-        const limit = pLimit(this.FILE_CONTENT_CONCURRENCY);
+        const decode = (fc: any) => {
+            const content = fc?.data?.content;
+            if (
+                typeof content === 'string' &&
+                fc?.data?.encoding === 'base64'
+            ) {
+                return Buffer.from(content, 'base64').toString('utf-8');
+            }
+            return content;
+        };
 
         try {
+            // Batch path. The platform adapter returns null when it
+            // doesn't support batch (GitLab/Bitbucket/Azure/Forgejo
+            // today) — falls through to the per-file path below.
+            // Wrapped in its own try/catch so a throw from the batch
+            // method (e.g., GraphQL client setup failure, expired
+            // installation token) degrades gracefully to per-file REST
+            // instead of aborting the whole stage.
+            let batchMap: Map<string, any> | null | undefined;
+            try {
+                batchMap =
+                    await this.codeManagementService.getRepositoryContentBatch(
+                        {
+                            organizationAndTeamData,
+                            repository,
+                            files,
+                            pullRequest,
+                        },
+                    );
+            } catch (batchErr) {
+                this.logger.warn({
+                    message:
+                        'getRepositoryContentBatch threw — falling back to REST per-file',
+                    context: PullRequestHandlerService.name,
+                    error: batchErr,
+                    metadata: {
+                        organizationAndTeamData,
+                        prNumber: pullRequest?.number,
+                        repositoryName: repository?.name,
+                        fileCount: files.length,
+                    },
+                });
+                batchMap = null;
+            }
+
+            if (batchMap) {
+                return files.map((file) => {
+                    const fc = batchMap.get(file.filename);
+                    if (!fc) {
+                        this.logger.warn({
+                            message: `Batch returned no content for file: ${file.filename}`,
+                            context: PullRequestHandlerService.name,
+                            metadata: {
+                                organizationAndTeamData,
+                                prNumber: pullRequest?.number,
+                                filename: file.filename,
+                            },
+                        });
+                        return file;
+                    }
+                    return { ...file, fileContent: decode(fc) };
+                });
+            }
+
+            // REST per-file fallback (GitLab/Bitbucket/Azure or batch
+            // returned null). pLimit caps concurrency to keep secondary
+            // rate-limit and connection pressure in check.
+            const limit = pLimit(this.FILE_CONTENT_CONCURRENCY);
             const filesWithContent = await Promise.all(
                 files.map((file) =>
                     limit(async () => {
@@ -373,22 +444,9 @@ export class PullRequestHandlerService implements IPullRequestManagerService {
                                     },
                                 );
 
-                            const content = fileContent?.data?.content;
-                            let decodedContent = content;
-
-                            if (
-                                content &&
-                                fileContent?.data?.encoding === 'base64'
-                            ) {
-                                decodedContent = Buffer.from(
-                                    content,
-                                    'base64',
-                                ).toString('utf-8');
-                            }
-
                             return {
                                 ...file,
-                                fileContent: decodedContent,
+                                fileContent: decode(fileContent),
                             };
                         } catch (error) {
                             this.logger.error({
