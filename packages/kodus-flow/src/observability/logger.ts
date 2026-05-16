@@ -105,18 +105,22 @@ function getPinoLogger(): pino.Logger {
                     'req.headers["x-api-key"]',
                     'req.headers.cookie',
                     'res.headers["set-cookie"]',
-                    // got/axios HTTPError nested shapes — belt-and-suspenders
-                    // for paths that bypass the err serializer (e.g. when a
-                    // caller logs response/request directly in metadata).
-                    '*.headers.authorization',
-                    '*.headers.cookie',
-                    '*.headers["set-cookie"]',
-                    '*.*.headers.authorization',
-                    '*.*.headers.cookie',
-                    '*.*.headers["set-cookie"]',
-                    '*.*.*.headers.authorization',
-                    '*.*.*.headers.cookie',
-                    '*.*.*.headers["set-cookie"]',
+                    // Intermediate wildcards (`*.headers.X`, `*.*.headers.X`,
+                    // `*.*.*.headers.X`) were intentionally removed: they
+                    // crashed pino-redact whenever the log payload carried
+                    // an `undici` Response in its tree (issue #1105). The
+                    // wildcard traversal touches getter-defined properties
+                    // on Response (e.g. `.type`) whose internal state may
+                    // be invalid after the body is consumed or aborted,
+                    // raising a TypeError that escaped this logger.
+                    //
+                    // `deepSanitize` below (key-based, normalizes case +
+                    // punctuation) provides equivalent or stronger
+                    // redaction for `authorization` / `cookie` /
+                    // `set-cookie` / `x-api-key` / `proxy-authorization`
+                    // at arbitrary depth, so dropping the wildcards is
+                    // not a coverage loss — it removes redundant work
+                    // that was the actual crash site.
                 ],
                 censor: '[REDACTED]',
             },
@@ -326,6 +330,34 @@ function deepSanitize(obj: any, seen?: WeakSet<object>): any {
         return obj;
     }
 
+    // Issue #1105: `undici` Response/Request expose state via prototype
+    // getters (`.type`, `.status`, `.headers`, `.url`) that THROW when
+    // the internal slot has been consumed/aborted. `Object.keys` returns
+    // [] for them (own enumerable empty), so a plain key walk would not
+    // crash — but it also would not redact anything inside, leaving
+    // `response.url` (potentially containing a token in the query
+    // string) and `response.headers` (potentially containing Set-Cookie)
+    // exposed to the downstream pino pipeline. Replacing the whole
+    // object with a flat string stub closes both holes: no getter is
+    // touched, and no sensitive sub-state can leak.
+    //
+    // `instanceof` is safe — it does not trigger property getters and
+    // works across `extends Response` subclasses. We guard on
+    // `globalThis.Response` because tests / older runtimes may not
+    // define it.
+    if (
+        typeof (globalThis as any).Response === 'function' &&
+        obj instanceof (globalThis as any).Response
+    ) {
+        return '[Response]';
+    }
+    if (
+        typeof (globalThis as any).Request === 'function' &&
+        obj instanceof (globalThis as any).Request
+    ) {
+        return '[Request]';
+    }
+
     // Lazily create WeakSet only when we actually recurse into a nested object.
     const refs = seen ?? new WeakSet();
     if (refs.has(obj)) return '[Circular]';
@@ -394,31 +426,95 @@ export class SimpleLogger {
         const contextStr = this.extractContextInfo(context);
         const baseLogger = getPinoLogger();
 
-        // Standard logging to stdout (respects API_LOG_LEVEL)
+        // Standard logging to stdout (respects API_LOG_LEVEL).
+        //
+        // Issue #1105: the pino write path (serializers + redact +
+        // JSON encoding) can throw on pathological payloads — most
+        // notably when an `undici` Response in the error chain has
+        // a getter that raises after the body is consumed. Anything
+        // that escapes here previously surfaced inside the caller's
+        // own `try/catch`, where it was reliably mis-attributed to
+        // the business operation (e.g. `(Check model config)` in the
+        // file-analysis stage). A logger that propagates is broken
+        // by definition: trap everything and fall back to a minimal
+        // line via `console.error` so the call site can never see a
+        // logger-internal failure.
         if (baseLogger.isLevelEnabled(level)) {
-            const childLogger = baseLogger.child({
-                serviceName: effectiveServiceName,
-                context: contextStr,
-            });
+            try {
+                const childLogger = baseLogger.child({
+                    serviceName: effectiveServiceName,
+                    context: contextStr,
+                });
 
-            const logObject = this.buildLogObject(
-                effectiveServiceName,
-                metadata,
-                error,
-            );
+                const logObject = this.buildLogObject(
+                    effectiveServiceName,
+                    metadata,
+                    error,
+                );
 
-            if (error) {
-                childLogger[level]({ ...logObject, err: error }, message);
-            } else {
-                childLogger[level](logObject, message);
+                if (error) {
+                    childLogger[level]({ ...logObject, err: error }, message);
+                } else {
+                    childLogger[level](logObject, message);
+                }
+            } catch (loggerErr) {
+                // Inner try/catch so the fallback itself cannot
+                // surface — JSON.stringify can blow up on exotic
+                // circular shapes or a TypeError-on-toString value
+                // even though deepSanitize handles the common cases.
+                try {
+                    const fallbackPayload: Record<string, unknown> = {
+                        level,
+                        message,
+                        serviceName: effectiveServiceName,
+                        context: contextStr,
+                        loggerFallback: true,
+                    };
+                    if (error) {
+                        fallbackPayload.errorName = (error as Error)?.name;
+                        fallbackPayload.errorMessage = (
+                            error as Error
+                        )?.message;
+                    }
+                    const loggerErrAsError = loggerErr as Error | undefined;
+                    fallbackPayload.loggerErrorName = loggerErrAsError?.name;
+                    fallbackPayload.loggerErrorMessage =
+                        loggerErrAsError?.message;
+                    // eslint-disable-next-line no-console
+                    console.error(JSON.stringify(fallbackPayload));
+                } catch {
+                    // Last resort: stringify failed (e.g. circular
+                    // ref in error.message). Emit a static marker so
+                    // the failure is at least visible in stdout.
+                    // eslint-disable-next-line no-console
+                    console.error(
+                        '[logger:fallback-failed] level=' +
+                            level +
+                            ' service=' +
+                            effectiveServiceName,
+                    );
+                }
             }
         }
 
-        // Processors run regardless of stdout log level
-        const safeProcessorMetadata = deepSanitize({
-            ...metadata,
-            component: effectiveServiceName,
-        });
+        // Processors run regardless of stdout log level. The
+        // `deepSanitize` call below can throw on pathological input
+        // (e.g. an enumerable getter-defined property that raises),
+        // so it lives inside its own try/catch — without it, the
+        // throw would escape `handleLog` even though the stdout
+        // write was already guarded above. (issue #1105)
+        let safeProcessorMetadata: Record<string, unknown> = {};
+        try {
+            safeProcessorMetadata = deepSanitize({
+                ...metadata,
+                component: effectiveServiceName,
+            });
+        } catch {
+            safeProcessorMetadata = {
+                component: effectiveServiceName,
+                sanitizationFailed: true,
+            };
+        }
         for (const processor of globalLogProcessors) {
             try {
                 if (typeof processor === 'function') {
