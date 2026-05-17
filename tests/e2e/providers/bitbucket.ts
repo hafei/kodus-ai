@@ -206,8 +206,15 @@ export class BitbucketProvider extends BaseProvider {
                     if (opts.triggerId && String(c.id) === opts.triggerId) return false;
                     const raw = c.content?.raw ?? "";
                     if (raw.toLowerCase().startsWith("@kody")) return false;
-                    // Filter Kody's status comments (placeholder notifications).
-                    if (raw.includes("<!-- kody-codereview")) return false;
+                    // Drop "Started!" placeholder but keep "Complete!" — the
+                    // latter is a valid mechanics signal even when Kody
+                    // found no inline findings.
+                    if (
+                        raw.includes("<!-- kody-codereview") &&
+                        !raw.includes("kody-codereview-completed")
+                    ) {
+                        return false;
+                    }
                     return true;
                 });
                 if (filtered.length) {

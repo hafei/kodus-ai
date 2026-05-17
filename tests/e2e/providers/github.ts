@@ -237,13 +237,17 @@ export class GitHubProvider extends BaseProvider {
                         { headers: this.headers() },
                     ),
                 ]);
-                // Filter out Kody's own status comments — they're placeholder
-                // "Code Review Started!" / "Completed!" notifications carrying
-                // no findings, identified by the `<!-- kody-codereview -->`
-                // HTML marker. Without this filter the test passes on Kody's
-                // "I'm starting" message instead of on actual review output.
+                // Distinguish Kody's two notification stages:
+                //   - "Started!" placeholder carries `<!-- kody-codereview -->`
+                //     by itself. No findings yet — drop.
+                //   - "Complete!" carries `<!-- kody-codereview-completed-… -->`
+                //     plus `<!-- kody-codereview -->`. Pipeline finished —
+                //     keep, because for mechanics smoke tests "review came
+                //     back, no issues" is a valid PASS signal (even with
+                //     zero inline findings).
                 const isStatusComment = (body: string) =>
-                    body.includes("<!-- kody-codereview");
+                    body.includes("<!-- kody-codereview") &&
+                    !body.includes("kody-codereview-completed");
                 const filterNonTrigger = (items: { id: number; body: string }[]) =>
                     items.filter(
                         (c) =>

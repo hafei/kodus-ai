@@ -220,9 +220,15 @@ export class GitLabProvider extends BaseProvider {
                     if (opts.triggerId && String(n.id) === opts.triggerId) return false;
                     const body = n.body ?? "";
                     if (body.toLowerCase().startsWith("@kody")) return false;
-                    // Filter Kody's status comments (placeholder "Started!" /
-                    // "Completed!" notifications carrying no findings).
-                    if (body.includes("<!-- kody-codereview")) return false;
+                    // Drop "Started!" placeholder but keep "Complete!" — the
+                    // latter is a valid mechanics signal even when Kody
+                    // found no inline findings.
+                    if (
+                        body.includes("<!-- kody-codereview") &&
+                        !body.includes("kody-codereview-completed")
+                    ) {
+                        return false;
+                    }
                     return true;
                 });
                 if (filtered.length) {

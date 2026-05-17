@@ -17,8 +17,12 @@ const FIXTURE_BRANCHES: Record<
     { head: string; base: string } | undefined
 > = {
     github: {
-        head: "performance-enhancement-complete",
-        base: "performance-optimization-baseline",
+        // 1 file / 5 lines changed — smallest pair in the benchmark fork.
+        // Picked deliberately so a smoke run reviews in <2 min instead of
+        // ~15 min on the larger fixtures (which blew past pollForReview's
+        // 600s timeout on self-hosted with Kimi K2.6 reasoning model).
+        head: "queue-assignment-enhancement-after",
+        base: "queue-assignment-enhancement-before",
     },
     // Placeholders for GitLab / Bitbucket / Azure DevOps — the real values
     // come from the equivalent fork (TODO: replicate

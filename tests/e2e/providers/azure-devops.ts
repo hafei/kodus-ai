@@ -264,8 +264,15 @@ export class AzureDevOpsProvider extends BaseProvider {
                             continue;
                         const text = c.content ?? "";
                         if (text.toLowerCase().startsWith("@kody")) continue;
-                        // Filter Kody's status comments (placeholder notifications).
-                        if (text.includes("<!-- kody-codereview")) continue;
+                        // Drop "Started!" placeholder but keep "Complete!" —
+                        // the latter is a valid mechanics signal even when
+                        // Kody found no inline findings.
+                        if (
+                            text.includes("<!-- kody-codereview") &&
+                            !text.includes("kody-codereview-completed")
+                        ) {
+                            continue;
+                        }
                         count++;
                         if (!sample) sample = text.slice(0, 240);
                     }
