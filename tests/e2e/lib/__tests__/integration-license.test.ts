@@ -33,22 +33,34 @@ async function runLicenseScenario(opts: RunOpts): Promise<{
 
     const ghRoutes: RouteHandler[] = [
         {
+            // closeOpenPRsBetween preflight — pretend no leftovers.
+            method: "GET",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/pulls\?/,
+            handler: (_req, res) => json(res, 200, []),
+        },
+        {
+            // openPRFromBranches → new PR. Stash the creation time so the
+            // polling routes below can return a Kody response that lands
+            // AFTER the PR was opened (mirrors `since=` filter semantics).
             method: "POST",
-            pathRegex: /^\/repos\/[^/]+\/[^/]+\/issues\/\d+\/comments$/,
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/pulls$/,
             handler: (_req, res) => {
-                const created = new Date().toISOString();
-                reviewWindow.triggeredAt = created;
-                json(res, 201, { id: 1001, created_at: created, body: "@kody review" });
+                reviewWindow.triggeredAt = new Date().toISOString();
+                json(res, 201, {
+                    number: TEST_PR_NUMBER,
+                    html_url: `https://github.com/${TEST_REPO}/pull/${TEST_PR_NUMBER}`,
+                });
             },
+        },
+        {
+            // closePR (PATCH /pulls/{number}) — always succeeds.
+            method: "PATCH",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/pulls\/\d+$/,
+            handler: (_req, res) => json(res, 200, {}),
         },
         {
             method: "GET",
             pathRegex: /^\/repos\/[^/]+\/[^/]+\/pulls\/\d+\/comments/,
-            handler: (_req, res) => json(res, 200, []),
-        },
-        {
-            method: "GET",
-            pathRegex: /^\/repos\/[^/]+\/[^/]+\/issues\/\d+\/comments/,
             handler: (_req, res) => {
                 if (!opts.kodyResponds) {
                     json(res, 200, []);
@@ -57,14 +69,24 @@ async function runLicenseScenario(opts: RunOpts): Promise<{
                 const responseTime = new Date(
                     new Date(reviewWindow.triggeredAt).getTime() + 1000,
                 ).toISOString();
+                // Inline review comment from Kody — counts as
+                // `reviewComments`. We can't return only an issueComment
+                // because the scenario's "expectReview" branch accepts any
+                // bucket and the "expectNoReview" branch wants zero in any
+                // bucket; both paths are exercised by varying kodyResponds.
                 json(res, 200, [
                     {
-                        id: 2002,
+                        id: 3003,
                         body: "Kody mock: 1 issue.",
                         created_at: responseTime,
                     },
                 ]);
             },
+        },
+        {
+            method: "GET",
+            pathRegex: /^\/repos\/[^/]+\/[^/]+\/issues\/\d+\/comments/,
+            handler: (_req, res) => json(res, 200, []),
         },
         {
             method: "GET",
