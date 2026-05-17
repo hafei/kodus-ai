@@ -17,12 +17,12 @@ const FIXTURE_BRANCHES: Record<
     { head: string; base: string } | undefined
 > = {
     github: {
-        // Permanent fixture branch in kodus-e2e/sentry. Created off master
-        // with `kodus-e2e/rule-violation.js` containing both:
-        //   const FORBIDDEN_MARKER = "TODO_REMOVE_ME";   ← string literal
-        //   // TODO_REMOVE_ME: still pending implementation  ← comment
-        head: "kody-rules-fixture-todo-remove-me",
-        base: "master",
+        // Persistent fixture branch in kodus-e2e/tiny-url. Adds
+        // `src/legacy/cleanup.ts` with TODO_REMOVE_ME both as a string
+        // literal (FORBIDDEN_MARKER constant) and inside a comment, so a
+        // rule forbidding the identifier matches either interpretation.
+        head: "fixture/kody-rule-todo-remove-me",
+        base: "main",
     },
 };
 

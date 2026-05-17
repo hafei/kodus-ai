@@ -17,30 +17,30 @@ const FIXTURE_BRANCHES: Record<
     { head: string; base: string } | undefined
 > = {
     github: {
-        // 1 file / 5 lines changed — smallest pair in the benchmark fork.
-        // Picked deliberately so a smoke run reviews in <2 min instead of
-        // ~15 min on the larger fixtures (which blew past pollForReview's
-        // 600s timeout on self-hosted with Kimi K2.6 reasoning model).
-        head: "queue-assignment-enhancement-after",
-        base: "queue-assignment-enhancement-before",
+        // Refactor in the tiny-url fixture repo (kodus-e2e/tiny-url):
+        // swaps the in-memory store from Object.create(null) to Map. No
+        // behavior change, clean small diff — exercises the review
+        // pipeline end-to-end without giving the LLM anything controversial
+        // to flag. Set `GH_TEST_REPO=kodus-e2e/tiny-url` to use this.
+        head: "refactor/use-map-storage",
+        base: "main",
     },
-    // Placeholders for GitLab / Bitbucket / Azure DevOps — the real values
-    // come from the equivalent fork (TODO: replicate
-    // scripts/pr-creator/fork-benchmark-repos.sh into those providers).
-    // The values below are good enough for the mocked integration tests
-    // (they only need a head/base pair to POST), but won't work against
-    // real providers until the fixture repos exist.
+    // Placeholders for GitLab / Bitbucket / Azure DevOps — assume the
+    // tiny-url fixture repo will be mirrored into those providers under
+    // the same path/branches. Good enough for mocked integration tests
+    // (they only POST and don't care about the actual remote); won't work
+    // against real providers until those mirrors exist.
     gitlab: {
-        head: "performance-enhancement-complete",
-        base: "performance-optimization-baseline",
+        head: "refactor/use-map-storage",
+        base: "main",
     },
     bitbucket: {
-        head: "performance-enhancement-complete",
-        base: "performance-optimization-baseline",
+        head: "refactor/use-map-storage",
+        base: "main",
     },
     "azure-devops": {
-        head: "performance-enhancement-complete",
-        base: "performance-optimization-baseline",
+        head: "refactor/use-map-storage",
+        base: "main",
     },
 };
 

@@ -15,11 +15,15 @@ const FIXTURE_BRANCHES: Record<
     { head: string; base: string } | undefined
 > = {
     github: {
-        // 4 files / 28 lines — small enough to review in well under the
-        // 600s poll window for `paid` cases, but large enough to be a
-        // realistic diff for the pipeline to chew on.
-        head: "buffer-trace-processing-after",
-        base: "buffer-trace-processing-before",
+        // Feature add in the tiny-url fixture repo (kodus-e2e/tiny-url):
+        // /stats endpoint + per-code hit counter. ~30 lines, two files
+        // touched — meaty enough that Kody usually surfaces real findings
+        // (paid path observed ~10–11 min end-to-end on Kimi K2.6), but
+        // still a realistic PR-sized change. Different head→base from
+        // code-review-basic and kody-rules so all three scenarios can
+        // have open PRs simultaneously.
+        head: "feature/add-stats",
+        base: "main",
     },
 };
 
@@ -33,7 +37,7 @@ export const licenseAttribution: Scenario = {
         provider: ["github"],
         license: ["free", "trial", "paid", "license-paid", "license-free"],
     },
-    timeoutSec: 900,
+    timeoutSec: 1200,
     async run(ctx: RunContext) {
         ctx.assert(ctx.tenant, "scenario requires a tenant");
 
@@ -65,12 +69,14 @@ export const licenseAttribution: Scenario = {
         });
 
         try {
-            // `paid` paths get the full 600s poll budget — fresh tenant +
-            // sentry-sized repo review takes a few minutes on Kimi K2.6.
+            // `paid` paths get a 900s poll budget. Empirically, Kimi K2.6 on
+            // the tiny-url fixture finishes a real review with findings in
+            // ~10–11 min when the diff has substance (the 600s budget
+            // missed a real completion by 31s in an earlier run).
             // `free` paths only need to confirm NO review activity within
             // a short window — anything longer just delays the false-positive
             // case where the gate fails open and Kody starts to review.
-            const pollWindow = expectReview ? 600 : 90;
+            const pollWindow = expectReview ? 900 : 90;
             const review = await ctx.provider.pollForReview(
                 { number: pr.number },
                 { sinceIso, timeoutSec: pollWindow },
