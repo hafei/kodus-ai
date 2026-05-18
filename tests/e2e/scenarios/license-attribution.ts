@@ -30,6 +30,11 @@ const FIXTURE_BRANCHES: Record<
         head: "feature/add-stats",
         base: "main",
     },
+    "azure-devops": {
+        // Same fixture mirrored to dev.azure.com/kodustech/kodus-e2e.
+        head: "feature/add-stats",
+        base: "main",
+    },
 };
 
 export const licenseAttribution: Scenario = {
@@ -39,7 +44,7 @@ export const licenseAttribution: Scenario = {
     priority: "P0",
     appliesTo: {
         target: ["cloud", "self-hosted"],
-        provider: ["github", "gitlab"],
+        provider: ["github", "gitlab", "azure-devops"],
         license: ["free", "trial", "paid", "license-paid", "license-free"],
     },
     timeoutSec: 1200,

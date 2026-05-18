@@ -113,6 +113,7 @@ export async function registerIntegration(
     session: KodusSession,
 ): Promise<void> {
     log.info(`Registering ${provider.integrationType} integration`);
+    const extras = provider.authExtraFields?.() ?? {};
     const resp = await http<{ data: { status?: string } }>(
         `${target.apiBaseUrl}/code-management/auth-integration`,
         {
@@ -126,6 +127,7 @@ export async function registerIntegration(
                     organizationId: session.organizationId,
                     teamId: session.teamId,
                 },
+                ...extras,
             },
             timeoutMs: 30_000,
         },

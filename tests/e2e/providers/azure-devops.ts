@@ -52,6 +52,18 @@ export class AzureDevOpsProvider extends BaseProvider {
         if (existing) this.existingPrId = Number(existing);
     }
 
+    authExtraFields(): Record<string, unknown> {
+        // Azure DevOps's authenticateWithToken requires `orgUrl` and
+        // `orgName` to look up projects and repos. Sending just `token`
+        // makes the backend's checkRepositoryPermissions fail with
+        // NO_REPOSITORIES (it calls `getProjects({orgName: undefined})`
+        // which gets a 401 from azure).
+        return {
+            orgUrl: `https://dev.azure.com/${this.org}`,
+            orgName: this.org,
+        };
+    }
+
     private basicAuth(): string {
         const raw = `:${this.pat}`;
         return `Basic ${Buffer.from(raw).toString("base64")}`;

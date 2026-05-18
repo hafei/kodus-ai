@@ -43,9 +43,14 @@ export const onboardingWebhookRegistration: Scenario = {
         // assert THIS run's onboarding registered a fresh one. Without
         // this, a hook left over from a previous (working) Kodus build
         // would mask a current regression.
-        const expectedSuffix = ctx.provider.webhookPath;
+        // Match on path-containment rather than endsWith — Azure DevOps
+        // appends `?token=<hmac>` to the consumer URL for webhook
+        // authentication, so the raw URL ends with the token, not with
+        // /azure-repos/webhook. Other providers don't append anything
+        // and the contains-check still matches them.
+        const expectedPath = ctx.provider.webhookPath;
         const matchesKodus = (h: WebhookInfo) =>
-            h.url.endsWith(expectedSuffix);
+            h.url.includes(expectedPath);
 
         const preExisting = await ctx.provider.listWebhooks();
         const stale = preExisting.filter(matchesKodus);
@@ -68,7 +73,7 @@ export const onboardingWebhookRegistration: Scenario = {
         ctx.assert(
             kodusHooks.length > 0,
             `Kodus did not register a webhook on ${ctx.provider.name} after onboarding. ` +
-                `Expected ≥1 hook ending with '${expectedSuffix}', found ${after.length} hooks total, ` +
+                `Expected ≥1 hook with URL containing '${expectedPath}', found ${after.length} hooks total, ` +
                 `${kodusHooks.length} matching. URLs: ${JSON.stringify(after.map((h) => h.url))}`,
         );
 

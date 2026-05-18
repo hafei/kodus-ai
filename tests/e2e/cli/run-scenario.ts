@@ -22,12 +22,17 @@ function parseArgs(): {
     const args = process.argv.slice(2);
     const positional: string[] = [];
     const flags: Record<string, string | boolean> = {};
+    // Flags listed here never consume the next positional as their value
+    // — they're pure boolean toggles. Without this, `run-scenario
+    // --fail-fast my-id` swallows `my-id` as the value of fail-fast and
+    // leaves scenarioId undefined.
+    const booleanFlags = new Set(["fail-fast"]);
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         if (a.startsWith("--")) {
             const key = a.slice(2);
             const next = args[i + 1];
-            if (next && !next.startsWith("--")) {
+            if (!booleanFlags.has(key) && next && !next.startsWith("--")) {
                 flags[key] = next;
                 i++;
             } else {

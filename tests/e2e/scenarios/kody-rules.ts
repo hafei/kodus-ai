@@ -30,6 +30,12 @@ const FIXTURE_BRANCHES: Record<
         head: "fixture/kody-rule-todo-remove-me",
         base: "main",
     },
+    "azure-devops": {
+        // Same fixture mirrored into Azure DevOps:
+        // dev.azure.com/kodustech/kodus-e2e/_git/kodus-e2e.
+        head: "fixture/kody-rule-todo-remove-me",
+        base: "main",
+    },
 };
 
 export const kodyRulesCreateAndApply: Scenario = {

@@ -37,9 +37,12 @@ IMAGE_TAG="$UPGRADE_FROM_TAG" \
     "$E2E_ROOT/provisioning/self-hosted/vm.sh" || true
 
 # vm.sh exits without teardown when TEST_KEEP_RUNNING=1. The droplet is still
-# alive here. We grab its IP back from the SERVER_IP env exported by vm.sh.
+# alive here. vm.sh runs as a subprocess so any `export SERVER_IP=...` it
+# does dies with the child shell — read the IP back from the state file
+# vm.sh writes (`.kodus-dev/selfhosted-vm-default.json`) instead.
+SERVER_IP=$(jq -r '.server_ip // empty' "$REPO_ROOT/.kodus-dev/selfhosted-vm-default.json" 2>/dev/null || true)
 if [ -z "${SERVER_IP:-}" ]; then
-    err "vm.sh did not export SERVER_IP — upgrade flow expects a kept-alive droplet"
+    err "vm.sh did not save SERVER_IP — upgrade flow expects a kept-alive droplet"
     exit 1
 fi
 

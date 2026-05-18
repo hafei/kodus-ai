@@ -102,6 +102,10 @@ export interface Provider {
     postComment(prNumber: number, body: string): Promise<{ id: string }>;
     authMode(): "token" | "oauth" | "app-password";
     authToken(): string;
+    // Provider-specific extra body fields for POST /code-management/auth-integration.
+    // Azure DevOps needs `orgUrl` + `orgName`; everything else returns {}.
+    // Override only when the Kodus backend rejects a bare token+authMode body.
+    authExtraFields?(): Record<string, unknown>;
 }
 
 export interface TenantCredentials {

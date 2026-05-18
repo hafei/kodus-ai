@@ -422,10 +422,15 @@ env_set IMAGE_TAG "$IMAGE_TAG"
 env_set WEB_HOSTNAME_API "kodus-api"
 env_set WEB_PORT_API "3001"
 env_set NEXTAUTH_URL "http://$SERVER_IP:3000"
+# Per-provider webhook URLs. Note the mismatched prefixes match what
+# the Kodus API code actually reads — github/gitlab use API_*,
+# bitbucket/azure use GLOBAL_*. Setting the wrong prefix silently
+# breaks webhook auto-registration (the env var resolves to undefined
+# and Kodus tries to POST to `?token=...` with no host/path).
 env_set API_GITHUB_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/github/webhook"
 env_set API_GITLAB_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/gitlab/webhook"
-env_set API_BITBUCKET_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/bitbucket/webhook"
-env_set API_AZURE_REPOS_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/azure-repos/webhook"
+env_set GLOBAL_BITBUCKET_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/bitbucket/webhook"
+env_set GLOBAL_AZURE_REPOS_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/azure-repos/webhook"
 env_set API_PG_DB_PASSWORD "\$(openssl rand -hex 16)"
 env_set API_MG_DB_PASSWORD "\$(openssl rand -hex 16)"
 env_set API_DATABASE_DISABLE_SSL "true"
