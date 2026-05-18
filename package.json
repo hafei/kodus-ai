@@ -47,6 +47,7 @@
         "e2e:dry-run": "scripts/e2e/run.sh dry-run",
         "e2e:smoke": "scripts/e2e/run.sh smoke",
         "e2e:matrix": "scripts/e2e/run.sh matrix",
+        "cloud:setup-tenants": "cd tests/e2e && npx tsx cli/cloud/setup-tenants.ts",
         "build": "nest build",
         "build:production": "nest build",
         "build:fast": "NODE_OPTIONS='--max-old-space-size=8192' nest build --webpack",
