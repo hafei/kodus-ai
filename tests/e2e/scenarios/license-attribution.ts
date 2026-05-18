@@ -35,6 +35,11 @@ const FIXTURE_BRANCHES: Record<
         head: "feature/add-stats",
         base: "main",
     },
+    bitbucket: {
+        // Same fixture mirrored to bitbucket.org/kodustech/tiny-url.
+        head: "feature/add-stats",
+        base: "main",
+    },
 };
 
 export const licenseAttribution: Scenario = {
@@ -44,7 +49,7 @@ export const licenseAttribution: Scenario = {
     priority: "P0",
     appliesTo: {
         target: ["cloud", "self-hosted"],
-        provider: ["github", "gitlab", "azure-devops"],
+        provider: ["github", "gitlab", "azure-devops", "bitbucket"],
         license: ["free", "trial", "paid", "license-paid", "license-free"],
     },
     timeoutSec: 1200,

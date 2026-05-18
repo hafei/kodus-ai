@@ -148,7 +148,14 @@ export async function registerRepo(
     const repoRef = await provider.repoRef();
     log.info(`Looking up ${repoRef.full_name} in available repos`);
     const listResp = await http<{
-        data: { full_name: string; id: string | number; name?: string }[];
+        data: Array<{
+            full_name?: string;
+            id: string | number;
+            name?: string;
+            // Bitbucket-shape: Kodus exposes org via `organizationName`
+            // (workspace slug) instead of folding it into full_name.
+            organizationName?: string;
+        }>;
     }>(
         `${target.apiBaseUrl}/code-management/repositories/org?teamId=${encodeURIComponent(session.teamId)}`,
         {
@@ -157,12 +164,42 @@ export async function registerRepo(
         },
     );
     ensureOk(listResp, "onboarding:listRepos");
+    // Each provider Kodus integrates with returns a slightly different
+    // repo shape on /repositories/org. Try several fields so we don't
+    // have to maintain a per-provider matcher in the test runner:
+    //   * github exposes `full_name` ("org/repo")
+    //   * bitbucket exposes `organizationName` (workspace slug) + `name`
+    //     and we synthesize the same "workspace/repo" form locally
+    //   * azure-repos / gitlab also exposes name only — match by id (with
+    //     UUID-brace stripping for parity with sanitizeUUID server-side).
+    const stripBraces = (id: unknown): string =>
+        String(id ?? "").replace(/^\{|\}$/g, "");
+    const wantedFullName = repoRef.full_name;
+    const wantedId = stripBraces(repoRef.id);
     const found =
-        listResp.body.data?.find((r) => r.full_name === repoRef.full_name) ??
-        listResp.body.data?.find((r) => String(r.id) === String(repoRef.id));
+        listResp.body.data?.find((r) => r.full_name === wantedFullName) ??
+        listResp.body.data?.find(
+            (r) =>
+                r.organizationName != null &&
+                r.name != null &&
+                `${r.organizationName}/${r.name}` === wantedFullName,
+        ) ??
+        listResp.body.data?.find((r) => stripBraces(r.id) === wantedId);
     if (!found) {
+        // Keep the response shape in the error so a future provider-shape
+        // mismatch is debuggable without re-instrumenting. Truncate to
+        // avoid spamming logs on accounts with hundreds of repos.
         throw new Error(
-            `Repo ${repoRef.full_name} not in integration's available list`,
+            `Repo ${repoRef.full_name} not in integration's available list. ` +
+                `Got ${listResp.body.data?.length ?? 0} entries: ` +
+                JSON.stringify(
+                    listResp.body.data?.slice(0, 5).map((r) => ({
+                        id: r.id,
+                        full_name: r.full_name,
+                        name: r.name,
+                        organizationName: r.organizationName,
+                    })),
+                ).slice(0, 800),
         );
     }
     const registerResp = await http<{ data: { status: boolean } }>(
@@ -184,8 +221,17 @@ export async function registerRepo(
             `Repo registration failed: ${registerResp.raw.slice(0, 400)}`,
         );
     }
-    log.ok(`Repo ${found.full_name} registered`);
-    return found;
+    // Normalize back to ProviderRepoRef. `found` may not carry `full_name`
+    // (Bitbucket case — Kodus folds workspace + name separately); fall back
+    // to the originally-requested form so callers always have a stable
+    // "workspace/repo" handle to log against.
+    const normalized: ProviderRepoRef = {
+        id: found.id,
+        name: found.name ?? repoRef.name,
+        full_name: found.full_name ?? repoRef.full_name,
+    };
+    log.ok(`Repo ${normalized.full_name} registered`);
+    return normalized;
 }
 
 export async function finishOnboarding(

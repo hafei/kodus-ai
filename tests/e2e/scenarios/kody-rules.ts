@@ -36,6 +36,11 @@ const FIXTURE_BRANCHES: Record<
         head: "fixture/kody-rule-todo-remove-me",
         base: "main",
     },
+    bitbucket: {
+        // Same fixture mirrored to bitbucket.org/kodustech/tiny-url.
+        head: "fixture/kody-rule-todo-remove-me",
+        base: "main",
+    },
 };
 
 export const kodyRulesCreateAndApply: Scenario = {

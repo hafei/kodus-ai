@@ -38,6 +38,14 @@ export class BitbucketProvider extends BaseProvider {
         if (existing) this.existingPrId = Number(existing);
     }
 
+    authExtraFields(): Record<string, unknown> {
+        // Bitbucket's authenticateWithToken requires `username` to pair with
+        // the app password — auth is HTTP Basic, not a bearer token. Sending
+        // just `token` makes bitbucket-cloud.service.ts authenticate as an
+        // empty user, which trips checkRepositoryPermissions with a 401.
+        return { username: this.user };
+    }
+
     private basicAuth(): string {
         const raw = `${this.user}:${this.appPassword}`;
         return `Basic ${Buffer.from(raw).toString("base64")}`;
@@ -230,11 +238,19 @@ export class BitbucketProvider extends BaseProvider {
                     if (raw.toLowerCase().startsWith("@kody")) return false;
                     // Drop "Started!" placeholder but keep "Complete!" — the
                     // latter is a valid mechanics signal even when Kody
-                    // found no inline findings.
+                    // found no inline findings. Bitbucket-specific: Kody
+                    // does NOT inject the `<!-- kody-codereview -->` HTML
+                    // marker into Bitbucket comments (it does on github/
+                    // gitlab), so the marker check alone matches nothing.
+                    // Fall back to detecting the visible heading text
+                    // Kody renders into the placeholder.
                     if (
                         raw.includes("<!-- kody-codereview") &&
                         !raw.includes("kody-codereview-completed")
                     ) {
+                        return false;
+                    }
+                    if (raw.includes("Code Review Started!")) {
                         return false;
                     }
                     return true;
@@ -270,8 +286,16 @@ export class BitbucketProvider extends BaseProvider {
         return { id: String(resp.body.id) };
     }
 
-    authMode(): "app-password" {
-        return "app-password";
+    authMode(): "token" {
+        // Bitbucket's "app password" / "API token" auth flows are both
+        // routed through Kodus's AuthMode.TOKEN branch — the backend
+        // accepts `username:token` Basic auth. Returning the literal
+        // "app-password" string here was silently bypassing the whole
+        // authenticateWithToken flow on the Kodus side (no enum match →
+        // default success response in <10ms with nothing persisted), so
+        // the subsequent /repositories/org call had no auth detail to
+        // pull repos from and returned an empty list.
+        return "token";
     }
 
     authToken(): string {
