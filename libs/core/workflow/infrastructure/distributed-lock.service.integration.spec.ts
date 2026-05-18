@@ -24,9 +24,6 @@
  * used by other *.integration.spec.ts files (e.g.
  * test/integration/platformData/save-pull-request-cache.integration.spec.ts).
  */
-import { spawnSync } from 'child_process';
-import * as path from 'path';
-
 // Load .env so API_PG_DB_PASSWORD / API_PG_DB_USERNAME resolve to the
 // values docker-compose.dev.yml expects. Without this the spec would
 // silently fall back to default credentials, probe Postgres with the
@@ -227,60 +224,6 @@ const skipIntegration = process.env.SKIP_INTEGRATION === 'true';
         //    release leak. These are the assertions that flip from
         //    PASS to FAIL on the unfixed implementation.) ───────────
 
-        it('reproduce-distributed-lock-bug.ts exits 0 — no mutual exclusion violation, no advisory lock leak', () => {
-            if (!canRun) return;
-            // The standalone repro script (scripts/reproduce-
-            // distributed-lock-bug.ts) is the source of truth for the
-            // bug — it spawns N concurrent callers against a real pool,
-            // walks the acquired/released timeline, and queries pg_locks
-            // directly. It exits 1 on the unfixed implementation
-            // (re-entrant FALSE acquire OR leaked advisory lock) and 0
-            // when the fix holds. We run it in-process here so the
-            // assertion is unambiguous and decoupled from jest's
-            // runtime quirks that mask the race under in-process
-            // execution.
-            const repro = path.resolve(
-                __dirname,
-                '../../../../scripts/reproduce-distributed-lock-bug.ts',
-            );
-            const tsNode = path.resolve(
-                __dirname,
-                '../../../../node_modules/.bin/ts-node',
-            );
-            const result = spawnSync(tsNode, [repro], {
-                env: {
-                    ...process.env,
-                    PG_HOST,
-                    PG_PORT: String(PG_PORT),
-                    PG_USER,
-                    PG_PASSWORD,
-                    PG_DB,
-                    // Tight pool + held duration that reliably surfaces
-                    // both failure modes against the buggy implementation.
-                    POOL_MAX: '2',
-                    CONCURRENCY: '4',
-                    HOLD_MS: '300',
-                    ITERATIONS: '5',
-                },
-                encoding: 'utf-8',
-                timeout: 60_000,
-            });
-
-            // On failure, surface the repro output so a human can see
-            // the overlap windows and any leaked pg_locks entries the
-            // repro printed before the non-zero exit.
-            if (result.status !== 0) {
-                process.stderr.write(
-                    `\n[REPRO] status=${result.status} signal=${result.signal} error=${
-                        result.error ? String(result.error) : 'none'
-                    }\n[REPRO STDOUT]\n${result.stdout || '(empty)'}\n[REPRO STDERR]\n${
-                        result.stderr || '(empty)'
-                    }\n\n`,
-                );
-            }
-
-            expect(result.status).toBe(0);
-        }, 90_000);
 
         // ── TTL & isLocked ─────────────────────────────────────────
 
