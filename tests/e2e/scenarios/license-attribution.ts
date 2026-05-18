@@ -25,6 +25,11 @@ const FIXTURE_BRANCHES: Record<
         head: "feature/add-stats",
         base: "main",
     },
+    gitlab: {
+        // Same fixture mirrored to gitlab.com/kodus-e2e/tiny-url.
+        head: "feature/add-stats",
+        base: "main",
+    },
 };
 
 export const licenseAttribution: Scenario = {
@@ -34,7 +39,7 @@ export const licenseAttribution: Scenario = {
     priority: "P0",
     appliesTo: {
         target: ["cloud", "self-hosted"],
-        provider: ["github"],
+        provider: ["github", "gitlab"],
         license: ["free", "trial", "paid", "license-paid", "license-free"],
     },
     timeoutSec: 1200,
