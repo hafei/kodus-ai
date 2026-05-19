@@ -63,10 +63,17 @@ test("code-review-basic applies to paid/trial/license-paid but not free/license-
     assert.ok(!s.appliesTo.license.includes("license-free"));
 });
 
-test("license-attribution applies to all 5 license modes", () => {
+test("license-attribution applies to every known license mode", () => {
     const s = allScenarios["license-attribution"];
     assert.ok(s.appliesTo.license);
-    for (const m of ["free", "trial", "paid", "license-paid", "license-free"] as const) {
+    for (const m of [
+        "free",
+        "trial",
+        "paid",
+        "community-byok",
+        "license-paid",
+        "license-free",
+    ] as const) {
         assert.ok(s.appliesTo.license.includes(m), `missing license: ${m}`);
     }
 });

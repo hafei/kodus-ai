@@ -33,6 +33,7 @@ import {
     registerRepo,
     signUp,
 } from "../../lib/onboarding.js";
+import { http } from "../../lib/http.js";
 import { makeProvider } from "../../providers/index.js";
 import type {
     KodusSession,
@@ -57,7 +58,7 @@ const CREDS_FILE = join(homedir(), ".kodus-dev", "cloud-tenants.json");
 const SHARED_PASSWORD =
     process.env.CLOUD_SETUP_PASSWORD ?? "E2eCloud!2026Smoke";
 
-type TenantLicense = "paid" | "trial" | "free";
+type TenantLicense = "paid" | "trial" | "free" | "community-byok";
 
 interface TenantSpec {
     email: string;
@@ -125,6 +126,16 @@ const TENANTS: TenantSpec[] = [
         provider: "azure-devops",
         repoFullName: "kodustech/kodus-e2e/tiny-url",
     },
+    {
+        // Community tenant: NO billing subscription, but with BYOK
+        // configured. Reviews work with the 10-rule limit. Distinct
+        // from `free` (trial expired + no BYOK = gate blocks).
+        email: "e2e-community-byok-gh@kodus.io",
+        name: "Smoke Community BYOK GitHub",
+        license: "community-byok",
+        provider: "github",
+        repoFullName: "kodus-e2e/tiny-url",
+    },
 ];
 
 interface SavedTenant extends TenantSpec {
@@ -174,17 +185,184 @@ function targetForCloud(): TargetContext {
     };
 }
 
-// TODO(cloud-setup): Drive Stripe Checkout via Playwright to upgrade
-// `paid` and `trial` tenants. Until then, those tiers stay on the
-// default (free), and the cloud × paid matrix cells will fail the
-// license-attribution scenario for the right reason — the gate
-// reports "free" instead of "paid". Track upgrade automation
-// separately from this loop so signup/integration progress isn't
-// blocked on the Stripe iframe.
-async function ensureLicenseTier(tenant: TenantSpec): Promise<boolean> {
+// `/auth/signUp` does NOT create a billing record — the UI signup flow
+// calls `/api/proxy/billing/trial` separately (likely from the post-
+// signup setup wizard our HTTP path skips). Without that call the
+// tenant has no subscription at all and `validate-org-license`
+// returns 400 — which Kodus's pipeline treats as "no license",
+// equivalent to `free` for the license-attribution gate.
+//
+// Tier handling per matrix label:
+//   - `free`            → leave subscription empty (= "trial expired,
+//                          no BYOK"). Gate blocks; Kody posts the
+//                          trial-ended notice.
+//   - `community-byok`  → leave subscription empty BUT configure BYOK
+//                          (`/organization-parameters/create-or-update`
+//                          with key=byok_config). Gate allows reviews
+//                          using the org's own LLM key; 10-rule limit.
+//   - `trial` / `paid`  → activate the trial billing record via
+//                          `POST /api/proxy/billing/trial`. Real
+//                          paid would need Stripe Checkout but for
+//                          the matrix's gate-allows assertion trial
+//                          is sufficient. TODO: hook up the Stripe
+//                          flow when we need to differentiate paid-
+//                          specific limits.
+async function ensureLicenseTier(
+    target: TargetContext,
+    session: KodusSession,
+    tenant: TenantSpec,
+): Promise<boolean> {
     if (tenant.license === "free") return true;
+    if (tenant.license === "community-byok") {
+        // The cloud gate (libs/ee/shared/services/permissionValidation
+        // .service.ts) requires `validation.valid===true` AND
+        // `planType` containing "byok" AND a stored BYOK config. The
+        // only HTTP path to that end-state (without Stripe Checkout)
+        // is the same three-step dance the UI does:
+        //   1. POST /billing/trial         → creates the license row
+        //   2. configure BYOK in org params
+        //   3. POST /billing/migrate-to-free → flips planType to free_byok
+        // /migrate-to-free fails with "Licença não encontrada" if step 1
+        // didn't run first — the endpoint mutates an existing row.
+        const trial = await http(
+            `${target.webBaseUrl}/api/proxy/billing/trial`,
+            {
+                method: "POST",
+                headers: { Authorization: `Bearer ${session.accessToken}` },
+                body: {
+                    organizationId: session.organizationId,
+                    teamId: session.teamId,
+                    byok: true,
+                },
+                timeoutMs: 30_000,
+            },
+        );
+        const trialOk =
+            (trial.status >= 200 && trial.status < 300) ||
+            trial.status === 409 ||
+            (trial.status === 400 &&
+                /already|trial|existe/i.test(
+                    (trial.body as any)?.error ??
+                        (trial.body as any)?.message ??
+                        "",
+                ));
+        if (!trialOk) {
+            console.log(
+                `  [warn] community-byok: trial step returned HTTP ${trial.status}: ${trial.raw.slice(0, 200)}`,
+            );
+            return false;
+        }
+        const byokOk = await configureByok(target, session);
+        if (!byokOk) return false;
+        const migrate = await http(
+            `${target.webBaseUrl}/api/proxy/billing/migrate-to-free`,
+            {
+                method: "POST",
+                headers: { Authorization: `Bearer ${session.accessToken}` },
+                body: {
+                    organizationId: session.organizationId,
+                    teamId: session.teamId,
+                },
+                timeoutMs: 30_000,
+            },
+        );
+        if (migrate.status >= 200 && migrate.status < 300) return true;
+        // Already on free_byok → 409 / "already" — treat as success.
+        if (
+            migrate.status === 409 ||
+            /already|free_byok/i.test(
+                (migrate.body as any)?.error ??
+                    (migrate.body as any)?.message ??
+                    "",
+            )
+        ) {
+            return true;
+        }
+        console.log(
+            `  [warn] community-byok: migrate-to-free returned HTTP ${migrate.status}: ${migrate.raw.slice(0, 200)}`,
+        );
+        return false;
+    }
+    const resp = await http(`${target.webBaseUrl}/api/proxy/billing/trial`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+        body: {
+            organizationId: session.organizationId,
+            teamId: session.teamId,
+            byok: false,
+        },
+        timeoutMs: 30_000,
+    });
+    if (
+        resp.status >= 200 &&
+        resp.status < 300 &&
+        (resp.body as any)?.subscriptionStatus === "trial"
+    ) {
+        return true;
+    }
+    // 409 / "already exists" is idempotent OK — billing service refuses
+    // to start a second trial for the same team, but the desired end-
+    // state (a valid subscription record) is satisfied.
+    if (
+        resp.status === 409 ||
+        (resp.status === 400 &&
+            /already|trial|existe/i.test((resp.body as any)?.error ??
+                (resp.body as any)?.message ??
+                ""))
+    ) {
+        return true;
+    }
     console.log(
-        `  [todo] license-tier upgrade for ${tenant.email} (${tenant.license}) — not implemented yet, staying on default tier`,
+        `  [warn] license activation returned HTTP ${resp.status}: ${resp.raw.slice(0, 200)}`,
+    );
+    return false;
+}
+
+// Configures the org's "main" BYOK key by POSTing the same payload the
+// UI sends (apps/web/src/features/ee/byok/_components/page.client.tsx).
+// Uses the same `API_OPEN_AI_API_KEY` env that drives self-hosted
+// installs — by default the team's Moonshot/Kimi K2.6 key with the
+// Moonshot base URL. Falls back to native OpenAI defaults if the env
+// is unset, which would fail-loud during the first review attempt
+// instead of silently scoring this scenario as "BYOK configured" when
+// no real key is reachable.
+async function configureByok(
+    target: TargetContext,
+    session: KodusSession,
+): Promise<boolean> {
+    const apiKey = process.env.API_OPEN_AI_API_KEY;
+    if (!apiKey) {
+        console.log(
+            "  [warn] community-byok skipped: API_OPEN_AI_API_KEY not set in env. " +
+                "Configure it in ~/.kodus-dev/config or scripts/e2e/.env before running.",
+        );
+        return false;
+    }
+    const provider = process.env.API_LLM_PROVIDER ?? "openai";
+    const baseURL =
+        process.env.API_OPENAI_FORCE_BASE_URL ?? "https://api.openai.com/v1";
+    const model = process.env.API_LLM_PROVIDER_MODEL ?? "kimi-k2.6";
+
+    const resp = await http(
+        `${target.apiBaseUrl}/organization-parameters/create-or-update`,
+        {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${session.accessToken}`,
+                "Content-Type": "application/json",
+            },
+            body: {
+                key: "byok_config",
+                configValue: {
+                    main: { provider, apiKey, baseURL, model },
+                },
+            },
+            timeoutMs: 30_000,
+        },
+    );
+    if (resp.status >= 200 && resp.status < 300) return true;
+    console.log(
+        `  [warn] BYOK setup returned HTTP ${resp.status}: ${resp.raw.slice(0, 200)}`,
     );
     return false;
 }
@@ -193,41 +371,78 @@ async function connectProvider(
     target: TargetContext,
     session: KodusSession,
     tenant: TenantSpec,
-): Promise<{ integrationConnected: boolean; repoRegistered: boolean }> {
-    // Build a Provider from env (GH_TEST_TOKEN / GL_TEST_TOKEN / etc.).
-    // For cloud QA we reuse the same tokens that drive the self-hosted
-    // matrix — the test repos in kodus-e2e org are reachable from both
-    // targets with the same PAT. `repoFullName` on the tenant overrides
-    // the env-driven GH_TEST_REPO etc. so each cloud tenant owns its
-    // own isolated repo and PR history.
-    const savedEnv = process.env;
-    const overrideKey = ({
-        github: "GH_TEST_REPO",
-        gitlab: "GL_TEST_REPO",
-        bitbucket: "BB_TEST_REPO",
-        "azure-devops": "AZ_TEST_REPO",
-    } as Record<ProviderName, string>)[tenant.provider];
-    const previous = savedEnv[overrideKey];
-    process.env[overrideKey] = tenant.repoFullName;
+): Promise<{
+    integrationConnected: boolean;
+    repoRegistered: boolean;
+    onboardingFinished: boolean;
+}> {
+    // Provider PATs + repo addressing come from the same env vars the
+    // self-hosted matrix uses (GH_TEST_TOKEN / GH_TEST_REPO / GL_*,
+    // BB_*, AZ_TEST_ORG/PROJECT/REPO). All cloud tenants point at the
+    // same fixture repos as self-hosted — there's nothing per-tenant
+    // to override here. The earlier attempt to overwrite e.g.
+    // `AZ_TEST_REPO` with the full `<org>/<project>/<repo>` path broke
+    // the Azure provider because it composes the URL from the three
+    // separate env pieces and the merged string isn't a valid repo
+    // name. Leave env alone.
+    const provider = makeProvider(tenant.provider);
+    await registerIntegration(target, provider, session);
+    // Wait for /code-management/auth-integration's async post-processing
+    // to land before /repositories queries depend on it. The UI flow
+    // takes 8-33s between these steps; our HTTP script ran them in
+    // ~2s on QA cloud and hit a race at
+    // active-code-review-automation.use-case.ts:43 where
+    // `const [teamAutomation] = teamAutomationService.find(...)`
+    // returned null on empty (Mongo log evidence: single 30d
+    // occurrence, only when gap < 8s).
+    //
+    // 10s clears the race for most tenants but not all — observed one
+    // miss on a brand-new community-byok signup. Retry the
+    // /code-management/repositories call when it fails specifically
+    // with the "(intermediate value) is not iterable" symptom: the
+    // server-side post-processing eventually finishes and the next
+    // attempt succeeds.
+    await new Promise((r) => setTimeout(r, 10_000));
+    let repo: Awaited<ReturnType<typeof registerRepo>>;
     try {
-        const provider = makeProvider(tenant.provider);
-        await registerIntegration(target, provider, session);
-        // Wait for /code-management/auth-integration's async post-processing
-        // to land before /repositories queries depend on it. The UI flow takes
-        // 8-33s between these steps (user clicks Continue, fills forms, etc.).
-        // Our HTTP script previously ran them in ~2s on QA cloud and hit the
-        // bug at active-code-review-automation.use-case.ts:43 where
-        // `const [teamAutomation] = teamAutomationService.find(...)` returns
-        // null on empty — confirmed deterministic race in QA's Mongo logs
-        // (single occurrence in 30d, ours, only when gap < 8s).
-        await new Promise((r) => setTimeout(r, 10_000));
-        const repo = await registerRepo(target, provider, session);
-        await finishOnboarding(target, session, repo);
-        return { integrationConnected: true, repoRegistered: true };
-    } finally {
-        if (previous === undefined) delete process.env[overrideKey];
-        else process.env[overrideKey] = previous;
+        repo = await registerRepo(target, provider, session);
+    } catch (err) {
+        const message = (err as Error).message ?? String(err);
+        if (/is not iterable/.test(message)) {
+            console.log(
+                "  [info] /repositories hit the post-integration race ('not iterable'); waiting 15s and retrying once",
+            );
+            await new Promise((r) => setTimeout(r, 15_000));
+            repo = await registerRepo(target, provider, session);
+        } else {
+            throw err;
+        }
     }
+    // finish-onboarding triggers generateKodyRulesUseCase, which can
+    // run >60s — enough for QA's nginx gateway to time out with 504
+    // even though the server-side work keeps going to completion. Treat
+    // the 504 as soft success: the request landed, the LLM step will
+    // finish in the background, and a re-run of finishOnboarding here
+    // would re-trigger the same long-running work and time out again.
+    let onboardingFinished = true;
+    try {
+        await finishOnboarding(target, session, repo);
+    } catch (err) {
+        const message = (err as Error).message ?? String(err);
+        if (/HTTP 504/.test(message)) {
+            console.log(
+                `  [info] finish-onboarding returned 504 (nginx gateway timeout); the server-side rule generation continues asynchronously — treating as completed`,
+            );
+            onboardingFinished = false;
+        } else {
+            throw err;
+        }
+    }
+    return {
+        integrationConnected: true,
+        repoRegistered: true,
+        onboardingFinished,
+    };
 }
 
 async function seedTenant(
@@ -245,16 +460,17 @@ async function seedTenant(
 
     const session = await login(target, { email: tenant.email, password });
 
-    const { integrationConnected, repoRegistered } = await connectProvider(
-        target,
-        session,
-        tenant,
-    );
-    const onboardingFinished = repoRegistered; // connectProvider runs finishOnboarding too
+    const { integrationConnected, repoRegistered, onboardingFinished } =
+        await connectProvider(target, session, tenant);
 
-    const tierUpgraded = await ensureLicenseTier(tenant);
+    const tierUpgraded = await ensureLicenseTier(target, session, tenant);
 
+    // Order matters: spread `existing` FIRST so the freshly computed
+    // values override the stored ones (previously these were spread
+    // in the opposite order and `tierUpgraded: true` got silently
+    // clobbered by a stale `tierUpgraded: false` from an earlier run).
     return {
+        ...(existing ?? {}),
         ...tenant,
         password,
         organizationId: session.organizationId,
@@ -264,12 +480,6 @@ async function seedTenant(
         onboardingFinished,
         tierUpgraded,
         seededAt: new Date().toISOString(),
-        ...(existing ?? {}),
-        // Preserve newly resolved org/team ids even if existing had stale ones.
-        ...(session.organizationId
-            ? { organizationId: session.organizationId }
-            : {}),
-        ...(session.teamId ? { teamId: session.teamId } : {}),
     };
 }
 

@@ -6,6 +6,7 @@ export type LicenseMode =
     | "free"
     | "trial"
     | "paid"
+    | "community-byok" // free plan with the org's own LLM API key configured
     | "license-paid"
     | "license-free";
 
@@ -61,6 +62,18 @@ export interface ReviewSignal {
     issueComments: number;
     reviews: number;
     sample?: string;
+    // Set when Kody posted a license-related notification (e.g. "Your
+    // trial has ended! Activate your plan…" or a BYOK prompt) instead of
+    // a real review. Scenarios that expect the entitlement gate to
+    // BLOCK a review still want to verify Kody told the user *why* —
+    // bare silence (no comment at all) is a different failure mode
+    // (webhook never arrived, pipeline crashed silently) than the
+    // intended UX. Providers populate this when they detect a
+    // license/trial/BYOK-prompt comment from Kody on the PR.
+    licenseBlockedNotice?: {
+        message: string;
+        kind: "trial-ended" | "byok-required" | "no-license" | "other";
+    };
 }
 
 export interface WebhookInfo {
