@@ -106,6 +106,16 @@ export interface Provider {
     // Azure DevOps needs `orgUrl` + `orgName`; everything else returns {}.
     // Override only when the Kodus backend rejects a bare token+authMode body.
     authExtraFields?(): Record<string, unknown>;
+    // Returns the id Kodus stores as `pullRequest.user.id` for PRs opened by
+    // this PAT — i.e. exactly what `validate-prerequisites.stage.ts` reads
+    // when deciding whether the author has a license seat. Per-provider:
+    //   * github / gitlab: numeric id from /user (stringified)
+    //   * bitbucket: uuid from /2.0/user with `{}` stripped (sanitizeUUID)
+    //   * azure-devops: authenticatedUser.id GUID from connectionData
+    currentUserId(): Promise<string>;
+    // Kodus's gitTool value for /license/assign (lowercase platformType).
+    // Matches `assignLicense(provider.toLowerCase())` in license.service.ts.
+    licenseGitTool(): string;
 }
 
 export interface TenantCredentials {

@@ -253,6 +253,22 @@ export class BitbucketProvider extends BaseProvider {
                     if (raw.includes("Code Review Started!")) {
                         return false;
                     }
+                    // Bitbucket-only leftover: when the gate skips the pipeline
+                    // mid-flow, Kody overwrites its "Code Review Started!"
+                    // placeholder comment so only the docs.kodus.io feedback
+                    // footer remains. The comment is then ~80 chars of just
+                    // the 👎 link with no actual review content — meaningless
+                    // for the per-seat scenario and easy to confuse with a
+                    // real "No issues found" outcome. Drop it.
+                    const trimmed = raw.trim();
+                    if (
+                        trimmed.length < 200 &&
+                        trimmed.includes("docs.kodus.io") &&
+                        !trimmed.includes("Kody Review Complete") &&
+                        !trimmed.includes("Kody Guide")
+                    ) {
+                        return false;
+                    }
                     return true;
                 });
                 if (filtered.length) {
@@ -300,5 +316,23 @@ export class BitbucketProvider extends BaseProvider {
 
     authToken(): string {
         return this.appPassword;
+    }
+
+    async currentUserId(): Promise<string> {
+        // Bitbucket returns uuid as `{abc-...}` with braces. Kodus's
+        // bitbucket-cloud.service.ts strips them via sanitizeUUID before
+        // storing as pullRequest.user.id, so we mirror that here — must
+        // match exactly for the per-seat assign payload to land on the
+        // same user the gate checks.
+        const resp = await http<{ uuid: string; account_id: string }>(
+            `${this.apiBase}/user`,
+            { headers: this.headers(), timeoutMs: 15_000 },
+        );
+        ensureOk(resp, "bitbucket:currentUserId");
+        return (resp.body.uuid ?? "").replace(/[{}]/g, "");
+    }
+
+    licenseGitTool(): string {
+        return "bitbucket";
     }
 }

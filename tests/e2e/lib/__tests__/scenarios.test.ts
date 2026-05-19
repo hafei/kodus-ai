@@ -14,10 +14,15 @@ test("allScenarios: includes the 6 P0 scenarios", () => {
     ]);
 });
 
-test("per-seat-license-toggle: self-hosted × github × license-paid only", () => {
+test("per-seat-license-toggle: self-hosted × all 4 providers × license-paid", () => {
     const s = allScenarios["per-seat-license-toggle"];
     assert.deepEqual(s.appliesTo.target, ["self-hosted"]);
-    assert.deepEqual(s.appliesTo.provider, ["github"]);
+    assert.deepEqual(s.appliesTo.provider, [
+        "github",
+        "gitlab",
+        "bitbucket",
+        "azure-devops",
+    ]);
     assert.deepEqual(s.appliesTo.license, ["license-paid"]);
 });
 

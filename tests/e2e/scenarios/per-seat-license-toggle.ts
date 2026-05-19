@@ -1,13 +1,26 @@
 import { readFileSync } from "node:fs";
 import { http, ensureOk } from "../lib/http.js";
-import type { RunContext, Scenario } from "../lib/types.js";
+import type {
+    ProviderName,
+    RunContext,
+    Scenario,
+} from "../lib/types.js";
 
-// Fixture branch pair on kodus-e2e/tiny-url. Different from other scenarios
-// so all three GitHub fixtures can have open PRs in parallel without GitHub
-// rejecting "second open PR for the same head→base".
-const GITHUB_FIXTURE = {
-    head: "feature/add-stats",
-    base: "main",
+// Per-provider head→base fixture branches. Mirrors the convention used by
+// the other scenarios (license-attribution, code-review-basic): each
+// provider's fixture repo has the same `feature/add-stats` ↔ `main` pair
+// already committed with a small but meaningful diff. We deliberately pick
+// the SAME pair as license-attribution since both scenarios validate the
+// license gate on the same diff shape and can never have open PRs at the
+// same instant (sequential runs reuse the persistent branch).
+const FIXTURE_BRANCHES: Record<
+    ProviderName,
+    { head: string; base: string }
+> = {
+    github: { head: "feature/add-stats", base: "main" },
+    gitlab: { head: "feature/add-stats", base: "main" },
+    bitbucket: { head: "feature/add-stats", base: "main" },
+    "azure-devops": { head: "feature/add-stats", base: "main" },
 };
 
 // Per-seat license gate validates three states on a single tenant with
@@ -27,6 +40,14 @@ const GITHUB_FIXTURE = {
 //
 // We deliberately do NOT consume `SH_LICENSE_KEY` directly because we want
 // the dev to keep the key in a chmod-600 file, not in their shell env.
+//
+// Cross-provider: the scenario reads `userGitId` from
+// `provider.currentUserId()` and the gitTool string from
+// `provider.licenseGitTool()`. Each provider returns the exact id format
+// Kodus stores as `pullRequest.user.id` in the webhook handler:
+//   * github / gitlab: numeric id from /user (stringified)
+//   * bitbucket: uuid from /2.0/user with `{}` stripped (sanitizeUUID)
+//   * azure-devops: authenticatedUser.id GUID from connectionData
 export const perSeatLicenseToggle: Scenario = {
     id: "per-seat-license-toggle",
     title:
@@ -34,13 +55,23 @@ export const perSeatLicenseToggle: Scenario = {
     priority: "P0",
     appliesTo: {
         target: ["self-hosted"],
-        provider: ["github"],
+        provider: ["github", "gitlab", "bitbucket", "azure-devops"],
         license: ["license-paid"],
     },
     timeoutSec: 2100,
     async run(ctx: RunContext) {
         ctx.assert(ctx.tenant, "scenario requires a tenant");
         const baseUrl = ctx.target.apiBaseUrl;
+
+        const fixture = FIXTURE_BRANCHES[ctx.provider.name];
+        ctx.assert(
+            fixture,
+            `No fixture branch pair configured for provider ${ctx.provider.name}`,
+        );
+        ctx.assert(
+            !!ctx.provider.openPRFromBranches,
+            `Provider ${ctx.provider.name} does not implement openPRFromBranches`,
+        );
 
         const jwtPath =
             process.env.SH_LICENSE_KEY_PATH ??
@@ -78,72 +109,67 @@ export const perSeatLicenseToggle: Scenario = {
             `License activate returned valid=false: ${activate.raw.slice(0, 300)}`,
         );
 
-        // GH user.id of the PAT — this is exactly what Kodus's
-        // validate-prerequisites stage reads from `pullRequest.user.id` when
-        // it decides whether to gate.
-        const userId = await fetchGithubUserId(
-            ctx.provider.authToken(),
+        // Resolve the PAT user's id in the exact format Kodus stores on the
+        // webhook payload (per-provider; see Provider.currentUserId comment).
+        const userId = await ctx.provider.currentUserId();
+        ctx.assert(
+            userId.length > 0,
+            `Provider ${ctx.provider.name} returned an empty currentUserId`,
         );
+        const gitTool = ctx.provider.licenseGitTool();
 
         // Force `assignedUsers = []` from the start. POST /license/assign
         // with licenseStatus=inactive is idempotent — if the user isn't in
         // the list it's a no-op.
-        await toggleSeat(baseUrl, authHeader, userId, "inactive");
+        await toggleSeat(baseUrl, authHeader, userId, gitTool, "inactive");
         await assertSeatCount(baseUrl, authHeader, 0, ctx);
+        const usersBeforePhase1 = await fetchSeats(baseUrl, authHeader);
 
-        const phase1 = await runReviewPhase(ctx, {
+        const phase1 = await runReviewPhase(ctx, fixture, {
             label: "unassigned-before",
             expectReview: false,
             pollTimeoutSec: 120,
+            seatsAtStart: usersBeforePhase1,
         });
 
-        await toggleSeat(baseUrl, authHeader, userId, "active");
+        await toggleSeat(baseUrl, authHeader, userId, gitTool, "active");
         await assertSeatCount(baseUrl, authHeader, 1, ctx);
+        const usersBeforePhase2 = await fetchSeats(baseUrl, authHeader);
 
-        const phase2 = await runReviewPhase(ctx, {
+        const phase2 = await runReviewPhase(ctx, fixture, {
             label: "assigned",
             expectReview: true,
             // Real review on tiny-url fixture (Kimi K2.6) measured at
             // ~10–11 min end-to-end. Give it 900s like code-review-basic.
             pollTimeoutSec: 900,
+            seatsAtStart: usersBeforePhase2,
         });
 
-        await toggleSeat(baseUrl, authHeader, userId, "inactive");
+        await toggleSeat(baseUrl, authHeader, userId, gitTool, "inactive");
         await assertSeatCount(baseUrl, authHeader, 0, ctx);
+        const usersBeforePhase3 = await fetchSeats(baseUrl, authHeader);
 
-        const phase3 = await runReviewPhase(ctx, {
+        const phase3 = await runReviewPhase(ctx, fixture, {
             label: "unassigned-after",
             expectReview: false,
             pollTimeoutSec: 120,
+            seatsAtStart: usersBeforePhase3,
         });
 
         return {
             userGitId: userId,
+            userIdType: typeof userId,
+            gitTool,
             phases: [phase1, phase2, phase3],
         };
     },
 };
 
-async function fetchGithubUserId(token: string): Promise<string> {
-    const resp = await http<{ id: number; login: string }>(
-        "https://api.github.com/user",
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            timeoutMs: 15_000,
-        },
-    );
-    ensureOk(resp, "per-seat:fetchGithubUserId");
-    return String(resp.body.id);
-}
-
 async function toggleSeat(
     baseUrl: string,
     authHeader: Record<string, string>,
     gitId: string,
+    gitTool: string,
     licenseStatus: "active" | "inactive",
 ): Promise<void> {
     const resp = await http<{ data: { successful: unknown[]; failed: unknown[] } }>(
@@ -152,7 +178,7 @@ async function toggleSeat(
             method: "POST",
             headers: authHeader,
             body: {
-                users: [{ gitId, gitTool: "github", licenseStatus }],
+                users: [{ gitId, gitTool, licenseStatus }],
             },
             timeoutMs: 15_000,
         },
@@ -178,23 +204,35 @@ async function assertSeatCount(
     );
 }
 
+async function fetchSeats(
+    baseUrl: string,
+    authHeader: Record<string, string>,
+): Promise<Array<{ git_id: string; type: string }>> {
+    const resp = await http<{ data: Array<{ git_id: string }> }>(
+        `${baseUrl}/license/users`,
+        { headers: authHeader, timeoutMs: 15_000 },
+    );
+    if (resp.status < 200 || resp.status >= 300) return [];
+    return (resp.body.data ?? []).map((u) => ({
+        git_id: u.git_id,
+        type: typeof u.git_id,
+    }));
+}
+
 async function runReviewPhase(
     ctx: RunContext,
+    fixture: { head: string; base: string },
     opts: {
         label: string;
         expectReview: boolean;
         pollTimeoutSec: number;
+        seatsAtStart?: Array<{ git_id: string; type: string }>;
     },
 ): Promise<Record<string, unknown>> {
-    if (!ctx.provider.openPRFromBranches) {
-        throw new Error(
-            `Provider ${ctx.provider.name} does not implement openPRFromBranches`,
-        );
-    }
     const sinceIso = new Date().toISOString();
-    const pr = await ctx.provider.openPRFromBranches({
-        head: GITHUB_FIXTURE.head,
-        base: GITHUB_FIXTURE.base,
+    const pr = await ctx.provider.openPRFromBranches!({
+        head: fixture.head,
+        base: fixture.base,
         title: `[e2e] per-seat ${opts.label} ${ctx.runId.slice(0, 8)}`,
         body: `Automated PR for per-seat license test (phase: ${opts.label}). Run ${ctx.runId}.`,
     });
@@ -223,6 +261,7 @@ async function runReviewPhase(
             expectReview: opts.expectReview,
             sawReview,
             review,
+            seatsAtStart: opts.seatsAtStart,
         };
     } finally {
         try {

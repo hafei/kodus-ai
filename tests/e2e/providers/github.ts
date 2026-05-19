@@ -329,6 +329,19 @@ export class GitHubProvider extends BaseProvider {
     authToken(): string {
         return this.token;
     }
+
+    async currentUserId(): Promise<string> {
+        const resp = await http<{ id: number; login: string }>(
+            `${this.apiBase}/user`,
+            { headers: this.headers(), timeoutMs: 15_000 },
+        );
+        ensureOk(resp, "github:currentUserId");
+        return String(resp.body.id);
+    }
+
+    licenseGitTool(): string {
+        return "github";
+    }
 }
 
 export function _touch() {
