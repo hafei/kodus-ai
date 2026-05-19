@@ -212,6 +212,15 @@ async function connectProvider(
     try {
         const provider = makeProvider(tenant.provider);
         await registerIntegration(target, provider, session);
+        // Wait for /code-management/auth-integration's async post-processing
+        // to land before /repositories queries depend on it. The UI flow takes
+        // 8-33s between these steps (user clicks Continue, fills forms, etc.).
+        // Our HTTP script previously ran them in ~2s on QA cloud and hit the
+        // bug at active-code-review-automation.use-case.ts:43 where
+        // `const [teamAutomation] = teamAutomationService.find(...)` returns
+        // null on empty — confirmed deterministic race in QA's Mongo logs
+        // (single occurrence in 30d, ours, only when gap < 8s).
+        await new Promise((r) => setTimeout(r, 10_000));
         const repo = await registerRepo(target, provider, session);
         await finishOnboarding(target, session, repo);
         return { integrationConnected: true, repoRegistered: true };
