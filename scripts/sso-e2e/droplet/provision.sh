@@ -150,6 +150,14 @@ env_set API_URL "${API_BASE_URL}"
 env_set API_FRONTEND_URL "${APP_BASE_URL}"
 env_set NEXTAUTH_URL "${APP_BASE_URL}"
 env_set WEB_HOSTNAME_API "${API_BASE_URL}"
+# kodus-installer defaults API_NODE_ENV to "development" for the
+# self-hosted dev experience. The SSO cookie code path explicitly
+# bails out under development (returns no Domain, omits Secure)
+# so the handoff cookie ends up host-only on api.<IP>.sslip.io and
+# the browser refuses to send it to app.<IP>.sslip.io — confirmed
+# at provision time on 2026-05-19. Force production here so the
+# Domain attribute (the thing under test) actually lands.
+env_set API_NODE_ENV "production"
 # Web container's SSR fetches go to API_BASE_URL directly. Caddy
 # terminates TLS so the cert chain is whatever ACME issued; Node trusts
 # the public LE roots out of the box. No NODE_EXTRA_CA_CERTS mount.

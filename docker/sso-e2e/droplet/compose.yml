@@ -45,23 +45,37 @@ services:
         image: quay.io/keycloak/keycloak:26.5.1
         container_name: kc-sso-e2e
         restart: unless-stopped
-        # `start` (production) not `start-dev`. The dev mode disables
-        # important production checks (token signing, https-only) that
-        # we DO want exercised — Caddy terminates TLS so Keycloak runs
-        # plain HTTP inside the network but sees X-Forwarded-Proto=https.
+        # `start` (production mode) terminates TLS at Caddy — Keycloak
+        # speaks plain HTTP inside the docker network but trusts the
+        # X-Forwarded-Proto header. Flags chosen for KC 26.5:
+        #   * --hostname is the *public* base URL Keycloak emits in
+        #     SAML metadata + admin links. Caddy forwards to here.
+        #   * --hostname-strict=false relaxes the "Host header must
+        #     match --hostname" check; harmless for SAML clients that
+        #     reach Keycloak via the same Caddy proxy.
+        #   * --http-enabled=true permits the plain-HTTP listener Caddy
+        #     proxies to.
+        #   * --proxy-headers=xforwarded reads X-Forwarded-{Proto,Host}
+        #     so issued tokens and redirects use the public https URL.
+        # We deliberately do NOT pass --optimized: that flag requires a
+        # `kc.sh build` step against the same config, which the stock
+        # image hasn't run for our dev-file DB + xforwarded combo. With
+        # plain `start` Keycloak does the implicit build on first boot
+        # (~30s extra) and serves correctly thereafter.
         command:
             - start
-            - --optimized
             - --hostname=kc.${SSO_E2E_BASE}
-            - --hostname-strict-https=false
-            - --proxy-headers=xforwarded
+            - --hostname-strict=false
             - --http-enabled=true
+            - --proxy-headers=xforwarded
         environment:
             KC_BOOTSTRAP_ADMIN_USERNAME: admin
             KC_BOOTSTRAP_ADMIN_PASSWORD: ${SSO_E2E_KC_ADMIN_PASSWORD}
-            # In-memory H2 is fine — every test run rebuilds the realm
-            # from scratch via bootstrap-keycloak.sh. Persistence would
-            # actually be a footgun: stale realms from prior runs.
+            # dev-file is an embedded H2 file DB — fast to bootstrap,
+            # zero external services. The realm is rebuilt by
+            # bootstrap-keycloak-remote.sh every provision, so we don't
+            # need persistence across droplet restarts. Postgres would
+            # be a footgun: stale realms from prior runs.
             KC_DB: dev-file
         volumes:
             - kc-sso-e2e-data:/opt/keycloak/data
