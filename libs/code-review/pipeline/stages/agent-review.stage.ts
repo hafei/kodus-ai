@@ -46,6 +46,7 @@ import {
     getClassification,
     isTerminalCategory,
 } from '@libs/code-review/infrastructure/agents/llm/error-classifier';
+import { ReviewStatus } from '@libs/platformData/domain/pullRequests/enums/reviewStatus.enum';
 
 /**
  * Extract valid line ranges from a unified diff patch.
@@ -507,10 +508,7 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 getClassification(f.error) ??
                 classifyLLMError(f.error, reviewProvider);
 
-            let derivedReviewStatus:
-                | 'SUCCESS'
-                | 'FAILED'
-                | 'PARTIAL' = 'SUCCESS';
+            let derivedReviewStatus: ReviewStatus = ReviewStatus.SUCCESS;
             let derivedLastReviewError:
                 | CodeReviewPipelineContext['lastReviewError']
                 | undefined;
@@ -521,7 +519,9 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                     CRITICAL_AGENTS.has(f.agentName),
                 );
                 derivedReviewStatus =
-                    criticalFailures.length > 0 ? 'FAILED' : 'PARTIAL';
+                    criticalFailures.length > 0
+                        ? ReviewStatus.FAILED
+                        : ReviewStatus.PARTIAL;
 
                 // Pick the failure that best informs the user: a critical
                 // agent with a mapped (non-UNKNOWN) classification wins.

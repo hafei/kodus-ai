@@ -31,6 +31,7 @@ export const AGENT_BRANCH_STAGE_NAMES = [
     'BusinessLogicValidationStage',
     'CreateSandboxStage',
     'AgentReviewStage',
+    'PersistReviewStatusStage',
 ] as const;
 
 export type EeBranchStageName = (typeof EE_BRANCH_STAGE_NAMES)[number];

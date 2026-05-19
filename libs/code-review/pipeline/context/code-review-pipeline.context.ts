@@ -9,6 +9,7 @@ import {
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 import { CollectCrossFileContextsResult } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { ReviewErrorCategory } from '@libs/code-review/infrastructure/agents/llm/error-classifier';
+import { ReviewStatus } from '@libs/platformData/domain/pullRequests/enums/reviewStatus.enum';
 import { PlatformType } from '@libs/core/domain/enums';
 import {
     AnalysisContext,
@@ -228,7 +229,7 @@ export interface CodeReviewPipelineContext extends PipelineContext {
      *
      * Absent on legacy (non-agent) engine runs.
      */
-    reviewStatus?: 'SUCCESS' | 'FAILED' | 'PARTIAL';
+    reviewStatus?: ReviewStatus;
 
     /**
      * Set to true when at least one agent failed with a terminal error

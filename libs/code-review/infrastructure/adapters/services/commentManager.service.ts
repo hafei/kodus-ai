@@ -8,6 +8,7 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
+import { ReviewStatus } from '@libs/platformData/domain/pullRequests/enums/reviewStatus.enum';
 import { LanguageValue } from '@libs/core/domain/enums/language-parameter.enum';
 import { ParametersKey } from '@libs/core/domain/enums/parameters-key.enum';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
@@ -826,9 +827,16 @@ You must always respond in ${languageResultPrompt}.`;
         threadId?: number,
         finalCommentBody?: string,
         dryRun?: CodeReviewPipelineContext['dryRun'],
+        reviewStatus?: ReviewStatus,
+        reviewErrorMessage?: string,
     ): Promise<void> {
         try {
-            let commentBody = finalCommentBody;
+            // When the review failed, we cannot honor a customer-configured
+            // endReviewMessage template — those say "review completed", which
+            // would be a lie. Force the default summary path so the
+            // `withErrors` variant renders the real reason.
+            const reviewFailed = reviewStatus === ReviewStatus.FAILED;
+            let commentBody = reviewFailed ? undefined : finalCommentBody;
 
             if (!commentBody || commentBody === '') {
                 commentBody = await this.generateLastReviewCommenBody(
@@ -837,6 +845,9 @@ You must always respond in ${languageResultPrompt}.`;
                     platformType,
                     codeSuggestions,
                     codeReviewConfig,
+                    undefined,
+                    reviewStatus,
+                    reviewErrorMessage,
                 );
             }
 
@@ -888,6 +899,8 @@ You must always respond in ${languageResultPrompt}.`;
         codeSuggestions?: Array<CommentResult>,
         codeReviewConfig?: CodeReviewConfig,
         prLevelCommentResults?: Array<CommentResult>,
+        reviewStatus?: ReviewStatus,
+        reviewErrorMessage?: string,
     ): Promise<string> {
         let commentBody = await this.generatePullRequestFinishSummaryMarkdown(
             organizationAndTeamData,
@@ -895,6 +908,8 @@ You must always respond in ${languageResultPrompt}.`;
             codeSuggestions,
             codeReviewConfig,
             prLevelCommentResults,
+            reviewStatus,
+            reviewErrorMessage,
         );
 
         commentBody = this.sanitizeBitbucketMarkdown(commentBody, platformType);
@@ -1416,6 +1431,8 @@ You must always respond in ${languageResultPrompt}.`;
         commentResults?: Array<CommentResult>,
         codeReviewConfig?: CodeReviewConfig,
         prLevelCommentResults?: Array<CommentResult>,
+        reviewStatus?: ReviewStatus,
+        reviewErrorMessage?: string,
     ): Promise<string> {
         try {
             const language =
@@ -1441,9 +1458,40 @@ You must always respond in ${languageResultPrompt}.`;
 
             const hasComments = hasPrLevelComments || hasFileComments;
 
-            const resultText = hasComments
-                ? translation.withComments
-                : translation.withoutComments;
+            // Failure variant takes priority: when the agent engine flagged
+            // reviewStatus = FAILED we cannot honestly tell the user "review
+            // completed" — even if the legacy hasComments path would also
+            // produce 0 suggestions. The dictionary's `withErrors` template
+            // includes the `{{errorMessage}}` placeholder that we fill with
+            // the human-readable reason; older dictionaries may not have the
+            // key, in which case we fall back to en-US.
+            let resultText: string | undefined;
+            if (reviewStatus === ReviewStatus.FAILED) {
+                resultText =
+                    translation.withErrors ??
+                    getTranslationsForLanguageByCategory(
+                        LanguageValue.ENGLISH,
+                        TranslationsCategory.PullRequestFinishSummaryMarkdown,
+                    )?.withErrors;
+                if (resultText) {
+                    const errorMessage =
+                        reviewErrorMessage?.trim() ||
+                        'Unexpected error while running the code review.';
+                    resultText = resultText.replace(
+                        /\{\{errorMessage\}\}/g,
+                        errorMessage,
+                    );
+                }
+            }
+
+            if (!resultText) {
+                // SUCCESS and PARTIAL share the same copy — the user-facing
+                // comment doesn't distinguish them (PARTIAL only matters for
+                // the dashboard / auto-approve gating).
+                resultText = hasComments
+                    ? translation.withComments
+                    : translation.withoutComments;
+            }
 
             if (!resultText) {
                 throw new Error(
@@ -2241,10 +2289,17 @@ ${reviewOptions}
         pullRequestMessagesConfig?: IPullRequestMessages,
         dryRun?: CodeReviewPipelineContext['dryRun'],
         prLevelCommentResults?: Array<CommentResult>,
+        reviewStatus?: ReviewStatus,
+        reviewErrorMessage?: string,
     ): Promise<void> {
         let commentBody: string;
 
-        if (endReviewMessage) {
+        // Same rationale as updateOverallComment: customer end-review
+        // templates assert success; on FAILED we override to the default
+        // path so the `withErrors` variant shows the real reason.
+        const reviewFailed = reviewStatus === ReviewStatus.FAILED;
+
+        if (endReviewMessage && !reviewFailed) {
             const placeholderContext = await this.getTemplateContext(
                 changedFiles,
                 organizationAndTeamData,
@@ -2268,6 +2323,8 @@ ${reviewOptions}
                 codeSuggestions,
                 codeReviewConfig,
                 prLevelCommentResults,
+                reviewStatus,
+                reviewErrorMessage,
             );
         }
 

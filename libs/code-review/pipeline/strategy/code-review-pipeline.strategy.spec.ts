@@ -5,6 +5,7 @@ import { BusinessLogicValidationStage } from '../stages/business-logic-validatio
 import { CollectCrossFileContextStage } from '../stages/collect-cross-file-context.stage';
 import { CreateSandboxStage } from '../stages/create-sandbox.stage';
 import { FileContextGateStage } from '../stages/file-context-gate.stage';
+import { PersistReviewStatusStage } from '../stages/persist-review-status.stage';
 import { ProcessFilesPrLevelReviewStage } from '../stages/process-files-pr-level-review.stage';
 import { ProcessFilesReview } from '../stages/process-files-review.stage';
 import { KodyFineTuningStage } from '@libs/ee/codeReview/stages/kody-fine-tuning.stage';
@@ -65,6 +66,7 @@ const buildStrategy = (): CodeReviewPipelineStrategy =>
         mockStage('BusinessLogicValidationStage') as any,
         mockStage('CreateSandboxStage') as any,
         mockStage('AgentReviewStage') as any,
+        mockStage('PersistReviewStatusStage') as any,
         mockStage('CreatePrLevelCommentsStage') as any,
         mockStage('ValidateSuggestionsStage') as any,
         mockStage('CreateFileCommentsStage') as any,
@@ -96,6 +98,7 @@ describe('CodeReviewPipelineStrategy', () => {
                 instantiateForName(BusinessLogicValidationStage),
                 instantiateForName(CreateSandboxStage),
                 instantiateForName(AgentReviewStage),
+                instantiateForName(PersistReviewStatusStage),
             ].map((s) => (s as { stageName: string }).stageName);
             expect(liveNames).toEqual([...AGENT_BRANCH_STAGE_NAMES]);
         });

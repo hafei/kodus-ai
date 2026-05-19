@@ -179,6 +179,8 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 initialCommentData.threadId,
                 undefined,
                 context.dryRun,
+                context.reviewStatus,
+                context.lastReviewError?.friendlyMessage,
             );
             return context;
         }
@@ -236,6 +238,8 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 initialCommentData.threadId,
                 finalCommentBody,
                 context.dryRun,
+                context.reviewStatus,
+                context.lastReviewError?.friendlyMessage,
             );
             return context;
         }
@@ -270,6 +274,8 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 context.pullRequestMessagesConfig,
                 context.dryRun,
                 context.prLevelCommentResults ?? [],
+                context.reviewStatus,
+                context.lastReviewError?.friendlyMessage,
             );
         }
 

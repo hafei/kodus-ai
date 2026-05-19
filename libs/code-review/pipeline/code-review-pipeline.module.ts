@@ -74,6 +74,7 @@ import { SandboxModule } from '@libs/sandbox/modules/sandbox.module';
 // V3 Agent-First
 import { CreateSandboxStage } from './stages/create-sandbox.stage';
 import { AgentReviewStage } from './stages/agent-review.stage';
+import { PersistReviewStatusStage } from './stages/persist-review-status.stage';
 import { BugAgentProvider } from '../infrastructure/agents/bug-agent.provider';
 import { SecurityAgentProvider } from '../infrastructure/agents/security-agent.provider';
 import { PerformanceAgentProvider } from '../infrastructure/agents/performance-agent.provider';
@@ -162,6 +163,7 @@ import { ReviewOrchestratorService } from '../infrastructure/agents/review-orche
         // V3 Agent-First stages + providers
         CreateSandboxStage,
         AgentReviewStage,
+        PersistReviewStatusStage,
         BugAgentProvider,
         SecurityAgentProvider,
         PerformanceAgentProvider,
@@ -216,6 +218,7 @@ import { ReviewOrchestratorService } from '../infrastructure/agents/review-orche
         // V3
         CreateSandboxStage,
         AgentReviewStage,
+        PersistReviewStatusStage,
         ReviewOrchestratorService,
     ],
 })
