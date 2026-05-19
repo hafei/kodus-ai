@@ -1,89 +1,129 @@
 /* eslint-disable no-console */
 /**
- * Seeds the persistent E2E tenants on the QA cloud (qa.web.kodus.io) the
- * cloud matrix smoke runs against. Each tenant is single-provider and
- * single-tier so it mirrors the self-hosted isolation pattern.
+ * Seeds the persistent E2E tenants on the QA cloud (qa.web.kodus.io)
+ * that the cloud matrix smoke runs against. Each tenant is
+ * single-provider and single-tier so it mirrors the self-hosted
+ * isolation pattern.
  *
  * Usage:
- *   yarn cloud:setup-tenants
+ *   yarn cloud:setup-tenants                    # all tenants
+ *   CLOUD_SETUP_ONLY=e2e-paid-gh@kodus.io \     # one tenant
+ *     yarn cloud:setup-tenants
  *
- * Idempotent. Safe to re-run after a partial failure — signup returns
- * "already exists" for known emails, upgrade is skipped when the tier
- * already matches, integration is updated in place.
+ * Idempotent: signUp() returns silently on 409, integration POST
+ * upserts in place, repo registration is idempotent on the Kodus side.
  *
- * Output: appended to `~/.kodus-dev/cloud-tenants.json` so the matrix
- * runner can read credentials per cell.
+ * Output: ~/.kodus-dev/cloud-tenants.json — one JSON object per
+ * tenant with email/password/organizationId/teamId. Read by the
+ * matrix runner in lib/runner.ts:resolveTenantForCell.
+ *
+ * Stripe upgrade (paid/trial tiers): NOT yet automated — see TODO in
+ * ensureLicenseTier(). For now, the script seeds the tenant on the
+ * default free tier. The matrix cell for paid will fail until upgrade
+ * is implemented OR an admin endpoint to set tier is exposed.
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { chromium, type Browser, type Page } from "playwright";
+
+import {
+    finishOnboarding,
+    login,
+    registerIntegration,
+    registerRepo,
+    signUp,
+} from "../../lib/onboarding.js";
+import { makeProvider } from "../../providers/index.js";
+import type {
+    KodusSession,
+    ProviderName,
+    TargetContext,
+} from "../../lib/types.js";
 
 const QA_WEB_URL =
     process.env.CLOUD_WEB_URL?.replace(/\/$/, "") ?? "https://qa.web.kodus.io";
-const HEADLESS = process.env.CLOUD_SETUP_HEADLESS !== "false"; // default headless; set =false to watch
-const SCREENSHOT_DIR = process.env.CLOUD_SETUP_SCREENSHOTS ?? "/tmp/kodus-cloud-setup";
+
+// Cloud QA proxies API calls through `/api/proxy/api/<path>`. The
+// helpers in lib/onboarding.ts append paths like `/auth/signUp` to the
+// configured apiBaseUrl, so the base must end at `/api` (not `/api/proxy`).
+const QA_API_BASE_URL =
+    process.env.CLOUD_API_URL?.replace(/\/$/, "") ??
+    `${QA_WEB_URL}/api/proxy/api`;
+
 const CREDS_FILE = join(homedir(), ".kodus-dev", "cloud-tenants.json");
 
 // Shared password for all seeded tenants. Stored in plaintext in the
 // gitignored creds file — fine for QA, never use for prod.
-const SHARED_PASSWORD = "E2eCloud!2026Smoke";
+const SHARED_PASSWORD =
+    process.env.CLOUD_SETUP_PASSWORD ?? "E2eCloud!2026Smoke";
 
 type TenantLicense = "paid" | "trial" | "free";
-type TenantProvider = "github" | "gitlab" | "bitbucket" | "azure-devops";
 
 interface TenantSpec {
     email: string;
     name: string;
     license: TenantLicense;
-    provider: TenantProvider;
+    provider: ProviderName;
     repoFullName: string;
 }
 
-// Name field is validated as `^[A-Za-z\s\-']+$` server-side, so no
-// digits — "E2E" gets rejected. Stay with plain letters.
+// Tenant registry. Names can only contain letters / spaces / hyphens /
+// apostrophes (Kodus validates `^[A-Za-z\s\-']+$` server-side), so no
+// digits in the visible name.
+//
+// Repos are shared across tiers of the same provider — license tier is
+// per-org on cloud (Stripe-driven), so each tier needs its own
+// organization, but webhooks from a single repo can be disambiguated
+// by Kodus per integration (App installation id for GitHub, OAuth/PAT
+// integration uuid for GitLab/Bitbucket/Azure). One downside: the
+// `generateKodyRulesUseCase` step at finish-onboarding reads the
+// repo's PR history regardless of which org is onboarding, so the
+// rules generated for tier B can be shaped by traffic from tier A —
+// acceptable for the QA matrix where the license-attribution and
+// per-seat gates are the real signal; revisit if a scenario needs
+// strictly isolated rule histories.
 const TENANTS: TenantSpec[] = [
     {
         email: "e2e-paid-gh@kodus.io",
         name: "Smoke Paid GitHub",
         license: "paid",
         provider: "github",
-        repoFullName: "kodus-e2e/tiny-url-qa-paid",
+        repoFullName: "kodus-e2e/tiny-url",
     },
     {
         email: "e2e-free-gh@kodus.io",
         name: "Smoke Free GitHub",
         license: "free",
         provider: "github",
-        repoFullName: "kodus-e2e/tiny-url-qa-free",
+        repoFullName: "kodus-e2e/tiny-url",
     },
     {
         email: "e2e-trial-gh@kodus.io",
         name: "Smoke Trial GitHub",
         license: "trial",
         provider: "github",
-        repoFullName: "kodus-e2e/tiny-url-qa-trial",
+        repoFullName: "kodus-e2e/tiny-url",
     },
     {
         email: "e2e-paid-gl@kodus.io",
         name: "Smoke Paid GitLab",
         license: "paid",
         provider: "gitlab",
-        repoFullName: "kodus-e2e/tiny-url-qa",
+        repoFullName: "kodus-e2e/tiny-url",
     },
     {
         email: "e2e-paid-bb@kodus.io",
         name: "Smoke Paid Bitbucket",
         license: "paid",
         provider: "bitbucket",
-        repoFullName: "kodustech/tiny-url-qa",
+        repoFullName: "kodustech/tiny-url",
     },
     {
         email: "e2e-paid-az@kodus.io",
         name: "Smoke Paid Azure",
         license: "paid",
         provider: "azure-devops",
-        repoFullName: "kodustech/kodus-e2e/tiny-url-qa",
+        repoFullName: "kodustech/kodus-e2e/tiny-url",
     },
 ];
 
@@ -91,6 +131,10 @@ interface SavedTenant extends TenantSpec {
     password: string;
     organizationId?: string;
     teamId?: string;
+    integrationConnected?: boolean;
+    repoRegistered?: boolean;
+    onboardingFinished?: boolean;
+    tierUpgraded?: boolean;
     seededAt: string;
 }
 
@@ -101,7 +145,9 @@ function readSavedCreds(): SavedTenant[] {
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? (parsed as SavedTenant[]) : [];
     } catch (err) {
-        console.warn(`[warn] could not parse ${CREDS_FILE}: ${(err as Error).message}. Starting fresh.`);
+        console.warn(
+            `[warn] could not parse ${CREDS_FILE}: ${(err as Error).message}. Starting fresh.`,
+        );
         return [];
     }
 }
@@ -120,182 +166,106 @@ function upsertCreds(creds: SavedTenant[], next: SavedTenant): SavedTenant[] {
     return [...creds, next];
 }
 
-async function withPage<T>(
-    browser: Browser,
-    label: string,
-    fn: (page: Page) => Promise<T>,
-): Promise<T> {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const page = await context.newPage();
+function targetForCloud(): TargetContext {
+    return {
+        target: "cloud",
+        apiBaseUrl: QA_API_BASE_URL,
+        webBaseUrl: QA_WEB_URL,
+    };
+}
+
+// TODO(cloud-setup): Drive Stripe Checkout via Playwright to upgrade
+// `paid` and `trial` tenants. Until then, those tiers stay on the
+// default (free), and the cloud × paid matrix cells will fail the
+// license-attribution scenario for the right reason — the gate
+// reports "free" instead of "paid". Track upgrade automation
+// separately from this loop so signup/integration progress isn't
+// blocked on the Stripe iframe.
+async function ensureLicenseTier(tenant: TenantSpec): Promise<boolean> {
+    if (tenant.license === "free") return true;
+    console.log(
+        `  [todo] license-tier upgrade for ${tenant.email} (${tenant.license}) — not implemented yet, staying on default tier`,
+    );
+    return false;
+}
+
+async function connectProvider(
+    target: TargetContext,
+    session: KodusSession,
+    tenant: TenantSpec,
+): Promise<{ integrationConnected: boolean; repoRegistered: boolean }> {
+    // Build a Provider from env (GH_TEST_TOKEN / GL_TEST_TOKEN / etc.).
+    // For cloud QA we reuse the same tokens that drive the self-hosted
+    // matrix — the test repos in kodus-e2e org are reachable from both
+    // targets with the same PAT. `repoFullName` on the tenant overrides
+    // the env-driven GH_TEST_REPO etc. so each cloud tenant owns its
+    // own isolated repo and PR history.
+    const savedEnv = process.env;
+    const overrideKey = ({
+        github: "GH_TEST_REPO",
+        gitlab: "GL_TEST_REPO",
+        bitbucket: "BB_TEST_REPO",
+        "azure-devops": "AZ_TEST_REPO",
+    } as Record<ProviderName, string>)[tenant.provider];
+    const previous = savedEnv[overrideKey];
+    process.env[overrideKey] = tenant.repoFullName;
     try {
-        return await fn(page);
-    } catch (err) {
-        // Snapshot on failure for post-mortem. Always created at the same
-        // place so re-runs overwrite; this is meant for the latest failure,
-        // not historical archiving.
-        mkdirSync(SCREENSHOT_DIR, { recursive: true });
-        const path = join(SCREENSHOT_DIR, `${label}.png`);
-        try {
-            await page.screenshot({ path, fullPage: true });
-            console.error(`[err] screenshot saved to ${path}`);
-        } catch {
-            /* ignore screenshot failure */
-        }
-        throw err;
+        const provider = makeProvider(tenant.provider);
+        await registerIntegration(target, provider, session);
+        const repo = await registerRepo(target, provider, session);
+        await finishOnboarding(target, session, repo);
+        return { integrationConnected: true, repoRegistered: true };
     } finally {
-        await context.close();
+        if (previous === undefined) delete process.env[overrideKey];
+        else process.env[overrideKey] = previous;
     }
 }
 
-/**
- * Drives the multi-step signup form on qa.web.kodus.io:
- *   step 1: email → click Continue
- *   step 2: name + password → submit, redirects to /setup
- *
- * Resolves with `{alreadyExisted: boolean}` so callers can decide whether
- * to skip upgrade/connect steps that would otherwise duplicate work.
- */
-async function signUpTenant(
-    page: Page,
+async function seedTenant(
     tenant: TenantSpec,
-    password: string,
-): Promise<{ alreadyExisted: boolean }> {
-    // Log any non-2xx API response we see during signup so failures
-    // surface in the console even when the UI swallows them.
-    page.on("response", async (resp) => {
-        const status = resp.status();
-        const url = resp.url();
-        if (status >= 400 && /api|auth/.test(url)) {
-            const body = await resp.text().catch(() => "(no body)");
-            console.error(
-                `  [http ${status}] ${resp.request().method()} ${url}\n    ${body.slice(0, 400)}`,
-            );
-        }
+    existing: SavedTenant | undefined,
+): Promise<SavedTenant> {
+    const target = targetForCloud();
+    const password = SHARED_PASSWORD;
+
+    await signUp(target, {
+        email: tenant.email,
+        password,
+        name: tenant.name,
     });
 
-    await page.goto(`${QA_WEB_URL}/sign-up`, { waitUntil: "domcontentloaded" });
+    const session = await login(target, { email: tenant.email, password });
 
-    // Step 1: email. The form's <Input> is uncontrolled (`value=undefined`,
-    // `defaultValue={field.value}`) and pipes onChange through a
-    // ~300ms debounce before it calls react-hook-form's setValue. A
-    // single `fill()` (which dispatches one synthetic change event)
-    // doesn't reliably drive the debounce — the form stays "untouched"
-    // and the Continue button never enables. Use `pressSequentially`
-    // to emit one event per character so onChange fires repeatedly,
-    // then sleep past the debounce window before clicking.
-    const emailInput = page.getByLabel("Email", { exact: true });
-    await emailInput.click();
-    await emailInput.pressSequentially(tenant.email, { delay: 20 });
-    // Debounce is configured at ~300ms; pad to 600ms to absorb noise.
-    await page.waitForTimeout(600);
-
-    const continueButton = page.getByRole("button", { name: "Continue" });
-    await continueButton.click({ timeout: 15_000 });
-
-    // Step 2: name + password + confirm password. Labels in the UI:
-    //   "How can we call you?" → name field (placeholder "Enter your name")
-    //   "Password"             → password
-    //   "Confirm Password"     → re-enter password
-    // Use placeholder selectors for the name field — its visible label
-    // is a sentence rather than a single word, and placeholder is the
-    // most stable handle.
-    const nameInput = page.getByPlaceholder("Enter your name");
-    await nameInput.waitFor({ state: "visible", timeout: 15_000 });
-    // Same debounce pattern as the email step.
-    await nameInput.click();
-    await nameInput.pressSequentially(tenant.name, { delay: 20 });
-
-    const passwordInput = page.getByPlaceholder("Create your password");
-    await passwordInput.click();
-    await passwordInput.pressSequentially(password, { delay: 20 });
-
-    const confirmPasswordInput = page.getByPlaceholder("Re-enter your password");
-    await confirmPasswordInput.click();
-    await confirmPasswordInput.pressSequentially(password, { delay: 20 });
-
-    // Let any debounced setValue calls flush before submitting.
-    await page.waitForTimeout(600);
-
-    const submitButton = page.getByRole("button", { name: "Sign up", exact: true });
-    await submitButton.click({ timeout: 15_000 });
-
-    // After submit one of three things happens:
-    //  (a) navigation away from /sign-up — fresh signup succeeded
-    //  (b) inline error "already registered" — re-run on existing tenant
-    //  (c) other failure — surface URL + visible errors
-    //
-    // We wait up to 60s for either a URL change OR a duplicate-email
-    // error to appear. Watching for ANY navigation off /sign-up is more
-    // robust than hard-coding `/setup` — the post-signup landing has
-    // moved before and may move again.
-    const startedAt = Date.now();
-    const deadline = startedAt + 60_000;
-    while (Date.now() < deadline) {
-        const url = page.url();
-        if (!url.includes("/sign-up")) {
-            return { alreadyExisted: false };
-        }
-        const dupVisible = await page
-            .getByText(/already\s+registered|already\s+exists/i)
-            .first()
-            .isVisible()
-            .catch(() => false);
-        if (dupVisible) {
-            return { alreadyExisted: true };
-        }
-        await page.waitForTimeout(500);
-    }
-    const finalUrl = page.url();
-    const visibleText = (await page
-        .locator("body")
-        .innerText()
-        .catch(() => ""))
-        .slice(0, 500);
-    throw new Error(
-        `signup for ${tenant.email}: stuck on ${finalUrl} after 60s. ` +
-            `Visible text snapshot: ${JSON.stringify(visibleText)}`,
+    const { integrationConnected, repoRegistered } = await connectProvider(
+        target,
+        session,
+        tenant,
     );
+    const onboardingFinished = repoRegistered; // connectProvider runs finishOnboarding too
+
+    const tierUpgraded = await ensureLicenseTier(tenant);
+
+    return {
+        ...tenant,
+        password,
+        organizationId: session.organizationId,
+        teamId: session.teamId,
+        integrationConnected,
+        repoRegistered,
+        onboardingFinished,
+        tierUpgraded,
+        seededAt: new Date().toISOString(),
+        ...(existing ?? {}),
+        // Preserve newly resolved org/team ids even if existing had stale ones.
+        ...(session.organizationId
+            ? { organizationId: session.organizationId }
+            : {}),
+        ...(session.teamId ? { teamId: session.teamId } : {}),
+    };
 }
 
-/**
- * Placeholder. Drives the /settings/subscription upgrade via Stripe
- * Checkout (test card 4242 4242 4242 4242). Skipped when the tenant is
- * already on the desired tier.
- *
- * TODO(cloud-setup): implement against the actual checkout iframe shape
- * once `qa.web.kodus.io/settings/subscription` is reachable from this
- * machine and the Stripe price IDs are confirmed.
- */
-async function ensureLicenseTier(
-    _page: Page,
-    tenant: TenantSpec,
-): Promise<void> {
-    if (tenant.license === "free") {
-        // No action — fresh signup defaults to free/trial; we treat the
-        // tenant slot as "free" once trial expires. For QA this is fine
-        // because the entitlement gate fires on "free" identically.
-        return;
-    }
-    console.log(`[todo] license-tier upgrade for ${tenant.email} (${tenant.license}) — not implemented yet`);
-}
-
-/**
- * Placeholder. Drives the connect-provider flow in /settings/integrations
- * for the tenant's provider. Uses the same PAT/app-password the
- * self-hosted matrix uses (so the same fixture repo is reachable).
- *
- * TODO(cloud-setup): implement per-provider once the page selectors are
- * inspected. GitHub uses an App install — that flow is the most
- * complex; GitLab/Azure/Bitbucket accept a pasted PAT.
- */
-async function connectProvider(_page: Page, tenant: TenantSpec): Promise<void> {
-    console.log(`[todo] connect ${tenant.provider} for ${tenant.email} (repo: ${tenant.repoFullName}) — not implemented yet`);
-}
-
-async function main() {
+async function main(): Promise<void> {
     const saved = readSavedCreds();
-    // Filter for iterative debugging: `CLOUD_SETUP_ONLY=e2e-paid-gh@kodus.io`
-    // runs just that tenant. Without the filter, all TENANTS are seeded.
     const onlyEmails = (process.env.CLOUD_SETUP_ONLY ?? "")
         .split(",")
         .map((s) => s.trim())
@@ -309,52 +279,44 @@ async function main() {
         );
         process.exit(2);
     }
-    console.log(`[cloud-setup] target: ${QA_WEB_URL}`);
-    console.log(`[cloud-setup] tenants to seed: ${todo.length}${onlyEmails.length ? ` (filtered)` : ""}`);
-    console.log(`[cloud-setup] creds file: ${CREDS_FILE} (${saved.length} existing entries)`);
 
-    const browser = await chromium.launch({ headless: HEADLESS });
-    try {
-        for (const tenant of todo) {
-            console.log(`\n[cloud-setup] ▶ ${tenant.email} (${tenant.license} × ${tenant.provider})`);
+    console.log(`[cloud-setup] target: ${QA_API_BASE_URL}`);
+    console.log(
+        `[cloud-setup] tenants to seed: ${todo.length}${onlyEmails.length ? " (filtered)" : ""}`,
+    );
+    console.log(
+        `[cloud-setup] creds file: ${CREDS_FILE} (${saved.length} existing entries)`,
+    );
 
-            const password = SHARED_PASSWORD;
-            const existingCred = saved.find((c) => c.email === tenant.email);
+    const failures: Array<{ email: string; error: string }> = [];
 
-            // 1. Signup (idempotent)
-            const { alreadyExisted } = await withPage(
-                browser,
-                `signup-${tenant.email}`,
-                (page) => signUpTenant(page, tenant, password),
-            );
-            console.log(`  signup: ${alreadyExisted ? "already existed" : "created"}`);
-
-            // 2. License tier (TODO)
-            await withPage(browser, `tier-${tenant.email}`, (page) =>
-                ensureLicenseTier(page, tenant),
-            );
-
-            // 3. Connect provider (TODO)
-            await withPage(browser, `provider-${tenant.email}`, (page) =>
-                connectProvider(page, tenant),
-            );
-
-            // 4. Persist
-            const next: SavedTenant = {
-                ...tenant,
-                password,
-                organizationId: existingCred?.organizationId,
-                teamId: existingCred?.teamId,
-                seededAt: new Date().toISOString(),
-            };
-            writeSavedCreds(upsertCreds(saved, next));
-            console.log(`  ✓ saved to ${CREDS_FILE}`);
+    let current = saved;
+    for (const tenant of todo) {
+        console.log(
+            `\n[cloud-setup] ▶ ${tenant.email} (${tenant.license} × ${tenant.provider})`,
+        );
+        const existing = current.find((c) => c.email === tenant.email);
+        try {
+            const next = await seedTenant(tenant, existing);
+            current = upsertCreds(current, next);
+            writeSavedCreds(current);
+            console.log(`  ✓ saved (org=${next.organizationId}, team=${next.teamId})`);
+        } catch (err) {
+            const message = (err as Error).message ?? String(err);
+            console.error(`  ✗ failed: ${message}`);
+            failures.push({ email: tenant.email, error: message });
         }
-    } finally {
-        await browser.close();
     }
 
-    console.log(`\n[cloud-setup] done. Inspect ${CREDS_FILE} for the seeded creds.`);
+    console.log(
+        `\n[cloud-setup] done. ${todo.length - failures.length}/${todo.length} ok`,
+    );
+    if (failures.length) {
+        for (const f of failures) {
+            console.error(`  ✗ ${f.email}: ${f.error}`);
+        }
+        process.exit(1);
+    }
 }
 
 main().catch((err) => {
