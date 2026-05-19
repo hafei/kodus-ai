@@ -2,15 +2,23 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { allScenarios, resolveScenarios } from "../../scenarios/index.js";
 
-test("allScenarios: includes the 5 P0 scenarios", () => {
+test("allScenarios: includes the 6 P0 scenarios", () => {
     const ids = Object.keys(allScenarios).sort();
     assert.deepEqual(ids, [
         "code-review-basic",
         "kody-rules-create-and-apply",
         "license-attribution",
         "onboarding-webhook-registration",
+        "per-seat-license-toggle",
         "upgrade-n-1-to-n",
     ]);
+});
+
+test("per-seat-license-toggle: self-hosted × github × license-paid only", () => {
+    const s = allScenarios["per-seat-license-toggle"];
+    assert.deepEqual(s.appliesTo.target, ["self-hosted"]);
+    assert.deepEqual(s.appliesTo.provider, ["github"]);
+    assert.deepEqual(s.appliesTo.license, ["license-paid"]);
 });
 
 test("resolveScenarios: returns scenarios in given order", () => {

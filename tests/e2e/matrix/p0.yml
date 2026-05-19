@@ -16,6 +16,10 @@ scenarios:
     - code-review-basic
     - kody-rules-create-and-apply
     - license-attribution
+    # Per-seat gate: appliesTo restricts to self-hosted × github × license-paid
+    # (one cell). Skipped automatically when SH_LICENSE_KEY_PATH (default
+    # ~/.kodus-dev/license-seats1.jwt) isn't available — see run-matrix.ts.
+    - per-seat-license-toggle
 
 cells:
     # ---------- self-hosted ----------

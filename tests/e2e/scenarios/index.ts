@@ -3,6 +3,7 @@ import codeReviewBasic from "./code-review-basic.js";
 import kodyRulesCreateAndApply from "./kody-rules.js";
 import licenseAttribution from "./license-attribution.js";
 import onboardingWebhookRegistration from "./onboarding-webhook-registration.js";
+import perSeatLicenseToggle from "./per-seat-license-toggle.js";
 import upgradeNMinusOneToN from "./upgrade.js";
 
 export const allScenarios: Record<string, Scenario> = {
@@ -10,6 +11,7 @@ export const allScenarios: Record<string, Scenario> = {
     [codeReviewBasic.id]: codeReviewBasic,
     [kodyRulesCreateAndApply.id]: kodyRulesCreateAndApply,
     [licenseAttribution.id]: licenseAttribution,
+    [perSeatLicenseToggle.id]: perSeatLicenseToggle,
     [upgradeNMinusOneToN.id]: upgradeNMinusOneToN,
 };
 
@@ -30,5 +32,6 @@ export {
     kodyRulesCreateAndApply,
     licenseAttribution,
     onboardingWebhookRegistration,
+    perSeatLicenseToggle,
     upgradeNMinusOneToN,
 };
