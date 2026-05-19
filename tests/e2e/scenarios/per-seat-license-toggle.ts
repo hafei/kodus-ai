@@ -58,7 +58,11 @@ export const perSeatLicenseToggle: Scenario = {
         provider: ["github", "gitlab", "bitbucket", "azure-devops"],
         license: ["license-paid"],
     },
-    timeoutSec: 2100,
+    // Outer budget: 1500s assigned-phase + 2× 120s unassigned + ~300s
+    // onboarding (LLM rule-gen on first run) = ~33 min worst-case. Round
+    // up to 40 min so a hung phase fails the scenario before the cell
+    // timeout, instead of letting the runner kill mid-poll.
+    timeoutSec: 2400,
     async run(ctx: RunContext) {
         ctx.assert(ctx.tenant, "scenario requires a tenant");
         const baseUrl = ctx.target.apiBaseUrl;
@@ -139,9 +143,15 @@ export const perSeatLicenseToggle: Scenario = {
         const phase2 = await runReviewPhase(ctx, fixture, {
             label: "assigned",
             expectReview: true,
-            // Real review on tiny-url fixture (Kimi K2.6) measured at
-            // ~10–11 min end-to-end. Give it 900s like code-review-basic.
-            pollTimeoutSec: 900,
+            // Measured per-provider review duration on tiny-url + Kimi K2.6:
+            //   bitbucket ~10 min, github/azure ~14 min, gitlab 14–15 min
+            // with variance from sandbox cold-start + LLM API latency.
+            // A 900s budget passed gitlab on a fast run but missed it on a
+            // slow run (15 min exact) — a real flake source. Bump to 1500s
+            // (25 min) so the slowest legitimate review still completes
+            // with margin; anything longer signals a real pipeline hang
+            // and should fail loudly, not be retried.
+            pollTimeoutSec: 1500,
             seatsAtStart: usersBeforePhase2,
         });
 
