@@ -57,9 +57,9 @@ jobs:
               working-directory: tests/e2e
               run: node --import tsx --test lib/__tests__/*.test.ts
 
-            - name: Dry-run full P0 matrix
+            - name: Dry-run fast matrix
               working-directory: tests/e2e
-              run: ./node_modules/.bin/tsx cli/run-matrix.ts matrix/p0.yml --dry-run
+              run: ./node_modules/.bin/tsx cli/run-matrix.ts matrix/fast.yml --dry-run
 
             - name: Upload dry-run evidence
               if: always()

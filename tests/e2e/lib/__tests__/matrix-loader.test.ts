@@ -24,23 +24,53 @@ const validProviders: ProviderName[] = [
     "azure-devops",
 ];
 
-test("p0.yml loads and has expected shape", () => {
-    const m = loadMatrix("p0.yml");
-    assert.equal(m.id, "p0");
+test("fast.yml loads and has expected shape", () => {
+    const m = loadMatrix("fast.yml");
+    assert.equal(m.id, "fast");
     assert.ok(Array.isArray(m.scenarios));
     assert.ok(m.scenarios.length > 0);
     assert.ok(Array.isArray(m.cells));
     assert.ok(m.cells.length > 0);
 });
 
-test("release.yml loads and includes upgrade scenario", () => {
-    const m = loadMatrix("release.yml");
-    assert.equal(m.id, "release");
-    assert.ok(m.scenarios.includes("upgrade-n-1-to-n"));
+test("full.yml loads and includes lifecycle scenarios", () => {
+    const m = loadMatrix("full.yml");
+    assert.equal(m.id, "full");
+    for (const id of [
+        "upgrade-n-1-to-n",
+        "sso-cookie-domain",
+        "sso-multi-user",
+        "stripe-billing",
+    ]) {
+        assert.ok(
+            m.scenarios.includes(id),
+            `full.yml missing lifecycle scenario: ${id}`,
+        );
+    }
+});
+
+test("full.yml is a strict superset of fast.yml (scenarios + cells)", () => {
+    const fast = loadMatrix("fast.yml");
+    const full = loadMatrix("full.yml");
+    for (const id of fast.scenarios) {
+        assert.ok(
+            full.scenarios.includes(id),
+            `full.yml is missing fast.yml scenario "${id}". Mirror it.`,
+        );
+    }
+    const cellKey = (c: MatrixCell) =>
+        `${c.target}|${c.provider}|${c.license}`;
+    const fullCells = new Set(full.cells.map(cellKey));
+    for (const fc of fast.cells) {
+        assert.ok(
+            fullCells.has(cellKey(fc)),
+            `full.yml is missing fast.yml cell ${cellKey(fc)}. Mirror it.`,
+        );
+    }
 });
 
 test("every cell in every matrix uses valid axes", () => {
-    for (const name of ["p0.yml", "release.yml"]) {
+    for (const name of ["fast.yml", "full.yml"]) {
         const m = loadMatrix(name);
         for (const cell of m.cells) {
             assert.ok(
@@ -66,23 +96,26 @@ test("every cell in every matrix uses valid axes", () => {
     }
 });
 
-test("p0.yml has at least one cell per provider (covering all 4)", () => {
-    const m = loadMatrix("p0.yml");
+test("fast.yml has at least one cell per provider (covering all 4)", () => {
+    const m = loadMatrix("fast.yml");
     const providers = new Set(m.cells.map((c) => c.provider));
     for (const p of validProviders) {
-        assert.ok(providers.has(p), `p0.yml missing provider: ${p}`);
+        assert.ok(providers.has(p), `fast.yml missing provider: ${p}`);
     }
 });
 
-test("p0.yml covers both targets", () => {
-    const m = loadMatrix("p0.yml");
+test("fast.yml covers both targets", () => {
+    const m = loadMatrix("fast.yml");
     const targets = new Set(m.cells.map((c) => c.target));
-    assert.ok(targets.has("cloud"), "p0.yml missing cloud target");
-    assert.ok(targets.has("self-hosted"), "p0.yml missing self-hosted target");
+    assert.ok(targets.has("cloud"), "fast.yml missing cloud target");
+    assert.ok(
+        targets.has("self-hosted"),
+        "fast.yml missing self-hosted target",
+    );
 });
 
-test("p0.yml license matrix has at least free/trial/paid for cloud", () => {
-    const m = loadMatrix("p0.yml");
+test("fast.yml license matrix has at least free/trial/paid for cloud", () => {
+    const m = loadMatrix("fast.yml");
     const cloudLicenses = new Set(
         m.cells.filter((c) => c.target === "cloud").map((c) => c.license),
     );
@@ -91,8 +124,8 @@ test("p0.yml license matrix has at least free/trial/paid for cloud", () => {
     assert.ok(cloudLicenses.has("paid"), "cloud missing paid");
 });
 
-test("p0.yml license matrix has paid and free for self-hosted", () => {
-    const m = loadMatrix("p0.yml");
+test("fast.yml license matrix has paid and free for self-hosted", () => {
+    const m = loadMatrix("fast.yml");
     const shLicenses = new Set(
         m.cells.filter((c) => c.target === "self-hosted").map((c) => c.license),
     );

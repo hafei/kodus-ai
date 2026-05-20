@@ -9,13 +9,13 @@
 #   GH_TEST_TOKEN, GH_TEST_REPO, GH_TEST_PR_NUMBER (and equivalents for GL/BB/AZ)
 #
 # Optional env:
-#   MATRIX_FILE              default: matrix/p0.yml
+#   MATRIX_FILE              default: matrix/fast.yml
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 E2E_ROOT="${REPO_ROOT}/tests/e2e"
-MATRIX_FILE="${MATRIX_FILE:-matrix/p0.yml}"
+MATRIX_FILE="${MATRIX_FILE:-matrix/fast.yml}"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; BLUE='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${BLUE}[cloud-e2e]${NC} $*"; }

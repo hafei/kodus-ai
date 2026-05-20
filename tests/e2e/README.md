@@ -48,8 +48,8 @@ tests/e2e/
 │   ├── run-scenario.ts    Run a single scenario against a target
 │   └── run-matrix.ts      Run multiple scenarios × matrix
 ├── matrix/                Pre-defined matrix configurations
-│   ├── p0.yml             Always-run gates
-│   └── release.yml        Full release matrix
+│   ├── fast.yml           Fast tier — PR / push gates
+│   └── full.yml           Full tier — superset of fast + lifecycle scenarios
 └── fixtures/              Diff fixtures used to open PRs
     └── basic-diff.md
 ```
@@ -106,10 +106,10 @@ yarn e2e:scenario code-review-basic --target self-hosted --provider gitlab --lic
 
 ```bash
 # Run all P0 scenarios across the full matrix
-yarn e2e:matrix matrix/p0.yml
+yarn e2e:matrix matrix/fast.yml
 
 # Release validation (all scenarios, all cells)
-yarn e2e:matrix matrix/release.yml
+yarn e2e:matrix matrix/full.yml
 ```
 
 ## Environment variables
@@ -149,7 +149,7 @@ The release workflow uploads these as artifacts.
 1. Create `scenarios/<name>.ts` exporting a `Scenario` object.
 2. Declare the matrix axes it applies to (`appliesTo: { target, provider, license }`).
 3. Implement `run(ctx)` using `ctx.provider`, `ctx.kodus`, `ctx.assert`.
-4. Add it to `matrix/p0.yml` or `matrix/release.yml`.
+4. Add it to `matrix/fast.yml` or `matrix/full.yml`.
 
 ## Adding a new provider
 

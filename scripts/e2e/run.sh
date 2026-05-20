@@ -18,9 +18,16 @@
 #   yarn e2e:smoke --provider gitlab              # different provider
 #   yarn e2e:smoke --scenario kody-rules-create-and-apply
 #   yarn e2e:smoke --name junior                  # against named instance
-#   yarn e2e:matrix                               # default: matrix/p0.yml
-#   yarn e2e:matrix matrix/release.yml            # different matrix
+#   yarn e2e:matrix                               # default: matrix/fast.yml
+#   yarn e2e:matrix matrix/full.yml               # full tier (adds upgrade/SSO/Stripe)
 #   yarn e2e:matrix -y                            # skip confirmation prompt
+#   yarn e2e:matrix matrix/full.yml --auto-provision -y
+#                                                 # also ensure self-hosted +
+#                                                 # sso-e2e droplets, seed
+#                                                 # cloud tenants, and export
+#                                                 # TARGET_* env vars from the
+#                                                 # provisioned droplet's state
+#                                                 # file. All idempotent.
 #
 # Config sources (same as scripts/selfhosted/):
 #   1. Inline env (highest)
@@ -212,13 +219,16 @@ case "$MODE" in
 
     matrix)
         ASSUME_YES=0
-        MATRIX_FILE="matrix/p0.yml"
+        AUTO_PROVISION=0
+        MATRIX_FILE="matrix/fast.yml"
         TARGET_FLAG=""
+        TARGET_NAME=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 -y|--yes)  ASSUME_YES=1; shift ;;
-                --target)  TARGET_FLAG="--target $2"; shift 2 ;;
-                --target=*) TARGET_FLAG="--target ${1#--target=}"; shift ;;
+                --auto-provision) AUTO_PROVISION=1; shift ;;
+                --target)  TARGET_FLAG="--target $2"; TARGET_NAME="$2"; shift 2 ;;
+                --target=*) TARGET_FLAG="--target ${1#--target=}"; TARGET_NAME="${1#--target=}"; shift ;;
                 -h|--help) usage; exit 0 ;;
                 -*)        err "Unknown matrix flag: $1"; exit 2 ;;
                 *)         MATRIX_FILE="$1"; shift ;;
@@ -263,6 +273,50 @@ case "$MODE" in
                 BB_TEST_USER BB_TEST_APP_PASSWORD \
                 AZ_TEST_TOKEN \
                 CLOUD_TENANT_PAID_PASSWORD CLOUD_TENANT_FREE_PASSWORD CLOUD_TENANT_TRIAL_PASSWORD
+        fi
+
+        # ----- optional auto-provision -----
+        # Ensures the matrix has everything it needs before the runner
+        # starts: self-hosted droplet (`matrix`), the SSO E2E droplet
+        # (`sso-e2e`) for sso-* scenarios, the cloud tenants seeded on
+        # qa.web.kodus.io, and the TARGET_* / SH_TENANT_PASSWORD env
+        # vars the runner reads. Each step is idempotent (--reuse on
+        # provision scripts, signup-409-OK on tenant seeding) so this
+        # is safe to run from a cold or warm state.
+        if [ "$AUTO_PROVISION" = "1" ]; then
+            log "auto-provision: ensuring matrix droplet (--reuse)"
+            "$REPO_ROOT/scripts/selfhosted/provision.sh" --name matrix --reuse
+
+            # SSO E2E droplet only matters if the matrix file references
+            # an sso-* scenario. Cheap check: grep the YAML.
+            if grep -qE '^\s*-\s*sso-(cookie-domain|multi-user)\b' "$E2E_DIR/$MATRIX_FILE"; then
+                log "auto-provision: ensuring sso-e2e droplet (--reuse)"
+                "$REPO_ROOT/scripts/sso-e2e/droplet/provision.sh" --reuse --skip-test
+            fi
+
+            # Cloud tenants only matter if the matrix has cloud cells.
+            if [ "$TARGET_NAME" != "self-hosted" ] && grep -qE '^\s*target:\s*cloud\b' "$E2E_DIR/$MATRIX_FILE"; then
+                log "auto-provision: ensuring cloud tenants (idempotent signup)"
+                "$REPO_ROOT/scripts/e2e/cloud-setup-tenants.sh"
+            fi
+
+            # Export TARGET_* + SH_TENANT_PASSWORD from the matrix
+            # droplet's state file so the runner doesn't depend on the
+            # caller having them pre-exported. Cloud-only runs don't
+            # need these; the runner reads CLOUD_* from cloud-tenants.json
+            # directly.
+            if [ "$TARGET_NAME" != "cloud" ]; then
+                MATRIX_STATE="$STATE_DIR/selfhosted-vm-matrix.json"
+                if [ -f "$MATRIX_STATE" ]; then
+                    MATRIX_IP=$(jq -r .server_ip "$MATRIX_STATE")
+                    MATRIX_TUNNEL=$(jq -r .tunnel_url "$MATRIX_STATE")
+                    MATRIX_PWD=$(jq -r .tenant.password "$MATRIX_STATE")
+                    export TARGET_BASE_URL="http://${MATRIX_IP}:3001"
+                    [ -n "$MATRIX_TUNNEL" ] && [ "$MATRIX_TUNNEL" != "null" ] && export TARGET_TUNNEL_URL="$MATRIX_TUNNEL"
+                    [ -n "$MATRIX_PWD" ] && [ "$MATRIX_PWD" != "null" ] && export SH_TENANT_PASSWORD="$MATRIX_PWD"
+                    log "auto-provision: TARGET_BASE_URL=$TARGET_BASE_URL"
+                fi
+            fi
         fi
 
         log "Running matrix: $MATRIX_FILE ${TARGET_FLAG:+(target filter: ${TARGET_FLAG#--target })}"

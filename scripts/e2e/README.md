@@ -27,11 +27,11 @@ Fails fast if no droplet is alive — telling you to run `yarn selfhosted:provis
 
 ## `yarn e2e:matrix`
 
-Runs the full matrix from `tests/e2e/matrix/p0.yml` (or another file you pass). Each self-hosted cell provisions a fresh droplet; each cell hits real provider APIs.
+Runs the full matrix from `tests/e2e/matrix/fast.yml` (or another file you pass). Each self-hosted cell provisions a fresh droplet; each cell hits real provider APIs.
 
 ```bash
-yarn e2e:matrix                          # tests/e2e/matrix/p0.yml
-yarn e2e:matrix matrix/release.yml       # different matrix
+yarn e2e:matrix                          # tests/e2e/matrix/fast.yml
+yarn e2e:matrix matrix/full.yml       # different matrix
 yarn e2e:matrix -y                       # skip the cost/duration confirmation
 ```
 

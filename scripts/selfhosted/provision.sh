@@ -34,10 +34,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---------- arg parsing ----------
 NAME_RAW="default"
+REUSE=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --name) NAME_RAW="$2"; shift 2 ;;
         --name=*) NAME_RAW="${1#--name=}"; shift ;;
+        --reuse) REUSE=1; shift ;;
         -h|--help)
             grep -E '^#( |$)' "$0" | sed 's/^# \?//'
             exit 0
@@ -51,8 +53,12 @@ LOCAL_SSH_KEY=$(ssh_key_path_for "$NAME")
 
 if state_exists "$NAME"; then
     EXISTING_IP=$(state_get "$NAME" .server_ip)
+    if [ "$REUSE" = "1" ]; then
+        ok "Instance '$NAME' already exists (IP $EXISTING_IP) — reusing."
+        exit 0
+    fi
     warn "Instance '$NAME' already exists (IP $EXISTING_IP)."
-    warn "Run 'yarn selfhosted:status' to inspect, or 'yarn selfhosted:destroy --name $NAME' to destroy."
+    warn "Run 'yarn selfhosted:status' to inspect, 'yarn selfhosted:destroy --name $NAME' to destroy, or pass --reuse to skip when present."
     exit 1
 fi
 
