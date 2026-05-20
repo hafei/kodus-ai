@@ -210,19 +210,40 @@ export async function registerRepo(
                 ).slice(0, 800),
         );
     }
-    const registerResp = await http<{ data: { status: boolean } }>(
-        `${target.apiBaseUrl}/code-management/repositories`,
-        {
-            method: "POST",
-            headers: { Authorization: `Bearer ${session.accessToken}` },
-            body: {
-                teamId: session.teamId,
-                type: "replace",
-                repositories: [found],
+    // POST /code-management/repositories sometimes 400s with
+    // `"(intermediate value) is not iterable"` when it runs <8s after
+    // auth-integration — server-side teamAutomationService.find()
+    // returns null on the still-uninitialized doc and the use-case
+    // tries to spread that null. Same race the cloud setup-tenants
+    // script wraps in setup-tenants.ts:405-419; observed today
+    // (2026-05-20) on a fresh self-hosted droplet right after
+    // registerIntegration. Wait + retry once on that specific symptom.
+    const postRegisterRepo = () =>
+        http<{ data: { status: boolean } }>(
+            `${target.apiBaseUrl}/code-management/repositories`,
+            {
+                method: "POST",
+                headers: { Authorization: `Bearer ${session.accessToken}` },
+                body: {
+                    teamId: session.teamId,
+                    type: "replace",
+                    repositories: [found],
+                },
+                timeoutMs: 30_000,
             },
-            timeoutMs: 30_000,
-        },
-    );
+        );
+
+    let registerResp = await postRegisterRepo();
+    if (
+        registerResp.status === 400 &&
+        /is not iterable/.test(registerResp.raw)
+    ) {
+        log.info(
+            "registerRepo hit the post-integration race ('not iterable'); waiting 15s and retrying once",
+        );
+        await new Promise((r) => setTimeout(r, 15_000));
+        registerResp = await postRegisterRepo();
+    }
     ensureOk(registerResp, "onboarding:registerRepo");
     if (!registerResp.body.data?.status) {
         throw new Error(
@@ -318,6 +339,21 @@ export async function finishOnboarding(
     );
 
     if (resp.status >= 200 && resp.status < 300) {
+        // 200 OK is premature: the API returns success before the
+        // server-side team_automation row is fully committed/
+        // propagated. If the next thing the scenario does is open a
+        // PR (which most do), the webhook arrives while
+        // validate-prerequisites stage still sees "no active
+        // code-review automation" and silently drops the event — no
+        // log, no comment on the PR, the test polls for 12 min and
+        // times out. Verified 2026-05-20 on the self-hosted matrix:
+        // MR opened 1s after 200 OK was silently dropped, identical
+        // MR opened 25 min later got the normal "Code Review
+        // Started!" placeholder. 10s sleep clears the race for every
+        // observed case. See task #84 for the corresponding server-
+        // side fix (validate-prerequisites should retry with backoff
+        // when no automation is found).
+        await new Promise((r) => setTimeout(r, 10_000));
         return;
     }
 
@@ -346,6 +382,11 @@ export async function finishOnboarding(
             log.info(
                 `finishOnboarding eventually consistent: kodyLearningStatus=enabled (after proxy ${resp.status})`,
             );
+            // Same race guard as the 2xx happy-path: kodyLearningStatus
+            // flips before team_automation is fully committed/propagated.
+            // 10s buffer keeps a webhook fired immediately after this
+            // call from being silently dropped by validate-prerequisites.
+            await new Promise((r) => setTimeout(r, 10_000));
             return;
         }
         await new Promise((r) => setTimeout(r, 10_000));
