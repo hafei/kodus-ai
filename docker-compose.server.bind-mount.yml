@@ -1,0 +1,322 @@
+# ====================================================================
+# Kodus AI - 服务器部署配置 (方案二：Bind Mount 直观绑定挂载修改版)
+# 使用方式: 
+# 1. 请先根据操作指南同步原有 Volume 数据至新宿主机路径（如 /mnt/new_disk/kodus-data）。
+# 2. 如果您的新磁盘路径不是 /mnt/new_disk/kodus-data，请全局替换此路径为您真实的挂载路径。
+# 3. 使用以下命令启动：
+#    docker-compose -f docker-compose.server.bind-mount.yml --env-file .env.server up -d
+# ====================================================================
+
+services:
+  #----------------------------------------------------------------
+  # Application Services (预构建镜像)
+  #----------------------------------------------------------------
+  api:
+    image: kodus-ai-api:2.0.12
+    container_name: kodus_api
+    ports:
+      - '${API_PORT:-3001}:${API_PORT:-3001}'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - NODE_OPTIONS=--max-old-space-size=1200 --max-semi-space-size=64
+      - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
+      - RUN_MIGRATIONS=true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      db_mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    image: kodus-ai-worker:2.0.12
+    container_name: kodus_worker
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - NODE_OPTIONS=--max-old-space-size=3072 --max-semi-space-size=64
+      - COMPONENT_TYPE=worker
+      - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
+    restart: unless-stopped
+    mem_limit: 4g
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      db_mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  webhooks:
+    image: kodus-ai-webhooks:2.0.12
+    container_name: kodus_webhooks
+    ports:
+      - '${WEBHOOKS_PORT:-3332}:${WEBHOOKS_PORT:-3332}'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - NODE_OPTIONS=--max-old-space-size=800 --max-semi-space-size=64
+      - API_LOG_PRETTY=${API_LOG_PRETTY:-false}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', 'process.exit(0)' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      db_mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  kodus-ast:
+    image: kodus-ast:0.0.2
+    container_name: ${API_AST_CONTAINER_NAME:-kodus_ast}
+    ports:
+      - '${API_AST_PORT:-3002}:${API_AST_PORT:-3002}'
+      - '5001:5001'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - ENV=production
+      - API_NODE_ENV=production
+      - API_CLOUD_MODE=${API_CLOUD_MODE:-false}
+      - RABBITMQ_URI=${API_RABBITMQ_URI}
+      - AMQP_URI=${API_RABBITMQ_URI}
+      - AMQP_URL=${API_RABBITMQ_URI}
+      - RABBIT_URL=${API_RABBITMQ_URI}
+      - CONTAINER_NAME=${API_AST_CONTAINER_NAME:-kodus_ast}
+      - API_PG_DB_SCHEMA=${API_AST_PG_DB_SCHEMA:-kodus_workflow}
+
+      # RabbitMQ Advanced
+      - RABBIT_RETRY_QUEUE=${API_AST_RABBIT_RETRY_QUEUE:-ast.jobs.retry.q}
+      - RABBIT_RETRY_TTL_MS=${API_AST_RABBIT_RETRY_TTL_MS:-60000}
+      - RABBIT_PREFETCH=${API_AST_RABBIT_PREFETCH:-1}
+      - RABBIT_PUBLISH_TIMEOUT_MS=${API_AST_RABBIT_PUBLISH_TIMEOUT_MS:-5000}
+
+      # S3
+      - S3_ENABLED=${API_AST_S3_ENABLED:-false}
+      - S3_BUCKET_NAME=${API_AWS_BUCKET_NAME_ASSISTANT}
+      - AWS_REGION=${API_AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${API_AWS_USERNAME}
+      - AWS_SECRET_ACCESS_KEY=${API_AWS_PASSWORD}
+
+      # LangChain
+      - LANGCHAIN_PROJECT=${API_AST_LANGCHAIN_PROJECT:-kodus-service-ast}
+
+      # Core Configuration
+      - API_PORT=${API_AST_PORT:-3002}
+      - ALLOWED_GIT_DOMAINS=${ALLOWED_GIT_DOMAINS}
+    restart: unless-stopped
+    volumes:
+      # [方案二修改] 绑定宿主机上迁移后的 kodus-ast 日志物理目录
+      - /mnt/new_disk/kodus-data/kodus_ast_logs:/app/logs
+    healthcheck:
+      test: [ 'CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3002/health' ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  kodus-mcp-manager:
+    image: kodus-mcp-manager:0.0.1
+    container_name: kodus_mcp_manager
+    ports:
+      - '${API_MCP_MANAGER_PORT:-3101}:3101'
+      - '9140:9140'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - NODE_ENV=production
+      - API_MCP_MANAGER_NODE_ENV=production
+
+      # Core
+      - API_MCP_MANAGER_PORT=${API_MCP_MANAGER_PORT:-3101}
+      - API_MCP_MANAGER_LOG_LEVEL=${API_MCP_MANAGER_LOG_LEVEL:-info}
+
+      # Database
+      - API_PG_DB_HOST=${API_PG_DB_HOST}
+      - API_PG_DB_PORT=${API_PG_DB_PORT}
+      - API_PG_DB_USERNAME=${API_PG_DB_USERNAME}
+      - API_PG_DB_PASSWORD=${API_PG_DB_PASSWORD}
+      - API_PG_DB_DATABASE=${API_PG_DB_DATABASE}
+      - API_MCP_MANAGER_PG_DB_SCHEMA=${API_MCP_MANAGER_PG_DB_SCHEMA:-mcp-manager}
+      # Disable SSL for internal docker network
+      - API_MCP_MANAGER_DB_SSL=false
+
+      # Secrets (优先使用 .env.server 中定义的值，如果为空则回退到全局变量)
+      - API_MCP_MANAGER_JWT_SECRET=${API_MCP_MANAGER_JWT_SECRET:-${API_JWT_SECRET}}
+      - API_MCP_MANAGER_ENCRYPTION_SECRET=${API_MCP_MANAGER_ENCRYPTION_SECRET:-${API_CRYPTO_KEY}}
+
+      # Composio & Providers
+      - API_MCP_MANAGER_MCP_PROVIDERS=${API_MCP_MANAGER_MCP_PROVIDERS:-composio}
+      - API_MCP_MANAGER_REDIRECT_URI=${API_MCP_MANAGER_REDIRECT_URI}
+      - API_MCP_MANAGER_COMPOSIO_BASE_URL=${API_MCP_MANAGER_COMPOSIO_BASE_URL}
+      - API_MCP_MANAGER_COMPOSIO_API_KEY=${API_MCP_MANAGER_COMPOSIO_API_KEY}
+    restart: unless-stopped
+    volumes:
+      # [方案二修改] 绑定宿主机上迁移后的 kodus-mcp-manager 日志物理目录
+      - /mnt/new_disk/kodus-data/kodus_mcp_manager_logs:/app/logs
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl -f http://localhost:3101/health || exit 1' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  #----------------------------------------------------------------
+  # Web Frontend (预构建镜像)
+  #----------------------------------------------------------------
+  web:
+    image: kodus-web:2.0.11
+    container_name: kodus_web
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    env_file:
+      - ${ENV_FILE:-.env.server}
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD', 'curl', '-f', 'http://localhost:3000' ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kodus-backend-services
+    depends_on:
+      - api
+
+  #----------------------------------------------------------------
+  # Databases & Infrastructure
+  #----------------------------------------------------------------
+  db_postgres:
+    image: pgvector/pgvector:pg16
+    container_name: db_postgres
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${API_PG_DB_USERNAME}
+      POSTGRES_PASSWORD: ${API_PG_DB_PASSWORD}
+      POSTGRES_DB: ${API_PG_DB_DATABASE}
+    volumes:
+      # [方案二修改] 绑定宿主机上迁移后的 PostgreSQL 数据物理目录
+      - /mnt/new_disk/kodus-data/pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - kodus-backend-services
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -U ${API_PG_DB_USERNAME} -d ${API_PG_DB_DATABASE}' ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  db_mongodb:
+    image: mongo:8
+    container_name: db_mongodb
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${API_MG_DB_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${API_MG_DB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${API_MG_DB_DATABASE}
+    volumes:
+      # [方案二修改] 绑定宿主机上迁移后的 MongoDB 数据物理目录
+      - /mnt/new_disk/kodus-data/mongodbdata:/data/db
+    networks:
+      - kodus-backend-services
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD-SHELL', "echo 'db.runCommand({ ping: 1 }).ok' | mongosh --quiet mongodb://$${MONGO_INITDB_ROOT_USERNAME}:$${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/admin | grep -q 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq-delayed:latest
+    container_name: rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: ${API_RABBITMQ_USER:-user}
+      RABBITMQ_DEFAULT_PASS: ${API_RABBITMQ_PASSWORD:-password}
+    volumes:
+      # [方案二修改] 绑定宿主机上迁移后的 RabbitMQ 数据物理目录
+      - /mnt/new_disk/kodus-data/rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - kodus-backend-services
+    restart: unless-stopped
+    healthcheck:
+      test: [ 'CMD-SHELL', 'rabbitmq-diagnostics -q ping' ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+# [方案二修改] 彻底移除了原底部的命名卷定义块 (volumes: pgdata, mongodbdata 等)，因为它们已改用直接绑定宿主机目录的方式挂载。
+
+networks:
+  kodus-backend-services:
+    driver: bridge
+    name: kodus-backend-services
