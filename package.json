@@ -52,6 +52,7 @@
         "e2e:smoke": "scripts/e2e/run.sh smoke",
         "e2e:matrix": "scripts/e2e/run.sh matrix",
         "cloud:setup-tenants": "scripts/e2e/cloud-setup-tenants.sh",
+        "cloud:stripe": "node tests/e2e/playwright/stripe-billing.mjs",
         "build": "nest build",
         "build:production": "nest build",
         "build:fast": "NODE_OPTIONS='--max-old-space-size=8192' nest build --webpack",
