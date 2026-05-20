@@ -25,7 +25,6 @@ import { FileContextGateStage } from '../stages/file-context-gate.stage';
 import { UpdateCommentsAndGenerateSummaryStage } from '../stages/finish-comments.stage';
 import { RequestChangesOrApproveStage } from '../stages/finish-process-review.stage';
 import { InitialCommentStage } from '../stages/initial-comment.stage';
-import { PersistReviewStatusStage } from '../stages/persist-review-status.stage';
 import { ProcessFilesPrLevelReviewStage } from '../stages/process-files-pr-level-review.stage';
 import { ProcessFilesReview } from '../stages/process-files-review.stage';
 import { ResolveConfigStage } from '../stages/resolve-config.stage';
@@ -69,7 +68,6 @@ export class CodeReviewPipelineStrategy
         private readonly businessLogicValidationStage: BusinessLogicValidationStage,
         private readonly createSandboxStage: CreateSandboxStage,
         private readonly agentReviewStage: AgentReviewStage,
-        private readonly persistReviewStatusStage: PersistReviewStatusStage,
         private readonly createPrLevelCommentsStage: CreatePrLevelCommentsStage,
         private readonly validateSuggestionsStage: ValidateSuggestionsStage,
         private readonly createFileCommentsStage: CreateFileCommentsStage,
@@ -133,7 +131,6 @@ export class CodeReviewPipelineStrategy
             this.businessLogicValidationStage,
             this.createSandboxStage,
             this.agentReviewStage,
-            this.persistReviewStatusStage,
         ];
     }
 
