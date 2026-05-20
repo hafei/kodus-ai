@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { allScenarios, resolveScenarios } from "../../scenarios/index.js";
 
-test("allScenarios: includes the 8 release-gate scenarios", () => {
+test("allScenarios: includes the 9 release-gate scenarios", () => {
     const ids = Object.keys(allScenarios).sort();
     assert.deepEqual(ids, [
         "code-review-basic",
@@ -12,6 +12,7 @@ test("allScenarios: includes the 8 release-gate scenarios", () => {
         "per-seat-license-toggle",
         "sso-cookie-domain",
         "sso-multi-user",
+        "stripe-billing",
         "upgrade-n-1-to-n",
     ]);
 });
@@ -21,6 +22,13 @@ test("sso-multi-user: single-cell self-hosted × github × license-paid", () => 
     assert.deepEqual(s.appliesTo.target, ["self-hosted"]);
     assert.deepEqual(s.appliesTo.provider, ["github"]);
     assert.deepEqual(s.appliesTo.license, ["license-paid"]);
+});
+
+test("stripe-billing: single-cell cloud × github × paid", () => {
+    const s = allScenarios["stripe-billing"];
+    assert.deepEqual(s.appliesTo.target, ["cloud"]);
+    assert.deepEqual(s.appliesTo.provider, ["github"]);
+    assert.deepEqual(s.appliesTo.license, ["paid"]);
 });
 
 test("sso-cookie-domain: single-cell self-hosted × github × license-paid", () => {

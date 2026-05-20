@@ -19,6 +19,11 @@ scenarios:
     # `sso-e2e` droplet — runs after sso-cookie-domain so the second
     # cell skips droplet provisioning entirely.
     - sso-multi-user
+    # Stripe billing lifecycle (Checkout, Portal, downgrade). Cloud-only
+    # via dedicated tenants seeded by setup-tenants.ts; test mode so the
+    # card 4242 4242 4242 4242 completes synchronously, then we poll the
+    # billing API until the webhook lands.
+    - stripe-billing
 
 cells:
     # ---------- self-hosted ----------

@@ -136,6 +136,33 @@ const TENANTS: TenantSpec[] = [
         provider: "github",
         repoFullName: "kodus-e2e/tiny-url",
     },
+    {
+        // Stripe billing scenario — sub-flow #1 (free → paid via
+        // Checkout) and then sub-flow #3 (cancel via Customer Portal
+        // once paid). Seeded as `free` so the scenario can drive the
+        // first Checkout completion itself; the cancel step runs
+        // inside the same scenario after the upgrade lands. Re-runs
+        // are idempotent: if the tenant ends up cancelled, the next
+        // run starts with the cancel state and exercises the upgrade
+        // path again.
+        email: "e2e-stripe-checkout-free@kodus.io",
+        name: "Stripe Checkout Free GitHub",
+        license: "free",
+        provider: "github",
+        repoFullName: "kodus-e2e/tiny-url",
+    },
+    {
+        // Stripe billing scenario — sub-flow #2 (trial → paid via
+        // Checkout) and then sub-flow #4 (downgrade paid → free via
+        // /billing/migrate-to-free). Seeded as `trial` so the
+        // /billing/trial call lands a fresh subscription record the
+        // Checkout flow can upgrade.
+        email: "e2e-stripe-checkout-trial@kodus.io",
+        name: "Stripe Checkout Trial GitHub",
+        license: "trial",
+        provider: "github",
+        repoFullName: "kodus-e2e/tiny-url",
+    },
 ];
 
 interface SavedTenant extends TenantSpec {
