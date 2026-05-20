@@ -7,7 +7,6 @@ import {
 import { DeliveryStatus } from '../enums/deliveryStatus.enum';
 import { ImplementationStatus } from '../enums/implementationStatus.enum';
 import { PriorityStatus } from '../enums/priorityStatus.enum';
-import { ReviewStatus } from '../enums/reviewStatus.enum';
 import { FeedbackType } from '@libs/kodyFineTuning/domain/enums/feedbackType.enum';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 import { LabelType } from '@libs/common/utils/codeManagement/labels';
@@ -41,12 +40,6 @@ export interface IPullRequests {
     suggestionsByPR?: ISuggestionByPR[];
     prLevelSuggestions?: ISuggestionByPR[];
     isDraft: boolean;
-    /**
-     * Outcome of the most recent agent-engine review. Populated by
-     * PersistReviewStatusStage. Consumed by the auto-approve cron, which
-     * must not approve a PR whose review failed.
-     */
-    reviewStatus?: ReviewStatus;
 }
 
 export interface ICommit {
@@ -209,12 +202,6 @@ export interface IPullRequestWithDeliveredSuggestions {
         name: string;
     };
     suggestions: IDeliveredSuggestion[];
-    /**
-     * Latest agent-engine review outcome (when present). Absent on PRs
-     * reviewed by the legacy EE engine or before this field was introduced
-     * — the auto-approve cron treats absence as approvable.
-     */
-    reviewStatus?: ReviewStatus;
 }
 
 /**
