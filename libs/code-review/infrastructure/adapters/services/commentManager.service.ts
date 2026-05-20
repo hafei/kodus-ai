@@ -828,6 +828,7 @@ You must always respond in ${languageResultPrompt}.`;
         dryRun?: CodeReviewPipelineContext['dryRun'],
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void> {
         try {
             // When the review failed, we cannot honor a customer-configured
@@ -846,6 +847,7 @@ You must always respond in ${languageResultPrompt}.`;
                     undefined,
                     reviewFailed,
                     reviewErrorMessage,
+                    reviewHasPartialErrors,
                 );
             }
 
@@ -899,6 +901,7 @@ You must always respond in ${languageResultPrompt}.`;
         prLevelCommentResults?: Array<CommentResult>,
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<string> {
         let commentBody = await this.generatePullRequestFinishSummaryMarkdown(
             organizationAndTeamData,
@@ -908,6 +911,7 @@ You must always respond in ${languageResultPrompt}.`;
             prLevelCommentResults,
             reviewFailed,
             reviewErrorMessage,
+            reviewHasPartialErrors,
         );
 
         commentBody = this.sanitizeBitbucketMarkdown(commentBody, platformType);
@@ -1431,6 +1435,7 @@ You must always respond in ${languageResultPrompt}.`;
         prLevelCommentResults?: Array<CommentResult>,
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<string> {
         try {
             const language =
@@ -1486,13 +1491,25 @@ You must always respond in ${languageResultPrompt}.`;
             if (!resultText) {
                 // Non-failed runs (full SUCCESS and PARTIAL_ERROR where only
                 // auxiliary work failed, e.g. kody-rules) share the same
-                // copy — the user-facing comment doesn't distinguish them.
-                // PARTIAL_ERROR still blocks auto-approve via the automation
-                // execution status; it's the dashboard/cron's job to signal
-                // the gap, not this message.
+                // base copy. For PARTIAL_ERROR we still append a short notice
+                // explaining why auto-approve didn't fire — otherwise the
+                // user sees "review completed" + no approval and thinks
+                // approve is broken.
                 resultText = hasComments
                     ? translation.withComments
                     : translation.withoutComments;
+
+                if (reviewHasPartialErrors) {
+                    const notice =
+                        translation.partialErrorsNotice ??
+                        getTranslationsForLanguageByCategory(
+                            LanguageValue.ENGLISH,
+                            TranslationsCategory.PullRequestFinishSummaryMarkdown,
+                        )?.partialErrorsNotice;
+                    if (notice) {
+                        resultText = `${resultText}${notice}`;
+                    }
+                }
             }
 
             if (!resultText) {
@@ -2293,6 +2310,7 @@ ${reviewOptions}
         prLevelCommentResults?: Array<CommentResult>,
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void> {
         let commentBody: string;
 
@@ -2326,6 +2344,7 @@ ${reviewOptions}
                 prLevelCommentResults,
                 reviewFailed,
                 reviewErrorMessage,
+                reviewHasPartialErrors,
             );
         }
 

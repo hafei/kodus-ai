@@ -54,14 +54,17 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
         // A "failed" review (from the user's perspective) is one with a
         // critical pipeline error — main agent rejected, sandbox blew up,
         // validation aborted, etc. Auxiliary failures (severity = partial,
-        // e.g. only kody-rules) keep the SUCCESS copy of the comment; the
-        // gap is signaled via automation_execution.status = PARTIAL_ERROR
-        // which blocks auto-approve downstream. Default severity for a
-        // pushed error is 'critical', matching PipelineErrorSeverity's
-        // documented default.
+        // e.g. only kody-rules) keep the SUCCESS copy of the comment but
+        // get a short notice appended explaining *why* auto-approve was
+        // skipped — otherwise the user sees "review completed" + no
+        // approval and assumes auto-approve is broken. Default severity
+        // for a pushed error is 'critical' per PipelineErrorSeverity docs.
         const reviewFailed = (context.errors ?? []).some(
             (e) => (e?.severity ?? 'critical') === 'critical',
         );
+        const reviewHasPartialErrors =
+            !reviewFailed &&
+            (context.errors ?? []).some((e) => e?.severity === 'partial');
         const reviewErrorMessage = context.lastReviewError?.friendlyMessage;
 
         const isCommitRun = Boolean(lastExecution);
@@ -194,6 +197,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 context.dryRun,
                 reviewFailed,
                 reviewErrorMessage,
+                reviewHasPartialErrors,
             );
             return context;
         }
@@ -253,6 +257,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 context.dryRun,
                 reviewFailed,
                 reviewErrorMessage,
+                reviewHasPartialErrors,
             );
             return context;
         }
@@ -289,6 +294,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 context.prLevelCommentResults ?? [],
                 reviewFailed,
                 reviewErrorMessage,
+                reviewHasPartialErrors,
             );
         }
 

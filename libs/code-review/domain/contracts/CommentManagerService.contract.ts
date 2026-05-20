@@ -70,6 +70,7 @@ export interface ICommentManagerService {
         dryRun?: CodeReviewPipelineContext['dryRun'],
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void>;
 
     updateSummarizationInPR(
@@ -146,5 +147,6 @@ export interface ICommentManagerService {
         prLevelCommentResults?: Array<CommentResult>,
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void>;
 }
