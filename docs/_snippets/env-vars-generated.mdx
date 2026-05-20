@@ -108,6 +108,7 @@
 | --- | --- | --- | --- | --- |
 | `API_OPEN_AI_API_KEY` | – | secret | ⚙️ Both | OpenAI API key. Required when API_LLM_PROVIDER_MODEL targets an OpenAI model. |
 | `API_OPENAI_FORCE_BASE_URL` | – | url | ⚙️ Both | OpenAI-compatible endpoint override (e.g. point to a local model proxy). |
+| `API_TRUST_JSON_SCHEMA_BASE_URLS` | – | string | ⚙️ Both | Comma-separated baseURL substrings trusted for native json_schema structured output on BYOK openai_compatible providers. A capability allowlist: when a BYOK baseURL contains one of these, the code review agent sends response_format=json_schema instead of the slower json_object fallback. Leave empty unless you run a non-vLLM but schema-capable proxy. |
 | `API_LLM_PROVIDER_MODEL` | – | string | ⚙️ Both | Force a specific model. "auto" = router picks per task. |
 | `API_ANTHROPIC_API_KEY` | – | secret | ☁️ Cloud |  |
 | `API_GOOGLE_AI_API_KEY` | – | secret | ☁️ Cloud | Optional secondary providers — appear commented in the installer template. |
@@ -296,7 +297,7 @@
 | `WEB_ANALYTICS_SECRET` | – | secret | 🏢 ☁️ Cloud |  |
 | `WEB_PORT_ANALYTICS` | – | port | 🏢 ☁️ Cloud |  |
 | `API_MCP_SERVER_ENABLED` | – | boolean | ⚙️ Both | Enables the MCP integration in kodus-ai (calls into the MCP Manager service). When false, MCP-related code paths are skipped entirely. |
-| `API_KODUS_SERVICE_MCP_MANAGER` | – | url | ⚙️ Both | Address of the kodus-mcp-manager service (sibling container). kodus-ai calls this URL to provision MCP servers per organization. |
+| `API_KODUS_SERVICE_MCP_MANAGER` | – | url | ⚙️ Both | Address of the kodus-mcp-manager service (sibling container). kodus-ai calls this URL to provision MCP servers per organization. In docker-compose self-hosted installs, the worker and mcp-manager run in sibling containers — `localhost` inside the worker resolves to the worker itself, not to the mcp-manager, and pipeline stages that call `MCPManagerService.getConnections()` 400 with ECONNREFUSED. Always use the compose service name (`kodus-mcp-manager`) so the request reaches the right container. |
 | `API_KODUS_MCP_SERVER_URL` | – | url | ⚙️ Both | Public URL where MCP clients (e.g. Cursor/Claude Desktop) connect to consume MCP tools exposed by kodus-ai itself. |
 | `API_MCP_MANAGER_LOG_LEVEL` | – | enum(error,warn,info,debug) | 🏠 Self-hosted | Log verbosity for the MCP Manager container. |
 | `API_MCP_MANAGER_PORT` | – | port | 🏠 Self-hosted |  |

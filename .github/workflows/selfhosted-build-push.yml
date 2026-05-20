@@ -413,6 +413,8 @@ jobs:
         needs:
             - plan-release
             - promote
+        permissions:
+            contents: read
         # Gated on promote so we don't push env updates to the installer
         # for an RC that never shipped. plan-release.outputs.release_tag
         # is the final selfhosted-X.Y.Z (no -rc suffix).
@@ -439,6 +441,10 @@ jobs:
         # post-promote sanity check against the published :latest image.
         if: needs.promote.result == 'success'
         runs-on: ubuntu-latest
+        # GITHUB_TOKEN isn't used here (we dispatch with CROSS_REPO_PAT),
+        # but declare an explicit empty perms block so the default
+        # write-all token scope doesn't leak in.
+        permissions: {}
         # GITHUB_TOKEN only scopes to this repo, so a cross-repo PAT is
         # needed to fire repository_dispatch into kodustech/kodus-installer.
         # We reuse CROSS_REPO_PAT (already used by env-sync-release.yml to

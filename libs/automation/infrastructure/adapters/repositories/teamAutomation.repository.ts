@@ -184,17 +184,10 @@ export class TeamAutomationRepository implements ITeamAutomationRepository {
                 ) ?? []
             );
         } catch (error) {
-            // Returning `undefined` here is a silent footgun: callers do
-            // `const [x] = await repo.find(...)` and the destructure
-            // explodes with "(intermediate value) is not iterable",
-            // masking whatever the real database error was. Log the
-            // underlying cause and degrade to an empty result so callers
-            // see a normal "nothing matched" outcome.
             this.logger.error({
-                message: 'teamAutomationRepository:find failed',
+                message: 'Failed to find team automations',
                 context: TeamAutomationRepository.name,
                 error,
-                metadata: { filter },
             });
             return [];
         }

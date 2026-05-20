@@ -7,7 +7,6 @@ import { WaitForCliReviewJobUseCase } from '@libs/cli-review/application/use-cas
 import { AuthenticatedRateLimiterService } from '@libs/cli-review/infrastructure/services/authenticated-rate-limiter.service';
 import { TrialRateLimiterService } from '@libs/cli-review/infrastructure/services/trial-rate-limiter.service';
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
-import { CliReviewResponse } from '@libs/cli-review/domain/types/cli-review.types';
 import {
     ITeamCliKeyService,
     TEAM_CLI_KEY_SERVICE_TOKEN,
@@ -26,7 +25,6 @@ import {
     HttpException,
     HttpStatus,
     Inject,
-    NotFoundException,
     Param,
     Post,
     Query,
