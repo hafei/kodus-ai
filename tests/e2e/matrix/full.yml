@@ -17,6 +17,11 @@ scenarios:
     # ----- mirrors fast.yml (keep in sync) -----
     - onboarding-webhook-registration
     - code-review-basic
+    # @kody review / @kody start-review command path. Disables
+    # automatedReviewActive at the org level first, then opens a PR
+    # and posts the comment, so the review under test can only come
+    # from the command. Covers all 4 providers.
+    - command-review
     - kody-rules-create-and-apply
     - license-attribution
     # Per-seat gate: appliesTo restricts to self-hosted × github × license-paid
