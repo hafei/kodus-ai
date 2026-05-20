@@ -1,10 +1,14 @@
-id: p0
+id: fast
 description: |
-    P0 gates that block every release. Covers the core onboarding wiring
-    (webhook auto-registration per provider), code-review on all four
-    providers in both targets, license attribution gates, and the
-    kody-rules apply flow on the primary provider. Run before promoting
-    any RC tag to client-visible.
+    Fast tier — the core gates that any release must keep working. Runs
+    per PR / on every push to main. Covers webhook auto-registration
+    after onboarding, code-review across the 4 providers in both
+    targets, license attribution gates, kody-rules create + apply, and
+    per-seat license toggling.
+
+    Lifecycle scenarios (upgrade N-1 → N, SSO cookie-domain + multi-user,
+    Stripe billing) live in `full.yml`, which is a strict superset of
+    this file — anything added here MUST also be in full.yml.
 
 # Order matters: onboarding-webhook-registration runs first per cell. If
 # the provider's webhook isn't registered after onboarding, the rest of

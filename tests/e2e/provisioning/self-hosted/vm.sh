@@ -14,7 +14,7 @@
 #   TEST_VM_PROVIDER=hetzner + HCLOUD_TOKEN
 #
 # Optional env:
-#   MATRIX_FILE            Path to matrix YAML (default: matrix/p0.yml)
+#   MATRIX_FILE            Path to matrix YAML (default: matrix/fast.yml)
 #   LICENSE_MODE           "license-paid" (default) | "license-free"
 #   SH_LICENSE_KEY_PAID    License key string for license-paid
 #   SH_LICENSE_KEY_FREE    License key string for license-free
@@ -38,7 +38,7 @@ if [ -f "$E2E_ROOT/.env" ]; then
 fi
 
 TEST_VM_PROVIDER="${TEST_VM_PROVIDER:-digitalocean}"
-MATRIX_FILE="${MATRIX_FILE:-matrix/p0.yml}"
+MATRIX_FILE="${MATRIX_FILE:-matrix/fast.yml}"
 LICENSE_MODE="${LICENSE_MODE:-license-paid}"
 TEST_TIMEOUT_REVIEW="${TEST_TIMEOUT_REVIEW:-600}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"

@@ -21,7 +21,7 @@ on:
             matrix_file:
                 description: "Matrix YAML path under tests/e2e/"
                 required: false
-                default: matrix/p0.yml
+                default: matrix/fast.yml
                 type: string
     workflow_dispatch:
         inputs:
@@ -33,7 +33,7 @@ on:
             matrix_file:
                 description: "Matrix YAML path under tests/e2e/"
                 required: false
-                default: matrix/p0.yml
+                default: matrix/fast.yml
                 type: string
 
 concurrency:

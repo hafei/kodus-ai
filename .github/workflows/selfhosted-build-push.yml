@@ -271,7 +271,7 @@ jobs:
         uses: ./.github/workflows/e2e-self-hosted-matrix.yml
         with:
             image_tag: ${{ needs.plan-release.outputs.rc_tag }}
-            matrix_file: matrix/p0.yml
+            matrix_file: matrix/fast.yml
         secrets: inherit
 
     promote:

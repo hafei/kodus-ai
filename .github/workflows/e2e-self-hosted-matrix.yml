@@ -9,7 +9,7 @@ name: "E2E: self-hosted matrix"
 #
 # Inputs:
 #   image_tag    Image tag to test against (REQUIRED, e.g. selfhosted-1.42.0-rc.1)
-#   matrix_file  Path to a matrix YAML file in tests/e2e/matrix/ (default p0.yml)
+#   matrix_file  Path to a matrix YAML file in tests/e2e/matrix/ (default fast.yml)
 #   keep_running Optional — leave droplets alive after each cell for debug
 #
 # Required secrets:
@@ -28,7 +28,7 @@ on:
             matrix_file:
                 description: "Matrix YAML path under tests/e2e/"
                 required: false
-                default: matrix/p0.yml
+                default: matrix/fast.yml
                 type: string
             keep_running:
                 description: "Skip droplet teardown"
@@ -44,7 +44,7 @@ on:
             matrix_file:
                 description: "Matrix YAML path under tests/e2e/"
                 required: false
-                default: matrix/p0.yml
+                default: matrix/fast.yml
                 type: string
             keep_running:
                 description: "Skip droplet teardown"

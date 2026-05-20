@@ -31,7 +31,7 @@ err()  { echo -e "${RED}[err]${NC}     $*" >&2; }
 
 log "Step 1/3: provisioning stack at $UPGRADE_FROM_TAG (N-1)"
 IMAGE_TAG="$UPGRADE_FROM_TAG" \
-    MATRIX_FILE="matrix/p0.yml" \
+    MATRIX_FILE="matrix/fast.yml" \
     LICENSE_MODE="${LICENSE_MODE:-license-paid}" \
     TEST_KEEP_RUNNING=1 \
     "$E2E_ROOT/provisioning/self-hosted/vm.sh" || true
@@ -70,4 +70,4 @@ done
 log "Step 3/3: running upgrade scenario matrix"
 export UPGRADE_PRE_VALIDATED=1
 cd "$E2E_ROOT"
-exec ./node_modules/.bin/tsx cli/run-matrix.ts matrix/release.yml --target self-hosted
+exec ./node_modules/.bin/tsx cli/run-matrix.ts matrix/full.yml --target self-hosted

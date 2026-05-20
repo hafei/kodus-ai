@@ -18,10 +18,10 @@
 #   yarn e2e:smoke --provider gitlab              # different provider
 #   yarn e2e:smoke --scenario kody-rules-create-and-apply
 #   yarn e2e:smoke --name junior                  # against named instance
-#   yarn e2e:matrix                               # default: matrix/p0.yml
-#   yarn e2e:matrix matrix/release.yml            # different matrix
+#   yarn e2e:matrix                               # default: matrix/fast.yml
+#   yarn e2e:matrix matrix/full.yml               # full tier (adds upgrade/SSO/Stripe)
 #   yarn e2e:matrix -y                            # skip confirmation prompt
-#   yarn e2e:matrix matrix/release.yml --auto-provision -y
+#   yarn e2e:matrix matrix/full.yml --auto-provision -y
 #                                                 # also ensure self-hosted +
 #                                                 # sso-e2e droplets, seed
 #                                                 # cloud tenants, and export
@@ -220,7 +220,7 @@ case "$MODE" in
     matrix)
         ASSUME_YES=0
         AUTO_PROVISION=0
-        MATRIX_FILE="matrix/p0.yml"
+        MATRIX_FILE="matrix/fast.yml"
         TARGET_FLAG=""
         TARGET_NAME=""
         while [ $# -gt 0 ]; do

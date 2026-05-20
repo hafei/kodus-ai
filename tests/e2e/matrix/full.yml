@@ -1,20 +1,38 @@
-id: release
+id: full
 description: |
-    Full release matrix. Run before retagging an RC to the customer-visible
-    semver tag. Includes upgrade testing for self-hosted.
+    Full tier — strict superset of fast.yml plus the lifecycle scenarios
+    (upgrade N-1 → N, SSO cookie-domain + multi-user, Stripe billing).
+    Run before retagging an RC to the customer-visible semver tag and
+    on a nightly cadence.
 
+    Invariant: every scenario AND cell in fast.yml is also here. If you
+    add something to fast.yml, mirror it here too — otherwise we ship
+    RCs that passed PR checks but were never exercised in the release
+    gate.
+
+# Order matters: onboarding-webhook-registration runs first per cell —
+# if the provider's webhook isn't registered after onboarding, every
+# downstream scenario times out instead of failing fast.
 scenarios:
+    # ----- mirrors fast.yml (keep in sync) -----
+    - onboarding-webhook-registration
     - code-review-basic
     - kody-rules-create-and-apply
     - license-attribution
+    # Per-seat gate: appliesTo restricts to self-hosted × github × license-paid
+    # (one cell). Skipped automatically when SH_LICENSE_KEY_PATH (default
+    # ~/.kodus-dev/license-seats1.jwt) isn't available — see run-matrix.ts.
+    - per-seat-license-toggle
+
+    # ----- lifecycle scenarios that justify the full tier -----
     - upgrade-n-1-to-n
     # SSO cookie-domain regression. Restricted by appliesTo to a single
     # cell (self-hosted × github × license-paid); spins up its own
     # dedicated droplet (--name sso-e2e) with Caddy + Keycloak on
-    # sslip.io. Release-only because LE issuance + droplet boot adds
+    # sslip.io. Full-only because LE issuance + droplet boot adds
     # ~7-8 min on first run. Validated end-to-end on 2026-05-19.
     - sso-cookie-domain
-    # SSO multi-user flows (admin UI smoke + sign-in CTA + new-user
+    # SSO multi-user flows (admin SSO login + sign-in CTA + new-user
     # signup via SSO + removed-user rejection). Reuses the
     # `sso-e2e` droplet — runs after sso-cookie-domain so the second
     # cell skips droplet provisioning entirely.
@@ -26,7 +44,7 @@ scenarios:
     - stripe-billing
 
 cells:
-    # ---------- self-hosted ----------
+    # ---------- self-hosted (mirrors fast.yml) ----------
     - target: self-hosted
       provider: github
       license: license-paid
@@ -43,7 +61,7 @@ cells:
       provider: github
       license: license-free
 
-    # ---------- cloud ----------
+    # ---------- cloud (mirrors fast.yml) ----------
     - target: cloud
       provider: github
       license: paid
@@ -62,3 +80,10 @@ cells:
     - target: cloud
       provider: github
       license: trial
+    # Community plan: post-trial tenant that configured its own LLM API
+    # key (BYOK). Free in Stripe terms but reviews still work (with the
+    # 10-rule limit). Distinct from `free` (= trial expired, no BYOK,
+    # gate blocks).
+    - target: cloud
+      provider: github
+      license: community-byok
