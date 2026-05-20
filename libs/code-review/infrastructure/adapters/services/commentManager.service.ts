@@ -8,7 +8,6 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
-import { ReviewStatus } from '@libs/platformData/domain/pullRequests/enums/reviewStatus.enum';
 import { LanguageValue } from '@libs/core/domain/enums/language-parameter.enum';
 import { ParametersKey } from '@libs/core/domain/enums/parameters-key.enum';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
@@ -827,7 +826,7 @@ You must always respond in ${languageResultPrompt}.`;
         threadId?: number,
         finalCommentBody?: string,
         dryRun?: CodeReviewPipelineContext['dryRun'],
-        reviewStatus?: ReviewStatus,
+        reviewFailed?: boolean,
         reviewErrorMessage?: string,
     ): Promise<void> {
         try {
@@ -835,7 +834,6 @@ You must always respond in ${languageResultPrompt}.`;
             // endReviewMessage template — those say "review completed", which
             // would be a lie. Force the default summary path so the
             // `withErrors` variant renders the real reason.
-            const reviewFailed = reviewStatus === ReviewStatus.FAILED;
             let commentBody = reviewFailed ? undefined : finalCommentBody;
 
             if (!commentBody || commentBody === '') {
@@ -846,7 +844,7 @@ You must always respond in ${languageResultPrompt}.`;
                     codeSuggestions,
                     codeReviewConfig,
                     undefined,
-                    reviewStatus,
+                    reviewFailed,
                     reviewErrorMessage,
                 );
             }
@@ -899,7 +897,7 @@ You must always respond in ${languageResultPrompt}.`;
         codeSuggestions?: Array<CommentResult>,
         codeReviewConfig?: CodeReviewConfig,
         prLevelCommentResults?: Array<CommentResult>,
-        reviewStatus?: ReviewStatus,
+        reviewFailed?: boolean,
         reviewErrorMessage?: string,
     ): Promise<string> {
         let commentBody = await this.generatePullRequestFinishSummaryMarkdown(
@@ -908,7 +906,7 @@ You must always respond in ${languageResultPrompt}.`;
             codeSuggestions,
             codeReviewConfig,
             prLevelCommentResults,
-            reviewStatus,
+            reviewFailed,
             reviewErrorMessage,
         );
 
@@ -1431,7 +1429,7 @@ You must always respond in ${languageResultPrompt}.`;
         commentResults?: Array<CommentResult>,
         codeReviewConfig?: CodeReviewConfig,
         prLevelCommentResults?: Array<CommentResult>,
-        reviewStatus?: ReviewStatus,
+        reviewFailed?: boolean,
         reviewErrorMessage?: string,
     ): Promise<string> {
         try {
@@ -1459,14 +1457,15 @@ You must always respond in ${languageResultPrompt}.`;
             const hasComments = hasPrLevelComments || hasFileComments;
 
             // Failure variant takes priority: when the agent engine flagged
-            // reviewStatus = FAILED we cannot honestly tell the user "review
-            // completed" — even if the legacy hasComments path would also
-            // produce 0 suggestions. The dictionary's `withErrors` template
-            // includes the `{{errorMessage}}` placeholder that we fill with
-            // the human-readable reason; older dictionaries may not have the
-            // key, in which case we fall back to en-US.
+            // the review as failed (critical errors on the pipeline) we
+            // cannot honestly tell the user "review completed" — even if
+            // the legacy hasComments path would also produce 0 suggestions.
+            // The dictionary's `withErrors` template includes the
+            // `{{errorMessage}}` placeholder that we fill with the human-
+            // readable reason; older dictionaries may not have the key,
+            // in which case we fall back to en-US.
             let resultText: string | undefined;
-            if (reviewStatus === ReviewStatus.FAILED) {
+            if (reviewFailed) {
                 resultText =
                     translation.withErrors ??
                     getTranslationsForLanguageByCategory(
@@ -1485,9 +1484,12 @@ You must always respond in ${languageResultPrompt}.`;
             }
 
             if (!resultText) {
-                // SUCCESS and PARTIAL share the same copy — the user-facing
-                // comment doesn't distinguish them (PARTIAL only matters for
-                // the dashboard / auto-approve gating).
+                // Non-failed runs (full SUCCESS and PARTIAL_ERROR where only
+                // auxiliary work failed, e.g. kody-rules) share the same
+                // copy — the user-facing comment doesn't distinguish them.
+                // PARTIAL_ERROR still blocks auto-approve via the automation
+                // execution status; it's the dashboard/cron's job to signal
+                // the gap, not this message.
                 resultText = hasComments
                     ? translation.withComments
                     : translation.withoutComments;
@@ -2289,16 +2291,15 @@ ${reviewOptions}
         pullRequestMessagesConfig?: IPullRequestMessages,
         dryRun?: CodeReviewPipelineContext['dryRun'],
         prLevelCommentResults?: Array<CommentResult>,
-        reviewStatus?: ReviewStatus,
+        reviewFailed?: boolean,
         reviewErrorMessage?: string,
     ): Promise<void> {
         let commentBody: string;
 
         // Same rationale as updateOverallComment: customer end-review
-        // templates assert success; on FAILED we override to the default
-        // path so the `withErrors` variant shows the real reason.
-        const reviewFailed = reviewStatus === ReviewStatus.FAILED;
-
+        // templates assert success; when the review failed we override to
+        // the default path so the `withErrors` variant shows the real
+        // reason instead of a misleading "all good" template.
         if (endReviewMessage && !reviewFailed) {
             const placeholderContext = await this.getTemplateContext(
                 changedFiles,
@@ -2323,7 +2324,7 @@ ${reviewOptions}
                 codeSuggestions,
                 codeReviewConfig,
                 prLevelCommentResults,
-                reviewStatus,
+                reviewFailed,
                 reviewErrorMessage,
             );
         }

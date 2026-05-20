@@ -2,7 +2,6 @@ import { BYOKConfig, LLMModelProvider } from '@kodus/kodus-common/llm';
 
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
-import { ReviewStatus } from '@libs/platformData/domain/pullRequests/enums/reviewStatus.enum';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
 import {
@@ -69,7 +68,7 @@ export interface ICommentManagerService {
         threadId?: number,
         finalCommentBody?: string,
         dryRun?: CodeReviewPipelineContext['dryRun'],
-        reviewStatus?: ReviewStatus,
+        reviewFailed?: boolean,
         reviewErrorMessage?: string,
     ): Promise<void>;
 
@@ -145,7 +144,7 @@ export interface ICommentManagerService {
         pullRequestMessagesConfig?: IPullRequestMessages,
         dryRun?: CodeReviewPipelineContext['dryRun'],
         prLevelCommentResults?: Array<CommentResult>,
-        reviewStatus?: ReviewStatus,
+        reviewFailed?: boolean,
         reviewErrorMessage?: string,
     ): Promise<void>;
 }
