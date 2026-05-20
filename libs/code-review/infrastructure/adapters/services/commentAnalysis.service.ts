@@ -10,6 +10,7 @@ import { Injectable } from '@nestjs/common';
 import { v4 } from 'uuid';
 
 import { SUPPORTED_LANGUAGES } from '@libs/code-review/domain/contracts/SupportedLanguages';
+import { isKodyAuthoredBody } from '@libs/common/utils/kody-identifiers';
 import {
     CategorizedComment,
     UncategorizedComment,
@@ -604,34 +605,18 @@ export class CommentAnalysisService {
                             !comment?.user?.type ||
                             comment?.user?.type?.toLowerCase() !== 'bot',
                     )
-                    ?.filter((comment) => {
+                    ?.filter(
                         // Drop comments authored by Kody itself — otherwise
-                        // the rule-generator LLM learns from Kody's own past
-                        // reviews and creates duplicate rules on subsequent
-                        // onboardings (self-feedback loop). Two visible
-                        // signatures across providers, both have to match:
-                        //   - `kody-codereview`  → github / gitlab / azure /
-                        //     forgejo emit this in the HTML-comment marker
-                        //     they suffix to every Kody comment. The marker
-                        //     is invisible in those renderers.
-                        //   - `kody|code-review` → bitbucket cloud emits
-                        //     this as a visible chip at the start of every
-                        //     Kody suggestion (bitbucket's Atlassian
-                        //     Markdown escapes raw HTML, so the HTML-comment
-                        //     marker is unusable there — see
-                        //     bitbucket.service.ts:213). Before this filter
-                        //     was widened, bitbucket Kody comments slipped
-                        //     through and the onboarding rule generator
-                        //     was effectively learning from itself —
-                        //     symptom is generated rules that exactly
-                        //     paraphrase Kody's own prior reviews of the
-                        //     same repo.
-                        const body = comment?.body?.toLowerCase() ?? '';
-                        return (
-                            !body.includes('kody-codereview') &&
-                            !body.includes('kody|code-review')
-                        );
-                    })
+                        // the rule-generator LLM learns from Kody's own
+                        // past reviews and creates duplicate rules on
+                        // subsequent onboardings (self-feedback loop).
+                        // Both provider signatures are checked centrally
+                        // via `isKodyAuthoredBody` — see
+                        // `libs/common/utils/kody-identifiers.ts` for why
+                        // bitbucket needs a different marker form than
+                        // github / gitlab / azure / forgejo.
+                        (comment) => !isKodyAuthoredBody(comment?.body),
+                    )
                     ?.filter((comment) => comment?.body?.length > 100);
 
                 let finalComments = filteredComments;
