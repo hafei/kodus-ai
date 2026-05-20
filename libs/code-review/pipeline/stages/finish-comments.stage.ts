@@ -53,18 +53,19 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
 
         // A "failed" review (from the user's perspective) is one with a
         // critical pipeline error — main agent rejected, sandbox blew up,
-        // validation aborted, etc. Auxiliary failures (severity = partial,
-        // e.g. only kody-rules) keep the SUCCESS copy of the comment but
-        // get a short notice appended explaining *why* auto-approve was
+        // validation aborted, etc. Partial failures (kody-rules agent,
+        // pr-level comment posting, business-logic validation, etc.)
+        // don't get the error variant of the message but DO get a short
+        // generic notice appended explaining *why* auto-approve was
         // skipped — otherwise the user sees "review completed" + no
         // approval and assumes auto-approve is broken. Default severity
         // for a pushed error is 'critical' per PipelineErrorSeverity docs.
-        const reviewFailed = (context.errors ?? []).some(
+        const errors = context.errors ?? [];
+        const reviewFailed = errors.some(
             (e) => (e?.severity ?? 'critical') === 'critical',
         );
         const reviewHasPartialErrors =
-            !reviewFailed &&
-            (context.errors ?? []).some((e) => e?.severity === 'partial');
+            !reviewFailed && errors.some((e) => e?.severity === 'partial');
         const reviewErrorMessage = context.lastReviewError?.friendlyMessage;
 
         const isCommitRun = Boolean(lastExecution);

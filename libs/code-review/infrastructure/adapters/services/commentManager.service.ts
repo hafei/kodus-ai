@@ -1507,7 +1507,18 @@ You must always respond in ${languageResultPrompt}.`;
                             TranslationsCategory.PullRequestFinishSummaryMarkdown,
                         )?.partialErrorsNotice;
                     if (notice) {
-                        resultText = `${resultText}${notice}`;
+                        // Resolve the dashboard URL from the env var, with
+                        // a public-domain fallback so the link never breaks
+                        // even in environments where the var is missing.
+                        const dashboardBase = (
+                            process.env.API_USER_INVITE_BASE_URL ||
+                            'https://app.kodus.io'
+                        ).replace(/\/+$/, '');
+                        const rendered = notice.replace(
+                            /\{\{dashboardUrl\}\}/g,
+                            `${dashboardBase}/pull-requests`,
+                        );
+                        resultText = `${resultText}${rendered}`;
                     }
                 }
             }

@@ -57,16 +57,15 @@ export class RequestChangesOrApproveStage extends BasePipelineStage<CodeReviewPi
             lineComments,
         );
 
-        // Aprovar PR se não houver comentários. The review's overall
-        // outcome is encoded in `context.errors[].severity` (critical =
-        // ERROR, partial = PARTIAL_ERROR on the automation execution) —
-        // any non-empty severity must block auto-approve so we don't
-        // signal "all good" on a failed/degraded run.
-        const reviewHasFailures =
-            (context.errors ?? []).some(
-                (e) => (e?.severity ?? 'critical') === 'critical',
-            ) ||
-            (context.errors ?? []).some((e) => e?.severity === 'partial');
+        // Any non-empty severity blocks auto-approve so we never signal
+        // "all good" on a degraded run. The user-facing message tells
+        // them which auxiliary checks failed and where to look for the
+        // details; here we just refuse to approve.
+        const reviewHasFailures = (context.errors ?? []).some(
+            (e) =>
+                (e?.severity ?? 'critical') === 'critical' ||
+                e?.severity === 'partial',
+        );
 
         const approved = await this.approvePullRequest(
             codeReviewConfig.pullRequestApprovalActive,
@@ -159,13 +158,12 @@ export class RequestChangesOrApproveStage extends BasePipelineStage<CodeReviewPi
                 return false;
             }
 
-            // Reviews with critical/partial failures may produce 0 line
-            // comments not because the PR is clean but because something
-            // couldn't be analyzed (BYOK out of credits, kody-rules agent
-            // threw, sandbox unavailable, etc.). Approving here would
-            // signal "all good" when the truth is "we couldn't tell." The
-            // user must re-run (typically `@kody review --force` after
-            // fixing the upstream issue) before auto-approve can re-engage.
+            // Any failure (critical or partial) means we couldn't fully
+            // analyze the PR — 0 line comments here is unanalyzed, not
+            // clean. Approving here would signal "all good" when the
+            // truth is "we couldn't tell." User must re-run (`@kody
+            // review` after fixing the cause) before auto-approve can
+            // re-engage.
             if (reviewHasFailures) {
                 this.logger.log({
                     message: `Skipping auto-approve for PR#${prNumber} because the review had failures`,

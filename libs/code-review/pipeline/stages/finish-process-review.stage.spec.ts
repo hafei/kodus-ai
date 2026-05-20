@@ -172,16 +172,14 @@ describe('RequestChangesOrApproveStage — review.auto_approved emit', () => {
         expect(notificationService.emit).not.toHaveBeenCalled();
     });
 
-    it('does not approve when only an auxiliary (partial) failure happened', async () => {
-        // Per latest decision: even though the main review still has
-        // value, a partial failure (e.g. kody-rules agent threw) means
-        // configured rules couldn't be checked. The user must decide.
+    it('does not approve on any partial failure (regardless of which stage)', async () => {
+        // Any partial-severity entry means some part of the review didn't
+        // run cleanly; auto-approve must wait for the user to decide.
         const ctx = makeContext();
         ctx.errors = [
             {
-                stage: 'AgentReviewStage',
-                substage: 'agent:kody-rules',
-                error: new Error('kody-rules unavailable'),
+                stage: 'ValidateSuggestionsStage',
+                error: new Error('validator timed out'),
                 severity: 'partial',
             } as any,
         ];
