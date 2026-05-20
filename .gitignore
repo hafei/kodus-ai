@@ -41,6 +41,7 @@ _*
 !libs/common/email/templates/_*
 !test/__mocks__/
 !**/__tests__/
+!scripts/selfhosted/_*.sh
 # Mintlify _snippets/ folder (docs/_snippets, mcp-manager/src/.../*) — those
 # are real source, not scratch files matched by _*.
 !docs/_snippets/
