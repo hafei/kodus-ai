@@ -13,6 +13,7 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { BYOKConfig, BYOKProvider } from '@kodus/kodus-common/llm';
 import { decrypt } from '@libs/common/utils/crypto';
+import { createHash } from 'crypto';
 
 /**
  * Build a Vercel AI SDK model from a base64-encoded Google Service Account
@@ -737,26 +738,54 @@ export function runWithBYOKLimiter<T>(
 // The allowlist in `shouldEnableJsonSchema` is conservative on purpose
 // but can guess wrong: a model we trusted may stop honoring json_schema,
 // or a custom proxy we trusted may be older than we thought. Rather
-// than fail the call we mark the offending provider:model combination
+// than fail the call we mark the offending combination
 // "json_schema-unsupported" in a process-scoped cache and retry once
 // with the flag off (SDK downgrades to `response_format: json_object`,
 // upstream accepts, slow path returns parseable text). Future calls
 // for the same combo skip the doomed first attempt entirely.
+//
+// The cache is keyed by organization + provider + model + baseURL +
+// apiKey hash so one tenant's verdict never leaks to another (two orgs
+// can hit the same provider/model with different keys — and a degraded
+// key tier on one must not demote everyone). Entries carry a timestamp
+// and expire after `NO_JSON_SCHEMA_TTL_MS`, so a transient upstream
+// 4xx self-heals instead of becoming a permanent denylist.
 
-const noJsonSchemaCache = new Set<string>();
+const NO_JSON_SCHEMA_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-function structuredFallbackCacheKey(byokConfig?: BYOKConfig): string {
-    if (byokConfig?.fallback) {
-        const f = byokConfig.fallback;
-        return `${f.provider}:${f.model}:${f.baseURL ?? ''}`;
-    }
-    if (byokConfig?.main) {
-        const m = byokConfig.main;
-        return `${m.provider}:${m.model}:${m.baseURL ?? ''}`;
+/** key → epoch ms when the "json_schema unsupported" verdict was recorded. */
+const noJsonSchemaCache = new Map<string, number>();
+
+function structuredFallbackCacheKey(
+    byokConfig?: BYOKConfig,
+    organizationId?: string,
+): string {
+    const org = organizationId ?? 'global';
+    // Mirror getInternalModel's slot preference: fallback first, then main.
+    const slot = byokConfig?.fallback ?? byokConfig?.main;
+    if (slot) {
+        // Hash the stored (encrypted) apiKey — stable per DB row, and
+        // changes when the tenant rotates their key, which should reset
+        // the verdict. Never logs the key itself.
+        const apiKeyHash = slot.apiKey
+            ? createHash('sha1').update(slot.apiKey).digest('hex').slice(0, 8)
+            : '';
+        return `${org}:${slot.provider}:${slot.model}:${slot.baseURL ?? ''}:${apiKeyHash}`;
     }
     // Self-hosted env mode — cache by the configured model id; the
     // base URL is process-wide so we can elide it from the key.
-    return `env:${process.env.API_LLM_PROVIDER_MODEL ?? 'auto'}`;
+    return `${org}:env:${process.env.API_LLM_PROVIDER_MODEL ?? 'auto'}`;
+}
+
+/** True when `key` has a non-expired "json_schema unsupported" verdict. */
+function isNoJsonSchemaCached(key: string): boolean {
+    const recordedAt = noJsonSchemaCache.get(key);
+    if (recordedAt === undefined) return false;
+    if (Date.now() - recordedAt > NO_JSON_SCHEMA_TTL_MS) {
+        noJsonSchemaCache.delete(key); // expired — let the next call retry
+        return false;
+    }
+    return true;
 }
 
 function isJsonSchemaUnsupportedError(err: unknown): boolean {
@@ -797,6 +826,12 @@ export interface StructuredFallbackParams {
     byokConfig?: BYOKConfig;
     /** Optional label for logs when the retry actually fires. */
     label?: string;
+    /**
+     * Organization the call runs for. Scopes the no-json-schema cache so
+     * one tenant's verdict never demotes another. Omit only for
+     * process-wide self-hosted mode.
+     */
+    organizationId?: string;
 }
 
 /**
@@ -821,8 +856,11 @@ export async function withStructuredOutputFallback<T>(
     params: StructuredFallbackParams,
     exec: (model: LanguageModel) => Promise<T>,
 ): Promise<T> {
-    const cacheKey = structuredFallbackCacheKey(params.byokConfig);
-    const tryStructured = !noJsonSchemaCache.has(cacheKey);
+    const cacheKey = structuredFallbackCacheKey(
+        params.byokConfig,
+        params.organizationId,
+    );
+    const tryStructured = !isNoJsonSchemaCached(cacheKey);
 
     const firstModel = getInternalModel(params.byokConfig, {
         structuredOutputs: tryStructured,
@@ -849,7 +887,7 @@ export async function withStructuredOutputFallback<T>(
         if (!sentJsonSchema || !isJsonSchemaUnsupportedError(err)) {
             throw err;
         }
-        noJsonSchemaCache.add(cacheKey);
+        noJsonSchemaCache.set(cacheKey, Date.now());
         const label = params.label ? ` for ${params.label}` : '';
         // eslint-disable-next-line no-console
         console.warn(
@@ -879,4 +917,6 @@ export const __structuredFallbackInternals = {
     cache: noJsonSchemaCache,
     isJsonSchemaUnsupportedError,
     cacheKey: structuredFallbackCacheKey,
+    isNoJsonSchemaCached,
+    ttlMs: NO_JSON_SCHEMA_TTL_MS,
 };
