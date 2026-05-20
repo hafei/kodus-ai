@@ -13,7 +13,6 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { BYOKConfig, BYOKProvider } from '@kodus/kodus-common/llm';
 import { decrypt } from '@libs/common/utils/crypto';
-import { createHash } from 'crypto';
 
 /**
  * Build a Vercel AI SDK model from a base64-encoded Google Service Account
@@ -744,12 +743,11 @@ export function runWithBYOKLimiter<T>(
 // upstream accepts, slow path returns parseable text). Future calls
 // for the same combo skip the doomed first attempt entirely.
 //
-// The cache is keyed by organization + provider + model + baseURL +
-// apiKey hash so one tenant's verdict never leaks to another (two orgs
-// can hit the same provider/model with different keys — and a degraded
-// key tier on one must not demote everyone). Entries carry a timestamp
-// and expire after `NO_JSON_SCHEMA_TTL_MS`, so a transient upstream
-// 4xx self-heals instead of becoming a permanent denylist.
+// The cache is keyed by organization + provider + model + baseURL so
+// one tenant's verdict never leaks to another. Entries carry a
+// timestamp and expire after `NO_JSON_SCHEMA_TTL_MS`, so a transient
+// upstream 4xx self-heals instead of becoming a permanent denylist —
+// the TTL also bounds any staleness after a tenant rotates their key.
 
 const NO_JSON_SCHEMA_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
@@ -764,13 +762,11 @@ function structuredFallbackCacheKey(
     // Mirror getInternalModel's slot preference: fallback first, then main.
     const slot = byokConfig?.fallback ?? byokConfig?.main;
     if (slot) {
-        // Hash the stored (encrypted) apiKey — stable per DB row, and
-        // changes when the tenant rotates their key, which should reset
-        // the verdict. Never logs the key itself.
-        const apiKeyHash = slot.apiKey
-            ? createHash('sha1').update(slot.apiKey).digest('hex').slice(0, 8)
-            : '';
-        return `${org}:${slot.provider}:${slot.model}:${slot.baseURL ?? ''}:${apiKeyHash}`;
+        // No credential material in the key. The json_schema verdict is
+        // a property of the provider/model/endpoint, not of the API
+        // key; organizationId already isolates tenants, and the TTL
+        // bounds any staleness after a key rotation.
+        return `${org}:${slot.provider}:${slot.model}:${slot.baseURL ?? ''}`;
     }
     // Self-hosted env mode — cache by the configured model id; the
     // base URL is process-wide so we can elide it from the key.
