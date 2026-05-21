@@ -121,12 +121,11 @@ test("upgrade-n-1-to-n only applies to self-hosted", () => {
     assert.deepEqual(s.appliesTo.target, ["self-hosted"]);
 });
 
-test("onboarding-webhook-registration applies to all 4 platform providers + github-app", () => {
+test("onboarding-webhook-registration applies to 4 platform providers (NOT github-app)", () => {
     const s = allScenarios["onboarding-webhook-registration"];
     assert.ok(s.appliesTo.provider);
     for (const p of [
         "github",
-        "github-app",
         "gitlab",
         "bitbucket",
         "azure-devops",
@@ -136,4 +135,11 @@ test("onboarding-webhook-registration applies to all 4 platform providers + gith
             `webhook scenario missing provider: ${p}`,
         );
     }
+    // github-app must NOT be in this list — GitHub Apps deliver
+    // webhooks at the App level, not via /repos/.../hooks REST
+    // entries, so this scenario would always fail for it.
+    assert.ok(
+        !s.appliesTo.provider.includes("github-app"),
+        "webhook scenario must exclude github-app — GitHub Apps don't register per-repo hooks via REST",
+    );
 });
