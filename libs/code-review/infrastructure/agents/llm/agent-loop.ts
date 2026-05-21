@@ -4023,7 +4023,7 @@ async function structureVerificationDecisionWithFallbackModel(
     const verifierFallbackSignal = timeoutSignal(LLM_CALL_TIMEOUT_MS);
     try {
         const result: any = await withStructuredOutputFallback(
-            { byokConfig, label: 'verify-structure-fallback' },
+            { byokConfig, organizationId, label: 'verify-structure-fallback' },
             (internalModel) =>
                 throttledGenerateText({
             byokConfig,
@@ -4302,7 +4302,7 @@ async function structureWithFallbackModel(
         const structureFallbackSignal = timeoutSignal(LLM_CALL_TIMEOUT_MS);
 
         const result: any = await withStructuredOutputFallback(
-            { byokConfig, label: 'review-structure-fallback' },
+            { byokConfig, organizationId, label: 'review-structure-fallback' },
             (internalModel) =>
                 throttledGenerateText({
             byokConfig,

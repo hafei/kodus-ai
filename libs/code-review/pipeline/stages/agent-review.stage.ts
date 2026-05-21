@@ -1288,7 +1288,11 @@ ${summaries}`,
                 dedupResult = await runDedup(model);
             } else {
                 dedupResult = await withStructuredOutputFallback(
-                    { byokConfig, label: 'dedup-suggestions' },
+                    {
+                        byokConfig,
+                        organizationId: telemetryMeta?.organizationId,
+                        label: 'dedup-suggestions',
+                    },
                     runDedup,
                 );
             }
