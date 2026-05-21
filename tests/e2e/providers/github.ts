@@ -391,7 +391,16 @@ export class GitHubProvider extends BaseProvider {
             { timeoutSec: opts.timeoutSec ?? 600, intervalSec: 10 },
         );
         if (!result) {
-            log.err(`No review activity on PR #${pr.number} after timeout`);
+            // Return-empty rather than throw — pollForReview is also used
+            // for sanity snapshots where empty IS the expected outcome
+            // (e.g. command-review.ts:108 polls with timeoutSec=1 to
+            // confirm auto-review did NOT fire on a PR whose
+            // automatedReviewActive is disabled). The caller decides
+            // whether 0 findings is a failure; logging [err] from the
+            // helper was misclassifying those expected zero-result
+            // snapshots as failures and confusing the matrix log.
+            // Caller-side assertions (ctx.assert in the scenario) are
+            // the right place to surface real timeouts.
             return { reviewComments: 0, issueComments: 0, reviews: 0 };
         }
         return result;
