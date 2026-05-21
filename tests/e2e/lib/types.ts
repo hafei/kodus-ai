@@ -175,8 +175,26 @@ export interface RunContext {
         ) => Promise<void>;
     };
     assert: (cond: unknown, msg: string) => asserts cond;
+    // Throw ScenarioSkipError (via this helper) when a scenario can
+    // detect at runtime that its preconditions aren't met and the
+    // outcome should be recorded as `skipped` rather than `failed`.
+    // Used by upgrade-n-1-to-n when not invoked from the upgrade
+    // provisioning script — the assertion-shaped failure was
+    // misleading bottom-line counts.
+    skip: (reason: string) => never;
     artifactDir: string;
     runId: string;
+}
+
+// Sentinel thrown by `ctx.skip(...)`. The matrix runner catches
+// this specifically and records the cell as `skipped` instead of
+// `failed`. Plain Error subclasses won't match (we check by name
+// to survive a bundler dropping prototype-chain identity).
+export class ScenarioSkipError extends Error {
+    readonly name = "ScenarioSkipError";
+    constructor(reason: string) {
+        super(reason);
+    }
 }
 
 export type ScenarioStatus =
