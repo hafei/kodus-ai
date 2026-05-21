@@ -12,10 +12,20 @@ export const upgradeNMinusOneToN: Scenario = {
     },
     timeoutSec: 1800,
     async run(ctx: RunContext) {
-        ctx.assert(
-            process.env.UPGRADE_PRE_VALIDATED === "1",
-            "upgrade-n-1-to-n must be invoked by the upgrade provisioning script. It validates that the stack provisioned at tag N-1 was already exercised before the upgrade ran.",
-        );
+        // Scenario is a guard: it only makes sense when invoked by the
+        // upgrade provisioning script, which seeds a droplet at the
+        // previous release tag, exercises it, then upgrades the
+        // containers in-place and runs this scenario to confirm the
+        // tenant + review pipeline survived. Outside that flow there
+        // is nothing to validate, so skip — surfacing this as a FAIL
+        // in the normal matrix run was misleading (one "expected"
+        // failure poluting the bottom-line PASS count and worrying
+        // anyone reading the matrix output).
+        if (process.env.UPGRADE_PRE_VALIDATED !== "1") {
+            ctx.skip(
+                "Not invoked by upgrade provisioning script (UPGRADE_PRE_VALIDATED unset)",
+            );
+        }
 
         ctx.assert(ctx.tenant, "scenario requires a tenant");
 

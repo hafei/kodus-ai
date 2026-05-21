@@ -12,6 +12,7 @@ import type {
     TargetContext,
     TenantCredentials,
 } from "./types.js";
+import { ScenarioSkipError } from "./types.js";
 import { makeProvider } from "../providers/index.js";
 import {
     finishOnboarding,
@@ -280,6 +281,9 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
                     assert: (cond, msg) => {
                         if (!cond) throw new Error(`Assertion failed: ${msg}`);
                     },
+                    skip: (reason: string): never => {
+                        throw new ScenarioSkipError(reason);
+                    },
                     artifactDir: scenarioArtifactDir,
                     runId: opts.runId,
                 });
@@ -292,6 +296,25 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
             } catch (err) {
                 const duration = Date.now() - t0;
                 const e = err as Error;
+                // ctx.skip() surfaces here as a recognized sentinel.
+                // Mark the cell as skipped (not failed) so the bottom-
+                // line summary stays accurate and the matrix run as a
+                // whole isn't dragged into "failed" by a precondition
+                // gap (e.g. upgrade-n-1-to-n outside the upgrade flow).
+                // Identity check by .name to survive bundlers that
+                // drop the prototype chain.
+                if (
+                    e instanceof ScenarioSkipError ||
+                    e?.name === "ScenarioSkipError"
+                ) {
+                    log.info(`SKIP  ${cellLabel}  (${e.message})`);
+                    results.push(
+                        makeResult(scenario, cell, "skipped", duration, {
+                            skipReason: e.message,
+                        }),
+                    );
+                    continue;
+                }
                 log.err(`FAIL  ${cellLabel}: ${e.message}`);
                 results.push(
                     makeResult(
