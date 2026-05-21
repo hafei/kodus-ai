@@ -44,6 +44,11 @@ import {
     DedupTraceSummary,
 } from '../context/code-review-pipeline.context';
 import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
+import {
+    ReviewErrorCategory,
+    classifyLLMError,
+    getClassification,
+} from '@libs/code-review/infrastructure/agents/llm/error-classifier';
 
 /**
  * Extract valid line ranges from a unified diff patch.
@@ -477,6 +482,67 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                             prNumber,
                         },
                     });
+                });
+            }
+
+            // Pick the best failure to surface to the user (used by the
+            // end-review comment to interpolate the reason). Severity-based
+            // bookkeeping already happened in the loop above — this only
+            // chooses *which* failure's classification gets attached to the
+            // context for the message. A critical agent with a mapped (non-
+            // UNKNOWN) classification wins; fall back to any critical, then
+            // any failure.
+            const failures = result.failures ?? [];
+            if (failures.length > 0) {
+                const reviewProvider =
+                    typeof context.codeReviewConfig?.byokConfig?.main
+                        ?.provider === 'string'
+                        ? (context.codeReviewConfig.byokConfig.main
+                              .provider as string)
+                        : undefined;
+                const classifyFailure = (f: (typeof failures)[number]) =>
+                    getClassification(f.error) ??
+                    classifyLLMError(f.error, reviewProvider);
+                const criticalFailures = failures.filter((f) =>
+                    CRITICAL_AGENTS.has(f.agentName),
+                );
+                const ranked = (
+                    criticalFailures.length > 0 ? criticalFailures : failures
+                ).slice();
+                ranked.sort((a, b) => {
+                    const aMapped =
+                        classifyFailure(a).category !==
+                        ReviewErrorCategory.UNKNOWN;
+                    const bMapped =
+                        classifyFailure(b).category !==
+                        ReviewErrorCategory.UNKNOWN;
+                    if (aMapped === bMapped) return 0;
+                    return aMapped ? -1 : 1;
+                });
+                const chosen = ranked[0];
+                const classification = classifyFailure(chosen);
+
+                context = this.updateContext(context, (draft) => {
+                    draft.lastReviewError = {
+                        category: classification.category,
+                        provider: classification.provider,
+                        friendlyMessage: classification.friendlyMessage,
+                        agentName: chosen.agentName,
+                        occurredAt: new Date(),
+                    };
+                });
+
+                this.logger.log({
+                    message: `[AGENT] Review failures: ${failures.length} (critical=${criticalFailures.length}, category=${classification.category})`,
+                    context: this.stageName,
+                    metadata: {
+                        prNumber,
+                        errorCategory: classification.category,
+                        provider: classification.provider,
+                        agentName: chosen.agentName,
+                        failureCount: failures.length,
+                        criticalCount: criticalFailures.length,
+                    },
                 });
             }
 
