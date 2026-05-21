@@ -849,6 +849,19 @@ You must always respond in ${languageResultPrompt}.`;
                     reviewErrorMessage,
                     reviewHasPartialErrors,
                 );
+            } else if (reviewHasPartialErrors) {
+                // Custom end-review template is rendering — the default
+                // path's suffix wiring doesn't run here, so we append the
+                // partial-errors notice ourselves. Without this the user
+                // sees their template's "all good" message + no approval
+                // and assumes auto-approve is broken.
+                const notice = this.resolvePartialErrorsNotice(
+                    codeReviewConfig?.languageResultPrompt ??
+                        LanguageValue.ENGLISH,
+                );
+                if (notice) {
+                    commentBody = `${commentBody}${notice}`;
+                }
             }
 
             await this.codeManagementService.updateIssueComment(
@@ -1427,6 +1440,45 @@ You must always respond in ${languageResultPrompt}.`;
         return { success: false };
     }
 
+    /**
+     * Build the localized `partialErrorsNotice` suffix with the dashboard
+     * URL already interpolated. Returns undefined when no notice is
+     * configured for the given language and the en-US fallback is also
+     * missing — caller should treat that as "nothing to append."
+     *
+     * Lives as its own method so the default-path renderer AND the
+     * customer-end-review-template paths can share it: both need the
+     * suffix when reviewHasPartialErrors is true, otherwise the custom
+     * template would render the optimistic copy and silently skip the
+     * "auto-approve was paused" notice — exactly the "looks like a bug"
+     * UX the suffix exists to prevent.
+     */
+    private resolvePartialErrorsNotice(language: string): string | undefined {
+        const translation = getTranslationsForLanguageByCategory(
+            language as LanguageValue,
+            TranslationsCategory.PullRequestFinishSummaryMarkdown,
+        );
+        const notice =
+            translation?.partialErrorsNotice ??
+            getTranslationsForLanguageByCategory(
+                LanguageValue.ENGLISH,
+                TranslationsCategory.PullRequestFinishSummaryMarkdown,
+            )?.partialErrorsNotice;
+        if (!notice) {
+            return undefined;
+        }
+        // Resolve the dashboard URL from the env var, with a public-domain
+        // fallback so the link never breaks even in environments where
+        // the var is missing.
+        const dashboardBase = (
+            process.env.API_USER_INVITE_BASE_URL || 'https://app.kodus.io'
+        ).replace(/\/+$/, '');
+        return notice.replace(
+            /\{\{dashboardUrl\}\}/g,
+            `${dashboardBase}/pull-requests`,
+        );
+    }
+
     private async generatePullRequestFinishSummaryMarkdown(
         organizationAndTeamData: OrganizationAndTeamData,
         prNumber: number,
@@ -1500,25 +1552,9 @@ You must always respond in ${languageResultPrompt}.`;
                     : translation.withoutComments;
 
                 if (reviewHasPartialErrors) {
-                    const notice =
-                        translation.partialErrorsNotice ??
-                        getTranslationsForLanguageByCategory(
-                            LanguageValue.ENGLISH,
-                            TranslationsCategory.PullRequestFinishSummaryMarkdown,
-                        )?.partialErrorsNotice;
+                    const notice = this.resolvePartialErrorsNotice(language);
                     if (notice) {
-                        // Resolve the dashboard URL from the env var, with
-                        // a public-domain fallback so the link never breaks
-                        // even in environments where the var is missing.
-                        const dashboardBase = (
-                            process.env.API_USER_INVITE_BASE_URL ||
-                            'https://app.kodus.io'
-                        ).replace(/\/+$/, '');
-                        const rendered = notice.replace(
-                            /\{\{dashboardUrl\}\}/g,
-                            `${dashboardBase}/pull-requests`,
-                        );
-                        resultText = `${resultText}${rendered}`;
+                        resultText = `${resultText}${notice}`;
                     }
                 }
             }
@@ -2345,6 +2381,19 @@ ${reviewOptions}
             );
 
             commentBody = this.sanitizeBitbucketMarkdown(rawBody, platformType);
+
+            // Same reason as in updateOverallComment: the custom template
+            // path skips the default suffix wiring, so we append the
+            // partial-errors notice manually to keep the UX consistent
+            // (user sees template message + "auto-approve was paused").
+            if (reviewHasPartialErrors) {
+                const notice = this.resolvePartialErrorsNotice(
+                    language ?? LanguageValue.ENGLISH,
+                );
+                if (notice) {
+                    commentBody = `${commentBody}${notice}`;
+                }
+            }
         } else {
             commentBody = await this.generateLastReviewCommenBody(
                 organizationAndTeamData,
