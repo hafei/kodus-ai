@@ -224,6 +224,48 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
     const artifactDir = join(opts.artifactRoot, opts.runId);
     mkdirSync(artifactDir, { recursive: true });
 
+    // Idempotency pre-flight: abandon every PR (or MR) on each
+    // fixture repo whose title starts with `[e2e]` and is still
+    // open. Per-scenario `closePR()` runs in `finally` and covers
+    // the happy path, but a scenario crash, a SIGINT to the runner,
+    // or a parallel-cell abort all leave PRs orphaned — the NEXT
+    // matrix run then hits HTTP 409 ("an active PR for this branch
+    // pair already exists") on Azure, PR-number drift on Bitbucket,
+    // or webhook bursts on auto-closed orphans across all providers.
+    // Cleaning up here makes every run start from a known-clean
+    // state regardless of how the previous one ended. Deduped on
+    // provider so 4 cells × 1 provider only hit the upstream API
+    // once. `opts.dryRun` short-circuits (no upstream calls).
+    if (!opts.dryRun) {
+        const uniqueProviders = Array.from(
+            new Set(
+                opts.cells
+                    .filter((c) => c.target === opts.target)
+                    .map((c) => c.provider),
+            ),
+        );
+        for (const providerName of uniqueProviders) {
+            try {
+                const provider = makeProvider(providerName);
+                const { closed } = await provider.cleanupStaleE2EArtifacts();
+                if (closed > 0) {
+                    log.info(
+                        `[cleanup] ${providerName}: abandoned ${closed} stale [e2e]-prefixed PR(s) from prior runs`,
+                    );
+                }
+            } catch (err) {
+                // Best-effort. Don't poison the entire matrix run just
+                // because cleanup couldn't list PRs on one provider —
+                // the per-scenario open path still throws its own
+                // specific error if a stale PR ends up blocking it,
+                // and that error is what the operator sees.
+                log.info(
+                    `[cleanup] ${providerName}: skipped (${err instanceof Error ? err.message : String(err)})`,
+                );
+            }
+        }
+    }
+
     for (const cell of opts.cells) {
         if (cell.target !== opts.target) continue;
 
