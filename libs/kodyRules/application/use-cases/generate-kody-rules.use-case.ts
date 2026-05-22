@@ -132,6 +132,12 @@ export class GenerateKodyRulesUseCase {
                 {
                     ...platformConfig.configValue,
                     kodyLearningStatus: KodyLearningStatus.GENERATING_RULES,
+                    // Bumped here, reset to 0 on completion below. A hard
+                    // crash leaves it incremented — the KodyLearning cron
+                    // reads it to stop retrying a run that keeps dying.
+                    kodyLearningStuckRetries:
+                        (platformConfig.configValue.kodyLearningStuckRetries ??
+                            0) + 1,
                 },
                 organizationAndTeamData,
             );
@@ -269,6 +275,7 @@ export class GenerateKodyRulesUseCase {
                 {
                     ...platformConfig.configValue,
                     kodyLearningStatus: KodyLearningStatus.ENABLED,
+                    kodyLearningStuckRetries: 0,
                 },
                 organizationAndTeamData,
             );
@@ -332,6 +339,7 @@ export class GenerateKodyRulesUseCase {
                     {
                         ...platformConfig.configValue,
                         kodyLearningStatus: KodyLearningStatus.ENABLED,
+                        kodyLearningStuckRetries: 0,
                     },
                     organizationAndTeamData ?? { teamId: body.teamId },
                 );
