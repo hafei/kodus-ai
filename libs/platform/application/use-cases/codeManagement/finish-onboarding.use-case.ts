@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { FinishOnboardingDTO } from '@libs/platform/dtos/finish-onboarding.dto';
 
+import { retryWithBackoff } from '@libs/common/utils/polling';
 import { ParametersKey } from '@libs/core/domain/enums/parameters-key.enum';
 import {
     IParametersService,
@@ -138,8 +139,18 @@ export class FinishOnboardingUseCase {
                     ruleIds,
                     status: KodyRulesStatus.ACTIVE,
                 });
-                __mark('changeStatusKodyRules', __t, { ruleCount: ruleIds.length });
+                __mark('changeStatusKodyRules', __t, {
+                    ruleCount: ruleIds.length,
+                });
             }
+
+            // Rule generation makes dozens of provider API calls and can
+            // take tens of seconds (Bitbucket especially). Run it detached
+            // so onboarding completes immediately; the frontend polls
+            // `kodyLearningStatus` to know when rules are ready.
+            setImmediate(() => {
+                void this.generateKodyRulesInBackground(organizationId, teamId);
+            });
 
             // Trigger immediate Kody Rules sync from repo files for all selected repositories
             __t = Date.now();
@@ -226,6 +237,68 @@ export class FinishOnboardingUseCase {
             });
 
             throw error;
+        }
+    }
+
+    /**
+     * Generate Kody rules from PR history and activate them.
+     *
+     * Runs detached from the HTTP request (fired via `setImmediate` in
+     * `execute`), so it must not read `this.request` — org/team come in as
+     * arguments. Best-effort: it retries with backoff and, on final
+     * failure, logs and returns. `GenerateKodyRulesUseCase` manages the
+     * `kodyLearningStatus` lifecycle (GENERATING_RULES → ENABLED) itself,
+     * including on error, so the frontend poll always resolves.
+     */
+    private async generateKodyRulesInBackground(
+        organizationId: string,
+        teamId: string,
+    ): Promise<void> {
+        try {
+            await retryWithBackoff(
+                () =>
+                    this.generateKodyRulesUseCase.execute(
+                        { teamId, months: 3 },
+                        organizationId,
+                    ),
+                {
+                    maxAttempts: 3,
+                    onRetry: ({ error, attempt, delayMs }) => {
+                        this.logger.warn({
+                            message: `Kody rules generation failed (attempt ${attempt}); retrying in ${delayMs}ms`,
+                            context: FinishOnboardingUseCase.name,
+                            error:
+                                error instanceof Error
+                                    ? error
+                                    : new Error(String(error)),
+                            metadata: { organizationId, teamId },
+                        });
+                    },
+                },
+            );
+
+            // Enable all freshly generated rules.
+            const rules = await this.findKodyRulesUseCase.execute(
+                organizationId,
+                {},
+            );
+
+            if (rules && rules.length > 0) {
+                const ruleIds = rules.map((rule) => rule.uuid);
+                await this.changeStatusKodyRulesUseCase.execute({
+                    ruleIds,
+                    status: KodyRulesStatus.ACTIVE,
+                });
+            }
+        } catch (error) {
+            this.logger.error({
+                message:
+                    'Kody rules generation failed after retries; onboarding already completed',
+                context: FinishOnboardingUseCase.name,
+                error:
+                    error instanceof Error ? error : new Error(String(error)),
+                metadata: { organizationId, teamId },
+            });
         }
     }
 }
