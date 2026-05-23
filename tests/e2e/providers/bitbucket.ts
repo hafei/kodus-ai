@@ -209,6 +209,26 @@ export class BitbucketProvider extends BaseProvider {
         );
         ensureOk(createRef, "bitbucket:openPRFromBranches/createBranch");
 
+        // Race window between bitbucket's `POST /refs/branches` returning
+        // 201 and bitbucket's internal indexers (PR-commits API, webhook
+        // payload assembly) recognizing the new ref. Observed 2026-05-23:
+        // when the throwaway branch is created and a PR is opened against
+        // it in the same tick, the webhook fires with a PR whose
+        // `pullrequests/{id}/commits` endpoint returns 0 entries — Kodus's
+        // ValidateNewCommitsStage then SKIPs the pipeline with
+        // "PR has 0 commits", the scenario polls forever, and the test
+        // times out at 25min. Confirmed via direct curl that the same
+        // endpoint returns the correct commit a few seconds later. Five
+        // seconds is enough headroom on every observed run; cheap
+        // compared to scenarios that already take 4-25min.
+        //
+        // Why other providers don't need this: github and gitlab's
+        // pull-request endpoints are strongly consistent with their
+        // refs/branches creation — they share a single coordinated index
+        // path. Bitbucket Cloud's branch-create and PR-commits paths run
+        // through different services on Atlassian Edge.
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+
         const resp = await http<{
             id: number;
             state?: string;
