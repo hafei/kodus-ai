@@ -264,6 +264,33 @@ export class BitbucketProvider extends BaseProvider {
         };
     }
 
+    async cleanupStaleE2EArtifacts(): Promise<{ closed: number }> {
+        // Bitbucket's `state` filter accepts OPEN; pagination via `?page=`.
+        // The Bitbucket SDK banner-spam loop is server-side (issue #1155);
+        // here we're talking to the REST API directly so each list call
+        // is just one HTTPS round-trip.
+        let closed = 0;
+        let url: string | null =
+            `${this.apiBase}/repositories/${this.workspaceSlug}/pullrequests?state=OPEN&pagelen=50`;
+        for (let i = 0; i < 5 && url; i += 1) {
+            const resp = await http<{
+                values?: Array<{ id: number; title: string }>;
+                next?: string;
+            }>(url, { headers: this.headers() });
+            ensureOk(resp, "bitbucket:cleanupStale:list");
+            for (const pr of resp.body.values ?? []) {
+                if (!(pr.title ?? "").startsWith("[e2e]")) continue;
+                await http(
+                    `${this.apiBase}/repositories/${this.workspaceSlug}/pullrequests/${pr.id}/decline`,
+                    { method: "POST", headers: this.headers() },
+                );
+                closed += 1;
+            }
+            url = resp.body.next ?? null;
+        }
+        return { closed };
+    }
+
     async closePR(pr: OpenedPR): Promise<void> {
         await http(
             `${this.apiBase}/repositories/${this.workspaceSlug}/pullrequests/${pr.number}/decline`,

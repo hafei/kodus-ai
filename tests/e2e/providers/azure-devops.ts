@@ -209,30 +209,12 @@ export class AzureDevOpsProvider extends BaseProvider {
     async openPRFromBranches(args: OpenPRFromBranchesArgs): Promise<OpenedPR> {
         const repoId = await this.resolveRepoId();
 
-        // Azure DevOps refuses POST /pullrequests with HTTP 409 if there's
-        // already an active PR between the same (head, base) pair. Earlier
-        // matrix runs (or aborted scenarios) sometimes leave that PR open —
-        // the closePR finally block runs, but if the scenario crashed before
-        // openPRFromBranches returned, OR a parallel cell raced, the abandon
-        // never fired. Scan for any active PR on this pair and abandon it
-        // before retrying, so a stale leftover doesn't poison every
-        // subsequent run on this provider.
-        const existing = await http<{
-            value?: Array<{ pullRequestId: number }>;
-        }>(
-            `${this.apiBase}/_apis/git/repositories/${repoId}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(`refs/heads/${args.head}`)}&searchCriteria.targetRefName=${encodeURIComponent(`refs/heads/${args.base}`)}&searchCriteria.status=active&api-version=${this.apiVersion}`,
-            { headers: this.headers() },
-        );
-        for (const pr of existing.body.value ?? []) {
-            await http(
-                `${this.apiBase}/_apis/git/repositories/${repoId}/pullrequests/${pr.pullRequestId}?api-version=${this.apiVersion}`,
-                {
-                    method: "PATCH",
-                    headers: this.headers(),
-                    body: { status: "abandoned" },
-                },
-            );
-        }
+        // Stale-PR cleanup on the same head/base pair is handled
+        // matrix-wide by `cleanupStaleE2EArtifacts()` (called once per
+        // provider at runner start). We deliberately don't duplicate
+        // it inline here: a second sweep on every PR open would double
+        // the upstream calls and the matrix-wide pass already runs by
+        // the time we get here.
 
         const resp = await http<{
             pullRequestId: number;
@@ -275,6 +257,34 @@ export class AzureDevOpsProvider extends BaseProvider {
         );
         // Azure DevOps PR abandon doesn't delete the source ref; no extra
         // step needed regardless of keepBranchOnClose.
+    }
+
+    async cleanupStaleE2EArtifacts(): Promise<{ closed: number }> {
+        // Azure's pagination uses `$skip` + `$top`; the test repo never
+        // has more than a handful of stale PRs so a single 100-item page
+        // is more than enough in practice.
+        const repoId = await this.resolveRepoId();
+        let closed = 0;
+        const resp = await http<{
+            value?: Array<{ pullRequestId: number; title: string }>;
+        }>(
+            `${this.apiBase}/_apis/git/repositories/${repoId}/pullrequests?searchCriteria.status=active&$top=100&api-version=${this.apiVersion}`,
+            { headers: this.headers() },
+        );
+        ensureOk(resp, "azure:cleanupStale:list");
+        for (const pr of resp.body.value ?? []) {
+            if (!(pr.title ?? "").startsWith("[e2e]")) continue;
+            await http(
+                `${this.apiBase}/_apis/git/repositories/${repoId}/pullrequests/${pr.pullRequestId}?api-version=${this.apiVersion}`,
+                {
+                    method: "PATCH",
+                    headers: this.headers(),
+                    body: { status: "abandoned" },
+                },
+            );
+            closed += 1;
+        }
+        return { closed };
     }
 
     async triggerReviewOnExistingPR(

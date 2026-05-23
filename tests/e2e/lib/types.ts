@@ -147,6 +147,20 @@ export interface Provider {
     // Kodus's gitTool value for /license/assign (lowercase platformType).
     // Matches `assignLicense(provider.toLowerCase())` in license.service.ts.
     licenseGitTool(): string;
+    // Idempotent pre-flight sweep — closes/abandons every PR (or MR) on
+    // the fixture repo whose title starts with `[e2e]` and is still
+    // open. Called once per (provider, target) pair at matrix start,
+    // BEFORE any scenario runs. Reason: the per-scenario `closePR()`
+    // finally block only fires on the happy path. A scenario crash, a
+    // SIGINT to the runner, or a parallel-cell abort all leave PRs
+    // open; the next matrix run then hits provider-specific errors
+    // (Azure HTTP 409 "active PR exists on this branch pair",
+    // GitHub/GitLab webhook bursts on auto-closed orphans, Bitbucket
+    // PR-number drift). Cleanup at the start makes every run start
+    // from a known-clean state regardless of how the previous run
+    // ended. Filters strictly by `[e2e]` title prefix so we never
+    // touch PRs a human opened on the same repo.
+    cleanupStaleE2EArtifacts(): Promise<{ closed: number }>;
 }
 
 export interface TenantCredentials {

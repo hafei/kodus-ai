@@ -221,6 +221,32 @@ export class GitHubProvider extends BaseProvider {
         }
     }
 
+    async cleanupStaleE2EArtifacts(): Promise<{ closed: number }> {
+        // Paginate /pulls?state=open until we've seen them all. The test
+        // repo is small (~10s of historical PRs) so a single page of 100
+        // is enough in practice; the loop guards against future drift.
+        let closed = 0;
+        for (let page = 1; page <= 5; page += 1) {
+            const resp = await http<Array<{ number: number; title: string; head: { ref: string } }>>(
+                `${this.apiBase}/repos/${this.repoFullName}/pulls?state=open&per_page=100&page=${page}`,
+                { headers: this.headers() },
+            );
+            ensureOk(resp, "github:cleanupStale:list");
+            const batch = resp.body ?? [];
+            if (batch.length === 0) break;
+            for (const pr of batch) {
+                if (!(pr.title ?? "").startsWith("[e2e]")) continue;
+                await http(
+                    `${this.apiBase}/repos/${this.repoFullName}/pulls/${pr.number}`,
+                    { method: "PATCH", headers: this.headers(), body: { state: "closed" } },
+                );
+                closed += 1;
+            }
+            if (batch.length < 100) break;
+        }
+        return { closed };
+    }
+
     async closePR(pr: OpenedPR): Promise<void> {
         await http(
             `${this.apiBase}/repos/${this.repoFullName}/pulls/${pr.number}`,

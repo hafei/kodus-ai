@@ -216,6 +216,30 @@ export class GitLabProvider extends BaseProvider {
         };
     }
 
+    async cleanupStaleE2EArtifacts(): Promise<{ closed: number }> {
+        const projectId = await this.resolveProjectId();
+        let closed = 0;
+        for (let page = 1; page <= 5; page += 1) {
+            const resp = await http<Array<{ iid: number; title: string }>>(
+                `${this.apiBase}/projects/${projectId}/merge_requests?state=opened&per_page=100&page=${page}`,
+                { headers: this.headers() },
+            );
+            ensureOk(resp, "gitlab:cleanupStale:list");
+            const batch = resp.body ?? [];
+            if (batch.length === 0) break;
+            for (const mr of batch) {
+                if (!(mr.title ?? "").startsWith("[e2e]")) continue;
+                await http(
+                    `${this.apiBase}/projects/${projectId}/merge_requests/${mr.iid}`,
+                    { method: "PUT", headers: this.headers(), body: { state_event: "close" } },
+                );
+                closed += 1;
+            }
+            if (batch.length < 100) break;
+        }
+        return { closed };
+    }
+
     async closePR(pr: OpenedPR): Promise<void> {
         const projectId = await this.resolveProjectId();
         await http(
