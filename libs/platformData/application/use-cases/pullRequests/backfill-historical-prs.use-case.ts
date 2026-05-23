@@ -1,7 +1,16 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { createLogger } from '@kodus/flow';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
+import { with429Retry } from '@libs/core/infrastructure/http/rate-limit-retry';
 import { IPullRequests } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
+
+// Sleep between historical-PR fetches. Even with sequential per-PR
+// calls + per-call 429 retry, a tight loop over 30+ PRs on a fresh
+// onboarding will tickle the unpublished bitbucket per-endpoint burst
+// limit. 250ms gives the burst budget time to refill while keeping
+// the full backfill of ~40 PRs under ~30s — acceptable for a
+// detached setImmediate background job.
+const PER_PR_DELAY_MS = 250;
 import {
     IPullRequestsRepository,
     PULL_REQUESTS_REPOSITORY_TOKEN,
@@ -173,26 +182,46 @@ export class BackfillHistoricalPRsUseCase {
                 let commits = [];
 
                 try {
-                    const [files, prCommits] = await Promise.all([
-                        this.codeManagementService.getFilesByPullRequestId({
-                            organizationAndTeamData,
-                            repository: {
-                                id: repository.id,
-                                name: repository.name,
-                            },
-                            prNumber: pr.number,
-                        }),
-                        this.codeManagementService.getCommitsForPullRequestForCodeReview(
-                            {
-                                organizationAndTeamData,
-                                repository: {
-                                    id: repository.id,
-                                    name: repository.name,
+                    // Sequential + per-call 429 retry. The old Promise.all
+                    // of two parallel calls per PR is what tipped bitbucket
+                    // Atlassian Edge into x-envoy-ratelimited=true during
+                    // the 2026-05-23 matrix run on kodustech/tiny-url
+                    // (38+ historical PRs) — finishOnboarding 500'd before
+                    // the user-visible response could land. Going serial
+                    // halves the peak in-flight count; with429Retry on
+                    // each call honours Retry-After so a transient burst
+                    // doesn't doom the whole backfill.
+                    const files =
+                        await with429Retry(
+                            () =>
+                                this.codeManagementService.getFilesByPullRequestId(
+                                    {
+                                        organizationAndTeamData,
+                                        repository: {
+                                            id: repository.id,
+                                            name: repository.name,
+                                        },
+                                        prNumber: pr.number,
+                                    },
+                                ),
+                            { label: `backfill:getFiles PR#${pr.number}` },
+                        );
+                    const prCommits = await with429Retry(
+                        () =>
+                            this.codeManagementService.getCommitsForPullRequestForCodeReview(
+                                {
+                                    organizationAndTeamData,
+                                    repository: {
+                                        id: repository.id,
+                                        name: repository.name,
+                                    },
+                                    prNumber: pr.number,
                                 },
-                                prNumber: pr.number,
-                            },
-                        ),
-                    ]);
+                            ),
+                        {
+                            label: `backfill:getCommits PR#${pr.number}`,
+                        },
+                    );
 
                     if (files && files.length > 0) {
                         fileStats = {
@@ -266,6 +295,15 @@ export class BackfillHistoricalPRsUseCase {
                         prNumber: pr.number,
                     },
                 });
+            }
+
+            // Pace the loop so we don't pin the provider's per-endpoint
+            // burst budget. See PER_PR_DELAY_MS comment at the top of
+            // the file for the rationale.
+            if (PER_PR_DELAY_MS > 0) {
+                await new Promise((resolve) =>
+                    setTimeout(resolve, PER_PR_DELAY_MS),
+                );
             }
         }
 
