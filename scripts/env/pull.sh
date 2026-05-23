@@ -96,6 +96,53 @@ fi
 # `op inject` resolves every op://... ref and writes the result. Any
 # unresolved ref (missing item/field) becomes a hard error and we exit
 # non-zero so the dev sees what's missing instead of a half-broken .env.
-op inject --in-file "$TEMPLATE" --out-file "$OUTPUT" --force
+#
+# Inject to a temp file first, validate it, then move into place — so a
+# malformed value never lands as the active .env (see the guard below).
+TMP="${OUTPUT}.tmp.$$"
+trap 'rm -f "$TMP"' EXIT
+op inject --in-file "$TEMPLATE" --out-file "$TMP" --force
+
+# ── Guard: no raw newlines inside values ──────────────────────────────────────
+#
+# `docker compose` reads .env via `env_file:`, and its parser does NOT
+# support multi-line values. A secret stored in 1Password with literal
+# newlines (e.g. a raw multi-line PEM private key) injects as a value
+# spanning several physical lines — which leaves a dangling quote and
+# makes compose choke with a cryptic "unexpected character in variable
+# name" error on some *later* line. We catch it here with a clear message
+# instead. Multi-line secrets must be stored single-line with `\n`
+# escapes; the app un-escapes them at read time (see github.service.ts).
+#
+# A continuation line is any non-blank line that is neither a comment nor
+# a `KEY=` assignment — i.e. the overflow of a multi-line value.
+OFFENDER="$(awk '
+    /^[A-Za-z_][A-Za-z0-9_]*=/ { key=$0; sub(/=.*/, "", key); next }
+    /^[[:space:]]*$/ || /^[[:space:]]*#/ { next }
+    { print key; exit }
+' "$TMP")"
+
+if [[ -n "$OFFENDER" ]]; then
+    cat >&2 <<EOF
+error: the value for "$OFFENDER" contains a raw newline.
+
+The 1Password item "$OFFENDER" holds a multi-line value. \`docker compose\`
+cannot parse multi-line values in an env file, so the resulting .env would
+break the whole stack.
+
+Fix the vault item to be single-line with escaped newlines:
+
+  # turn a PEM (or any multi-line secret) into one line with \\n
+  awk 'NR>1{printf "\\\\n"} {printf "%s", \$0}' key.pem | \\
+    op item edit "$OFFENDER" --vault "$VAULT" "password=-"
+
+The app un-escapes \\n at read time (see github.service.ts). Then re-run
+\`yarn env:pull\`. The malformed .env was NOT written.
+EOF
+    exit 1
+fi
+
+mv "$TMP" "$OUTPUT"
+trap - EXIT
 
 echo "wrote $OUTPUT from .env.template (vault: $VAULT)"

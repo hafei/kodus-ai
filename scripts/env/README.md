@@ -181,6 +181,30 @@ zero gain.
    "expired" when left at the default `0` timestamp.)
 4. `yarn env:pull` to materialize.
 
+### Multi-line secrets (PEM keys, certs, etc.)
+
+**Store them single-line with `\n` escapes** — never as a raw
+multi-line value. `docker compose` reads `.env` via `env_file:` and its
+parser does **not** support multi-line values: a raw PEM injects as a
+value spanning several physical lines, leaves a dangling quote, and
+makes the whole stack fail to boot with a cryptic "unexpected character
+in variable name" error on some unrelated later line.
+
+`yarn env:pull` guards against this — it refuses to write a `.env`
+whose values contain raw newlines and tells you which item is at fault.
+To store a PEM correctly:
+
+```bash
+# collapse a PEM into one line with literal \n, then store it
+awk 'NR>1{printf "\\n"} {printf "%s", $0}' key.pem | \
+    op item edit "API_GITHUB_PRIVATE_KEY" --vault "Kodus-Dev" "password=-"
+```
+
+The app un-escapes `\n` at read time (see
+`libs/platform/.../github/github.service.ts`), so consumers get a real
+multi-line key. If you have no real dev key, leave the item **empty** —
+it injects cleanly and the app guards on the missing value.
+
 ### Rotating a secret
 
 Edit the item's `password` field in 1Password (UI or
