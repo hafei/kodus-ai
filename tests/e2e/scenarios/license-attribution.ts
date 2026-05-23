@@ -56,13 +56,25 @@ export const licenseAttribution: Scenario = {
     appliesTo: {
         target: ["cloud", "self-hosted"],
         provider: ["github", "github-app", "gitlab", "azure-devops", "bitbucket"],
+        // `license-free` deliberately excluded: in self-hosted mode there is
+        // NO state in which Kodus posts the "trial ended / BYOK / activate
+        // plan" notice the scenario asserts on. SelfHostedLicenseService
+        // returns either {valid:false} (no/invalid key → Community Edition,
+        // reviews fire normally) or {valid:true, …} (licensed, may enforce
+        // per-seat). The only `errorType` returned from
+        // validateSelfHostedPermissions is USER_NOT_LICENSED, which posts a
+        // REACTION via the auto-assign branch — not a notice comment. The
+        // "trial ended" comment in validate-prerequisites.stage:681 is only
+        // reachable from the cloud path (BYOK_REQUIRED, INVALID_LICENSE,
+        // PLAN_LIMIT_EXCEEDED errorTypes), so license-free × self-hosted is
+        // structurally unprovable. Keep `free` (cloud post-trial no-BYOK) and
+        // `trial` (cloud) here — those DO trigger the notice path.
         license: [
             "free",
             "trial",
             "paid",
             "community-byok",
             "license-paid",
-            "license-free",
         ],
     },
     timeoutSec: 1200,
