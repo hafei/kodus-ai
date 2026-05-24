@@ -1,5 +1,11 @@
 name: "E2E: self-hosted matrix"
 
+# Minimal token scope — CodeQL actions/missing-workflow-permissions.
+# These jobs only read the repo (checkout); provider/cloud creds come
+# from secrets, not GITHUB_TOKEN. No job writes back to the repo.
+permissions:
+    contents: read
+
 # Runs the matrix runner (tests/e2e/cli/run-matrix.ts) against a self-hosted
 # stack provisioned from the given image tag. Spawns one ephemeral droplet
 # per (provider, license) cell defined in the matrix YAML, drives the

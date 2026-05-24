@@ -1,5 +1,11 @@
 name: "E2E suite — typecheck, unit, integration"
 
+# Minimal token scope — CodeQL actions/missing-workflow-permissions.
+# These jobs only read the repo (checkout); provider/cloud creds come
+# from secrets, not GITHUB_TOKEN. No job writes back to the repo.
+permissions:
+    contents: read
+
 # Runs the hermetic part of the e2e suite (unit + integration tests against
 # in-process mock HTTP servers, dry-run of the full matrix, TypeScript
 # typecheck, actionlint on workflows). Triggered on every PR that touches

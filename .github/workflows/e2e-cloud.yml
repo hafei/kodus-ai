@@ -1,5 +1,11 @@
 name: "E2E: cloud matrix"
 
+# Minimal token scope — CodeQL actions/missing-workflow-permissions.
+# These jobs only read the repo (checkout); provider/cloud creds come
+# from secrets, not GITHUB_TOKEN. No job writes back to the repo.
+permissions:
+    contents: read
+
 # Runs the matrix runner against the existing cloud QA target. Cloud is a
 # permanent environment, so this job does NOT provision anything — it
 # authenticates as pre-existing test tenants (free / trial / paid) and
