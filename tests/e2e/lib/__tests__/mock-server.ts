@@ -57,11 +57,18 @@ export async function startMockServer(
                     await route.handler(req, res, match, body);
                 } catch (err) {
                     res.statusCode = 500;
+                    // Explicit JSON content-type so the reflected request
+                    // method/path/error text is never interpreted as HTML
+                    // by a browser (CodeQL js/reflected-xss + exception-as-
+                    // HTML). This is a localhost test mock, but setting the
+                    // header is both correct and silences the scanner.
+                    res.setHeader("Content-Type", "application/json");
                     res.end(JSON.stringify({ error: (err as Error).message }));
                 }
                 return;
             }
             res.statusCode = 404;
+            res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ error: `no route for ${req.method} ${path}` }));
         });
     });

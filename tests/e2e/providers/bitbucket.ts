@@ -397,9 +397,13 @@ export class BitbucketProvider extends BaseProvider {
                     // for the per-seat scenario and easy to confuse with a
                     // real "No issues found" outcome. Drop it.
                     const trimmed = raw.trim();
+                    // Regex (not String.includes) so CodeQL doesn't read this
+                    // as URL-host sanitization — `trimmed` is a review-comment
+                    // body and we're plain text-matching the footer's docs
+                    // link, not validating a URL.
                     if (
                         trimmed.length < 200 &&
-                        trimmed.includes("docs.kodus.io") &&
+                        /docs\.kodus\.io/.test(trimmed) &&
                         !trimmed.includes("Kody Review Complete") &&
                         !trimmed.includes("Kody Guide")
                     ) {

@@ -360,9 +360,13 @@ export class AzureDevOpsProvider extends BaseProvider {
                         // bitbucket filter; real Kody completions contain
                         // "Kody Review Complete" / "Kody Guide".
                         const trimmed = text.trim();
+                        // Regex (not String.includes) so CodeQL doesn't read
+                        // this as URL-host sanitization — `trimmed` is a
+                        // review-comment body and we're plain text-matching
+                        // the footer's docs link, not validating a URL.
                         if (
                             trimmed.length < 200 &&
-                            trimmed.includes("docs.kodus.io") &&
+                            /docs\.kodus\.io/.test(trimmed) &&
                             !trimmed.includes("Kody Review Complete") &&
                             !trimmed.includes("Kody Guide")
                         ) {

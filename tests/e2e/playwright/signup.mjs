@@ -135,7 +135,13 @@ page.on("response", async (resp) => {
     let bodySnippet = "";
     try {
         const ct = resp.headers()["content-type"] || "";
-        if (ct.includes("json") || ct.includes("text")) {
+        // Never echo auth/signup response bodies — they carry tokens and can
+        // reflect the submitted credentials (CodeQL js/clear-text-logging of
+        // the password that flows from TEST_USER_PASSWORD through the form
+        // into these requests). Status + URL is enough to debug the flow.
+        const isSensitive =
+            /\/(auth|signup|sign-up|login|sign-in|token|session)\b/i.test(url);
+        if (!isSensitive && (ct.includes("json") || ct.includes("text"))) {
             const text = await resp.text();
             bodySnippet = text.length > 300 ? text.slice(0, 300) + "…" : text;
         }
