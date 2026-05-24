@@ -125,15 +125,16 @@ export class FinishOnboardingUseCase {
             // (await generateKodyRulesUseCase + findKodyRules + activate)
             // surfaced as `finishOnboarding HTTP 500` on the 2026-05-23
             // self-hosted matrix because GenerateKodyRulesUseCase exhausted
-            // its retries on Atlassian Edge throttling. The same work runs
-            // inside `generateKodyRulesInBackground` below, which already
-            // does generate → find → activate with retry-with-backoff
-            // wrapping the whole pipeline and owns the
-            // kodyLearningStatus lifecycle (GENERATING_RULES → ENABLED) so
-            // the frontend poll resolves regardless. Detaching this work
-            // lets finishOnboarding return immediately instead of holding
-            // the HTTP request open for the duration of the rule
-            // generation.
+            // its retries on Atlassian Edge throttling (and measured
+            // 70–112s on Bitbucket vs 1–4s for GitHub/GitLab on the
+            // 2026-05-22 run). The same work runs inside
+            // `generateKodyRulesInBackground` below, which already does
+            // generate → find → activate with retry-with-backoff wrapping
+            // the whole pipeline and owns the kodyLearningStatus lifecycle
+            // (GENERATING_RULES → ENABLED) so the frontend poll resolves
+            // regardless. Detaching it lets finishOnboarding return
+            // immediately instead of holding the HTTP request open for the
+            // duration of rule generation.
             setImmediate(() => {
                 void this.generateKodyRulesInBackground(organizationId, teamId);
             });
