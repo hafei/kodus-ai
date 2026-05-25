@@ -97,6 +97,12 @@ else
         exit 1
     fi
     log "Provisioning base Kodus stack on a fresh droplet (~5 min)…"
+    # This droplet runs the full Kodus stack PLUS Keycloak (Quarkus/Java,
+    # memory-hungry) PLUS local image builds/extracts. The default
+    # s-2vcpu-4gb OOM/thrashes during the rabbitmq build + image extraction
+    # and hangs the provision. Default to 8GB here (overridable via DO_SIZE).
+    export DO_SIZE="${DO_SIZE:-s-4vcpu-8gb}"
+    log "  droplet size: ${DO_SIZE}"
     "${REPO_ROOT}/scripts/selfhosted/provision.sh" --name "${NAME}"
     SERVER_IP=$(state_get "${NAME}" .server_ip)
 fi
