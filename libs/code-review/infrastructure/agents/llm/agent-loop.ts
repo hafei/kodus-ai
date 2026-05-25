@@ -6,6 +6,7 @@ import {
 } from './agent-tools.factory';
 import { attachClassification, classifyLLMError } from './error-classifier';
 import { AgentPromptTooLargeError } from './errors';
+import type { ReviewWarning } from './review-warnings';
 /**
  * Simple agent loop using Vercel AI SDK with native function calling.
  *
@@ -971,6 +972,10 @@ export interface AgentLoopOutput {
     coverage: CoverageSummary;
     verification?: VerificationTraceSummary | null;
     anomalies: AgentAnomalySummary;
+    /** Fidelity warnings emitted during the loop (small context window
+     *  forced compact prompt, dropped callGraph, etc). Always present;
+     *  empty array when no adaptive strategy fired. */
+    warnings: ReviewWarning[];
 }
 
 interface SuggestionVerificationDecision {
@@ -1572,6 +1577,7 @@ async function runAgentLoopBody(
                     toolCalls: allToolCalls,
                     coverage: getCoverageSummary(coverageTargets),
                 }),
+                warnings: [],
             };
         }
         throw error;
@@ -2150,6 +2156,7 @@ async function runAgentLoopBody(
             toolCalls: allToolCalls,
             coverage: coverageSummary,
         }),
+        warnings: [],
     };
 }
 

@@ -546,6 +546,29 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 });
             }
 
+            // Surface adaptive-fit fidelity warnings (already deduped by
+            // the orchestrator) so the end-review PR comment can render
+            // a collapsible "review fidelity reduced" section, and so
+            // telemetry can roll up "how often does each kind fire".
+            // No-op today (PR1): resolveAdaptiveProfile always returns
+            // full-fidelity flags, so the warnings array is always empty.
+            if (result.warnings && result.warnings.length > 0) {
+                context = this.updateContext(context, (draft) => {
+                    draft.reviewWarnings = result.warnings;
+                });
+                this.logger.log({
+                    message: `[AGENT] Review fidelity warnings: ${result.warnings
+                        .map((w) => w.kind)
+                        .join(', ')}`,
+                    context: this.stageName,
+                    metadata: {
+                        prNumber,
+                        warningKinds: result.warnings.map((w) => w.kind),
+                        warningCount: result.warnings.length,
+                    },
+                });
+            }
+
             // Collect suggestions discarded by severity filter and verify
             const allDiscarded: Partial<CodeSuggestion>[] = [];
             for (const agentResult of result.agentResults) {

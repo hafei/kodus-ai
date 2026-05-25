@@ -23,6 +23,7 @@ import { assignFileTiers, computeFileScores } from './llm/file-priority-scorer';
 import { byokToVercelModel, getModelName } from './llm/byok-to-vercel';
 import { resolveContextWindow } from './llm/model-context-window';
 import { AgentContextWindowTooSmallError } from './llm/errors';
+import type { ReviewWarning } from './llm/review-warnings';
 import {
     runAgentLoop,
     type AgentLoopSecrets,
@@ -439,6 +440,10 @@ export interface ReviewAgentOutput {
     agentReplicaTotal?: number;
     turnsUsed: number;
     durationMs: number;
+    /** Fidelity warnings emitted by this agent's loop (small context window
+     *  forced compact prompt, dropped callGraph, etc). Empty when no
+     *  adaptive strategy fired. */
+    warnings?: ReviewWarning[];
 }
 
 /**
@@ -1234,6 +1239,7 @@ export abstract class BaseCodeReviewAgentProvider {
                 agentReplicaTotal: input.agentReplicaTotal,
                 turnsUsed: agentResult.steps,
                 durationMs,
+                warnings: agentResult.warnings,
             };
         } catch (error) {
             const durationMs = Date.now() - startTime;
@@ -1341,6 +1347,7 @@ export abstract class BaseCodeReviewAgentProvider {
         const allSuggestions: Partial<CodeSuggestion>[] = [];
         const allDiscardedBySeverity: Partial<CodeSuggestion>[] = [];
         const allDiscardedByVerify: Partial<CodeSuggestion>[] = [];
+        const allWarnings: ReviewWarning[] = [];
         let totalTurns = 0;
 
         const batchTotal = chunks.length;
@@ -1401,6 +1408,9 @@ export abstract class BaseCodeReviewAgentProvider {
                 }
                 if (batchResult.discardedByVerify) {
                     allDiscardedByVerify.push(...batchResult.discardedByVerify);
+                }
+                if (batchResult.warnings?.length) {
+                    allWarnings.push(...batchResult.warnings);
                 }
                 totalTurns += batchResult.turnsUsed;
 
@@ -1474,6 +1484,7 @@ export abstract class BaseCodeReviewAgentProvider {
             agentReplicaTotal: input.agentReplicaTotal,
             turnsUsed: totalTurns,
             durationMs,
+            warnings: allWarnings,
         };
     }
 

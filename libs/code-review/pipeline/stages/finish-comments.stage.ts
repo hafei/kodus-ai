@@ -199,6 +199,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 reviewFailed,
                 reviewErrorMessage,
                 reviewHasPartialErrors,
+                context.reviewWarnings,
             );
             return context;
         }
@@ -259,6 +260,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 reviewFailed,
                 reviewErrorMessage,
                 reviewHasPartialErrors,
+                context.reviewWarnings,
             );
             return context;
         }
@@ -296,6 +298,7 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 reviewFailed,
                 reviewErrorMessage,
                 reviewHasPartialErrors,
+                context.reviewWarnings,
             );
         }
 
