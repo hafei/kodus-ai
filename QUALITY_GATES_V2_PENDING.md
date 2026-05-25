@@ -41,35 +41,64 @@ gates releases on that matrix.
 
 ### 1. Bitbucket cell fails in the full matrix (BLOCKER for green CI)
 
-**Status:** root-caused, fix designed, NOT applied.
+**Status:** ✅ root-caused; fixed at the **production** layer (not
+test-only); **validated** on the `repaired-cells` matrix (2026-05-25).
+
+**Validation result (2026-05-25, self-hosted droplet running the fix):**
+Bitbucket cell went **0/5 → 4/5** with a **fresh-per-run tenant** (the
+real customer path, not the persistent-tenant band-aid). **Zero 429s in
+the entire run** (worker logs). github 5/5, gitlab 5/5. The single
+remaining Bitbucket failure is `kody-rules`, an **unrelated** pre-existing
+bug — the AST repo clone uses an unauthenticated `git fetch` against
+private Bitbucket repos (`could not read Username`), starving the rule
+pipeline of repo content → 0 suggestions. Filed as **#1168**. github/gitlab
+kody-rules passed; the 429-sensitive Bitbucket scenarios all passed.
 
 Bitbucket passes in isolation (single-cell `bitbucket-only.yml` probe = 5/6,
-the 6th fixed by the 5s branch-create wait; `smoke` = pass) but fails 0/5 in
+the 6th fixed by the 5s branch-create wait; `smoke` = pass) but failed 0/5 in
 the full matrix. Cause: the matrix creates a **fresh tenant per cell**, so the
 Bitbucket cell's `registerRepo` triggers a historical-PR backfill in
 background; that backfill + the review pipeline + the scenario's own polling
-all hit the **same** Bitbucket app-password token concurrently and blow the
+all hit the **same** Bitbucket app-password token concurrently and blew the
 per-endpoint burst window → `429` cascade.
 
 GitHub/GitLab are unaffected (much higher API budgets).
 
-**Designed fix (not yet applied):** use a **persistent** tenant for the
-Bitbucket cell in the matrix (like `smoke` does) instead of a fresh one, so
-`registerRepo` doesn't re-trigger backfill. ~1 line in
-`tests/e2e/lib/runner.ts` (`resolveTenantForCell`). Trade-off: less per-run
-isolation for Bitbucket; acceptable to fit Bitbucket's tight rate limit.
+**Rejected band-aid:** using a **persistent** tenant for the Bitbucket cell
+(like `smoke`) so `registerRepo` doesn't re-trigger backfill. This only hides
+the bug in the test — a real customer's first repo registration still 429s.
 
-Alternatives considered: (a) two rotating BB tokens; (b) accept BB as
-quarantined/flaky and run it separately. Parallelizing the matrix does NOT
-help — all droplets share the one BB token.
+**Applied fix (production-level, fixes the test as a consequence):**
+- Per-credential **rate gate** at the single Bitbucket HTTP chokepoint
+  (`libs/core/infrastructure/http/per-key-rate-gate.ts`, wired into
+  `BitbucketCloudService.safeFetch`): single-slot + min-interval queue keyed
+  by the `Authorization` header, so backfill + review + polling serialize per
+  token and *proactively* park on 429 (`Retry-After`). Composes with the
+  existing reactive `with429Retry`.
+- Backfill **single-flight** guard in `create-repositories.ts` (no two
+  concurrent backfills for the same org/team on double-save/retry).
+- In-memory / per-process — see item #6b for the distributed follow-up.
+
+Alternatives considered (now moot): (a) two rotating BB tokens; (b) accept BB
+as quarantined/flaky. Parallelizing the matrix does NOT help — all droplets
+share the one BB token; the gate is what bounds the load.
 
 ### 2. Production bug — Bitbucket backfill rate-limit (FILED)
 
 GitHub issue **kodustech/kodus-ai#1165**. Backfill can silently 429 against
-Bitbucket, dropping dashboard history + degrading the first review. Partially
-mitigated by the app-side fixes below; proper fix (per-token rate limiter,
-backfill only newly-added repos, stop masking 429 as "0 commits") is tracked
-in the issue.
+Bitbucket, dropping dashboard history + degrading the first review.
+
+Progress on the proper fix:
+- **per-token rate limiter** — DONE (per-process gate, item #1). Distributed
+  version is item #6b.
+- **don't re-trigger backfill needlessly** — partially DONE: single-flight
+  guard (item #1) + the existing PR-level idempotency (backfill skips PRs
+  already saved, so re-registering an existing repo costs ~1 list call). A
+  strict "diff only newly-added repos" was deemed low-value given that and
+  left out.
+- **stop masking 429 as "0 commits"** — still open. Backfill's per-PR
+  `catch` (`backfill-historical-prs.use-case.ts:303`) swallows fetch errors
+  into empty stats; the live review path now re-throws. Revisit in the issue.
 
 ### 3. Parallel matrix architecture (OPTIMIZATION, not a blocker)
 
@@ -107,11 +136,43 @@ structurally unreachable on self-hosted (only the cloud path emits it). The
 **cloud** `free`/`trial` notice path is still asserted but has not been
 re-validated end-to-end recently. Confirm a cloud run exercises it.
 
+### 6b. Distributed limiter for the Bitbucket rate gate (FOLLOW-UP)
+
+The item #1 fix (per-credential rate gate in `safeFetch`, plus backfill
+single-flight in `create-repositories.ts`) is **in-memory / per-process**.
+Production runs N-replica workers on AWS, so each replica gates
+independently — a single tenant's review traffic spread across replicas
+can still collectively exceed Bitbucket's per-token limit (the reactive
+`with429Retry` then absorbs it, degrading to "slower" not "failed").
+
+This is acceptable for now and strictly better than the prior state (no
+coordination at all). The dominant burst source — the backfill — runs
+entirely in one API process, so it's fully gated. The residual gap is the
+review pipeline across worker replicas.
+
+**Real future fix:** coordinate on shared state. Recommended path is a
+per-tenant RabbitMQ queue with `prefetch=1` (serialize provider calls
+across replicas, no new infra — Rabbit is already in the stack). Redis
+token-bucket is the classic alternative but would add infra to both cloud
+and self-hosted (against the simple/identical-topology principle).
+Track alongside #1165.
+
 ### 6. authMode App matrix coverage
 
 From the project plan: App authMode coverage was "next" and is not yet in the
 matrix. Add a self-hosted github-app cell (the cloud github-app cell exists in
 `full.yml`).
+
+### 7. Bitbucket AST clone uses unauthenticated git fetch (FILED #1168)
+
+Surfaced by the 2026-05-25 `repaired-cells` run. The AST graph build's
+`git fetch https://bitbucket.org/<ws>/<repo>` carries no credentials and
+fails on private repos (`could not read Username`), so kody-rules (and any
+AST-backed feature) gets no repo content → 0 suggestions on Bitbucket.
+GitHub/GitLab inject a token into the clone URL; the Bitbucket path does
+not. Fix: embed the app-password in the clone/fetch (or a git credential
+helper), matching the other providers. Tracked in **#1168**. Independent
+of the rate-gate work.
 
 ---
 
@@ -126,15 +187,21 @@ matrix. Add a self-hosted github-app cell (the cloud github-app cell exists in
 | `cda9c4457` | cap historical backfill to 10 PRs, 2s apart, patient retry |
 | `08bd7918f` | wait 5s after BB throwaway-branch create before opening the PR (dodge BB commits-indexing race that made ValidateNewCommitsStage skip with "0 commits") |
 
-## Test status snapshot (2026-05-23, single-droplet matrix)
+## Test status snapshot (2026-05-25, `repaired-cells` matrix w/ rate-gate fix)
+
+Single-droplet `repaired-cells` run on a droplet running the rate-gate +
+single-flight fix (image tag `dev-matrix`). Fresh-per-run tenants. Final:
+**14/20 passed (1 failed, 5 skipped)**.
 
 | Cell | Result |
 |---|---|
-| github × {code-review, onboarding-webhook, kody-rules, license-attribution, per-seat} | 5/5 PASS (stable across 4 runs) |
-| gitlab × same 5 | 5/5 PASS (stable across 4 runs) |
-| bitbucket — isolated (`bitbucket-only.yml` probe + smoke) | PASS (6/6 with the 5s fix) |
-| bitbucket — in full matrix | 0/5 (item #1) |
-| github × license-free | SKIP (item #5, by design) |
+| github × {code-review, onboarding-webhook, kody-rules, license-attribution, per-seat} | 5/5 PASS |
+| gitlab × same 5 | 5/5 PASS |
+| **bitbucket × same 5** | **4/5** — was 0/5 (item #1 fixed). Only `kody-rules` failed: unrelated AST-clone auth bug (#1168, item #7). **Zero 429s in the whole run.** |
+| github × license-free | 5 SKIP (item #5, by design) |
+
+Earlier (2026-05-23, pre-fix): bitbucket was 0/5 in the full matrix (429
+cascade), 5/6 in `bitbucket-only.yml` isolation.
 
 ## Useful artifacts
 
