@@ -163,16 +163,29 @@ From the project plan: App authMode coverage was "next" and is not yet in the
 matrix. Add a self-hosted github-app cell (the cloud github-app cell exists in
 `full.yml`).
 
-### 7. Bitbucket AST clone uses unauthenticated git fetch (FILED #1168)
+### 7. Bitbucket AST clone git-auth (#1168) — ✅ FIXED & validated
 
 Surfaced by the 2026-05-25 `repaired-cells` run. The AST graph build's
-`git fetch https://bitbucket.org/<ws>/<repo>` carries no credentials and
-fails on private repos (`could not read Username`), so kody-rules (and any
-AST-backed feature) gets no repo content → 0 suggestions on Bitbucket.
-GitHub/GitLab inject a token into the clone URL; the Bitbucket path does
-not. Fix: embed the app-password in the clone/fetch (or a git credential
-helper), matching the other providers. Tracked in **#1168**. Independent
-of the rate-gate work.
+`git fetch` against Bitbucket failed with `could not read Username`, so
+the repo got no AST graph. **Root cause:** Atlassian API tokens (ATATT…)
+authenticate to git-over-HTTPS ONLY with the literal username
+`x-bitbucket-api-token-auth` — the REST API accepts `<email>:<token>`
+(why every other Bitbucket call worked), but git rejects it. **Fixed** in
+`buildAuthHeader` (local + E2B sandbox) — commit `0b2b03d03`. Validated:
+AST build now COMPLETES on Bitbucket. (The AST failure was a *red herring*
+for the kody-rules 0-suggestions symptom — see item #8.)
+
+### 8. kody-rules drops LLM-corrupted rule UUID (#1170) — ✅ MITIGATED
+
+Once #1168 was fixed, kody-rules × bitbucket *still* gave 0 suggestions.
+Real cause: the agent validates each suggestion's `ruleUuid` with an exact
+match, and the LLM occasionally drops a character echoing the 36-char UUID
+(`…cc9eb8773a92` → `…cceb8773a92`), discarding a correct finding. Not
+provider-specific — github/gitlab passed only because the LLM happened to
+echo it correctly. **Mitigated** in `base-code-review-agent.provider.ts`
+(`recoverRuleUuid`, edit-distance ≤2 unique match) — commit `2869fd57f`.
+Stronger follow-up (index-based rule refs so the model never echoes a
+UUID) tracked in **#1170**.
 
 ---
 
