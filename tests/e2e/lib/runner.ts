@@ -269,7 +269,7 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
         );
         for (const providerName of uniqueProviders) {
             try {
-                const provider = makeProvider(providerName);
+                const provider = makeProvider(providerName, opts.target);
                 const { closed } = await provider.cleanupStaleE2EArtifacts();
                 if (closed > 0) {
                     log.info(
@@ -333,7 +333,7 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
             log.info(`RUN   ${cellLabel}`);
             const t0 = Date.now();
             try {
-                const provider = makeProvider(cell.provider);
+                const provider = makeProvider(cell.provider, cell.target);
                 const scenarioArtifactDir = join(
                     artifactDir,
                     `${scenario.id}-${cell.target}-${cell.provider}-${cell.license}`,

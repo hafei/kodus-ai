@@ -7,7 +7,13 @@ import type {
     ReviewSignal,
     WebhookInfo,
 } from "../lib/types.js";
-import { BaseProvider, pollUntil, requireEnv } from "./base.js";
+import type { Target } from "../lib/types.js";
+import {
+    BaseProvider,
+    pollUntil,
+    requireEnv,
+    resolveTargetRepo,
+} from "./base.js";
 import { ensureOk, http } from "../lib/http.js";
 import { prepareBranch } from "../lib/git.js";
 
@@ -29,11 +35,11 @@ export class BitbucketProvider extends BaseProvider {
     private readonly apiBase = "https://api.bitbucket.org/2.0";
     private readonly existingPrId?: number;
 
-    constructor() {
+    constructor(target: Target = "self-hosted") {
         super();
         this.user = requireEnv("BB_TEST_USER");
         this.appPassword = requireEnv("BB_TEST_APP_PASSWORD");
-        this.workspaceSlug = requireEnv("BB_TEST_REPO");
+        this.workspaceSlug = resolveTargetRepo("BB_TEST_REPO", target);
         const existing = process.env.BB_TEST_PR_ID;
         if (existing) this.existingPrId = Number(existing);
     }

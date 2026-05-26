@@ -7,7 +7,15 @@ import type {
     ReviewSignal,
     WebhookInfo,
 } from "../lib/types.js";
-import { BaseProvider, nowIso, pollUntil, requireEnv } from "./base.js";
+import { randomUUID } from "node:crypto";
+import type { Target } from "../lib/types.js";
+import {
+    BaseProvider,
+    nowIso,
+    pollUntil,
+    requireEnv,
+    resolveTargetRepo,
+} from "./base.js";
 import { ensureOk, http } from "../lib/http.js";
 import { prepareBranch } from "../lib/git.js";
 import { logger } from "../lib/log.js";
@@ -39,7 +47,7 @@ export class GitHubProvider extends BaseProvider {
     protected readonly apiBase = "https://api.github.com";
     protected readonly existingPrNumber?: number;
 
-    constructor(opts?: { repoOverride?: string }) {
+    constructor(opts?: { repoOverride?: string; target?: Target }) {
         super();
         this.token = requireEnv("GH_TEST_TOKEN");
         // Subclasses (notably GitHubAppProvider) need to target a
@@ -49,7 +57,9 @@ export class GitHubProvider extends BaseProvider {
         // webhook. Pass repoOverride to redirect this provider's
         // entire surface (clone URL, /repos/<owner>/<repo>/*, webhook
         // listing) to the App-bound repo.
-        this.repoFullName = opts?.repoOverride ?? requireEnv("GH_TEST_REPO");
+        this.repoFullName =
+            opts?.repoOverride ??
+            resolveTargetRepo("GH_TEST_REPO", opts?.target ?? "self-hosted");
         const existing = process.env.GH_TEST_PR_NUMBER;
         if (existing) this.existingPrNumber = Number(existing);
     }
@@ -169,11 +179,53 @@ export class GitHubProvider extends BaseProvider {
     }
 
     async openPRFromBranches(args: OpenPRFromBranchesArgs): Promise<OpenedPR> {
-        // Self-heal: GitHub refuses to open a second open PR for the same
-        // head→base combo. If a previous run crashed before `closePR` (or a
-        // human left a standing PR there), close it first so we can open
-        // fresh.
-        await this.closeOpenPRsBetween(args.head, args.base);
+        // Open the PR from a UNIQUE throwaway branch carrying a fresh empty
+        // commit on top of the fixture tip — never from the shared fixture
+        // branch. GitHub caps a repo at 100 PRs sharing a head_sha, so opening
+        // every PR off the fixture tip burns the repo out (HTTP 422). An empty
+        // commit (same tree, parent = fixture tip) gives each PR a UNIQUE
+        // head_sha with an IDENTICAL diff vs base, and a unique branch name
+        // sidesteps the "one open PR per head→base" limit. The fixture branch
+        // is never modified; closePR deletes the throwaway.
+        const tip = await http<{ object: { sha: string } }>(
+            `${this.apiBase}/repos/${this.repoFullName}/git/ref/heads/${args.head}`,
+            { headers: this.headers() },
+        );
+        ensureOk(tip, "github:openPRFromBranches:resolveHead");
+        const headSha = tip.body.object.sha;
+        const commitInfo = await http<{ tree: { sha: string } }>(
+            `${this.apiBase}/repos/${this.repoFullName}/git/commits/${headSha}`,
+            { headers: this.headers() },
+        );
+        ensureOk(commitInfo, "github:openPRFromBranches:resolveTree");
+
+        const uid = randomUUID().slice(0, 8);
+        const throwaway = `e2e/${args.head.replace(/[^a-zA-Z0-9._-]+/g, "-")}-${uid}`;
+        const commit = await http<{ sha: string }>(
+            `${this.apiBase}/repos/${this.repoFullName}/git/commits`,
+            {
+                method: "POST",
+                headers: this.headers(),
+                body: {
+                    message: `[e2e] throwaway head for ${args.head} (${uid})`,
+                    tree: commitInfo.body.tree.sha,
+                    parents: [headSha],
+                },
+            },
+        );
+        ensureOk(commit, "github:openPRFromBranches:commit");
+        const ref = await http(
+            `${this.apiBase}/repos/${this.repoFullName}/git/refs`,
+            {
+                method: "POST",
+                headers: this.headers(),
+                body: {
+                    ref: `refs/heads/${throwaway}`,
+                    sha: commit.body.sha,
+                },
+            },
+        );
+        ensureOk(ref, "github:openPRFromBranches:ref");
 
         const resp = await http<{ number: number; html_url: string }>(
             `${this.apiBase}/repos/${this.repoFullName}/pulls`,
@@ -183,7 +235,7 @@ export class GitHubProvider extends BaseProvider {
                 body: {
                     title: args.title,
                     body: args.body,
-                    head: args.head,
+                    head: throwaway,
                     base: args.base,
                 },
             },
@@ -192,9 +244,9 @@ export class GitHubProvider extends BaseProvider {
         return {
             number: resp.body.number,
             url: resp.body.html_url,
-            branch: args.head,
+            branch: throwaway,
             baseBranch: args.base,
-            keepBranchOnClose: true,
+            keepBranchOnClose: false,
         };
     }
 
