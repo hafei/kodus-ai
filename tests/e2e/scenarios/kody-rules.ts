@@ -129,6 +129,41 @@ export const kodyRulesCreateAndApply: Scenario = {
             "Rule was created but the response did not include uuid/id",
         );
 
+        // The code-review pipeline only enforces ACTIVE rules, and a freshly
+        // created rule isn't reliably loadable by ResolveConfigStage the
+        // instant /create-or-update returns. Under matrix contention (4
+        // self-hosted droplets sharing one LLM key) the PR's review can fire
+        // before the rule propagates and then run the kody-rules agent with no
+        // rule in context — observed on bitbucket (rules-agent input=47 tokens,
+        // 0 suggestions) while github/gitlab/azure won the race the same run.
+        // Poll until the rule is visible AND active for this org, then a short
+        // settle for review-side config propagation, before opening the PR — so
+        // the review deterministically sees the rule instead of racing it.
+        const ruleActive = await pollUntil<boolean>(
+            async () => {
+                const r = await http(
+                    `${ctx.target.apiBaseUrl}/kody-rules/find-by-organization-id`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${session.accessToken}`,
+                        },
+                        timeoutMs: 15_000,
+                    },
+                );
+                return findRuleStatusById(r.body, ruleId) === "active"
+                    ? true
+                    : null;
+            },
+            { intervalSec: 3, timeoutSec: 60 },
+        );
+        ctx.assert(
+            ruleActive,
+            `Rule ${ruleName} (${ruleId}) did not reach status=active within 60s of creation — the review would race it. Aborting before opening the PR.`,
+        );
+        // Small settle: the rule is active in the DB, but give the review's
+        // per-repo config load a beat to observe it under load.
+        await new Promise((r) => setTimeout(r, 5_000));
+
         const sinceIso = new Date().toISOString();
         const opened = await ctx.provider.openPRFromBranches({
             head: fixture!.head,
@@ -238,5 +273,33 @@ export const kodyRulesCreateAndApply: Scenario = {
         }
     },
 };
+
+// Recursively locate a rule's status by uuid in the
+// /kody-rules/find-by-organization-id response. Shape is roughly
+// `{ data: [{ repositoryId, rules: [{ uuid, status }] }] }`, but we walk it
+// defensively so a response-shape tweak doesn't silently break the wait.
+function findRuleStatusById(
+    node: unknown,
+    ruleId: string,
+): string | undefined {
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            const s = findRuleStatusById(item, ruleId);
+            if (s) return s;
+        }
+        return undefined;
+    }
+    if (node && typeof node === "object") {
+        const obj = node as Record<string, unknown>;
+        if (obj.uuid === ruleId && typeof obj.status === "string") {
+            return obj.status;
+        }
+        for (const v of Object.values(obj)) {
+            const s = findRuleStatusById(v, ruleId);
+            if (s) return s;
+        }
+    }
+    return undefined;
+}
 
 export default kodyRulesCreateAndApply;

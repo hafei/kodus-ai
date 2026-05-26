@@ -363,8 +363,11 @@ export class GitLabProvider extends BaseProvider {
         pr: { number: number },
         opts: { sinceIso: string; timeoutSec?: number },
     ): Promise<boolean> {
-        // USER_NOT_LICENSED → 👎 award emoji on the MR (GitLab name
-        // `thumbsdown`), added by validate-prerequisites' addReactionToPR.
+        // USER_NOT_LICENSED → award emoji on the MR. NOTE: GitLab's no-license
+        // reaction is the 🔒 LOCK award (NO_LICENSE_REACTION_MAP[GITLAB] =
+        // GitlabReaction.LOCK = 'lock'), NOT 👎 — only GitHub/Forgejo use
+        // thumbs-down. Match `lock`; also accept `thumbsdown` defensively in
+        // case the map changes.
         const projectId = await this.resolveProjectId();
         const found = await pollUntil<boolean>(
             async () => {
@@ -373,7 +376,9 @@ export class GitLabProvider extends BaseProvider {
                     { headers: this.headers() },
                 );
                 if (resp.status < 200 || resp.status >= 300) return null;
-                return (resp.body ?? []).some((a) => a.name === "thumbsdown")
+                return (resp.body ?? []).some(
+                    (a) => a.name === "lock" || a.name === "thumbsdown",
+                )
                     ? true
                     : null;
             },
