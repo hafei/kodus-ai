@@ -1856,6 +1856,7 @@ export class ForgejoService implements Omit<
         return this.getFilesByPullRequestId(params);
     }
 
+
     async isDraftPullRequest(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         repository: Partial<Repository>;
@@ -3973,7 +3974,9 @@ export class ForgejoService implements Omit<
         return null;
     }
 
-    async getUsersByUsername(_params: any): Promise<Map<string, any> | null> {
+    async getUsersByUsername(
+        _params: any,
+    ): Promise<Map<string, any> | null> {
         // Not implemented for Forgejo — callers fall back to per-user
         // `getUserByUsername`.
         return null;

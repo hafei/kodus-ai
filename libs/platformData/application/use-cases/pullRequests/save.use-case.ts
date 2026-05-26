@@ -180,9 +180,7 @@ export class SavePullRequestUseCase {
                                 },
                                 platformType,
                             ),
-                        {
-                            label: `saveSync:getFiles PR#${pullRequest?.number}`,
-                        },
+                        { label: `saveSync:getFiles PR#${pullRequest?.number}` },
                     );
                     pullRequestCommits = await with429Retry(
                         () =>
@@ -305,7 +303,6 @@ export class SavePullRequestUseCase {
             'completed',
             'ready_for_review',
         ] as const;
-
         const validObjectActions = [
             'open',
             'close',
