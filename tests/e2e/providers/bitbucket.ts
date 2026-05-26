@@ -471,4 +471,32 @@ export class BitbucketProvider extends BaseProvider {
     licenseGitTool(): string {
         return "bitbucket";
     }
+
+    async pollForLicenseBlock(
+        pr: { number: number },
+        opts: { sinceIso: string; timeoutSec?: number },
+    ): Promise<boolean> {
+        // USER_NOT_LICENSED → on Bitbucket the stage posts a 👎 PR comment
+        // linking the emoji-meaning docs (createIssueComment with
+        // `[👎](https://docs.kodus.io/...what-each-emoji-means)`) rather than
+        // a reaction. Match the 👎 in the comment body.
+        const found = await pollUntil<boolean>(
+            async () => {
+                const resp = await http<{
+                    values?: { content?: { raw?: string } }[];
+                }>(
+                    `${this.apiBase}/repositories/${this.workspaceSlug}/pullrequests/${pr.number}/comments?pagelen=100`,
+                    { headers: this.headers() },
+                );
+                if (resp.status < 200 || resp.status >= 300) return null;
+                return (resp.body.values ?? []).some((c) =>
+                    (c.content?.raw ?? "").includes("👎"),
+                )
+                    ? true
+                    : null;
+            },
+            { intervalSec: 5, timeoutSec: opts.timeoutSec ?? 120 },
+        );
+        return found === true;
+    }
 }

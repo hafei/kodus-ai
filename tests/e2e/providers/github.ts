@@ -507,6 +507,31 @@ export class GitHubProvider extends BaseProvider {
     licenseGitTool(): string {
         return "github";
     }
+
+    async pollForLicenseBlock(
+        pr: { number: number },
+        opts: { sinceIso: string; timeoutSec?: number },
+    ): Promise<boolean> {
+        // USER_NOT_LICENSED → validate-prerequisites adds a 👎 reaction on the
+        // PR via addReactionToPR. GitHub stores 👎 as the `-1` reaction
+        // content. The 🚀 start reaction is removed when a review actually
+        // completes, so a surviving `-1` unambiguously means the seat gate
+        // blocked the review (vs. a review that ran).
+        const found = await pollUntil<boolean>(
+            async () => {
+                const resp = await http<{ content: string }[]>(
+                    `${this.apiBase}/repos/${this.repoFullName}/issues/${pr.number}/reactions?per_page=100`,
+                    { headers: this.headers() },
+                );
+                if (resp.status < 200 || resp.status >= 300) return null;
+                return (resp.body ?? []).some((r) => r.content === "-1")
+                    ? true
+                    : null;
+            },
+            { intervalSec: 5, timeoutSec: opts.timeoutSec ?? 120 },
+        );
+        return found === true;
+    }
 }
 
 export function _touch() {

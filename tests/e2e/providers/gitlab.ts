@@ -358,4 +358,27 @@ export class GitLabProvider extends BaseProvider {
     licenseGitTool(): string {
         return "gitlab";
     }
+
+    async pollForLicenseBlock(
+        pr: { number: number },
+        opts: { sinceIso: string; timeoutSec?: number },
+    ): Promise<boolean> {
+        // USER_NOT_LICENSED → 👎 award emoji on the MR (GitLab name
+        // `thumbsdown`), added by validate-prerequisites' addReactionToPR.
+        const projectId = await this.resolveProjectId();
+        const found = await pollUntil<boolean>(
+            async () => {
+                const resp = await http<{ name: string }[]>(
+                    `${this.apiBase}/projects/${projectId}/merge_requests/${pr.number}/award_emoji`,
+                    { headers: this.headers() },
+                );
+                if (resp.status < 200 || resp.status >= 300) return null;
+                return (resp.body ?? []).some((a) => a.name === "thumbsdown")
+                    ? true
+                    : null;
+            },
+            { intervalSec: 5, timeoutSec: opts.timeoutSec ?? 120 },
+        );
+        return found === true;
+    }
 }

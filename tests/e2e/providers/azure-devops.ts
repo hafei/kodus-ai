@@ -456,4 +456,33 @@ export class AzureDevOpsProvider extends BaseProvider {
         // sets gitTool, so AZURE_REPOS → "azure_repos".
         return "azure_repos";
     }
+
+    async pollForLicenseBlock(
+        pr: { number: number },
+        opts: { sinceIso: string; timeoutSec?: number },
+    ): Promise<boolean> {
+        // USER_NOT_LICENSED → on Azure the stage posts a 👎 thread comment
+        // linking the emoji-meaning docs (createIssueComment with
+        // `[👎](https://docs.kodus.io/...what-each-emoji-means)`) rather than
+        // a reaction. Scan PR threads for the 👎 in any comment body.
+        const repoId = await this.resolveRepoId();
+        const found = await pollUntil<boolean>(
+            async () => {
+                const resp = await http<{ value: AzureThread[] }>(
+                    `${this.apiBase}/_apis/git/repositories/${repoId}/pullRequests/${pr.number}/threads?api-version=${this.apiVersion}`,
+                    { headers: this.headers() },
+                );
+                if (resp.status < 200 || resp.status >= 300) return null;
+                for (const thread of resp.body.value ?? []) {
+                    if (thread.isDeleted) continue;
+                    for (const c of thread.comments ?? []) {
+                        if ((c.content ?? "").includes("👎")) return true;
+                    }
+                }
+                return null;
+            },
+            { intervalSec: 5, timeoutSec: opts.timeoutSec ?? 120 },
+        );
+        return found === true;
+    }
 }
