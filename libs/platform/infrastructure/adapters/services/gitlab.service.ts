@@ -2678,7 +2678,7 @@ export class GitlabService implements Omit<
                             id: note.id,
                             body: note.body,
                             createdAt: note.created_at,
-                            discussionId: comment.id,
+                            discussionId: filters.discussionId,
                             originalCommit: {
                                 body: originalCommit.body,
                                 id: originalCommit.id,
