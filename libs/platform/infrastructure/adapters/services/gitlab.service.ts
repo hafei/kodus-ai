@@ -1731,12 +1731,29 @@ export class GitlabService implements Omit<
         projectId: string,
         merge_number: number,
     ): Promise<any> {
-        const files = await gitlab.MergeRequests.allDiffs(
-            projectId,
-            merge_number,
-        );
+        try {
+            const files = await gitlab.MergeRequests.allDiffs(
+                projectId,
+                merge_number,
+            );
 
-        return files;
+            return files;
+        } catch (error) {
+            if (
+                error?.cause?.response?.status === 404 ||
+                error?.status === 404
+            ) {
+                // Fallback for GitLab < 15.7 where /diffs endpoint doesn't exist
+                const mr = await gitlab.MergeRequests.showChanges(
+                    projectId,
+                    merge_number,
+                );
+
+                return mr.changes || [];
+            }
+
+            throw error;
+        }
     }
 
     async countChangesInMergeRequest(
@@ -1903,10 +1920,27 @@ export class GitlabService implements Omit<
 
         // 4. Get the MR diffs to filter out files that came from merge commits
         // MergeRequests.allDiffs only returns files that belong to the MR (relative to target branch)
-        const mrDiffs = await gitlabAPI.MergeRequests.allDiffs(
-            repository.id,
-            prNumber,
-        );
+        // Fallback to showChanges for GitLab < 15.7 where /diffs endpoint doesn't exist
+        let mrDiffs: Array<{ new_path: string }>;
+        try {
+            mrDiffs = await gitlabAPI.MergeRequests.allDiffs(
+                repository.id,
+                prNumber,
+            );
+        } catch (error) {
+            if (
+                error?.cause?.response?.status === 404 ||
+                error?.status === 404
+            ) {
+                const mr = await gitlabAPI.MergeRequests.showChanges(
+                    repository.id,
+                    prNumber,
+                );
+                mrDiffs = mr.changes || [];
+            } else {
+                throw error;
+            }
+        }
 
         const mrFileNames = new Set(mrDiffs.map((f) => f.new_path));
 
