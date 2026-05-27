@@ -1,6 +1,5 @@
 import {
     dedupReviewWarnings,
-    renderFidelityWarningsNotice,
     type ReviewWarning,
 } from './review-warnings';
 
@@ -76,52 +75,5 @@ describe('dedupReviewWarnings', () => {
         ]);
         expect(out).toHaveLength(1);
         expect(out[0].agentName).toBeUndefined();
-    });
-});
-
-describe('renderFidelityWarningsNotice', () => {
-    it('returns undefined when warnings array is empty (PR1 default)', () => {
-        expect(renderFidelityWarningsNotice([])).toBeUndefined();
-    });
-
-    it('returns undefined when warnings is undefined (caller passed nothing)', () => {
-        expect(renderFidelityWarningsNotice(undefined)).toBeUndefined();
-    });
-
-    it('renders a collapsible <details> block with one bullet per warning', () => {
-        const out = renderFidelityWarningsNotice([
-            w('PROMPT_COMPACTED'),
-            w('CALLGRAPH_DROPPED'),
-        ]);
-        expect(out).toContain('<details>');
-        expect(out).toContain('</details>');
-        expect(out).toContain('Review fidelity reduced');
-        expect(out).toContain('System prompt was compacted');
-        expect(out).toContain('Pre-computed call graph was omitted');
-    });
-
-    it('includes modelName and contextWindowTokens in the footer for actionability', () => {
-        const out = renderFidelityWarningsNotice([
-            w('PROMPT_COMPACTED', {
-                modelName: 'meta-llama/Llama-3.3-70B',
-                contextWindowTokens: 16_000,
-            }),
-        ]);
-        expect(out).toContain('meta-llama/Llama-3.3-70B');
-        expect(out).toContain('16,000');
-    });
-
-    it('appends `detail` text in parens when present', () => {
-        const out = renderFidelityWarningsNotice([
-            w('LOW_SIGNAL_FILES_DROPPED', {
-                detail: '3 files dropped: foo.test.ts, bar.test.ts',
-            }),
-        ]);
-        expect(out).toContain('(3 files dropped: foo.test.ts, bar.test.ts)');
-    });
-
-    it('starts with a horizontal rule so it visually separates from the main summary', () => {
-        const out = renderFidelityWarningsNotice([w('PROMPT_COMPACTED')]);
-        expect(out?.split('\n').slice(0, 3).join('\n')).toContain('---');
     });
 });

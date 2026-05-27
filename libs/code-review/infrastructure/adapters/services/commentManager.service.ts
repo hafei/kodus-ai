@@ -42,10 +42,6 @@ import { ObservabilityService } from '@libs/core/log/observability.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import {
-    renderFidelityWarningsNotice,
-    type ReviewWarning,
-} from '@libs/code-review/infrastructure/agents/llm/review-warnings';
-import {
     getTranslationsForLanguageByCategory,
     TranslationsCategory,
 } from '@libs/common/utils/translations/translations';
@@ -833,7 +829,6 @@ You must always respond in ${languageResultPrompt}.`;
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
         reviewHasPartialErrors?: boolean,
-        reviewWarnings?: ReviewWarning[],
     ): Promise<void> {
         try {
             // When the review failed, we cannot honor a customer-configured
@@ -853,28 +848,22 @@ You must always respond in ${languageResultPrompt}.`;
                     reviewFailed,
                     reviewErrorMessage,
                     reviewHasPartialErrors,
-                    reviewWarnings,
                 );
-            } else {
+            } else if (reviewHasPartialErrors) {
                 // Custom end-review template is rendering — the default
                 // path's suffix wiring doesn't run here, so we append the
                 // partial-errors notice ourselves. Without this the user
                 // sees their template's "all good" message + no approval
-                // and assumes auto-approve is broken. Same reasoning
-                // applies to the adaptive-fit fidelity notice.
-                if (reviewHasPartialErrors) {
-                    const notice = this.resolvePartialErrorsNotice(
-                        codeReviewConfig?.languageResultPrompt ??
-                            LanguageValue.ENGLISH,
-                    );
-                    if (notice) {
-                        commentBody = `${commentBody}${notice}`;
-                    }
-                }
-                const fidelityNotice =
-                    renderFidelityWarningsNotice(reviewWarnings);
-                if (fidelityNotice) {
-                    commentBody = `${commentBody}${fidelityNotice}`;
+                // and assumes auto-approve is broken. Adaptive-fit
+                // fidelity warnings are intentionally NOT rendered in
+                // the PR comment — they surface in the web app's Pull
+                // Requests admin dashboard via dataExecution.reviewWarnings.
+                const notice = this.resolvePartialErrorsNotice(
+                    codeReviewConfig?.languageResultPrompt ??
+                        LanguageValue.ENGLISH,
+                );
+                if (notice) {
+                    commentBody = `${commentBody}${notice}`;
                 }
             }
 
@@ -929,7 +918,6 @@ You must always respond in ${languageResultPrompt}.`;
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
         reviewHasPartialErrors?: boolean,
-        reviewWarnings?: ReviewWarning[],
     ): Promise<string> {
         let commentBody = await this.generatePullRequestFinishSummaryMarkdown(
             organizationAndTeamData,
@@ -940,7 +928,6 @@ You must always respond in ${languageResultPrompt}.`;
             reviewFailed,
             reviewErrorMessage,
             reviewHasPartialErrors,
-            reviewWarnings,
         );
 
         commentBody = this.sanitizeBitbucketMarkdown(commentBody, platformType);
@@ -1504,7 +1491,6 @@ You must always respond in ${languageResultPrompt}.`;
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
         reviewHasPartialErrors?: boolean,
-        reviewWarnings?: ReviewWarning[],
     ): Promise<string> {
         try {
             const language =
@@ -1582,14 +1568,13 @@ You must always respond in ${languageResultPrompt}.`;
                 );
             }
 
-            // Adaptive-fit fidelity notice: collapsible section telling
-            // the user the model's context window forced a degraded path
-            // (compact prompt, dropped callGraph, etc). Empty array → no
-            // append, which is the PR1 default since no strategy emits.
-            const fidelityNotice = renderFidelityWarningsNotice(reviewWarnings);
-            if (fidelityNotice) {
-                resultText = `${resultText}${fidelityNotice}`;
-            }
+            // Adaptive-fit fidelity warnings are NOT rendered in the
+            // GitHub PR comment — PR authors don't care that the review
+            // was compacted, only that it failed (and CONTEXT_OVERFLOW
+            // failures already render via the `withErrors` template +
+            // friendlyMessage). The warnings ARE persisted to
+            // automation_execution.dataExecution.reviewWarnings for the
+            // admin-facing Pull Requests dashboard in the Kodus web app.
 
             // Add unique tag with timestamp to identify this comment as completed
             const uniqueId = `completed-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -2384,7 +2369,6 @@ ${reviewOptions}
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
         reviewHasPartialErrors?: boolean,
-        reviewWarnings?: ReviewWarning[],
     ): Promise<void> {
         let commentBody: string;
 
@@ -2421,14 +2405,8 @@ ${reviewOptions}
                     commentBody = `${commentBody}${notice}`;
                 }
             }
-            // Adaptive-fit fidelity notice: same reasoning as the
-            // partial-errors append — customer end-review templates don't
-            // know about it, so we tack it on here too.
-            const fidelityNotice =
-                renderFidelityWarningsNotice(reviewWarnings);
-            if (fidelityNotice) {
-                commentBody = `${commentBody}${fidelityNotice}`;
-            }
+            // Adaptive-fit fidelity warnings are NOT appended to the PR
+            // comment (admin-only signal — see updateOverallComment).
         } else {
             commentBody = await this.generateLastReviewCommenBody(
                 organizationAndTeamData,
@@ -2440,7 +2418,6 @@ ${reviewOptions}
                 reviewFailed,
                 reviewErrorMessage,
                 reviewHasPartialErrors,
-                reviewWarnings,
             );
         }
 

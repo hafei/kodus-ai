@@ -14,7 +14,6 @@ import {
     SummaryConfig,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
-import type { ReviewWarning } from '@libs/code-review/infrastructure/agents/llm/review-warnings';
 
 export const COMMENT_MANAGER_SERVICE_TOKEN = Symbol.for(
     'CommentManagerService',
@@ -72,7 +71,6 @@ export interface ICommentManagerService {
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
         reviewHasPartialErrors?: boolean,
-        reviewWarnings?: ReviewWarning[],
     ): Promise<void>;
 
     updateSummarizationInPR(
@@ -150,6 +148,5 @@ export interface ICommentManagerService {
         reviewFailed?: boolean,
         reviewErrorMessage?: string,
         reviewHasPartialErrors?: boolean,
-        reviewWarnings?: ReviewWarning[],
     ): Promise<void>;
 }
