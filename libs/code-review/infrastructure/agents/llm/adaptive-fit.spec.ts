@@ -43,17 +43,69 @@ describe('resolveAdaptiveProfile', () => {
         });
     });
 
-    describe('PR1 contract: every profile returns full-fidelity flags (no behavior change yet)', () => {
-        it.each([1_048_576, 200_000, 64_000, 32_000, 16_000, 12_288, 8_000])(
-            'window=%i → all adaptive flags off',
+    describe('full profile (≥64K): no adaptive flags — full-fidelity review', () => {
+        it.each([1_048_576, 200_000, 128_000, 64_000])(
+            'window=%i → all flags off',
             (contextWindowTokens) => {
-                const profile = resolveAdaptiveProfile(contextWindowTokens);
-                expectFlags(profile, {
-                    kind: profile.kind,
+                expectFlags(resolveAdaptiveProfile(contextWindowTokens), {
+                    kind: 'full',
                     contextWindowTokens,
                 });
             },
         );
+    });
+
+    describe('light profile (32K–64K): drop callGraph + skip heavy passes', () => {
+        it('window=32K → dropCallGraph + skipHeavyPasses only', () => {
+            expectFlags(resolveAdaptiveProfile(32_000), {
+                kind: 'light',
+                contextWindowTokens: 32_000,
+                dropCallGraph: true,
+                skipHeavyPasses: true,
+            });
+        });
+    });
+
+    describe('compact profile (16K–32K): + compact prompt + low-signal filter', () => {
+        it('window=16K → compactPrompt + lowSignalFilterUnconditional on top of light', () => {
+            expectFlags(resolveAdaptiveProfile(16_000), {
+                kind: 'compact',
+                contextWindowTokens: 16_000,
+                dropCallGraph: true,
+                skipHeavyPasses: true,
+                compactPrompt: true,
+                lowSignalFilterUnconditional: true,
+            });
+        });
+    });
+
+    describe('minimal profile (8K–16K): + all-optional + diff truncation', () => {
+        it('window=12_288 → all compact flags + allOptional + maxDiffChars=4000', () => {
+            expectFlags(resolveAdaptiveProfile(12_288), {
+                kind: 'minimal',
+                contextWindowTokens: 12_288,
+                dropCallGraph: true,
+                skipHeavyPasses: true,
+                compactPrompt: true,
+                lowSignalFilterUnconditional: true,
+                allOptional: true,
+                maxDiffChars: 4_000,
+            });
+        });
+
+        it('window=8K → same minimal profile', () => {
+            expect(resolveAdaptiveProfile(8_000).kind).toBe('minimal');
+            expect(resolveAdaptiveProfile(8_000).maxDiffChars).toBe(4_000);
+        });
+    });
+
+    describe('unviable profile (<8K): flags do not matter — preflight will throw', () => {
+        it('window=4K → unviable, flags off (no point firing strategies for a doomed run)', () => {
+            const p = resolveAdaptiveProfile(4_096);
+            expect(p.kind).toBe('unviable');
+            expect(p.compactPrompt).toBe(false);
+            expect(p.dropCallGraph).toBe(false);
+        });
     });
 
     describe('input sanitization', () => {

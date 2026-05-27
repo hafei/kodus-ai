@@ -53,26 +53,51 @@ function classify(contextWindowTokens: number): AdaptiveProfileKind {
 }
 
 /**
- * Resolve the profile for a given context window. PR1: always returns
- * full-fidelity flags regardless of `kind`; only `kind` and
- * `contextWindowTokens` vary so downstream code and telemetry can start
- * observing which band each run lands in.
+ * Per-file diff cap used by the `minimal` profile. 4K chars ≈ 1K tokens
+ * per file is enough for ~20 hunks of context; long files get a
+ * truncation marker. Tied to the profile so callers don't have to pick
+ * the constant themselves.
+ */
+const MINIMAL_PROFILE_MAX_DIFF_CHARS = 4_000;
+
+/**
+ * Resolve the profile for a given context window. Each band cumulatively
+ * activates strategies (light ⊂ compact ⊂ minimal). `full` and
+ * `unviable` keep every flag off — `full` because it doesn't need them,
+ * `unviable` because the preflight will throw before strategies could
+ * help and we don't want to silently emit "fidelity reduced" warnings
+ * for a doomed run.
+ *
+ * The flags are read by `BaseCodeReviewAgentProvider.execute`,
+ * `agent-review.stage.ts`, and `agent-loop.ts` to gate their behavior.
  */
 export function resolveAdaptiveProfile(
     contextWindowTokens: number,
 ): AdaptiveProfile {
     const kind = classify(contextWindowTokens);
+    const resolvedWindow = Number.isFinite(contextWindowTokens)
+        ? contextWindowTokens
+        : 0;
+
+    // Cumulative flag activation per band:
+    const light = kind === 'light' || kind === 'compact' || kind === 'minimal';
+    const compact = kind === 'compact' || kind === 'minimal';
+    const minimal = kind === 'minimal';
+
     return {
         kind,
-        contextWindowTokens: Number.isFinite(contextWindowTokens)
-            ? contextWindowTokens
-            : 0,
-        // PR1: all flags off — strategies are wired in PR2/PR3.
-        compactPrompt: false,
-        dropCallGraph: false,
-        allOptional: false,
-        maxDiffChars: undefined,
-        skipHeavyPasses: false,
-        lowSignalFilterUnconditional: false,
+        contextWindowTokens: resolvedWindow,
+        // light+: cheap wins — fewer tokens out, fewer follow-up calls.
+        dropCallGraph: light,
+        skipHeavyPasses: light,
+        // compact+: trim the prompt itself and drop low-signal files
+        // unconditionally (no longer gated on review mode).
+        compactPrompt: compact,
+        lowSignalFilterUnconditional: compact,
+        // minimal: last resort. All files become hunk-headers-only and
+        // long diffs get truncated to MINIMAL_PROFILE_MAX_DIFF_CHARS.
+        // Quality drops noticeably here — only fires below 16K.
+        allOptional: minimal,
+        maxDiffChars: minimal ? MINIMAL_PROFILE_MAX_DIFF_CHARS : undefined,
     };
 }
