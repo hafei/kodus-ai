@@ -24,8 +24,18 @@ import {
     Inject,
     Query,
     Scope,
+    UseGuards,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import {
+    Action,
+    ResourceType,
+} from '@libs/identity/domain/permissions/enums/permissions.enum';
+import {
+    CheckPolicies,
+    PolicyGuard,
+} from '@libs/identity/infrastructure/adapters/services/permissions/policy.guard';
+import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
 import {
     ApiBearerAuth,
     ApiOkResponse,
@@ -51,6 +61,13 @@ import {
 @ApiTags('Token Usage')
 @ApiBearerAuth('jwt')
 @ApiStandardResponses()
+@UseGuards(PolicyGuard)
+@CheckPolicies(
+    checkPermissions({
+        action: Action.Read,
+        resource: ResourceType.TokenUsage,
+    }),
+)
 @Controller({ path: 'usage', scope: Scope.REQUEST })
 export class TokenUsageController {
     private readonly logger = createLogger(TokenUsageController.name);

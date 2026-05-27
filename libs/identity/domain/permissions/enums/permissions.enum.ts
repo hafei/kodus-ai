@@ -27,4 +27,5 @@ export enum ResourceType {
     PluginSettings = 'plugin_settings',
     Logs = 'logs',
     KodyRules = 'kody_rules',
+    TokenUsage = 'token_usage',
 }

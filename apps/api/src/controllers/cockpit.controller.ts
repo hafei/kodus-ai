@@ -21,6 +21,20 @@ import {
 import { SendWeeklyRecapUseCase } from '@libs/cockpit/application/use-cases/send-weekly-recap.use-case';
 import { CockpitTierGuard } from '@libs/cockpit/infrastructure/guards/cockpit-tier.guard';
 import { Public } from '@libs/identity/infrastructure/adapters/services/auth/public.decorator';
+import {
+    Action,
+    ResourceType,
+} from '@libs/identity/domain/permissions/enums/permissions.enum';
+import {
+    CheckPolicies,
+    PolicyGuard,
+} from '@libs/identity/infrastructure/adapters/services/permissions/policy.guard';
+import { checkPermissions } from '@libs/identity/infrastructure/adapters/services/permissions/policy.handlers';
+
+const canReadCockpit = checkPermissions({
+    action: Action.Read,
+    resource: ResourceType.Cockpit,
+});
 
 /**
  * Path shape matches the legacy `kodus-service-analytics` Express routes:
@@ -95,6 +109,8 @@ export class CockpitController {
     }
 
     @Get('/validate')
+    @UseGuards(PolicyGuard)
+    @CheckPolicies(canReadCockpit)
     @ApiOperation({ summary: 'Cockpit data validation (PR presence)' })
     async validate(@Query('organizationId') organizationId: string) {
         if (!organizationId) {
@@ -112,7 +128,8 @@ export class CockpitController {
 
 @ApiTags('Cockpit · Code Health')
 @ApiBearerAuth('jwt')
-@UseGuards(CockpitTierGuard)
+@UseGuards(PolicyGuard, CockpitTierGuard)
+@CheckPolicies(canReadCockpit)
 @Controller('code-health')
 export class CockpitCodeHealthController {
     constructor(private readonly codeHealth: CockpitCodeHealthService) {}
@@ -167,7 +184,8 @@ export class CockpitCodeHealthController {
 
 @ApiTags('Cockpit · Productivity')
 @ApiBearerAuth('jwt')
-@UseGuards(CockpitTierGuard)
+@UseGuards(PolicyGuard, CockpitTierGuard)
+@CheckPolicies(canReadCockpit)
 @Controller('productivity')
 export class CockpitProductivityController {
     constructor(

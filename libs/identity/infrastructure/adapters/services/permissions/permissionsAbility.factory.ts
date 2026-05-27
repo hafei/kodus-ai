@@ -115,6 +115,8 @@ export class PermissionsAbilityFactory {
                 canInOrg(Action.Read, ResourceType.GitSettings);
 
                 canInOrg(Action.Read, ResourceType.PluginSettings);
+
+                canInOrg(Action.Read, ResourceType.TokenUsage);
                 break;
 
             case Role.BILLING_MANAGER:
@@ -132,6 +134,8 @@ export class PermissionsAbilityFactory {
                 canInOrg(Action.Read, ResourceType.IssuesSettings);
 
                 canInOrg(Action.Read, ResourceType.Logs);
+
+                canInOrg(Action.Read, ResourceType.TokenUsage);
                 break;
 
             case Role.CONTRIBUTOR:
