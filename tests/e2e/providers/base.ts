@@ -26,6 +26,7 @@ export abstract class BaseProvider implements Provider {
     abstract listWebhooks(): Promise<WebhookInfo[]>;
     abstract openPR(args: OpenPRArgs): Promise<OpenedPR>;
     abstract closePR(pr: OpenedPR): Promise<void>;
+    abstract cleanupStaleE2EArtifacts(): Promise<{ closed: number }>;
     abstract triggerReviewOnExistingPR(prNumber: number): Promise<{
         triggerId: string;
         sinceIso: string;
