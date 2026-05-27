@@ -1747,6 +1747,7 @@ export class GitlabService implements Omit<
                 const mr = await gitlab.MergeRequests.showChanges(
                     projectId,
                     merge_number,
+                    { accessRawDiffs: true },
                 );
 
                 return mr.changes || [];
@@ -1935,6 +1936,7 @@ export class GitlabService implements Omit<
                 const mr = await gitlabAPI.MergeRequests.showChanges(
                     repository.id,
                     prNumber,
+                    { accessRawDiffs: true },
                 );
                 mrDiffs = mr.changes || [];
             } else {
