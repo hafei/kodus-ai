@@ -244,9 +244,19 @@ async function completeStripeCheckout(page) {
     // Stripe shows an inline error (declined card, missing field), we
     // never leave and surface the error from the page on timeout.
     try {
-        await page.waitForURL((u) => !u.toString().includes("checkout.stripe.com"), {
-            timeout: 60_000,
-        });
+        // Compare the parsed hostname instead of a substring match so a URL
+        // like `evil.com/?x=checkout.stripe.com` can't be mistaken for the
+        // Stripe host (CodeQL js/incomplete-url-substring-sanitization).
+        await page.waitForURL(
+            (u) => {
+                try {
+                    return new URL(u.toString()).hostname !== "checkout.stripe.com";
+                } catch {
+                    return true;
+                }
+            },
+            { timeout: 60_000 },
+        );
     } catch (err) {
         // Surface whatever inline error Stripe is showing.
         const errText = await page
