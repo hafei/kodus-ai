@@ -3,6 +3,7 @@ import {
     Body,
     Controller,
     Get,
+    Inject,
     Param,
     Post,
     Query,
@@ -12,7 +13,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import {
     CockpitCodeHealthService,
-    CockpitDeveloperProductivityService,
+    COCKPIT_DEVELOPER_PRODUCTIVITY_SERVICE_TOKEN,
+    ICockpitDeveloperProductivityService,
     CockpitHealthService,
     CockpitRangeQuery,
     CockpitSourceResolver,
@@ -189,7 +191,8 @@ export class CockpitCodeHealthController {
 @Controller('productivity')
 export class CockpitProductivityController {
     constructor(
-        private readonly productivity: CockpitDeveloperProductivityService,
+        @Inject(COCKPIT_DEVELOPER_PRODUCTIVITY_SERVICE_TOKEN)
+        private readonly productivity: ICockpitDeveloperProductivityService,
     ) {}
 
     @Get('/charts/deploy-frequency')
