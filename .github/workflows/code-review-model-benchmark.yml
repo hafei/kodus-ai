@@ -10,17 +10,20 @@ name: "Benchmark: tier-0 model code review"
 # (`benchmark:scorecard`, judged by Sonnet vs golden_comments) is uploaded as an
 # ARTIFACT for regression tracking against main — it is NOT a gate.
 #
-# Triggers (locked spec 2026-05-28):
-#   - pull_request on engine paths → LIGHT run (kimi-k2-6, 5 PRs, ~$1, ~10min).
-#     Fast regression signal on engine changes. Notify-only, no PR gate.
+# Triggers (locked spec 2026-05-28, revised 2026-05-28):
 #   - push to main on engine paths → FULL run (5 models, 5 PRs each = 25
 #     reviews, ~$17, ~40min). Notify-only.
 #   - workflow_dispatch → manual: pin one model (only_model).
-# NOT scheduled: nightly cron deliberately omitted — full FULL run only when
-# the engine actually changes, to keep cost bounded.
-# Opus is dropped at the driver level (tests/e2e/benchmark/run.ts
-# DEFAULT_EXCLUDED) — ~$23/run extra and not worth the CI spend. Run
-# ad-hoc via dispatch with only_model="opus-4-7" if you ever need it.
+# NO pull_request trigger: the benchmark drives reviews on qa.web.kodus.io,
+# which runs main's image — a PR-time LIGHT run would benchmark MAIN's
+# engine quality (not the PR's), defeating the purpose. The right signal
+# at PR-time is the kody rule "engine sem benchmark" reminding the dev to
+# update the dataset; the FULL run after merge measures the actual change.
+# NO nightly cron: full FULL run only when the engine actually changes,
+# to keep cost bounded. Opus is dropped at the driver level
+# (tests/e2e/benchmark/run.ts DEFAULT_EXCLUDED) — ~$23/run extra and not
+# worth the CI spend. Run ad-hoc via dispatch with only_model="opus-4-7"
+# if you ever need it.
 #
 # Required secrets (add in repo settings — only GH_TEST_TOKEN exists today):
 #   GH_TEST_TOKEN            PAT that can see + write the kodus-e2e/* bench repos
@@ -43,23 +46,11 @@ on:
                 required: false
                 default: ""
                 type: string
-    pull_request:
-        paths:
-            # Engine paths — anything that can change review OUTPUT QUALITY.
-            # Stages/agents/prompts/rules/sandbox/BYOK + the model catalog.
-            - "libs/code-review/**"
-            - "libs/ee/codeBase/**"
-            - "libs/ee/codeReview/**"
-            - "libs/ee/kodyRules/**"
-            - "libs/kodyRules/**"
-            - "libs/sandbox/**"
-            - "libs/core/infrastructure/services/tokenTracking/**"
-            - "apps/web/src/features/ee/byok/_data/curated-models.json"
-            - "tests/e2e/benchmark/**"
-            - "scripts/benchmark/tier0-bench-prs.json"
     push:
         branches: [main]
         paths:
+            # Engine paths — anything that can change review OUTPUT quality.
+            # Stages/agents/prompts/rules/sandbox/BYOK + the model catalog.
             - "libs/code-review/**"
             - "libs/ee/codeBase/**"
             - "libs/ee/codeReview/**"
@@ -99,24 +90,16 @@ jobs:
               working-directory: tests/e2e
               run: npm install --no-audit --no-fund
 
-            - name: Decide scope (PR=light, push main=full, dispatch=manual)
+            - name: Decide scope (push main = full, dispatch = manual override)
               id: scope
               run: |
                   set -euo pipefail
                   ONLY_MODEL_INPUT="${{ github.event.inputs.only_model }}"
 
-                  if [ "${{ github.event_name }}" = "pull_request" ]; then
-                      # LIGHT: ONE cheap model that also exercises the
-                      # openai_compatible BYOK path (Moonshot) — the path most
-                      # likely to break on integration quirks. Override with
-                      # repo var BENCH_LIGHT_MODEL if needed.
-                      MODEL="${{ vars.BENCH_LIGHT_MODEL || 'kimi-k2-6' }}"
-                      echo "only_model=$MODEL" >> "$GITHUB_OUTPUT"
-                      echo "Light run (PR on engine paths): $MODEL"
-                  elif [ "${{ github.event_name }}" = "push" ]; then
+                  if [ "${{ github.event_name }}" = "push" ]; then
                       # FULL on merge: all recommended models EXCEPT the ones
-                      # excluded at the driver level (Opus, see models.ts
-                      # BENCH_EXCLUDED_MODELS) — 5 models, ~$17.
+                      # excluded at the driver level (Opus, see run.ts
+                      # DEFAULT_EXCLUDED) — 5 models, ~$17.
                       echo "only_model=" >> "$GITHUB_OUTPUT"
                       echo "Full run (engine merged to main): 5 models (Opus excluded by driver)"
                   else
