@@ -31,18 +31,23 @@ echo "==> docker compose up"
 docker compose -f "${COMPOSE}" up -d
 
 echo
-echo "==> waiting for ${GITLAB_URL}/-/health"
+echo "==> waiting for ${GITLAB_URL}/users/sign_in"
 echo "    (first boot is 2-5 minutes — gitlab-ce reconfigures on cold start)"
+# /users/sign_in returns 200 once the Rails app is serving requests
+# and is stable across the gitlab-ce versions we support. The
+# historically-recommended /-/health endpoint was removed/restricted
+# in recent versions (returns 404), and /-/readiness requires a
+# health-check token — sign-in is the simplest reliable probe.
 DEADLINE=$(( $(date +%s) + 900 ))
 last_status=""
 while :; do
-    status=$(curl -s -o /dev/null -w "%{http_code}" "${GITLAB_URL}/-/health" || true)
+    status=$(curl -s -o /dev/null -w "%{http_code}" "${GITLAB_URL}/users/sign_in" || true)
     if [ "${status}" = "200" ]; then
-        echo "    health=${status}  OK"
+        echo "    sign_in=${status}  OK"
         break
     fi
     if [ "${status}" != "${last_status}" ]; then
-        echo "    health=${status:-unreachable} (still booting…)"
+        echo "    sign_in=${status:-unreachable} (still booting…)"
         last_status="${status}"
     fi
     if [ "$(date +%s)" -ge "${DEADLINE}" ]; then

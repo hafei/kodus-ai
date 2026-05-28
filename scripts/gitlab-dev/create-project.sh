@@ -53,7 +53,7 @@ fi
 echo
 echo "==> ensuring group ${GROUP_PATH}"
 GROUP_ID=$(api "${GITLAB_URL}/api/v4/groups?search=${GROUP_PATH}" \
-    | python3 -c "import json,sys,os; d=json.load(sys.stdin); m=[g for g in d if g['path']==os.environ['GROUP_PATH']]; print(m[0]['id'] if m else '', end='')")
+    | python3 -c "import json,sys; d=json.load(sys.stdin); m=[g for g in d if g['path']=='${GROUP_PATH}']; print(m[0]['id'] if m else '', end='')")
 
 if [ -z "${GROUP_ID}" ]; then
     GROUP_ID=$(api -X POST "${GITLAB_URL}/api/v4/groups" -d "$(cat <<EOF
@@ -282,10 +282,16 @@ fi
 # `write_repository`. Keeping the dev fixture in sync with the docs
 # means a token minted here is drop-in replaceable with one a user
 # generates by hand.
+#
+# `expires_at` is required by GitLab 16+; never-expiring PATs were
+# removed. One year out is plenty for a dev fixture and matches what
+# the Kody docs suggest users pick when creating their own token.
+EXPIRES_AT="$(date -d '+365 days' +%Y-%m-%d 2>/dev/null || date -v+365d +%Y-%m-%d)"
 PAT=$(api -X POST "${GITLAB_URL}/api/v4/users/${USER_ID}/impersonation_tokens" -d "$(cat <<EOF
 {
     "name": "kodus-dev-bootstrap",
-    "scopes": ["api", "read_api", "read_user", "read_repository", "write_repository"]
+    "scopes": ["api", "read_api", "read_user", "read_repository", "write_repository"],
+    "expires_at": "${EXPIRES_AT}"
 }
 EOF
 )" | jq_field "['token']")
