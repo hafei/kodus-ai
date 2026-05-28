@@ -39,8 +39,50 @@ on:
                 type: boolean
 
 jobs:
+    # ----------------------------------------------------------------
+    # Freeze main while the release is in flight. The repo ruleset
+    # `release-freeze` lives in this repo's settings (id 17004627);
+    # default state is enforcement=disabled. We flip it to active here
+    # so no new PRs can land in `main` between RC build and customer
+    # ship. Hotfix path skips the freeze — emergencies are short
+    # enough that locking main would make things worse.
+    # `unfreeze-main` below runs `if: always()` so an unexpected
+    # failure here doesn't leave main frozen forever.
+    # Failsafe NOTE: if the runner is killed mid-flight (rare), the
+    # freeze stays active. Manually disable via:
+    #   gh api -X PUT repos/${REPO}/rulesets/17004627 \
+    #     --input <(jq '.enforcement="disabled"' <(gh api repos/${REPO}/rulesets/17004627))
+    # ----------------------------------------------------------------
+    freeze-main:
+        name: 🧊 Freeze main (block merges during release)
+        if: ${{ inputs.hotfix == false }}
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Activate release-freeze ruleset
+              env:
+                  GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+                  RULESET_ID: 17004627
+                  REPO: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
+                  echo "Activating ruleset $RULESET_ID on $REPO ..."
+                  # PUT replaces the whole ruleset, so fetch current state
+                  # and patch only the enforcement field — keeps rules + bypass
+                  # actors intact across releases.
+                  CURRENT=$(gh api "repos/${REPO}/rulesets/${RULESET_ID}")
+                  echo "$CURRENT" | jq '.enforcement="active"' > /tmp/ruleset.json
+                  gh api --method PUT "repos/${REPO}/rulesets/${RULESET_ID}" --input /tmp/ruleset.json | jq '{name, enforcement}'
+                  echo "::notice::main is now frozen — no PRs can merge until unfreeze-main runs."
+
     plan-release:
         name: Plan release (compute version and RC version)
+        needs: freeze-main
+        # Run on freeze success (normal release) OR skip (hotfix path).
+        # Don't run if freeze failed — that indicates an admin / token /
+        # ruleset bug and we shouldn't ship with main potentially open.
+        if: ${{ needs.freeze-main.result == 'success' || needs.freeze-main.result == 'skipped' }}
         runs-on: ubuntu-latest
         outputs:
             release_version: ${{ steps.bump.outputs.release_version }}
@@ -490,6 +532,37 @@ jobs:
                       -f client_payload[image_tag]=latest \
                       -f client_payload[source_run_url]="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                   echo "::notice::Dispatched selfhosted-image-published to kodustech/kodus-installer for tag $RELEASE_TAG"
+
+    # ----------------------------------------------------------------
+    # Always unfreeze, even if anything above failed or was cancelled.
+    # Only fires if freeze-main actually succeeded (no point trying to
+    # disable a freeze we never enabled — hotfix path skips both).
+    # ----------------------------------------------------------------
+    unfreeze-main:
+        name: 🌡 Unfreeze main
+        needs:
+            - freeze-main
+            - plan-release
+            - build-and-push
+            - e2e-matrix
+            - promote
+        if: ${{ always() && needs.freeze-main.result == 'success' }}
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Deactivate release-freeze ruleset
+              env:
+                  GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+                  RULESET_ID: 17004627
+                  REPO: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
+                  echo "Deactivating ruleset $RULESET_ID on $REPO ..."
+                  CURRENT=$(gh api "repos/${REPO}/rulesets/${RULESET_ID}")
+                  echo "$CURRENT" | jq '.enforcement="disabled"' > /tmp/ruleset.json
+                  gh api --method PUT "repos/${REPO}/rulesets/${RULESET_ID}" --input /tmp/ruleset.json | jq '{name, enforcement}'
+                  echo "::notice::main is unfrozen — PRs can merge again."
 
     notify-discord-failure:
         name: Notify Discord (failure only)
