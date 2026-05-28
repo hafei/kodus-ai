@@ -497,6 +497,7 @@ export class KodyRulesTools {
                             },
                             message: centralizedPr.message,
                             prUrl: centralizedPr.prUrl,
+                            link: centralizedPr.prUrl,
                         };
                     }
 
@@ -643,7 +644,7 @@ export class KodyRulesTools {
         return {
             name: 'KODUS_UPDATE_KODY_RULE',
             description:
-                'Update an existing Kody Rule. Only the fields provided in kodyRule will be updated. Use this to modify rule details, change severity, scope, or status of existing rules. If centralized config is enabled the update will be published to a pull request pending to be approved.',
+                'Update an existing Kody Rule. Only the fields provided in kodyRule will be updated. Use this to modify rule details, change severity, scope, or status of existing rules. After execution, ALWAYS inform the user of the provided link to open the rule in the Kody Rules page. If centralized config is enabled the update will be published to a pull request pending to be approved instead, and a prUrl is returned.',
             inputSchema,
             outputSchema: z.object({
                 success: z.boolean(),
@@ -656,6 +657,12 @@ export class KodyRulesTools {
                 }),
                 message: z.string().optional(),
                 prUrl: z.string().optional(),
+                link: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Link to open the updated Kody Rule in the app (or the pull request URL when centralized config is enabled)',
+                    ),
             }),
             execute: wrapToolHandler(
                 async (args: InputType): Promise<CreateKodyRuleResponse> => {
@@ -756,6 +763,7 @@ export class KodyRulesTools {
                             },
                             message: centralizedPr.message,
                             prUrl: centralizedPr.prUrl,
+                            link: centralizedPr.prUrl,
                         };
                     }
 
@@ -766,10 +774,20 @@ export class KodyRulesTools {
                             userInfo,
                         );
 
+                    const link = buildKodyRuleAppLink({
+                        repositoryId: result?.repositoryId,
+                        ruleId: result?.uuid,
+                        teamId: organizationAndTeamData.teamId,
+                        status: result?.status,
+                        tab: 'review-rules',
+                    });
+
                     return {
                         success: true,
                         count: 1,
                         data: result,
+                        message: 'Rule updated. You can open it directly from the provided link.',
+                        link,
                     };
                 },
             ),
