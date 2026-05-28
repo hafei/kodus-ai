@@ -88,21 +88,31 @@ jobs:
 
                   GH_TEST_TOKEN: ${{ secrets.GH_TEST_TOKEN }}
                   GH_TEST_REPO: ${{ secrets.GH_TEST_REPO }}
+                  # *_CLOUD overrides for the cloud target so the matrix
+                  # runner (providers/base.ts resolveTargetRepo) picks the
+                  # *-cloud fixture repo instead of the self-hosted one.
+                  # Cloud and SH integrations have different repos onboarded —
+                  # falling back to the SH repo here makes the lookup fail
+                  # ("Repo X not in integration's available list").
+                  GH_TEST_REPO_CLOUD: ${{ secrets.GH_TEST_REPO_CLOUD }}
                   GH_TEST_PR_NUMBER: ${{ secrets.GH_TEST_PR_NUMBER }}
 
                   GL_TEST_TOKEN: ${{ secrets.GL_TEST_TOKEN }}
                   GL_TEST_REPO: ${{ secrets.GL_TEST_REPO }}
+                  GL_TEST_REPO_CLOUD: ${{ secrets.GL_TEST_REPO_CLOUD }}
                   GL_TEST_MR_IID: ${{ secrets.GL_TEST_MR_IID }}
 
                   BB_TEST_USER: ${{ secrets.BB_TEST_USER }}
                   BB_TEST_APP_PASSWORD: ${{ secrets.BB_TEST_APP_PASSWORD }}
                   BB_TEST_REPO: ${{ secrets.BB_TEST_REPO }}
+                  BB_TEST_REPO_CLOUD: ${{ secrets.BB_TEST_REPO_CLOUD }}
                   BB_TEST_PR_ID: ${{ secrets.BB_TEST_PR_ID }}
 
                   AZ_TEST_TOKEN: ${{ secrets.AZ_TEST_TOKEN }}
                   AZ_TEST_ORG: ${{ secrets.AZ_TEST_ORG }}
                   AZ_TEST_PROJECT: ${{ secrets.AZ_TEST_PROJECT }}
                   AZ_TEST_REPO: ${{ secrets.AZ_TEST_REPO }}
+                  AZ_TEST_REPO_CLOUD: ${{ secrets.AZ_TEST_REPO_CLOUD }}
                   AZ_TEST_PR_ID: ${{ secrets.AZ_TEST_PR_ID }}
 
                   CLOUD_TENANT_PAID_EMAIL: ${{ secrets.CLOUD_TENANT_PAID_EMAIL }}
