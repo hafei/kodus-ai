@@ -17,6 +17,20 @@ name: "Self-Hosted: Release, Build, Validate and Publish"
 #   7) changelog-publish      — only fires after promote, on FINAL tag
 
 on:
+    # Auto-trigger every Friday at 06:00 UTC (03:00 BRT). RC build +
+    # matrix complete by ~05:30 BRT, so when the team arrives at ~09h
+    # the Discord channel already shows whether the matrix is green or
+    # red. The 10h meeting and 11–12h manual QA day run informed instead
+    # of waiting for results. The 13h human approval (promote env=
+    # production) is still the only human gate — if the meeting decides
+    # not to ship this week, nobody clicks Approve and the run expires
+    # without promoting.
+    #
+    # The scheduled run uses the default `version_type: patch`. For
+    # minor/major/custom releases, hotfixes, or out-of-band runs,
+    # dispatch manually via workflow_dispatch.
+    schedule:
+        - cron: "0 6 * * 5"
     workflow_dispatch:
         inputs:
             version_type:
@@ -38,6 +52,13 @@ on:
                 default: false
                 type: boolean
 
+# Don't queue or kill a release that's already in flight. If a manual
+# dispatch happens before the Friday cron, the cron skips. If you
+# really want to re-run, cancel the in-flight one first.
+concurrency:
+    group: selfhosted-release
+    cancel-in-progress: false
+
 jobs:
     # ----------------------------------------------------------------
     # Freeze main while the release is in flight. The repo ruleset
@@ -55,7 +76,10 @@ jobs:
     # ----------------------------------------------------------------
     freeze-main:
         name: 🧊 Freeze main (block merges during release)
-        if: ${{ inputs.hotfix == false }}
+        # Freeze on every release path EXCEPT hotfix. Schedule (Friday
+        # cron) has no inputs, so `inputs.hotfix != true` resolves to
+        # "freeze" — exactly what we want for the weekly train.
+        if: ${{ inputs.hotfix != true }}
         runs-on: ubuntu-latest
         permissions:
             contents: read
@@ -119,7 +143,10 @@ jobs:
                   VERSION=${LATEST#selfhosted-}
                   IFS='.' read -r -a parts <<< "$VERSION"
                   MAJOR=${parts[0]}; MINOR=${parts[1]}; PATCH=${parts[2]}
-                  TYPE="${{ github.event.inputs.version_type }}"
+                  # Scheduled (Friday cron) runs don't have inputs — fall
+                  # back to `patch`. workflow_dispatch passes whatever the
+                  # operator picked.
+                  TYPE="${{ github.event.inputs.version_type || 'patch' }}"
 
                   if [ "$TYPE" == "custom" ]; then
                     NEW_VERSION="${{ github.event.inputs.custom_version }}"

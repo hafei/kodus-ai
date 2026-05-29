@@ -38,24 +38,23 @@ For visual layout, see `docs/diagrams/ci-flow-files.excalidraw`.
 
 ## Friday release — your procedure
 
-### Before 09h
+### 03h BRT (06h UTC) — auto-trigger
 
-- Make sure you slept. The decision at 13h is yours and needs to be cogent.
-- Check Discord for matrix failures from the week (#kodus-ci or wherever the webhook posts).
+GitHub Actions fires `selfhosted-build-push.yml` via cron `0 6 * * 5`.
+You sleep through it. By the time you arrive in the morning, the
+Discord channel already shows whether the matrix is green or red.
 
-### 09h — dispatch
-
-1. Open https://github.com/kodustech/kodus-ai/actions/workflows/selfhosted-build-push.yml
-2. Click **Run workflow**
-3. Branch: `main`, `version_type`: `patch` (or higher if intentional), `hotfix`: **unchecked**
-4. Click the green **Run workflow** button
+The scheduled run uses `version_type: patch`. For minor/major/custom
+releases you still need to dispatch manually (typically before 03h on
+Friday or you let the patch run go and dispatch the bigger version
+yourself).
 
 What happens automatically:
 
 ```
 freeze-main       ←  Ruleset release-freeze activates. New PR merges are blocked
-                     until unfreeze runs. Admins can still "Bypass and merge"
-                     (auditable, used only when truly needed).
+                     for feat/fix/perf/refactor titles; chore/ci/docs/build/test/style
+                     still flow. Admins can "Bypass and merge" (auditable).
 plan-release      ←  computes the next X.Y.Z + rc.N from the latest tag
 create-rc-tag     ←  pushes selfhosted-X.Y.Z-rc.N
 build-and-push    ←  ~10–15 min, builds 5 images, pushes :rc.N only (NOT :latest)
@@ -69,20 +68,34 @@ promote PAUSES    ←  env=production · waits for required reviewer approval
                      (you, Wellington, Junior)
 ```
 
+By ~05:30 BRT the matrix should be done and Discord shows the result.
+You wake up to a verdict, not a question.
+
+### 09h — arrive informed
+
+Open Discord. If the matrix posted a failure overnight, the meeting at
+10h is already framed around that. If silence, matrix is green — meeting
+is about prioritization.
+
 ### 10h — weekly meeting
 
-Hold the meeting normally. Matrix is running in background.
+Discuss the week. If the matrix flagged something the team agrees to
+fix-forward (not block), proceed. If the team decides not to ship this
+week, just don't click Approve — the promote job will expire after a
+few hours without affecting anything.
 
 ### 11h–12h — manual QA day
 
 Hit the QA cloud at https://qa.web.kodus.io as a real user. Exercise the features
 that landed during the week — anything automation can't reach (UX feel, weird flows,
-new integrations from the perspective of a customer signing up cold).
+new integrations from the perspective of a customer signing up cold). The
+matrix tells you "does it boot", QA day tells you "does it feel right".
 
 ### ~12h30 — checkpoint
 
 Open the run in Actions. The `promote` job should be paused with a
-**"Review deployments"** banner. The matrix is finished (green).
+**"Review deployments"** banner. The matrix is finished (and was already
+finished hours ago).
 
 ### 13h — approve (the one click)
 
