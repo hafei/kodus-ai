@@ -142,6 +142,14 @@ jobs:
                   SH_LICENSE_KEY_PAID: ${{ secrets.SH_LICENSE_KEY_PAID }}
                   SH_LICENSE_KEY_FREE: ${{ secrets.SH_LICENSE_KEY_FREE }}
 
+                  # LLM provider — vm.sh expects these to write to the VM's .env.
+                  # Team default: Moonshot Kimi K2.6 (reusing BYOK_MOONSHOT_API_KEY
+                  # since that's the key we already pay for and that maps to the
+                  # API_OPEN_AI_API_KEY slot per scripts/selfhosted/op-references.md).
+                  API_OPEN_AI_API_KEY: ${{ secrets.BYOK_MOONSHOT_API_KEY }}
+                  API_OPENAI_FORCE_BASE_URL: https://api.moonshot.ai/v1
+                  API_LLM_PROVIDER_MODEL: kimi-k2.6
+
                   TARGET_FILTER_PROVIDER: ${{ matrix.cell.provider }}
               run: |
                   # Build a single-cell matrix YAML that mirrors the SOURCE
