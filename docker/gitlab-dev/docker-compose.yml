@@ -26,8 +26,9 @@ services:
         # GitLab-version-compat code paths against older tags without
         # a separate compose file. Recommended pins:
         #   gitlab/gitlab-ce:latest        — happy-path / regression
-        #   gitlab/gitlab-ce:15.6.5-ce.0   — last release before the
-        #                                    /diffs endpoint (15.7)
+        #   gitlab/gitlab-ce:15.6.8-ce.0   — last 15.6.x (before 15.7
+        #                                    introduced the /diffs
+        #                                    endpoint that allDiffs uses)
         #   gitlab/gitlab-ce:13.12.15-ce.0 — 13.x webhook payload shape
         #                                    (notes may omit action and
         #                                    discussion_id)
