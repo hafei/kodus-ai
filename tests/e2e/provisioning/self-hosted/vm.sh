@@ -347,14 +347,17 @@ env_set API_GITHUB_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/github/webhook"
 env_set API_GITLAB_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/gitlab/webhook"
 env_set GLOBAL_BITBUCKET_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/bitbucket/webhook"
 env_set GLOBAL_AZURE_REPOS_CODE_MANAGEMENT_WEBHOOK "$SERVER_TUNNEL_URL/azure-repos/webhook"
-# Bitbucket Cloud rate-limits aggressively. finish-onboarding alone fires
-# ~72 sequential Bitbucket API calls (kody-rule generation); without a
-# throttle the burst exhausts the account's budget and the very next call
-# (the runner opening a PR) gets HTTP 429, which cascades into 400 "Error
-# authenticating PAT" on every following scenario. This is the same gate
-# prod runs (default 400ms in .env.schema); 800ms gives the shared test
-# account extra headroom since the runner ALSO hits Bitbucket directly.
-env_set BITBUCKET_RATE_GATE_MIN_INTERVAL_MS "800"
+# Bitbucket Cloud rate-limits per-endpoint at ~16-60 req/min. The prod
+# default (400ms ≈ 150/min) and even 800ms (≈75/min) sit ABOVE that ceiling,
+# so under the e2e load — 6 scenarios each re-onboarding (~72 calls to
+# generate kody rules) + the runner's own calls, all on ONE shared test
+# account — the worker's Bitbucket calls (getDefaultBranch, getLanguage-
+# Repository, …) start returning 429 "Rate limit exceeded", which surfaces
+# as NO_REPOSITORIES / 400 on the next scenario. Confirmed in worker logs
+# 2026-05-30. 2500ms ≈ 24/min keeps every call inside the ceiling — slower
+# but deterministic. ONLY the test droplet runs this hot; prod keeps the
+# 400ms default (real installs don't re-onboard one account in a loop).
+env_set BITBUCKET_RATE_GATE_MIN_INTERVAL_MS "2500"
 env_set API_PG_DB_PASSWORD "\$(openssl rand -hex 16)"
 env_set API_MG_DB_PASSWORD "\$(openssl rand -hex 16)"
 env_set API_DATABASE_DISABLE_SSL "true"
