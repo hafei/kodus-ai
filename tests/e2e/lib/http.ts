@@ -126,15 +126,54 @@ function isTransportError(err: unknown): boolean {
 // get retried.
 const TRANSPORT_RETRIES = 5;
 
+// HTTP 429 retry budget. Bitbucket Cloud rate-limits the shared test account
+// hard: the runner's pollForReview loop (one list-comments call every 10s for
+// up to 10min) plus the review worker's own Bitbucket calls overrun the
+// per-account quota and Bitbucket returns 429 with a Retry-After header. A
+// single 429 also cascades — the next scenario's PAT re-validation goes
+// through Kodus to Bitbucket and comes back as 400 "Error authenticating".
+// Honouring Retry-After here makes the whole thing deterministic: we wait
+// exactly as long as Bitbucket asks (capped) and retry, so no rate-limit
+// blip ever surfaces as a test failure. Applies to every provider but only
+// Bitbucket realistically hits it.
+const RATE_LIMIT_RETRIES = 6;
+const RETRY_AFTER_CAP_MS = 60_000;
+
+function retryAfterMs(resp: HttpResponse<unknown>, attempt: number): number {
+    const header = resp.headers.get("retry-after");
+    if (header) {
+        const secs = Number(header);
+        if (Number.isFinite(secs) && secs >= 0) {
+            return Math.min(secs * 1_000, RETRY_AFTER_CAP_MS);
+        }
+    }
+    // No/!numeric header → exponential backoff 2s,4s,8s… capped.
+    return Math.min(2_000 * 2 ** attempt, RETRY_AFTER_CAP_MS);
+}
+
 export async function http<T = unknown>(
     url: string,
     opts: HttpOptions = {},
 ): Promise<HttpResponse<T>> {
     const timeoutMs = opts.timeoutMs ?? 30_000;
     let lastErr: unknown;
+    let rateLimitHits = 0;
     for (let i = 0; i <= TRANSPORT_RETRIES; i++) {
         try {
-            return await attempt<T>(url, opts, timeoutMs);
+            const resp = await attempt<T>(url, opts, timeoutMs);
+            // 429 isn't an exception — it's a valid response we choose to
+            // retry. Don't count it against the transport budget.
+            if (resp.status === 429 && rateLimitHits < RATE_LIMIT_RETRIES) {
+                const delay = retryAfterMs(resp, rateLimitHits);
+                rateLimitHits++;
+                log.info(
+                    `[http] 429 on ${opts.method ?? "GET"} ${url} (rate-limit ${rateLimitHits}/${RATE_LIMIT_RETRIES}) — waiting ${delay}ms`,
+                );
+                await new Promise((r) => setTimeout(r, delay));
+                i--; // this loop turn didn't consume a transport retry
+                continue;
+            }
+            return resp;
         } catch (err) {
             if (!isTransportError(err)) {
                 throw err;
