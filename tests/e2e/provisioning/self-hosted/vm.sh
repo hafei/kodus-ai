@@ -448,5 +448,26 @@ export TEST_TIMEOUT_REVIEW
 # without the flag it crashes with ENOENT and reds the whole cell. The
 # matrix YAML already documents this scenario as "skipped automatically when
 # SH_LICENSE_KEY_PATH isn't available"; the flag is what makes that true.
-ok "Exec matrix runner: ./node_modules/.bin/tsx cli/run-matrix.ts $MATRIX_FILE --target self-hosted --skip-missing-tokens"
-exec ./node_modules/.bin/tsx cli/run-matrix.ts "$MATRIX_FILE" --target self-hosted --skip-missing-tokens
+ok "Run matrix runner: ./node_modules/.bin/tsx cli/run-matrix.ts $MATRIX_FILE --target self-hosted --skip-missing-tokens"
+# NOT `exec`: exec would replace this shell and bypass the EXIT trap, so a
+# scenario failure would (a) leave the droplet alive forever — no teardown —
+# and (b) discard the on-VM logs. Run normally, capture the stack logs into
+# the evidence tree (uploaded as the cell artifact), then exit so `cleanup`
+# tears the droplet down.
+set +e
+./node_modules/.bin/tsx cli/run-matrix.ts "$MATRIX_FILE" --target self-hosted --skip-missing-tokens
+RUN_EXIT=$?
+set -e
+
+# Dump the API + review-worker logs from the droplet into evidence/. The SSH
+# key is ephemeral (discarded with the runner), so this is the only chance to
+# see WHY a scenario failed on the server side — e.g. whether the kody-rules
+# agent actually received the rule. Best-effort: never fail the run on this.
+PROV="${TARGET_FILTER_PROVIDER:-unknown}"
+mkdir -p "$E2E_ROOT/evidence"
+ssh_vm "cd /opt/kodus-installer && docker compose logs api worker webhooks --tail 2000 --no-color" \
+    > "$E2E_ROOT/evidence/droplet-logs-${PROV}.txt" 2>&1 \
+    && ok "Captured droplet logs → evidence/droplet-logs-${PROV}.txt" \
+    || warn "Could not capture droplet logs"
+
+exit "$RUN_EXIT"
