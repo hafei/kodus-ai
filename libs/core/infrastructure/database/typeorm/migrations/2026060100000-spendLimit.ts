@@ -1,11 +1,26 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class SpendLimit1780335078312 implements MigrationInterface {
-    name = 'SpendLimit1780335078312'
+/**
+ * Adds `spend_limit_config` to the `organization_parameters_configkey_enum`
+ * so the monthly BYOK spend-limit config can be persisted as an
+ * organization_parameters row (the feature stores everything in the existing
+ * jsonb `configValue`; no new tables/columns).
+ *
+ * Changing the enum type rewrites the `configKey` column, which means the
+ * `IDX_org_params_key_org` index has to be dropped and recreated. That index
+ * was originally built CONCURRENTLY (see Indexes1763403030146), so it is
+ * rebuilt the same way here — which is why this migration opts out of the
+ * per-migration transaction (CREATE/DROP INDEX CONCURRENTLY cannot run inside
+ * a transaction block).
+ */
+export class SpendLimit2026060100000 implements MigrationInterface {
+    name = 'SpendLimit2026060100000';
+
+    transaction = false;
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`
-            DROP INDEX "public"."IDX_org_params_key_org"
+            DROP INDEX CONCURRENTLY IF EXISTS "public"."IDX_org_params_key_org"
         `);
         await queryRunner.query(`
             ALTER TYPE "public"."organization_parameters_configkey_enum"
@@ -57,13 +72,13 @@ export class SpendLimit1780335078312 implements MigrationInterface {
             DROP TYPE "kodus_workflow"."workflow_jobs_errorclassification_enum_old"
         `);
         await queryRunner.query(`
-            CREATE INDEX CONCURRENTLY "IDX_org_params_key_org" ON "organization_parameters" ("configKey", "organization_id")
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS "IDX_org_params_key_org" ON "organization_parameters" ("configKey", "organization_id")
         `);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`
-            DROP INDEX CONCURRENTLY "public"."IDX_org_params_key_org"
+            DROP INDEX CONCURRENTLY IF EXISTS "public"."IDX_org_params_key_org"
         `);
         await queryRunner.query(`
             CREATE TYPE "kodus_workflow"."workflow_jobs_errorclassification_enum_old" AS ENUM(
@@ -113,8 +128,7 @@ export class SpendLimit1780335078312 implements MigrationInterface {
             RENAME TO "organization_parameters_configkey_enum"
         `);
         await queryRunner.query(`
-            CREATE INDEX "IDX_org_params_key_org" ON "organization_parameters" ("configKey", "organization_id")
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS "IDX_org_params_key_org" ON "organization_parameters" ("configKey", "organization_id")
         `);
     }
-
 }

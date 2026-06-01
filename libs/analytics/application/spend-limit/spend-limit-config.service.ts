@@ -6,6 +6,7 @@ import {
     IOrganizationParametersService,
     ORGANIZATION_PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/organizationParameters/contracts/organizationParameters.service.contract';
+import { OrganizationParametersEntity } from '@libs/organization/domain/organizationParameters/entities/organizationParameters.entity';
 
 import {
     PriceabilityResult,
@@ -61,25 +62,76 @@ export class SpendLimitConfigService {
     }
 
     /**
-     * Score month-to-date BYOK spend against the configured limit. Returns
-     * null when no usable limit is configured (absent, disabled, or
-     * non-positive) — there is nothing to evaluate or alert on.
+     * Read the config and, when a usable limit is enabled, score month-to-date
+     * BYOK spend against it — returning both so the caller can act on the
+     * evaluation and persist updated alert state without a second read.
+     * Returns null when no usable limit is configured (absent, disabled, or
+     * non-positive).
      */
-    async evaluate(
+    async loadAndEvaluate(
         organizationAndTeamData: OrganizationAndTeamData,
         now: Date = new Date(),
-    ): Promise<SpendLimitEvaluation | null> {
+    ): Promise<{
+        config: SpendLimitConfig;
+        evaluation: SpendLimitEvaluation;
+    } | null> {
         const config = await this.getConfig(organizationAndTeamData);
         if (!config?.enabled || !(config.monthlyLimitUsd > 0)) {
             return null;
         }
 
-        return this.monthlySpend.getStatus(
+        const evaluation = await this.monthlySpend.getStatus(
             organizationAndTeamData.organizationId,
             config.monthlyLimitUsd,
             now,
             config.modelPricing,
         );
+
+        return { config, evaluation };
+    }
+
+    /**
+     * Score month-to-date BYOK spend against the configured limit. Returns
+     * null when no usable limit is configured. The read-only primitive for
+     * consumers that only need the status (e.g. a future blocking gate).
+     */
+    async evaluate(
+        organizationAndTeamData: OrganizationAndTeamData,
+        now: Date = new Date(),
+    ): Promise<SpendLimitEvaluation | null> {
+        const result = await this.loadAndEvaluate(
+            organizationAndTeamData,
+            now,
+        );
+        return result?.evaluation ?? null;
+    }
+
+    /**
+     * Every organization with an enabled, positive monthly limit. Used by the
+     * alert cron to know which orgs to evaluate. Scans the SPEND_LIMIT_CONFIG
+     * parameter across orgs — cheap because only configured orgs have a row.
+     */
+    async listEnabledOrganizations(): Promise<
+        Array<{ organizationId: string; config: SpendLimitConfig }>
+    > {
+        const params = await this.organizationParametersService
+            .find({
+                configKey: OrganizationParametersKey.SPEND_LIMIT_CONFIG,
+            })
+            .catch(() => [] as OrganizationParametersEntity[]);
+
+        const enabled: Array<{
+            organizationId: string;
+            config: SpendLimitConfig;
+        }> = [];
+        for (const parameter of params ?? []) {
+            const config = parameter.configValue as SpendLimitConfig;
+            const organizationId = parameter.organization?.uuid;
+            if (organizationId && config?.enabled && config.monthlyLimitUsd > 0) {
+                enabled.push({ organizationId, config });
+            }
+        }
+        return enabled;
     }
 
     /** Whether every given model can be priced (catalog or manual override). */

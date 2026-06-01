@@ -7,7 +7,11 @@ const NOW = new Date(Date.UTC(2026, 5, 15, 12, 0, 0));
 
 describe('SpendLimitConfigService', () => {
     let service: SpendLimitConfigService;
-    let orgParams: { findByKey: jest.Mock; createOrUpdateConfig: jest.Mock };
+    let orgParams: {
+        findByKey: jest.Mock;
+        createOrUpdateConfig: jest.Mock;
+        find: jest.Mock;
+    };
     let monthlySpend: { getStatus: jest.Mock };
     let pricingResolver: { resolveMany: jest.Mock };
 
@@ -15,7 +19,8 @@ describe('SpendLimitConfigService', () => {
         orgParams = {
             findByKey: jest.fn(),
             createOrUpdateConfig: jest.fn(),
-        };
+            find: jest.fn(),
+        } as any;
         monthlySpend = { getStatus: jest.fn() };
         pricingResolver = { resolveMany: jest.fn() };
         service = new SpendLimitConfigService(
@@ -120,6 +125,76 @@ describe('SpendLimitConfigService', () => {
                 priceable: false,
                 unpriceable: ['b', 'c'],
             });
+        });
+    });
+
+    describe('listEnabledOrganizations', () => {
+        it('returns only orgs with an enabled, positive limit', async () => {
+            orgParams.find.mockResolvedValue([
+                {
+                    organization: { uuid: 'org-a' },
+                    configValue: { enabled: true, monthlyLimitUsd: 1000 },
+                },
+                {
+                    organization: { uuid: 'org-b' },
+                    configValue: { enabled: false, monthlyLimitUsd: 1000 },
+                },
+                {
+                    organization: { uuid: 'org-c' },
+                    configValue: { enabled: true, monthlyLimitUsd: 0 },
+                },
+                {
+                    // missing organization id — skipped
+                    configValue: { enabled: true, monthlyLimitUsd: 500 },
+                },
+            ]);
+
+            const result = await service.listEnabledOrganizations();
+
+            expect(result).toEqual([
+                {
+                    organizationId: 'org-a',
+                    config: { enabled: true, monthlyLimitUsd: 1000 },
+                },
+            ]);
+        });
+
+        it('returns an empty list when the lookup fails', async () => {
+            orgParams.find.mockRejectedValue(new Error('db down'));
+            await expect(service.listEnabledOrganizations()).resolves.toEqual(
+                [],
+            );
+        });
+    });
+
+    describe('loadAndEvaluate', () => {
+        it('returns the config alongside the evaluation', async () => {
+            const config = {
+                enabled: true,
+                monthlyLimitUsd: 1000,
+                modelPricing: { m: { input: 1e-6, output: 1e-6, cacheRead: 0, cacheWrite: 0 } },
+            };
+            orgParams.findByKey.mockResolvedValue({ configValue: config });
+            const evaluation = { spentUsd: 500, periodKey: '2026-06' };
+            monthlySpend.getStatus.mockResolvedValue(evaluation);
+
+            await expect(service.loadAndEvaluate(ORG, NOW)).resolves.toEqual({
+                config,
+                evaluation,
+            });
+            expect(monthlySpend.getStatus).toHaveBeenCalledWith(
+                'org-1',
+                1000,
+                NOW,
+                config.modelPricing,
+            );
+        });
+
+        it('returns null when the limit is disabled', async () => {
+            orgParams.findByKey.mockResolvedValue({
+                configValue: { enabled: false, monthlyLimitUsd: 1000 },
+            });
+            await expect(service.loadAndEvaluate(ORG, NOW)).resolves.toBeNull();
         });
     });
 
