@@ -5,6 +5,7 @@ import {
     TOKEN_USAGE_SERVICE_TOKEN,
 } from '@libs/analytics/domain/token-usage/contracts/tokenUsage.service.contract';
 import { TokenUsageBreakdown } from '@libs/analytics/domain/token-usage/types/tokenUsage.types';
+import { ManualPricingOverrides } from '@libs/analytics/domain/token-usage/types/pricing.types';
 import { buildSpendLimitStatus } from '@libs/analytics/domain/spend-limit/spend-limit-status';
 import {
     MonthlySpendResult,
@@ -36,6 +37,7 @@ export class MonthlySpendUseCase {
     async getMonthToDateSpend(
         organizationId: string,
         now: Date = new Date(),
+        overrides?: ManualPricingOverrides,
     ): Promise<MonthlySpendResult> {
         const { start, end, periodKey } = this.getMonthRange(now);
 
@@ -48,6 +50,7 @@ export class MonthlySpendUseCase {
 
         const byModel = await this.modelCostCalculator.spendByModel(
             rows as CostUsageRow[],
+            overrides,
         );
         const spentUsd = this.roundToCents(
             byModel.reduce((sum, m) => sum + m.spentUsd, 0),
@@ -71,8 +74,13 @@ export class MonthlySpendUseCase {
         organizationId: string,
         limitUsd: number,
         now: Date = new Date(),
+        overrides?: ManualPricingOverrides,
     ): Promise<SpendLimitEvaluation> {
-        const spend = await this.getMonthToDateSpend(organizationId, now);
+        const spend = await this.getMonthToDateSpend(
+            organizationId,
+            now,
+            overrides,
+        );
         const status = buildSpendLimitStatus(spend.spentUsd, limitUsd);
 
         return {

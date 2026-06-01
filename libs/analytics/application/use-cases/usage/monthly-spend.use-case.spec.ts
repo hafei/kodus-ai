@@ -81,7 +81,10 @@ describe('MonthlySpendUseCase', () => {
             const result = await useCase.getMonthToDateSpend('org-1', NOW);
 
             // Cost math is delegated to the calculator with the raw rows.
-            expect(modelCostCalculator.spendByModel).toHaveBeenCalledWith(rows);
+            expect(modelCostCalculator.spendByModel).toHaveBeenCalledWith(
+                rows,
+                undefined,
+            );
             expect(result.spentUsd).toBe(3.75);
             expect(result.byModel).toEqual([
                 { model: 'm1', spentUsd: 1.5 },
@@ -109,6 +112,23 @@ describe('MonthlySpendUseCase', () => {
 
             const result = await useCase.getMonthToDateSpend('org-1', NOW);
             expect(result.spentUsd).toBe(3.01);
+        });
+
+        it('forwards manual pricing overrides to the calculator', async () => {
+            const rows = [
+                { input: 1, output: 1, outputReasoning: 0, model: 'custom' },
+            ];
+            const overrides = {
+                custom: { input: 1e-6, output: 1e-6, cacheRead: 0, cacheWrite: 0 },
+            };
+            tokenUsageService.getDailyUsage.mockResolvedValue(rows);
+
+            await useCase.getMonthToDateSpend('org-1', NOW, overrides);
+
+            expect(modelCostCalculator.spendByModel).toHaveBeenCalledWith(
+                rows,
+                overrides,
+            );
         });
 
         it('builds a zero-padded periodKey for single-digit months', async () => {

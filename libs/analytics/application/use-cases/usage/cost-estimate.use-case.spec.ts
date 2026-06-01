@@ -1,5 +1,6 @@
 import { CostEstimateUseCase } from './cost-estimate.use-case';
 import { ModelCostCalculator } from './model-cost-calculator';
+import { PricingResolver } from './pricing-resolver';
 import { ModelPricingInfo } from './token-pricing.use-case';
 
 type UsageRow = {
@@ -74,7 +75,7 @@ describe('CostEstimateUseCase', () => {
         // owned by ModelCostCalculator, so the end-to-end assertions below
         // exercise it through the use case.
         const modelCostCalculator = new ModelCostCalculator(
-            tokenPricingUseCase as any,
+            new PricingResolver(tokenPricingUseCase as any),
         );
         useCase = new CostEstimateUseCase(
             tokenUsageService as any,

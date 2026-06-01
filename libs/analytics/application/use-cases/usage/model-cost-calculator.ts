@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
 
 import { ModelSpend } from '@libs/analytics/domain/spend-limit/spend-limit.types';
+import {
+    ManualPricingOverrides,
+    TokenRate,
+} from '@libs/analytics/domain/token-usage/types/pricing.types';
 
-import { TokenPrice, TokenPricingUseCase } from './token-pricing.use-case';
+import { PricingResolver } from './pricing-resolver';
 
 const UNKNOWN_MODEL = '(unknown)';
 
@@ -28,29 +32,38 @@ interface ModelUsageAgg {
 
 /**
  * Single source of truth for turning token usage into US$. Buckets usage by
- * model and prices each independently because rates vary by ~10x across
- * providers — averaging into one flat rate drops the signal entirely. Used by
- * both the cost-estimate projection and the monthly spend tracker so the two
- * can never disagree on what a workload costs.
+ * model and prices each independently (rates vary by ~10x across providers).
+ * Pricing comes from the PricingResolver, so manual overrides and catalog
+ * rates are applied consistently here, in cost-estimate, and on the config
+ * surface — they can never disagree on what a workload costs.
  */
 @Injectable()
 export class ModelCostCalculator {
-    constructor(private readonly tokenPricingUseCase: TokenPricingUseCase) {}
+    constructor(private readonly pricingResolver: PricingResolver) {}
 
     /** Per-model billed cost for the given usage rows. */
-    async spendByModel(rows: CostUsageRow[]): Promise<ModelSpend[]> {
+    async spendByModel(
+        rows: CostUsageRow[],
+        overrides?: ManualPricingOverrides,
+    ): Promise<ModelSpend[]> {
         const perModel = this.bucketByModel(rows);
 
         const out: ModelSpend[] = [];
         for (const [model, agg] of perModel) {
-            out.push({ model, spentUsd: await this.costForModel(model, agg) });
+            out.push({
+                model,
+                spentUsd: await this.costForModel(model, agg, overrides),
+            });
         }
         return out;
     }
 
     /** Total billed cost across every model in the given usage rows. */
-    async totalCost(rows: CostUsageRow[]): Promise<number> {
-        const byModel = await this.spendByModel(rows);
+    async totalCost(
+        rows: CostUsageRow[],
+        overrides?: ManualPricingOverrides,
+    ): Promise<number> {
+        const byModel = await this.spendByModel(rows, overrides);
         return byModel.reduce((sum, m) => sum + m.spentUsd, 0);
     }
 
@@ -78,22 +91,21 @@ export class ModelCostCalculator {
     private async costForModel(
         model: string,
         agg: ModelUsageAgg,
+        overrides?: ManualPricingOverrides,
     ): Promise<number> {
         if (model === UNKNOWN_MODEL) return 0;
 
-        const info = await this.tokenPricingUseCase.execute(model);
-        const rates = info.pricing;
+        const { rates } = await this.pricingResolver.resolve(model, overrides);
 
-        // Tier selection: when the catalog defines a separate rate above 200K
-        // prompt tokens (only Gemini Pro today), use it once the aggregate
-        // input for this model clears that bar. Code-review workloads always
-        // do; anything else overestimates by at most ~2x, acceptable here.
+        // Tier selection: when a separate rate above 200K prompt tokens exists
+        // (only Gemini Pro in the catalog today; manual pricing is always
+        // flat), use it once the aggregate input for this model clears the bar.
         const shouldUseAbove200k = agg.input > 200_000;
 
-        const pick = (price: TokenPrice) =>
-            shouldUseAbove200k && typeof price.above200k === 'number'
-                ? price.above200k
-                : price.default;
+        const pick = (rate: TokenRate) =>
+            shouldUseAbove200k && typeof rate.above200k === 'number'
+                ? rate.above200k
+                : rate.default;
 
         const inputRate = pick(rates.input);
         const outputRate = pick(rates.output);

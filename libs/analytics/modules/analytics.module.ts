@@ -12,6 +12,7 @@ import { TokensByDeveloperUseCase } from '../application/use-cases/usage/tokens-
 import { CostEstimateUseCase } from '../application/use-cases/usage/cost-estimate.use-case';
 import { ModelCostCalculator } from '../application/use-cases/usage/model-cost-calculator';
 import { MonthlySpendUseCase } from '../application/use-cases/usage/monthly-spend.use-case';
+import { PricingResolver } from '../application/use-cases/usage/pricing-resolver';
 import {
     ObservabilityTelemetryModel,
     ObservabilityTelemetryModelSchema,
@@ -39,6 +40,7 @@ import { PullRequestsModule } from '@libs/code-review/modules/pull-requests.modu
         CostEstimateUseCase,
         ModelCostCalculator,
         MonthlySpendUseCase,
+        PricingResolver,
     ],
     exports: [
         TOKEN_USAGE_SERVICE_TOKEN,
@@ -47,6 +49,7 @@ import { PullRequestsModule } from '@libs/code-review/modules/pull-requests.modu
         CostEstimateUseCase,
         ModelCostCalculator,
         MonthlySpendUseCase,
+        PricingResolver,
     ],
 })
 export class AnalyticsModule {}

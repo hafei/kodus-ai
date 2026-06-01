@@ -1,4 +1,5 @@
 import { ModelCostCalculator } from './model-cost-calculator';
+import { PricingResolver } from './pricing-resolver';
 import { ModelPricingInfo } from './token-pricing.use-case';
 
 /**
@@ -58,7 +59,10 @@ describe('ModelCostCalculator', () => {
 
     beforeEach(() => {
         tokenPricingUseCase = { execute: jest.fn() };
-        calculator = new ModelCostCalculator(tokenPricingUseCase as any);
+        // Real resolver over the mocked catalog: the catalog path still flows
+        // through tokenPricingUseCase.execute, so the assertions below hold.
+        const pricingResolver = new PricingResolver(tokenPricingUseCase as any);
+        calculator = new ModelCostCalculator(pricingResolver);
     });
 
     it('returns zero and never consults pricing for an empty row set', async () => {
@@ -152,6 +156,25 @@ describe('ModelCostCalculator', () => {
         expect(spend.gemini).toBeCloseTo(3.8, 10);
         expect(spend.claude).toBeCloseTo(3.0, 10);
         expect(tokenPricingUseCase.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('prices with a manual override instead of the catalog when one is given', async () => {
+        const byModel = await calculator.spendByModel(
+            [{ input: 100_000, output: 40_000, outputReasoning: 0, model: 'custom' }],
+            {
+                custom: {
+                    input: 3e-6, // $3 / 1M
+                    output: 15e-6, // $15 / 1M
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                },
+            },
+        );
+
+        // input 100K × $3/M = $0.30, output 40K × $15/M = $0.60 → $0.90
+        expect(byModel[0].spentUsd).toBeCloseTo(0.9, 10);
+        // Manual override short-circuits the catalog entirely.
+        expect(tokenPricingUseCase.execute).not.toHaveBeenCalled();
     });
 
     it('contributes zero and skips pricing for usage with a blank/unknown model', async () => {
