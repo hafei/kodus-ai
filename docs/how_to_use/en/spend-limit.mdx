@@ -12,7 +12,7 @@ The monthly spend limit watches how much you're spending on your **BYOK models**
 ## What it tracks
 
 - **BYOK models only.** Spend is measured against the models you configured under [Bring Your Own Key](/how_to_use/en/byok) — the keys you pay your provider for directly. Models Kodus runs on its own side don't count.
-- **Priced at current rates.** Spend is computed live from your token usage × the current price for each model. There's no snapshot: if you switch models or a price changes, the month-to-date figure re-bases to reflect it.
+- **Priced at current rates, per model.** Each model's tokens are priced at that model's current rate. There's no snapshot — if a model's price changes (catalog update or a manual edit), that model's month-to-date usage is recomputed at the new rate. Switching to a different model doesn't re-price the model you were using before.
 - **Per calendar month (UTC).** The window runs from the 1st of the month to the 1st of the next. Usage resets to $0 automatically at the start of each month — there's nothing to reset by hand.
 
 <Info>
@@ -109,8 +109,10 @@ Spend is an **estimate**. It's derived from the tokens your reviews used and the
     On the 1st of each calendar month (UTC). Month-to-date spend goes back to $0 and all threshold alerts re-arm automatically.
   </Accordion>
 
-  <Accordion title="I switched models mid-month — what happens?">
-    Spend is always priced at current rates, so the month-to-date total re-bases to reflect the models actually used. Past spend isn't re-priced retroactively in a misleading way — it reflects live pricing for the usage that occurred.
+  <Accordion title="I switched models mid-month — does my spend jump?">
+    No. Spend is tracked **per model**: each model's tokens are priced at *that model's* rate. If you spent \$50 on model A and then switch to model B, model A's usage stays at \$50 — switching to B never re-prices A's tokens at B's rate. Your total just grows by what model B then uses.
+
+    The only thing that re-prices already-incurred usage is a change to **that same model's price** — when the pricing catalog updates a model's rate, or you edit its manual price on the BYOK screen, that model's month-to-date usage is recomputed at the new rate (there's no frozen snapshot).
   </Accordion>
 
   <Accordion title="Why can't I enable the limit?">
