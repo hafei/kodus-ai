@@ -230,6 +230,7 @@ export async function registerRepo(
     target: TargetContext,
     provider: Provider,
     session: KodusSession,
+    opts?: { forceRecreate?: boolean },
 ): Promise<ProviderRepoRef> {
     const repoRef = await provider.repoRef();
     // Key on apiBaseUrl (not target.target) so each hermetic mock server
@@ -238,7 +239,14 @@ export async function registerRepo(
     // registration. Real runs share one apiBaseUrl, where organizationId
     // disambiguates tenants.
     const cacheKey = `${target.apiBaseUrl}:${provider.name}:${session.organizationId}:${repoRef.full_name}`;
-    const cached = registeredRepoCache.get(cacheKey);
+    // forceRecreate bypasses the cache: onboarding-webhook-registration
+    // deletes the repo's webhook on purpose and then asserts registerRepo
+    // recreated it, so it MUST hit the real POST (the cache exists exactly
+    // to skip that POST's webhook churn, which would otherwise leave the
+    // just-deleted hook gone and fail that scenario's assertion).
+    const cached = opts?.forceRecreate
+        ? undefined
+        : registeredRepoCache.get(cacheKey);
     if (cached) {
         log.info(
             `Repo ${cached.full_name} already registered this run — reusing (skips webhook-churning re-POST)`,
