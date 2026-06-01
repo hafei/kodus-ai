@@ -27,6 +27,7 @@ import * as dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 import * as fs from 'fs';
 import * as path from 'path';
+import { pickSnapshot } from './featured-review-snapshot';
 
 const argv = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -47,22 +48,6 @@ const fixturePath = path.resolve(
 
 const COLLECTION = 'featured_public_reviews';
 
-// Snapshot fields we persist in the fixture. `_id`, `createdAt` and
-// `updatedAt` are intentionally dropped — they're storage bookkeeping and
-// are (re)assigned by the target environment on import.
-const SNAPSHOT_FIELDS = [
-    'slug',
-    'published',
-    'tags',
-    'highlight',
-    'sortOrder',
-    'prUrl',
-    'pr',
-    'diff',
-    'result',
-    'sourceJobId',
-] as const;
-
 function buildMongoUri(): string {
     if (process.env.MONGODB_URI) return process.env.MONGODB_URI;
     const host = process.env.API_MG_DB_HOST ?? 'localhost';
@@ -72,14 +57,6 @@ function buildMongoUri(): string {
     const auth = user && pass ? `${user}:${encodeURIComponent(pass)}@` : '';
     const db = process.env.API_MG_DB_DATABASE ?? 'kodus';
     return `mongodb://${auth}${host}:${port}/${db}?authSource=admin`;
-}
-
-function pickSnapshot(doc: any): any {
-    const out: any = {};
-    for (const key of SNAPSHOT_FIELDS) {
-        if (doc[key] !== undefined) out[key] = doc[key];
-    }
-    return out;
 }
 
 async function exportFixture(db: any, dryRun: boolean) {

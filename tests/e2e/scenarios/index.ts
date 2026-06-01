@@ -5,6 +5,7 @@ import kodyRulesCreateAndApply from "./kody-rules.js";
 import licenseAttribution from "./license-attribution.js";
 import onboardingWebhookRegistration from "./onboarding-webhook-registration.js";
 import perSeatLicenseToggle from "./per-seat-license-toggle.js";
+import publicPrDemo from "./public-pr-demo.js";
 import rbacAuthorization from "./rbac-authorization.js";
 import ssoCookieDomain from "./sso-cookie-domain.js";
 import ssoMultiUser from "./sso-multi-user.js";
@@ -18,6 +19,7 @@ export const allScenarios: Record<string, Scenario> = {
     [kodyRulesCreateAndApply.id]: kodyRulesCreateAndApply,
     [licenseAttribution.id]: licenseAttribution,
     [perSeatLicenseToggle.id]: perSeatLicenseToggle,
+    [publicPrDemo.id]: publicPrDemo,
     [rbacAuthorization.id]: rbacAuthorization,
     [ssoCookieDomain.id]: ssoCookieDomain,
     [ssoMultiUser.id]: ssoMultiUser,
@@ -44,6 +46,7 @@ export {
     licenseAttribution,
     onboardingWebhookRegistration,
     perSeatLicenseToggle,
+    publicPrDemo,
     rbacAuthorization,
     ssoCookieDomain,
     ssoMultiUser,

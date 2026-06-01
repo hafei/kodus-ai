@@ -33,6 +33,11 @@ scenarios:
     # user per role, and asserts the expected 200/403 across API endpoints.
     # appliesTo restricts it to github × paid (one cell per target).
     - rbac-authorization
+    # Public PR-review demo API (anonymous, cloud-only). appliesTo pins it
+    # to cloud × github × paid so it runs exactly once: featured-grid
+    # snapshots + a live enqueue→poll→completed against a small public PR.
+    # No tenant/provider — it only touches /cli/public/*.
+    - public-pr-demo
 
 cells:
     # ---------- self-hosted ----------

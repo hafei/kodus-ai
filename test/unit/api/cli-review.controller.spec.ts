@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
     ForbiddenException,
     HttpException,
+    NotFoundException,
     UnauthorizedException,
 } from '@nestjs/common';
 
@@ -174,6 +175,9 @@ const mockIngestSessionEvent = {
 const mockCliDeviceService = {
     validateOrRegisterDevice: jest.fn().mockResolvedValue({}),
 };
+const mockPublicPrReview = { execute: jest.fn() };
+const mockListFeaturedReviews = { execute: jest.fn() };
+const mockGetFeaturedReview = { execute: jest.fn() };
 
 // ============================================================================
 // SUITE
@@ -231,19 +235,15 @@ describe('CliReviewController', () => {
                 },
                 {
                     provide: PublicPrReviewUseCase,
-                    useValue: { execute: jest.fn() },
+                    useValue: mockPublicPrReview,
                 },
                 {
                     provide: ListFeaturedPublicReviewsUseCase,
-                    useValue: {
-                        execute: jest.fn().mockResolvedValue({ items: [] }),
-                    },
+                    useValue: mockListFeaturedReviews,
                 },
                 {
                     provide: GetFeaturedPublicReviewUseCase,
-                    useValue: {
-                        execute: jest.fn().mockResolvedValue(null),
-                    },
+                    useValue: mockGetFeaturedReview,
                 },
                 // Real use case wired against the existing mocked tokens
                 // (teamCliKey, team, auth, cliDevice, jwt, config) so
@@ -1661,6 +1661,179 @@ describe('CliReviewController', () => {
             // Should be roughly 1 hour from now
             const resetDate = new Date(result.resetsAt);
             expect(resetDate.getTime()).toBeGreaterThan(Date.now());
+        });
+    });
+
+    // =========================================================================
+    // POST /cli/public/review-pr  (anonymous public-demo enqueue)
+    // =========================================================================
+
+    describe('POST /cli/public/review-pr', () => {
+        const PUBLIC_BODY = {
+            prUrl: 'https://github.com/trpc/trpc/pull/7280',
+            fingerprint: 'fp-public-1',
+        } as any;
+
+        it('returns 202 with the enqueue response on success', async () => {
+            const res = { status: jest.fn() };
+            mockPublicPrReview.execute.mockResolvedValue({
+                ok: true,
+                response: {
+                    jobId: 'job-pub-1',
+                    status: 'PENDING',
+                    statusUrl: '/cli/public/review/jobs/job-pub-1',
+                    pr: { owner: 'trpc', repo: 'trpc', prNumber: 7280 },
+                    diff: 'diff --git a/x b/x',
+                },
+            });
+
+            const result = await controller.publicPrReview(PUBLIC_BODY, res);
+
+            expect(mockPublicPrReview.execute).toHaveBeenCalledWith({
+                prUrl: PUBLIC_BODY.prUrl,
+                fingerprint: PUBLIC_BODY.fingerprint,
+            });
+            expect(res.status).toHaveBeenCalledWith(202);
+            expect(result).toHaveProperty('jobId', 'job-pub-1');
+            expect(result).toHaveProperty('diff');
+        });
+
+        it('throws 400 when fingerprint is missing', async () => {
+            await expect(
+                controller.publicPrReview({ prUrl: 'x' } as any),
+            ).rejects.toThrow(HttpException);
+            expect(mockPublicPrReview.execute).not.toHaveBeenCalled();
+        });
+
+        it('throws a typed 400 (e.g. too_large) carrying code + message', async () => {
+            mockPublicPrReview.execute.mockResolvedValue({
+                ok: false,
+                code: 'too_large',
+                message: 'PR exceeds the free-demo cap',
+                statusCode: 400,
+            });
+
+            try {
+                await controller.publicPrReview(PUBLIC_BODY, { status: jest.fn() });
+                throw new Error('expected publicPrReview to throw');
+            } catch (error) {
+                expect(error).toBeInstanceOf(HttpException);
+                expect(error.getStatus()).toBe(400);
+                const response = error.getResponse();
+                expect(response.code).toBe('too_large');
+                expect(response.message).toContain('cap');
+            }
+        });
+
+        it('throws 429 with remaining/resetAt/limit when rate-limited', async () => {
+            mockPublicPrReview.execute.mockResolvedValue({
+                ok: false,
+                code: 'rate_limited',
+                message: "You've used your free reviews",
+                statusCode: 429,
+                rateLimit: {
+                    remaining: 0,
+                    resetAt: '2026-01-01T00:00:00.000Z',
+                    limit: 2,
+                },
+            });
+
+            try {
+                await controller.publicPrReview(PUBLIC_BODY, { status: jest.fn() });
+                throw new Error('expected publicPrReview to throw');
+            } catch (error) {
+                expect(error).toBeInstanceOf(HttpException);
+                expect(error.getStatus()).toBe(429);
+                const response = error.getResponse();
+                expect(response.remaining).toBe(0);
+                expect(response.resetAt).toBe('2026-01-01T00:00:00.000Z');
+                expect(response.limit).toBe(2);
+            }
+        });
+    });
+
+    // =========================================================================
+    // GET /cli/public/review/jobs/:jobId  (anonymous poll, scoped to 'trial')
+    // =========================================================================
+
+    describe('GET /cli/public/review/jobs/:jobId', () => {
+        it("scopes the lookup to the 'trial' org and forwards omit=payload", async () => {
+            mockGetCliReviewJobStatus.execute.mockResolvedValue({
+                jobId: 'job-pub-1',
+                status: 'COMPLETED',
+            });
+
+            await controller.getPublicReviewJob('job-pub-1', 'payload');
+
+            expect(mockGetCliReviewJobStatus.execute).toHaveBeenCalledWith({
+                jobId: 'job-pub-1',
+                organizationId: 'trial',
+                omitPayload: true,
+            });
+        });
+
+        it('does not omit payload on the first poll', async () => {
+            mockGetCliReviewJobStatus.execute.mockResolvedValue({
+                jobId: 'job-pub-1',
+                status: 'PENDING',
+            });
+
+            await controller.getPublicReviewJob('job-pub-1', undefined);
+
+            expect(mockGetCliReviewJobStatus.execute).toHaveBeenCalledWith(
+                expect.objectContaining({ omitPayload: false }),
+            );
+        });
+    });
+
+    // =========================================================================
+    // GET /cli/public/featured-reviews  (cached marketing grid)
+    // =========================================================================
+
+    describe('GET /cli/public/featured-reviews', () => {
+        it('returns the { items } envelope from the use case', async () => {
+            const items = [
+                { slug: 'react-fizz-resume-abort', issuesCount: 3 },
+                { slug: 'trpc-error-handling-vm', issuesCount: 1 },
+            ];
+            mockListFeaturedReviews.execute.mockResolvedValue({ items });
+
+            const result = await controller.listFeaturedReviews();
+
+            expect(result).toEqual({ items });
+        });
+    });
+
+    // =========================================================================
+    // GET /cli/public/featured-reviews/:slug  (cached snapshot)
+    // =========================================================================
+
+    describe('GET /cli/public/featured-reviews/:slug', () => {
+        it('returns the snapshot for a known slug', async () => {
+            const review = {
+                slug: 'react-fizz-resume-abort',
+                pr: { prNumber: 36584 },
+                diff: 'diff --git a/x b/x',
+                result: { issues: [{ file: 'x', line: 1 }] },
+            };
+            mockGetFeaturedReview.execute.mockResolvedValue(review);
+
+            const result = await controller.getFeaturedReview(
+                'react-fizz-resume-abort',
+            );
+
+            expect(mockGetFeaturedReview.execute).toHaveBeenCalledWith({
+                slug: 'react-fizz-resume-abort',
+            });
+            expect(result).toBe(review);
+        });
+
+        it('throws 404 when the slug is unknown / unpublished', async () => {
+            mockGetFeaturedReview.execute.mockResolvedValue(null);
+
+            await expect(
+                controller.getFeaturedReview('does-not-exist'),
+            ).rejects.toThrow(NotFoundException);
         });
     });
 });

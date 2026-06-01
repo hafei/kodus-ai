@@ -8,6 +8,7 @@ import {
     type JobStatusResponse,
 } from "@/lib/api";
 import { loadSnapshot, saveSnapshot, type ReviewSnapshot } from "@/lib/snapshot";
+import { isFeaturedSlug as detectFeaturedSlug } from "@/lib/jobId";
 import { parseUnifiedDiff } from "@/lib/diff";
 import { loadViewed, setViewed as persistViewed } from "@/lib/viewed";
 import { ReviewProgressBar } from "@/components/ReviewProgressBar";
@@ -30,11 +31,6 @@ import {
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000;
-
-// UUID v4-ish — what the worker queue hands back as a jobId. Anything
-// else in the URL is treated as a featured-review slug.
-const UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function ResultPage({
     params,
@@ -77,7 +73,7 @@ export default function ResultPage({
         setCollapsed(next);
     };
 
-    const isFeaturedSlug = !UUID_RE.test(jobId);
+    const isFeaturedSlug = detectFeaturedSlug(jobId);
 
     useEffect(() => {
         let cancelled = false;

@@ -50,6 +50,9 @@ scenarios:
     # RBAC authorization matrix (also in fast.yml). Signs up a throwaway org,
     # provisions one user per role, asserts 200/403 across API endpoints.
     - rbac-authorization
+    # Public PR-review demo API (also in fast.yml). Anonymous, cloud-only;
+    # appliesTo pins it to one cell (cloud × github × paid).
+    - public-pr-demo
 
 cells:
     # ---------- self-hosted (mirrors fast.yml) ----------
