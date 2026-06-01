@@ -40,6 +40,17 @@ export interface SpendLimitConfigView {
     priceable: boolean;
 }
 
+/** Month-to-date BYOK spend evaluated against the configured limit. */
+export interface SpendLimitStatus {
+    organizationId: string;
+    periodKey: string;
+    spentUsd: number;
+    limitUsd: number;
+    pct: number;
+    isOverLimit: boolean;
+    crossedThresholds: number[];
+}
+
 export interface UpdateSpendLimitPayload {
     enabled: boolean;
     monthlyLimitUsd: number;

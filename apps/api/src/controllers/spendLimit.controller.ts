@@ -1,6 +1,7 @@
 import { ConfigureSpendLimitUseCase } from '@libs/analytics/application/spend-limit/configure-spend-limit.use-case';
 import { GetOrgByokModelsUseCase } from '@libs/analytics/application/spend-limit/get-org-byok-models.use-case';
 import { GetSpendLimitConfigUseCase } from '@libs/analytics/application/spend-limit/get-spend-limit-config.use-case';
+import { SpendLimitConfigService } from '@libs/analytics/application/spend-limit/spend-limit-config.service';
 import {
     SpendLimitConfigError,
     SpendLimitPriceabilityError,
@@ -46,7 +47,25 @@ export class SpendLimitController {
         private readonly getSpendLimitConfigUseCase: GetSpendLimitConfigUseCase,
         private readonly configureSpendLimitUseCase: ConfigureSpendLimitUseCase,
         private readonly getOrgByokModelsUseCase: GetOrgByokModelsUseCase,
+        private readonly spendLimitConfigService: SpendLimitConfigService,
     ) {}
+
+    @Get('status')
+    @CheckPolicies(
+        checkPermissions({
+            action: Action.Read,
+            resource: ResourceType.TokenUsage,
+        }),
+    )
+    @ApiOperation({
+        summary: 'Month-to-date BYOK spend vs the configured limit',
+        description:
+            'Returns the current evaluation (spent / limit / pct / over) for ' +
+            'the usage page, or null when no enabled limit is configured.',
+    })
+    async status() {
+        return this.spendLimitConfigService.evaluate(this.resolveOrg());
+    }
 
     @Get()
     @CheckPolicies(
