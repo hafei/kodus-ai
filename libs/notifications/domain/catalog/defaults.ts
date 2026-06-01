@@ -207,14 +207,15 @@ export const EVENT_DEFAULTS: Readonly<
     },
 
     // ── Spend limit ────────────────────────────────────────────
-    // In-app only for now; an EMAIL channel can be added by registering
-    // the two templates in the email registry (a fast-follow).
 
     [NotificationEvent.SPEND_LIMIT_THRESHOLD_REACHED]: {
         criticality: Criticality.INFORMATIONAL,
         category: 'spend_limit',
         label: 'Monthly Spend Limit Threshold Reached',
-        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
         icon: 'credit-card',
     },
 
@@ -222,7 +223,10 @@ export const EVENT_DEFAULTS: Readonly<
         criticality: Criticality.CRITICAL,
         category: 'spend_limit',
         label: 'Monthly Spend Limit Exceeded',
-        defaultChannels: new Set([NotificationChannel.IN_APP]),
+        defaultChannels: new Set([
+            NotificationChannel.EMAIL,
+            NotificationChannel.IN_APP,
+        ]),
         icon: 'credit-card',
         pageSeverity: true,
     },
