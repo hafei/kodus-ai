@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate an Excalidraw diagram of the current Kodus code-review harness."""
-import json
+import json, os
 
 elements = []
 _seed = [1000]
@@ -259,7 +259,6 @@ out = {
     "files": {},
 }
 path = os.path.join(os.path.dirname(__file__), "..", "docs", "code-review-harness.excalidraw")
-import os
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w") as f:
     json.dump(out, f, indent=2)
