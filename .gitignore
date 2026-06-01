@@ -218,3 +218,6 @@ parity-report.json
 
 # IDE - Zed
 .zed/
+
+opus-diagnosis-ptbr/
+scripts/benchmark/node_modules/
