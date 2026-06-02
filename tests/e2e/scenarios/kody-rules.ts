@@ -3,7 +3,11 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunContext, Scenario } from "../lib/types.js";
 import { ensureOk, http } from "../lib/http.js";
+import { ensureLicenseSeat } from "../lib/onboarding.js";
 import { pollUntil } from "../providers/base.js";
+import { logger } from "../lib/log.js";
+
+const log = logger("kody-rules");
 
 // Fixture branch pair per provider. Each fixture branch lives permanently in
 // the test repo and contains a file with deliberate TODO_REMOVE_ME markers
@@ -79,6 +83,9 @@ export const kodyRulesCreateAndApply: Scenario = {
         await ctx.kodus.registerIntegration(session);
         const repo = await ctx.kodus.registerRepo(session);
         await ctx.kodus.finishOnboarding(session, repo);
+        // Rule application runs inside the review pipeline; on licensed
+        // self-hosted the PR author needs a seat or the review is skipped.
+        await ensureLicenseSeat(ctx.target, session, ctx.provider);
 
         const ruleName = `e2e-rule-${ctx.runId.slice(0, 8)}-${randomUUID().slice(0, 6)}`;
         // The rule must be unambiguous AND override intent-aware reasoning.
@@ -125,6 +132,41 @@ export const kodyRulesCreateAndApply: Scenario = {
             "Rule was created but the response did not include uuid/id",
         );
 
+        // The code-review pipeline only enforces ACTIVE rules, and a freshly
+        // created rule isn't reliably loadable by ResolveConfigStage the
+        // instant /create-or-update returns. Under matrix contention (4
+        // self-hosted droplets sharing one LLM key) the PR's review can fire
+        // before the rule propagates and then run the kody-rules agent with no
+        // rule in context — observed on bitbucket (rules-agent input=47 tokens,
+        // 0 suggestions) while github/gitlab/azure won the race the same run.
+        // Poll until the rule is visible AND active for this org, then a short
+        // settle for review-side config propagation, before opening the PR — so
+        // the review deterministically sees the rule instead of racing it.
+        const ruleActive = await pollUntil<boolean>(
+            async () => {
+                const r = await http(
+                    `${ctx.target.apiBaseUrl}/kody-rules/find-by-organization-id`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${session.accessToken}`,
+                        },
+                        timeoutMs: 15_000,
+                    },
+                );
+                return findRuleStatusById(r.body, ruleId) === "active"
+                    ? true
+                    : null;
+            },
+            { intervalSec: 3, timeoutSec: 60 },
+        );
+        ctx.assert(
+            ruleActive,
+            `Rule ${ruleName} (${ruleId}) did not reach status=active within 60s of creation — the review would race it. Aborting before opening the PR.`,
+        );
+        // Small settle: the rule is active in the DB, but give the review's
+        // per-repo config load a beat to observe it under load.
+        await new Promise((r) => setTimeout(r, 5_000));
+
         const sinceIso = new Date().toISOString();
         const opened = await ctx.provider.openPRFromBranches({
             head: fixture!.head,
@@ -134,55 +176,81 @@ export const kodyRulesCreateAndApply: Scenario = {
         });
 
         try {
-            const review = await ctx.provider.pollForReview(
-                { number: opened.number },
-                { sinceIso, timeoutSec: 720 },
-            );
-
-            // Mechanics: review pipeline ran end-to-end and Kody finished
-            // (status "Complete!" comment or real inline findings).
-            ctx.assert(
-                review.reviewComments + review.issueComments + review.reviews >
-                    0,
-                `No review activity on PR ${opened.url} within timeout`,
-            );
-
-            // Apply: the rule influenced the review. Mechanically observable
-            // via Kodus's own API (`GET /kody-rules/suggestions?ruleId=…`)
-            // which returns suggestions whose pipeline-side metadata links
-            // them to this rule. We don't inspect the suggestion text — only
-            // count — so we don't reintroduce LLM-quality flakiness. If 0
-            // suggestions came back for an obvious fixture (literal +
-            // commented TODO_REMOVE_ME against a rule explicitly forbidding
-            // it), the rule pipeline silently skipped — a real regression.
+            // One review→suggestions pass. Returns the review activity and
+            // the count of suggestions the pipeline linked to OUR rule.
             //
-            // Why a poll instead of one-shot: pollForReview returns as soon
-            // as Kody posts the completion comment on the provider, but the
-            // pipeline persists `files.suggestions[].brokenKodyRulesIds`
-            // asynchronously after the comment is delivered. On bitbucket
-            // (where individual API calls are ~1.3s each) we observed the
-            // suggestion landing ~11s AFTER pollForReview returned, so a
-            // one-shot read raced and saw 0. 60s is plenty for any provider
-            // — fast ones return on the first attempt anyway.
-            const suggestionsCount = await pollUntil(async () => {
-                const resp = await http<{ data?: unknown[] }>(
-                    `${ctx.target.apiBaseUrl}/kody-rules/suggestions?ruleId=${encodeURIComponent(ruleId!)}`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${session.accessToken}`,
-                        },
-                        timeoutMs: 30_000,
-                    },
+            // Why a poll for suggestions instead of one-shot: pollForReview
+            // returns as soon as Kody posts the completion comment on the
+            // provider, but the pipeline persists
+            // `files.suggestions[].brokenKodyRulesIds` asynchronously after
+            // the comment is delivered. On bitbucket (individual API calls
+            // ~1.3s each) the suggestion landed ~11s AFTER pollForReview
+            // returned, so a one-shot read raced and saw 0. 60s is plenty.
+            const collect = async (since: string) => {
+                const review = await ctx.provider.pollForReview(
+                    { number: opened.number },
+                    { sinceIso: since, timeoutSec: 720 },
                 );
-                ensureOk(resp, "kody-rules:findSuggestionsByRule");
-                const count = Array.isArray(resp.body.data)
-                    ? resp.body.data.length
-                    : 0;
-                return count > 0 ? count : null;
-            }, { intervalSec: 3, timeoutSec: 60 }) ?? 0;
+                ctx.assert(
+                    review.reviewComments +
+                        review.issueComments +
+                        review.reviews >
+                        0,
+                    `No review activity on PR ${opened.url} within timeout`,
+                );
+                const count =
+                    (await pollUntil(async () => {
+                        const resp = await http<{ data?: unknown[] }>(
+                            `${ctx.target.apiBaseUrl}/kody-rules/suggestions?ruleId=${encodeURIComponent(ruleId!)}`,
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${session.accessToken}`,
+                                },
+                                timeoutMs: 30_000,
+                            },
+                        );
+                        ensureOk(resp, "kody-rules:findSuggestionsByRule");
+                        const c = Array.isArray(resp.body.data)
+                            ? resp.body.data.length
+                            : 0;
+                        return c > 0 ? c : null;
+                    }, { intervalSec: 3, timeoutSec: 60 })) ?? 0;
+                return { review, count };
+            };
+
+            let { review, count: suggestionsCount } = await collect(sinceIso);
+
+            // The rule influenced the review iff ≥1 suggestion links back to
+            // it. A 0 here has TWO possible causes and we must distinguish
+            // them deterministically:
+            //   (a) propagation race — the review fired before the freshly
+            //       created rule reached the worker's per-repo config, so the
+            //       rules-agent ran with the rule ABSENT (observed on
+            //       bitbucket, the slowest provider: rules-agent input ~47
+            //       tokens, 0 suggestions, while github/gitlab/azure won the
+            //       race the same run). The rule has been active for minutes
+            //       by now, so re-triggering the review on the SAME PR gives
+            //       a clean second pass that deterministically sees it.
+            //   (b) real regression — the rule pipeline ignored an obvious
+            //       match. If the re-trigger ALSO yields 0, it's (b) and we
+            //       fail loudly.
+            // One retry, not a loop: (a) always clears on the second pass;
+            // anything that survives it is a genuine bug, not a race.
+            if (suggestionsCount === 0) {
+                log.warn(
+                    `0 suggestions on first review of PR ${opened.url} — re-triggering review (rule propagation race vs real miss)`,
+                );
+                const retrigger = await ctx.provider.triggerReviewOnExistingPR(
+                    opened.number,
+                );
+                ({ review, count: suggestionsCount } = await collect(
+                    retrigger.sinceIso,
+                ));
+            }
+
             ctx.assert(
                 suggestionsCount > 0,
-                `Rule ${ruleName} produced 0 suggestions even though the fixture branch contains explicit TODO_REMOVE_ME occurrences. Either the rule pipeline didn't run for this PR or it ignored the rule.`,
+                `Rule ${ruleName} produced 0 suggestions even after a re-triggered review, though the fixture branch contains explicit TODO_REMOVE_ME occurrences. The rule pipeline ignored an active rule — a real regression, not a propagation race.`,
             );
 
             // Informational only — captured as evidence, not asserted on.
@@ -234,5 +302,33 @@ export const kodyRulesCreateAndApply: Scenario = {
         }
     },
 };
+
+// Recursively locate a rule's status by uuid in the
+// /kody-rules/find-by-organization-id response. Shape is roughly
+// `{ data: [{ repositoryId, rules: [{ uuid, status }] }] }`, but we walk it
+// defensively so a response-shape tweak doesn't silently break the wait.
+function findRuleStatusById(
+    node: unknown,
+    ruleId: string,
+): string | undefined {
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            const s = findRuleStatusById(item, ruleId);
+            if (s) return s;
+        }
+        return undefined;
+    }
+    if (node && typeof node === "object") {
+        const obj = node as Record<string, unknown>;
+        if (obj.uuid === ruleId && typeof obj.status === "string") {
+            return obj.status;
+        }
+        for (const v of Object.values(obj)) {
+            const s = findRuleStatusById(v, ruleId);
+            if (s) return s;
+        }
+    }
+    return undefined;
+}
 
 export default kodyRulesCreateAndApply;
