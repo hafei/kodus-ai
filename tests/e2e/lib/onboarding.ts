@@ -212,12 +212,47 @@ export async function registerIntegration(
     }
 }
 
+// Within a single matrix run a tenant's repo only needs to be registered
+// ONCE. Re-POSTing /code-management/repositories on every scenario makes
+// Kodus delete+recreate that repo's GitHub webhook each time (see
+// github.service.ts createPullRequestWebhook: it lists → deletes → creates
+// the hook with the same URL). That recreate opens a brief blind spot: a
+// PR opened right then fires its `opened` event at the about-to-be-deleted
+// hook, and GitHub never redelivers it to the new one — so the review
+// never starts and the scenario times out waiting for a heartbeat that can
+// no longer come. Caching the registration per (target, provider, org,
+// repo) means only the FIRST scenario per tenant pays the webhook churn;
+// every later scenario reuses the stable hook. (The first scenario's lone
+// churn completes before it opens its PR, so the new hook is already live.)
+const registeredRepoCache = new Map<string, ProviderRepoRef>();
+
 export async function registerRepo(
     target: TargetContext,
     provider: Provider,
     session: KodusSession,
+    opts?: { forceRecreate?: boolean },
 ): Promise<ProviderRepoRef> {
     const repoRef = await provider.repoRef();
+    // Key on apiBaseUrl (not target.target) so each hermetic mock server
+    // — every integration test spins a fresh one on a unique localhost
+    // port — gets its own cache slot and never reuses a prior test's
+    // registration. Real runs share one apiBaseUrl, where organizationId
+    // disambiguates tenants.
+    const cacheKey = `${target.apiBaseUrl}:${provider.name}:${session.organizationId}:${repoRef.full_name}`;
+    // forceRecreate bypasses the cache: onboarding-webhook-registration
+    // deletes the repo's webhook on purpose and then asserts registerRepo
+    // recreated it, so it MUST hit the real POST (the cache exists exactly
+    // to skip that POST's webhook churn, which would otherwise leave the
+    // just-deleted hook gone and fail that scenario's assertion).
+    const cached = opts?.forceRecreate
+        ? undefined
+        : registeredRepoCache.get(cacheKey);
+    if (cached) {
+        log.info(
+            `Repo ${cached.full_name} already registered this run — reusing (skips webhook-churning re-POST)`,
+        );
+        return cached;
+    }
     log.info(`Looking up ${repoRef.full_name} in available repos`);
     const listResp = await http<{
         data: Array<{
@@ -324,6 +359,7 @@ export async function registerRepo(
         full_name: found.full_name ?? repoRef.full_name,
     };
     log.ok(`Repo ${normalized.full_name} registered`);
+    registeredRepoCache.set(cacheKey, normalized);
     return normalized;
 }
 
