@@ -68,8 +68,9 @@ function buildRouteChecks() {
     const manifest = JSON.parse(
         readFileSync(MANIFEST_PATH, "utf8"),
     ) as ManifestEntry[];
+    const byRoute = new Map(manifest.map((m) => [m.route, m]));
     return RENDER_ROUTES.map(({ path, marker }) => {
-        const entry = manifest.find((m) => m.route === path);
+        const entry = byRoute.get(path);
         if (!entry) {
             throw new Error(
                 `route ${path} not found in permissions.route-manifest.json — regenerate with UPDATE_ROUTE_MANIFEST=1`,
