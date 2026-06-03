@@ -176,10 +176,21 @@ export const centralizedConfigSync: Scenario = {
     },
     timeoutSec: 900,
     async run(ctx: RunContext) {
-        const sourceRepoFullName = process.env.CENTRALIZED_CONFIG_TEST_REPO;
+        // Per-target source repo, same convention as resolveTargetRepo
+        // (GH_TEST_REPO_CLOUD etc.): cloud and self-hosted cells run in
+        // parallel in one matrix process, and this scenario WRITES to the
+        // source repo — sharing one repo would let run A's global config be
+        // overwritten by run B between A's seed and A's sync, and the
+        // merge-trigger webhook would route to whichever run's org is
+        // freshest. One repo per target removes both races. Skip (not
+        // throw) when unset so cells without the fixture record `skipped`.
+        const sfx = ctx.target.target.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+        const sourceRepoFullName =
+            process.env[`CENTRALIZED_CONFIG_TEST_REPO_${sfx}`] ||
+            process.env.CENTRALIZED_CONFIG_TEST_REPO;
         if (!sourceRepoFullName) {
             ctx.skip(
-                "CENTRALIZED_CONFIG_TEST_REPO is unset — no writable centralized-config source repo to drive",
+                `CENTRALIZED_CONFIG_TEST_REPO_${sfx} / CENTRALIZED_CONFIG_TEST_REPO are unset — no writable centralized-config source repo to drive`,
             );
         }
         const repoFolder = sourceRepoFullName!.split("/")[1]; // repo-scope folder = the source repo itself
