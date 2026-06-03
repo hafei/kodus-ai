@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import { RBAC_PASSWORD, setupRbacOrg } from "../lib/rbac-provision.js";
+import type { RbacRole } from "../lib/rbac-provision.js";
 import type { RunContext, Scenario } from "../lib/types.js";
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,59 @@ import type { RunContext, Scenario } from "../lib/types.js";
 
 const PLAYWRIGHT_DIR = resolve(import.meta.dirname, "..", "playwright");
 const SPEC = resolve(PLAYWRIGHT_DIR, "rbac-ui-render.mjs");
+
+// Routes whose RENDER we prove in the browser, with a DOM marker that the
+// screen actually painted (`null` = only assert allow-side is not /forbidden —
+// cockpit's body is data-dependent charts with no stable heading).
+//
+// The allow/deny verdict per role is NOT defined here: it comes from the
+// committed route manifest (permissions.route-manifest.json), itself derived
+// from ROLE_POLICIES with a jest drift-guard — single source of truth, no
+// duplicated permission matrix (same file rbac-frontend-routes replays).
+// /user-logs is deliberately absent: the page is feature-gated (EE
+// activity-logs) and redirects to /settings when off, so its render is
+// environment-dependent, not role-dependent.
+const RENDER_ROUTES: Array<{ path: string; marker: string | null }> = [
+    { path: "/token-usage", marker: "token usage" },
+    { path: "/pull-requests", marker: "pull requests" },
+    { path: "/settings/git", marker: "git settings" },
+    { path: "/cockpit", marker: null },
+];
+
+const MANIFEST_PATH = join(
+    import.meta.dirname,
+    "..",
+    "..",
+    "..",
+    "apps",
+    "web",
+    "src",
+    "core",
+    "utils",
+    "permissions.route-manifest.json",
+);
+
+type ManifestEntry = {
+    route: string;
+    expected: Record<Exclude<RbacRole, "owner">, "allow" | "deny">;
+};
+
+/** Resolve each render route's per-role verdict from the committed manifest
+ *  (owner is omitted there — it reaches everything by definition). */
+function buildRouteChecks() {
+    const manifest = JSON.parse(
+        readFileSync(MANIFEST_PATH, "utf8"),
+    ) as ManifestEntry[];
+    return RENDER_ROUTES.map(({ path, marker }) => {
+        const entry = manifest.find((m) => m.route === path);
+        if (!entry) {
+            throw new Error(
+                `route ${path} not found in permissions.route-manifest.json — regenerate with UPDATE_ROUTE_MANIFEST=1`,
+            );
+        }
+        return { path, marker, expected: entry.expected };
+    });
+}
 
 export const rbacUiRender: Scenario = {
     id: "rbac-ui-render",
@@ -64,6 +118,7 @@ export const rbacUiRender: Scenario = {
                     WEB_URL: ctx.target.webBaseUrl,
                     PASSWORD: RBAC_PASSWORD,
                     ROLES_JSON: JSON.stringify(roles),
+                    ROUTES_JSON: JSON.stringify(buildRouteChecks()),
                     OUT_DIR: ctx.artifactDir,
                 },
                 stdio: ["ignore", "inherit", "inherit"],

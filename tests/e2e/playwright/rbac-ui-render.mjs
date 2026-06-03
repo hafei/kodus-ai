@@ -11,10 +11,15 @@
 // (validated flow) and inject the cookies straight into the browser context.
 //
 // Env:
-//   WEB_URL    e.g. https://qa.web.kodus.io  (or http://127.0.0.1:3000)
-//   PASSWORD   shared password for the provisioned role users
-//   ROLES_JSON JSON array: [{ "role": "repo_admin", "email": "..." }, ...]
-//   OUT_DIR    directory for videos/screenshots (default: ./rbac-ui-evidence)
+//   WEB_URL     e.g. https://qa.web.kodus.io  (or http://127.0.0.1:3000)
+//   PASSWORD    shared password for the provisioned role users
+//   ROLES_JSON  JSON array: [{ "role": "repo_admin", "email": "..." }, ...]
+//   ROUTES_JSON JSON array from the scenario: [{ "path", "marker",
+//               "expected": { billing_manager|repo_admin|contributor:
+//               "allow"|"deny" } }] — verdicts resolved from the committed
+//               permissions.route-manifest.json (derived from ROLE_POLICIES),
+//               so this spec never redefines the permission matrix.
+//   OUT_DIR     directory for videos/screenshots (default: ./rbac-ui-evidence)
 
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
@@ -22,46 +27,22 @@ import { mkdirSync } from "node:fs";
 const WEB = (process.env.WEB_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 const PASSWORD = process.env.PASSWORD || "";
 const ROLES = JSON.parse(process.env.ROLES_JSON || "[]");
+const ROUTE_CHECKS = JSON.parse(process.env.ROUTES_JSON || "[]");
 const OUT_DIR = process.env.OUT_DIR || "./rbac-ui-evidence";
 mkdirSync(OUT_DIR, { recursive: true });
 
-// TokenUsage is the #1229 case: every role except contributor may see/open it.
-const tokenUsageAllowed = (role) => role !== "contributor";
+if (!ROUTE_CHECKS.length) {
+    console.error("[rbac-ui] ROUTES_JSON is empty — the scenario must pass the route matrix");
+    process.exit(1);
+}
 
-// Route-render matrix. `allowed` mirrors ROLE_POLICIES (role-policies.ts);
-// `marker` is page text that proves the screen actually rendered (not just a
-// 200). `marker: null` = only assert allow-side is NOT /forbidden (cockpit's
-// body is data-dependent charts, no stable heading).
-const ROUTE_CHECKS = [
-    {
-        path: "/token-usage",
-        marker: "token usage",
-        allowed: tokenUsageAllowed,
-    },
-    {
-        // Contributor read visibility (new): PRs on assigned repos.
-        path: "/pull-requests",
-        marker: "pull requests",
-        allowed: (role) => role !== "billing_manager",
-    },
-    {
-        // Contributor read visibility (new): git settings.
-        path: "/settings/git",
-        marker: "git settings",
-        allowed: () => true,
-    },
-    // NOTE: /user-logs is deliberately NOT here — the page is feature-gated
-    // (EE activity-logs) and redirects to /settings when the feature is off,
-    // so its render is environment-dependent, not role-dependent. The Logs
-    // RBAC grant is covered by rbac-authorization (API) and
-    // rbac-frontend-routes (middleware manifest).
-    {
-        // Cockpit stays admin-only — contributor/billing must hit /forbidden.
-        path: "/cockpit",
-        marker: null,
-        allowed: (role) => role === "owner" || role === "repo_admin",
-    },
-];
+// Owner is omitted from the manifest: it reaches everything by definition.
+const isAllowed = (entry, role) =>
+    role === "owner" || entry.expected[role] === "allow";
+
+// The "Token Usage" user-menu item mirrors the /token-usage route verdict
+// (#1229 regression: menu shown ⇔ page reachable).
+const tokenUsageEntry = ROUTE_CHECKS.find((r) => r.path === "/token-usage");
 
 const log = (m) => console.log(`[rbac-ui] ${m}`);
 const failures = [];
@@ -155,8 +136,8 @@ for (const { role, email } of ROLES) {
             }
         }
         await page.screenshot({ path: `${OUT_DIR}/${role}-menu.png`, fullPage: true });
-        const wantItem = tokenUsageAllowed(role);
-        if (opened) {
+        const wantItem = tokenUsageEntry ? isAllowed(tokenUsageEntry, role) : false;
+        if (opened && tokenUsageEntry) {
             const itemVisible =
                 (await page.getByRole("menuitem", { name: /Token Usage/i }).count()) > 0;
             if (itemVisible !== wantItem) {
@@ -173,8 +154,9 @@ for (const { role, email } of ROLES) {
         }
 
         // ---- 2) Route render: open each route, assert render vs /forbidden ----
-        for (const { path, marker, allowed } of ROUTE_CHECKS) {
-            const want = allowed(role);
+        for (const entry of ROUTE_CHECKS) {
+            const { path, marker } = entry;
+            const want = isAllowed(entry, role);
             await page.goto(`${WEB}${path}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
             await page.waitForTimeout(1500);
             const url = page.url();
