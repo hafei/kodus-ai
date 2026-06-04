@@ -7,6 +7,9 @@ import { safeArray } from "src/core/utils/safe-array";
 /**
  * Returns the platform type(s) of the active CODE_MANAGEMENT connections
  * for the current team. Returns a Set for O(1) lookups.
+ *
+ * Called unconditionally in every hook that needs platform info so that
+ * React's hook-order invariant is never violated across navigations.
  */
 function useCodeManagementPlatforms(): Set<string> {
     const { teamId } = useSelectedTeamId();
@@ -28,8 +31,10 @@ function useCodeManagementPlatforms(): Set<string> {
  */
 export function useShouldHideRequestChanges(): boolean {
     const { repositoryId } = useCodeReviewRouteParams();
+    const platforms = useCodeManagementPlatforms();
+
     if (repositoryId === "global") return false;
-    return useCodeManagementPlatforms().has(PlatformType.GITLAB);
+    return platforms.has(PlatformType.GITLAB);
 }
 
 /**
@@ -39,8 +44,10 @@ export function useShouldHideRequestChanges(): boolean {
  */
 export function useShouldHideHiddenComments(): boolean {
     const { repositoryId } = useCodeReviewRouteParams();
+    const platforms = useCodeManagementPlatforms();
+
     if (repositoryId === "global") return false;
-    return !useCodeManagementPlatforms().has(PlatformType.GITHUB);
+    return !platforms.has(PlatformType.GITHUB);
 }
 
 /**
@@ -50,6 +57,8 @@ export function useShouldHideHiddenComments(): boolean {
  */
 export function useShouldHideLLMPrompt(): boolean {
     const { repositoryId } = useCodeReviewRouteParams();
+    const platforms = useCodeManagementPlatforms();
+
     if (repositoryId === "global") return false;
-    return useCodeManagementPlatforms().has(PlatformType.BITBUCKET);
+    return platforms.has(PlatformType.BITBUCKET);
 }
