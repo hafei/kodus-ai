@@ -605,7 +605,7 @@ export class KodyRulesSyncService {
                     }
 
                     decoded =
-                        contentResp?.data?.encoding === 'base64'
+                        effectiveContent?.data?.encoding === 'base64'
                             ? Buffer.from(rawContent, 'base64').toString('utf-8')
                             : rawContent;
                 }
