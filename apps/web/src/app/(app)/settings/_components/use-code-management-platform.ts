@@ -26,39 +26,43 @@ function useCodeManagementPlatforms(): Set<string> {
 
 /**
  * Returns true when the "Request Changes" review-status toggle should be
- * hidden.  GitLab does not support this feature; global settings are
- * always shown (they apply to all platforms).
+ * hidden.  Hidden when ALL connected platforms are GitLab (the feature
+ * is not supported there).  For mixed-platform teams the setting is
+ * shown because it may apply to non-GitLab repositories.
  */
 export function useShouldHideRequestChanges(): boolean {
-    const { repositoryId } = useCodeReviewRouteParams();
     const platforms = useCodeManagementPlatforms();
 
-    if (repositoryId === "global") return false;
-    return platforms.has(PlatformType.GITLAB);
+    // All connected platforms are GitLab → feature unsupported everywhere.
+    return platforms.size > 0 && !platforms.has(PlatformType.GITHUB)
+        && !platforms.has(PlatformType.BITBUCKET)
+        && !platforms.has(PlatformType.AZURE_REPOS)
+        && !platforms.has(PlatformType.FORGEJO);
 }
 
 /**
  * Returns true when the "Post as hidden comment" toggle should be hidden.
- * Only GitHub supports hidden/minimized comments; global settings are
- * always shown.
+ * Hidden when NO connected platform is GitHub (the feature is
+ * GitHub-only).  For mixed-platform teams the setting is shown because
+ * it may apply to GitHub repositories.
  */
 export function useShouldHideHiddenComments(): boolean {
-    const { repositoryId } = useCodeReviewRouteParams();
     const platforms = useCodeManagementPlatforms();
-
-    if (repositoryId === "global") return false;
-    return !platforms.has(PlatformType.GITHUB);
+    return platforms.size > 0 && !platforms.has(PlatformType.GITHUB);
 }
 
 /**
  * Returns true when the "Enable LLM Prompt" toggle should be hidden.
- * Bitbucket does not support this feature; global settings are always
- * shown.
+ * Hidden when ALL connected platforms are Bitbucket (the feature is not
+ * supported there).  For mixed-platform teams the setting is shown
+ * because it may apply to non-Bitbucket repositories.
  */
 export function useShouldHideLLMPrompt(): boolean {
-    const { repositoryId } = useCodeReviewRouteParams();
     const platforms = useCodeManagementPlatforms();
 
-    if (repositoryId === "global") return false;
-    return platforms.has(PlatformType.BITBUCKET);
+    // All connected platforms are Bitbucket → feature unsupported everywhere.
+    return platforms.size > 0 && !platforms.has(PlatformType.GITHUB)
+        && !platforms.has(PlatformType.GITLAB)
+        && !platforms.has(PlatformType.AZURE_REPOS)
+        && !platforms.has(PlatformType.FORGEJO);
 }
