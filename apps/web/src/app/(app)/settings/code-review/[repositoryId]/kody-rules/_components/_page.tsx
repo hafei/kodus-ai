@@ -363,41 +363,47 @@ const KodyRulesPageContent = () => {
                 : statusFilteredRules;
 
         // Popover filters: origin (Auto-sync / Onboard / Kody-generated /
-        // manual) and severity. Origin only applies to standard rules
-        // (memories don't have these origins).
-        const listFilteredRules = bannerFilteredRules.filter((rule) => {
-            const passesOrigin =
-                ruleType !== KodyRulesType.STANDARD ||
-                matchesOriginFilter(rule as KodyRule, listFilters);
-            const passesSeverity =
-                ruleType !== KodyRulesType.STANDARD ||
-                matchesSeverityFilter(rule as KodyRule, listFilters);
-            const passesSyncErrors =
-                ruleType !== KodyRulesType.STANDARD ||
-                matchesSyncErrorsFilter(rule as KodyRule, listFilters);
-            const passesPausedOnly =
-                ruleType !== KodyRulesType.STANDARD ||
-                matchesPausedOnlyFilter(rule as KodyRule, listFilters);
-            const passesKodySync =
-                ruleType !== KodyRulesType.STANDARD ||
-                matchesKodySyncFilter(rule as KodyRule, listFilters);
-            return (
-                passesOrigin &&
-                passesSeverity &&
-                passesSyncErrors &&
-                passesPausedOnly &&
-                passesKodySync
-            );
-        });
+        // manual), sync state, paused-only — everything EXCEPT severity,
+        // which is applied last (below) so the heatmap can count this
+        // pool. Origin only applies to standard rules (memories don't
+        // have these origins).
+        const nonSeverityFilteredRules = bannerFilteredRules.filter(
+            (rule) => {
+                const passesOrigin =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesOriginFilter(rule as KodyRule, listFilters);
+                const passesSyncErrors =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesSyncErrorsFilter(rule as KodyRule, listFilters);
+                const passesPausedOnly =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesPausedOnlyFilter(rule as KodyRule, listFilters);
+                const passesKodySync =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesKodySyncFilter(rule as KodyRule, listFilters);
+                return (
+                    passesOrigin &&
+                    passesSyncErrors &&
+                    passesPausedOnly &&
+                    passesKodySync
+                );
+            },
+        );
 
         const filterQueryLowercase = filterQuery.toLowerCase();
         const queryFilteredRules = !filterQuery
-            ? listFilteredRules
-            : listFilteredRules.filter((rule) =>
+            ? nonSeverityFilteredRules
+            : nonSeverityFilteredRules.filter((rule) =>
                 matchesTextQuery(rule as KodyRule, filterQueryLowercase),
             );
 
-        const rulesToDisplay = [...queryFilteredRules].sort((x, y) =>
+        const listFilteredRules = queryFilteredRules.filter(
+            (rule) =>
+                ruleType !== KodyRulesType.STANDARD ||
+                matchesSeverityFilter(rule as KodyRule, listFilters),
+        );
+
+        const rulesToDisplay = [...listFilteredRules].sort((x, y) =>
             compareRules(x as KodyRule, y as KodyRule, sortOption),
         );
 
@@ -407,16 +413,19 @@ const KodyRulesPageContent = () => {
             inheritedRepoRulesByType.length > 0 ||
             inheritedDirectoryRulesByType.length > 0;
 
-        // Severity distribution computed BEFORE severity filtering so the
-        // heatmap counters always reflect the full pool (otherwise clicking
-        // "Critical" would zero out the High/Medium/Low counters).
+        // Severity distribution over the pool with every OTHER filter
+        // (origin, sync, paused, text query) already applied, but NOT the
+        // severity selection itself: each chip must match the cards on
+        // screen when other filters are active (e.g. Origin: Library → "2
+        // High", not the unfiltered "4 High"), while clicking "Critical"
+        // still must not zero out the High/Medium/Low counters.
         const severityCounts: Record<string, number> = {
             critical: 0,
             high: 0,
             medium: 0,
             low: 0,
         };
-        for (const rule of bannerFilteredRules) {
+        for (const rule of queryFilteredRules) {
             const sev = (rule as KodyRule).severity?.toLowerCase();
             if (sev && severityCounts[sev] !== undefined) {
                 severityCounts[sev] += 1;
