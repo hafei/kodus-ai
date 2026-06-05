@@ -54,7 +54,7 @@ export class DeleteRuleInOrganizationByIdKodyRulesUseCase {
         try {
             const requestUser = this.request?.user as any;
             const organizationId =
-                actor?.organizationId || requestUser.organization.uuid;
+                actor?.organizationId || requestUser?.organization?.uuid;
             const teamId =
                 actor?.teamId || requestUser?.team?.uuid || requestUser?.teamId;
 
@@ -142,8 +142,8 @@ export class DeleteRuleInOrganizationByIdKodyRulesUseCase {
                             },
                         } as any,
                         {
-                            userId: actor?.userId || requestUser.uuid,
-                            userEmail: actor?.userEmail || requestUser.email,
+                            userId: actor?.userId || requestUser?.uuid,
+                            userEmail: actor?.userEmail || requestUser?.email,
                         },
                     );
 
@@ -157,8 +157,8 @@ export class DeleteRuleInOrganizationByIdKodyRulesUseCase {
                 },
                 ruleId,
                 {
-                    userId: actor?.userId || requestUser.uuid,
-                    userEmail: actor?.userEmail || requestUser.email,
+                    userId: actor?.userId || requestUser?.uuid,
+                    userEmail: actor?.userEmail || requestUser?.email,
                 },
             );
         } catch (error) {
@@ -169,7 +169,7 @@ export class DeleteRuleInOrganizationByIdKodyRulesUseCase {
                 metadata: {
                     organizationId:
                         actor?.organizationId ||
-                        this.request.user.organization.uuid,
+                        this.request?.user?.organization?.uuid,
                     ruleId,
                 },
             });
