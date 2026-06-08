@@ -182,6 +182,32 @@ export class ForgejoService implements Omit<
 
         return allItems;
     }
+    private mapForgejoReviewComment(
+        review: ForgejoPullReview,
+        comment: {
+            id?: number;
+            body?: string;
+            created_at?: string;
+            updated_at?: string;
+            user?: ForgejoUser;
+            resolver?: ForgejoUser | null;
+        },
+    ): PullRequestReviewComment {
+        return {
+            id: comment.id,
+            threadId: review.id?.toString(),
+            isResolved: comment.resolver != null,
+            isOutdated: review.stale ?? false,
+            body: comment.body ?? '',
+            createdAt: comment.created_at,
+            updatedAt: comment.updated_at,
+            author: {
+                id: comment.user?.id?.toString() ?? '',
+                username: comment.user?.login ?? '',
+                name: comment.user?.full_name ?? comment.user?.login ?? '',
+            },
+        };
+    }
 
     private async getAuthDetails(
         organizationAndTeamData: OrganizationAndTeamData,
@@ -2527,17 +2553,9 @@ export class ForgejoService implements Omit<
                     const comments = commentsResult.data ?? [];
 
                     for (const c of comments) {
-                        allComments.push({
-                            id: c.id,
-                            body: c.body ?? '',
-                            createdAt: c.created_at,
-                            updatedAt: c.updated_at,
-                            author: {
-                                id: c.user?.id?.toString() ?? '',
-                                username: c.user?.login ?? '',
-                                name: c.user?.full_name ?? c.user?.login ?? '',
-                            },
-                        });
+                        allComments.push(
+                            this.mapForgejoReviewComment(review, c),
+                        );
                     }
                 } catch {
                     // Skip reviews we can't get comments for
@@ -3116,17 +3134,9 @@ export class ForgejoService implements Omit<
                     for (const c of comments) {
                         if (hasKodyMarker(c.body)) continue;
 
-                        allComments.push({
-                            id: c.id,
-                            body: c.body ?? '',
-                            createdAt: c.created_at,
-                            updatedAt: c.updated_at,
-                            author: {
-                                id: c.user?.id?.toString() ?? '',
-                                username: c.user?.login ?? '',
-                                name: c.user?.full_name ?? c.user?.login ?? '',
-                            },
-                        });
+                        allComments.push(
+                            this.mapForgejoReviewComment(review, c),
+                        );
                     }
                 } catch (reviewError) {
                     this.logger.warn({
