@@ -36,7 +36,8 @@
                                 "group": "Billing & Licenses",
                                 "pages": [
                                     "how_to_use/en/pricing",
-                                    "how_to_use/en/byok"
+                                    "how_to_use/en/byok",
+                                    "how_to_use/en/spend-limit"
                                 ]
                             },
                             {
@@ -302,6 +303,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -589,6 +595,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -876,6 +887,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -1163,6 +1179,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -1450,6 +1471,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             }
