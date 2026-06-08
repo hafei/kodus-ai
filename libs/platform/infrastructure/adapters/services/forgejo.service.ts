@@ -1325,7 +1325,12 @@ export class ForgejoService implements Omit<
 
     async getCloneParams(params: {
         organizationAndTeamData: OrganizationAndTeamData;
-        repository: { id?: string; name: string; defaultBranch?: string };
+        repository: {
+            id?: string;
+            name: string;
+            fullName?: string;
+            defaultBranch?: string;
+        };
     }): Promise<GitCloneParams> {
         const authDetail = await this.getAuthDetails(
             params.organizationAndTeamData,
@@ -1334,8 +1339,11 @@ export class ForgejoService implements Omit<
             throw new Error('No auth details found');
         }
 
+        const repositoryFullName =
+            params.repository.fullName || params.repository.name;
+
         const repoInfo = this.extractRepoInfo(
-            params.repository.name,
+            repositoryFullName,
             'getCloneParams',
         );
         if (!repoInfo) {
@@ -1343,7 +1351,7 @@ export class ForgejoService implements Omit<
         }
 
         const token = decrypt(authDetail.accessToken);
-        const cloneUrl = `${authDetail.host}/${params.repository.name}.git`;
+        const cloneUrl = `${authDetail.host}/${repositoryFullName}.git`;
 
         return {
             url: cloneUrl,
