@@ -224,14 +224,27 @@ export class RoutingRuleService {
                 channels[ch] = defaults.defaultChannels.has(ch);
             }
 
-            // Seed for wildcard role — applies to all roles by default
-            rules.push({
+            const base = (role: string, ch: Record<string, boolean>) => ({
                 organization: { uuid: organizationId },
                 event,
                 category: defaults.category,
-                role: '*',
-                channels,
+                role,
+                channels: ch,
             });
+
+            if (defaults.defaultRoles?.length) {
+                // Role-fanout event: '*' is an off baseline (so non-default
+                // roles inherit nothing) and each default role gets the
+                // catalog channels via an explicit override row.
+                rules.push(base(ROLE_WILDCARD, {}));
+                for (const role of defaults.defaultRoles) {
+                    rules.push(base(role, channels));
+                }
+            } else {
+                // Directed event (no role-fanout): '*' carries the catalog
+                // defaults so directly-targeted recipients deliver on them.
+                rules.push(base(ROLE_WILDCARD, channels));
+            }
         }
 
         return this.routingRuleRepo.upsertBatch(rules);

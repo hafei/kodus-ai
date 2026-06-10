@@ -747,24 +747,21 @@ export class NotificationDispatcherService {
      *
      *   - SYSTEM events: catalog defaults, role-independent (non-configurable).
      *   - A specific (event, role) row always wins.
-     *   - Otherwise the role's *default* depends on whether it's a declared
-     *     audience role for the event:
-     *       · audience role  → the '*' row, else catalog defaults.
-     *       · non-audience   → off (empty) unless an admin added a specific
-     *                          row opting it in.
+     *   - Else the '*' ("All Roles") row applies — it is a literal baseline for
+     *     every role, not just the default ones.
+     *   - Else (no rows at all) the code fallback: a default role (or a directed
+     *     recipient) gets the catalog defaults; any other role is off. This is
+     *     what keeps orgs that were never seeded behaving correctly.
      *
      * Criticality no longer locks channels — critical events are configurable
      * like any other (their catalog defaults already cover every active
      * channel, so this only grants the ability to mute).
      *
-     * Events without `defaultRoles` treat every role as an audience role, so
-     * their behaviour is unchanged (specific → '*' → defaults; CRITICAL ⇒ all).
-     * Everything is intersected with ACTIVE_CHANNELS.
-     *
      * `forceAudience` is set for directed recipients (the explicit envelope
-     * recipients): they always resolve as if their role were an audience role,
-     * so a directly-involved contributor is never gated off an event that
-     * only defaults to owners.
+     * recipients): in the code fallback they always resolve to the catalog
+     * defaults, so a directly-involved contributor is never gated off an event
+     * that only defaults to owners. Everything is intersected with
+     * ACTIVE_CHANNELS.
      */
     private resolveEnabledChannels(
         rules: IRoutingRule[],
@@ -779,29 +776,30 @@ export class NotificationDispatcherService {
             );
         }
 
-        const isAudienceRole =
-            forceAudience ||
-            !defaults.defaultRoles ||
-            (defaults.defaultRoles as readonly string[]).includes(role);
-
+        // A specific (event, role) row wins; otherwise the '*' baseline applies
+        // to every role. Both are honored before the code fallback so the
+        // stored config is the source of truth for seeded orgs.
         const specific = rules.find(
             (r) => r.event === event && r.role === role,
         );
         if (specific) return this.activeEnabledChannels(specific.channels);
 
-        if (isAudienceRole) {
-            const wildcard = rules.find(
-                (r) => r.event === event && r.role === ROLE_WILDCARD,
-            );
-            if (wildcard) {
-                return this.activeEnabledChannels(wildcard.channels);
-            }
+        const wildcard = rules.find(
+            (r) => r.event === event && r.role === ROLE_WILDCARD,
+        );
+        if (wildcard) return this.activeEnabledChannels(wildcard.channels);
+
+        // No rows: fall back to the catalog defaults for default roles and
+        // directed recipients; everyone else is off.
+        const isDefaultRole =
+            forceAudience ||
+            !defaults.defaultRoles ||
+            (defaults.defaultRoles as readonly string[]).includes(role);
+        if (isDefaultRole) {
             return [...defaults.defaultChannels].filter((ch) =>
                 ACTIVE_CHANNELS.has(ch),
             );
         }
-
-        // Non-audience role with no explicit opt-in row: off.
         return [];
     }
 

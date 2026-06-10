@@ -281,6 +281,34 @@ describe('NotificationDispatcherService', () => {
             );
         });
 
+        it('applies a "*" rule to every role (literal all-roles baseline)', async () => {
+            const t = makeDispatcher();
+            t.usersService.find.mockResolvedValueOnce([
+                { uuid: 'owner-1', email: 'o@a.com', role: 'owner' } as any,
+                { uuid: 'c-1', email: 'c@a.com', role: 'contributor' } as any,
+            ]);
+            // A wildcard rule now reaches non-default roles too, not just owners.
+            t.routingRuleRepo.findByOrganization.mockResolvedValueOnce([
+                {
+                    event: SPEND_THRESHOLD,
+                    role: '*',
+                    channels: { email: true, in_app: false },
+                } as any,
+            ]);
+
+            await t.dispatcher.dispatch(
+                baseMessage({
+                    event: SPEND_THRESHOLD,
+                    payload: thresholdPayload,
+                    recipients: [],
+                }),
+            );
+
+            // Both owner and contributor get email via the '*' baseline.
+            expect(t.emailAdapter.deliver).toHaveBeenCalledTimes(2);
+            expect(t.inAppAdapter.deliver).not.toHaveBeenCalled();
+        });
+
         it('opts a non-audience role in via an explicit routing rule', async () => {
             const t = makeDispatcher();
             t.usersService.find.mockResolvedValueOnce([
