@@ -35,6 +35,7 @@ import { changeStatusKodyRules } from "@services/kodyRules/fetch";
 import { KodyRulesStatus } from "@services/kodyRules/types";
 import { toast } from "@components/ui/toaster/use-toast";
 import { useAsyncAction } from "@hooks/use-async-action";
+import { isAxiosError } from "axios";
 
 export const KodyRuleItem = ({
     rule,
@@ -120,9 +121,15 @@ export const KodyRuleItem = ({
             onAnyChange?.();
         } catch (error) {
             console.error("Failed to resume rule", error);
+            const message =
+                isAxiosError(error) &&
+                error.response?.data?.message ===
+                    "Free plan's limit of Kody Rules reached."
+                    ? "You have reached the limit of 10 active Kody rules. Pause or delete another rule first."
+                    : "Please try again in a moment.";
             toast({
                 title: "Could not resume rule",
-                description: "Please try again in a moment.",
+                description: message,
                 variant: "danger",
             });
         }
