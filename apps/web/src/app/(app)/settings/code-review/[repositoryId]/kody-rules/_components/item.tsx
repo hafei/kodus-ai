@@ -11,6 +11,7 @@ import { Separator } from "@components/ui/separator";
 import {
     Tooltip,
     TooltipContent,
+    TooltipPortal,
     TooltipTrigger,
 } from "@components/ui/tooltip";
 import {
@@ -36,6 +37,12 @@ import { KodyRulesStatus } from "@services/kodyRules/types";
 import { toast } from "@components/ui/toaster/use-toast";
 import { useAsyncAction } from "@hooks/use-async-action";
 import { isAxiosError } from "axios";
+
+function showLastPaths(path: string, max = 3): string {
+    const items = path.split(",").map((g) => g.trim()).filter((g) => g.length > 0);
+    if (items.length <= max) return path;
+    return "..." + items.slice(-max).join(", ");
+}
 
 export const KodyRuleItem = ({
     rule,
@@ -343,13 +350,20 @@ export const KodyRuleItem = ({
                                         // InlineCode pill clashed with the
                                         // card surface and made Path look
                                         // heavier than any other field.
-                                        <code className="font-mono text-xs break-all">
-                                            {rule.path
-                                                .split(",")
-                                                .map((g) => g.trim())
-                                                .filter((g) => g.length > 0)
-                                                .join(", ")}
-                                        </code>
+                                        <Tooltip delayDuration={500}>
+                                            <TooltipTrigger asChild>
+                                                <code className="font-mono text-xs">
+                                                    {showLastPaths(rule.path)}
+                                                </code>
+                                            </TooltipTrigger>
+                                            <TooltipPortal>
+                                                <TooltipContent side="right" className="max-w-96">
+                                                    <code className="font-mono text-xs break-all">
+                                                        {rule.path}
+                                                    </code>
+                                                </TooltipContent>
+                                            </TooltipPortal>
+                                        </Tooltip>
                                     ) : (
                                         "all files (default)"
                                     )}
