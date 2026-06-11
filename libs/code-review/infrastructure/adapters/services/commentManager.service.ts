@@ -41,6 +41,9 @@ import {
 import { ObservabilityService } from '@libs/core/log/observability.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
+import { byokToVercelModel } from '@libs/code-review/infrastructure/agents/llm/byok-to-vercel';
+import { tracedGenerateText } from '@libs/code-review/infrastructure/agents/llm/agent-loop';
+import { buildLangfuseTelemetry } from '@libs/core/log/langfuse';
 import {
     getTranslationsForLanguageByCategory,
     TranslationsCategory,
@@ -73,6 +76,68 @@ export class CommentManagerService implements ICommentManagerService {
         private readonly codeManagementService: CodeManagementService,
     ) {
         this.llmResponseProcessor = new LLMResponseProcessor();
+    }
+
+    /**
+     * Run a one-shot text prompt for the PR summary through the v5 (Vercel AI
+     * SDK) path so the user's BYOK model — including Claude-on-Vertex — is
+     * honored. The legacy v2 langchain path (PromptRunnerService) only spoke
+     * Gemini on Vertex, so a Claude-on-Vertex BYOK crashed the summary step
+     * before suggestions could be posted. Falls back to gemini-2.5-flash when
+     * no BYOK is configured (cloud default), matching the previous behavior.
+     */
+    private async runSummaryPromptV5(params: {
+        byokConfig: BYOKConfig | null;
+        systemPrompt: string;
+        userPrompt: string;
+        runName: string;
+        spanName: string;
+        attrs: Record<string, unknown>;
+        metadata?: {
+            organizationId?: string;
+            teamId?: string;
+            pullRequestId?: number;
+        };
+    }): Promise<string> {
+        const {
+            byokConfig,
+            systemPrompt,
+            userPrompt,
+            runName,
+            spanName,
+            attrs,
+            metadata,
+        } = params;
+
+        const { result } = await this.observabilityService.runLLMInSpan<string>(
+            {
+                spanName,
+                runName,
+                attrs,
+                byokConfig: byokConfig ?? undefined,
+                exec: async () => {
+                    const model = byokToVercelModel(
+                        byokConfig ?? undefined,
+                        'main',
+                        {},
+                        'gemini-2.5-flash',
+                    );
+                    const res: any = await tracedGenerateText({
+                        model: model as any,
+                        system: systemPrompt,
+                        prompt: userPrompt,
+                        temperature: 0,
+                        experimental_telemetry: buildLangfuseTelemetry(
+                            runName,
+                            metadata,
+                        ),
+                    });
+                    return (res?.text as string) ?? '';
+                },
+            },
+        );
+
+        return result;
     }
 
     async generateSummaryPR(
@@ -210,50 +275,23 @@ export class CommentManagerService implements ICommentManagerService {
                     }
                 }
 
-                const baseContext = {
-                    changedFiles,
-                    pullRequest,
-                    repository,
-                    summaryConfig,
-                    languageResultPrompt,
-                    updatedPR,
-                };
-
                 // For REPLACE on commit runs, the caller now provides the full PR
                 // diff (base...head), so the LLM generates a fresh summary from
                 // scratch — no need to inject the previous summary as context.
 
-                const fallbackProvider = LLMModelProvider.OPENAI_GPT_4O;
-
-                const promptRunner = new BYOKPromptRunnerService(
-                    this.promptRunnerService,
-                    LLMModelProvider.GEMINI_2_5_FLASH,
-                    fallbackProvider,
-                    byokConfigValue,
-                );
-
                 const runName = 'generateSummaryPR';
                 const spanName = `${CommentManagerService.name}::${runName}`;
                 const spanAttrs = {
-                    type: promptRunner.executeMode,
+                    type: byokConfigValue ? 'byok' : 'system',
                     organizationId: organizationAndTeamData?.organizationId,
                     prNumber: pullRequest?.number,
                     repositoryId: repository?.id,
                 };
 
-                const llmMetadata = {
+                const summaryMeta = {
                     organizationId: organizationAndTeamData?.organizationId,
                     teamId: organizationAndTeamData?.teamId,
                     pullRequestId: pullRequest?.number,
-                    repositoryId: repository?.id,
-                    provider:
-                        byokConfigValue?.main?.provider ||
-                        LLMModelProvider.GEMINI_2_5_FLASH,
-                    fallbackProvider:
-                        byokConfigValue?.fallback?.provider || fallbackProvider,
-                    model: byokConfigValue?.main?.model,
-                    fallbackModel: byokConfigValue?.fallback?.model,
-                    runName,
                 };
 
                 // --- Chunk changedFiles if maxInputTokens is configured ---
@@ -287,35 +325,15 @@ export class CommentManagerService implements ICommentManagerService {
                     const userPrompt =
                         `<changedFilesContext>${JSON.stringify(fileChunks[0]) || 'No files changed'}</changedFilesContext>`;
 
-                    const llmResult =
-                        await this.observabilityService.runLLMInSpan<string>({
-                            spanName,
-                            runName,
-                            attrs: spanAttrs,
-                            byokConfig: byokConfigValue,
-                            exec: async (callbacks) => {
-                                return await promptRunner
-                                    .builder()
-                                    .setParser(ParserType.STRING)
-                                    .setLLMJsonMode(false)
-                                    .setPayload(baseContext)
-                                    .addPrompt({
-                                        prompt: promptBase,
-                                        role: PromptRole.SYSTEM,
-                                    })
-                                    .addPrompt({
-                                        prompt: userPrompt,
-                                        role: PromptRole.USER,
-                                    })
-                                    .addMetadata(llmMetadata)
-                                    .addCallbacks(callbacks)
-                                    .setRunName(runName)
-                                    .setTemperature(0)
-                                    .execute();
-                            },
-                        });
-
-                    result = llmResult.result;
+                    result = await this.runSummaryPromptV5({
+                        byokConfig: byokConfigValue,
+                        systemPrompt: promptBase,
+                        userPrompt,
+                        runName,
+                        spanName,
+                        attrs: spanAttrs,
+                        metadata: summaryMeta,
+                    });
                 } else {
                     // Multiple chunks (2–4) — generate partial summaries then consolidate
                     this.logger.log({
@@ -338,47 +356,24 @@ export class CommentManagerService implements ICommentManagerService {
                         const chunkRunName = `${runName}_chunk_${i + 1}`;
                         const chunkSpanName = `${CommentManagerService.name}::${chunkRunName}`;
 
-                        const chunkResult =
-                            await this.observabilityService.runLLMInSpan<string>(
-                                {
-                                    spanName: chunkSpanName,
-                                    runName: chunkRunName,
-                                    attrs: {
-                                        ...spanAttrs,
-                                        chunkIndex: i,
-                                        totalChunks: fileChunks.length,
-                                    },
-                                    byokConfig: byokConfigValue,
-                                    exec: async (callbacks) => {
-                                        return await promptRunner
-                                            .builder()
-                                            .setParser(ParserType.STRING)
-                                            .setLLMJsonMode(false)
-                                            .setPayload(baseContext)
-                                            .addPrompt({
-                                                prompt:
-                                                    promptBase +
-                                                    `\n\n**Note**: This is chunk ${i + 1} of ${fileChunks.length}. Generate a summary for these files only.`,
-                                                role: PromptRole.SYSTEM,
-                                            })
-                                            .addPrompt({
-                                                prompt: chunkUserPrompt,
-                                                role: PromptRole.USER,
-                                            })
-                                            .addMetadata({
-                                                ...llmMetadata,
-                                                runName: chunkRunName,
-                                            })
-                                            .addCallbacks(callbacks)
-                                            .setRunName(chunkRunName)
-                                            .setTemperature(0)
-                                            .execute();
-                                    },
-                                },
-                            );
+                        const chunkResult = await this.runSummaryPromptV5({
+                            byokConfig: byokConfigValue,
+                            systemPrompt:
+                                promptBase +
+                                `\n\n**Note**: This is chunk ${i + 1} of ${fileChunks.length}. Generate a summary for these files only.`,
+                            userPrompt: chunkUserPrompt,
+                            runName: chunkRunName,
+                            spanName: chunkSpanName,
+                            attrs: {
+                                ...spanAttrs,
+                                chunkIndex: i,
+                                totalChunks: fileChunks.length,
+                            },
+                            metadata: summaryMeta,
+                        });
 
-                        if (chunkResult.result) {
-                            partialSummaries.push(chunkResult.result);
+                        if (chunkResult) {
+                            partialSummaries.push(chunkResult);
                         }
                     }
 
@@ -408,38 +403,15 @@ You must always respond in ${languageResultPrompt}.`;
                         )
                         .join('\n\n');
 
-                    const consolidationResult =
-                        await this.observabilityService.runLLMInSpan<string>({
-                            spanName: consolidationSpanName,
-                            runName: consolidationRunName,
-                            attrs: spanAttrs,
-                            byokConfig: byokConfigValue,
-                            exec: async (callbacks) => {
-                                return await promptRunner
-                                    .builder()
-                                    .setParser(ParserType.STRING)
-                                    .setLLMJsonMode(false)
-                                    .setPayload(baseContext)
-                                    .addPrompt({
-                                        prompt: consolidationPrompt,
-                                        role: PromptRole.SYSTEM,
-                                    })
-                                    .addPrompt({
-                                        prompt: consolidationUserPrompt,
-                                        role: PromptRole.USER,
-                                    })
-                                    .addMetadata({
-                                        ...llmMetadata,
-                                        runName: consolidationRunName,
-                                    })
-                                    .addCallbacks(callbacks)
-                                    .setRunName(consolidationRunName)
-                                    .setTemperature(0)
-                                    .execute();
-                            },
-                        });
-
-                    result = consolidationResult.result;
+                    result = await this.runSummaryPromptV5({
+                        byokConfig: byokConfigValue,
+                        systemPrompt: consolidationPrompt,
+                        userPrompt: consolidationUserPrompt,
+                        runName: consolidationRunName,
+                        spanName: consolidationSpanName,
+                        attrs: spanAttrs,
+                        metadata: summaryMeta,
+                    });
                 }
 
                 if (!result) {
