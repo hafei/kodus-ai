@@ -73,6 +73,30 @@ describe('byokToVercelModel — Google Vertex protocol routing', () => {
         );
     });
 
+    it('accepts a raw (non-base64) SA JSON and still routes claude-* to Vertex Anthropic', () => {
+        const rawJsonConfig = {
+            main: {
+                provider: BYOKProvider.GOOGLE_VERTEX,
+                apiKey: JSON.stringify({
+                    type: 'service_account',
+                    project_id: 'my-proj',
+                    client_email: 'sa@my-proj.iam.gserviceaccount.com',
+                }),
+                model: 'claude-opus-4-8',
+                vertexLocation: 'global',
+            },
+        } as BYOKConfig;
+
+        const result: any = byokToVercelModel(rawJsonConfig);
+
+        expect(createVertexAnthropicMock).toHaveBeenCalledTimes(1);
+        expect(createVertexMock).not.toHaveBeenCalled();
+        expect(result.modelId).toBe('claude-opus-4-8');
+        expect(createVertexAnthropicMock).toHaveBeenCalledWith(
+            expect.objectContaining({ project: 'my-proj', location: 'global' }),
+        );
+    });
+
     it('routes a gemini-* model id through createVertex (Gemini protocol)', () => {
         const result: any = byokToVercelModel(vertexConfig('gemini-2.5-pro'));
 

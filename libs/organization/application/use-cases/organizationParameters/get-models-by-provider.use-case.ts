@@ -424,7 +424,10 @@ export class GetModelsByProviderUseCase {
      */
     private getVertexModels(): ModelResponse {
         const catalog: Array<{ id: string; name: string }> = [
-            { id: 'gemini-3-pro-preview', name: 'Vertex Gemini 3 Pro' },
+            // gemini-3-pro-preview was discontinued on Vertex (2026-03-26);
+            // Google's migration target is gemini-3.1-pro-preview.
+            { id: 'gemini-3.1-pro-preview', name: 'Vertex Gemini 3.1 Pro' },
+            { id: 'gemini-3.5-flash', name: 'Vertex Gemini 3.5 Flash' },
             { id: 'gemini-2.5-pro', name: 'Vertex Gemini 2.5 Pro' },
             { id: 'gemini-2.5-flash', name: 'Vertex Gemini 2.5 Flash' },
             { id: 'claude-opus-4-8', name: 'Vertex Claude Opus 4.8' },

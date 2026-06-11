@@ -105,6 +105,7 @@ export class BYOKProviderService {
             apiKey,
             model,
             baseURL,
+            vertexLocation,
             disableReasoning,
             reasoningEffort,
         } = config.main;
@@ -132,6 +133,7 @@ export class BYOKProviderService {
         const modelInstance = adapter.build({
             model,
             apiKey,
+            vertexLocation,
             baseURL:
                 provider === BYOKProvider.OPENAI_COMPATIBLE ||
                 provider === BYOKProvider.ANTHROPIC_COMPATIBLE

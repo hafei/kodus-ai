@@ -72,15 +72,11 @@ const VertexFields = () => {
             <Alert variant="info">
                 <InfoIcon />
                 <AlertTitle className="text-balance">
-                    Service account JSON, base64-encoded
+                    Service account JSON
                 </AlertTitle>
                 <AlertDescription className="text-pretty">
-                    Run{" "}
-                    <code className="bg-card-lv2 rounded px-1 py-0.5 font-mono text-[11px]">
-                        base64 &lt; sa.json | tr -d &apos;\n&apos;
-                    </code>{" "}
-                    (works on macOS and Linux) and paste the output below.
-                    Kodus extracts{" "}
+                    Paste the contents of your service account JSON file
+                    directly (base64-encoded also works). Kodus extracts{" "}
                     <code className="bg-card-lv2 rounded px-1 py-0.5 font-mono text-[11px]">
                         project_id
                     </code>{" "}
@@ -94,7 +90,7 @@ const VertexFields = () => {
                 render={({ field }) => (
                     <FormControl.Root>
                         <FormControl.Label htmlFor={field.name}>
-                            Service Account JSON (base64)
+                            Service Account JSON
                         </FormControl.Label>
                         <FormControl.Input>
                             <Textarea

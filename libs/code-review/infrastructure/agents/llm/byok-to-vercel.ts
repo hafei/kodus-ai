@@ -34,14 +34,33 @@ import { decrypt } from '@libs/common/utils/crypto';
  * Returns null when the value is not a valid base64-encoded JSON with a
  * `project_id` — the caller should fall back to another provider path.
  */
+/**
+ * Parse a Google Service Account from either raw JSON or base64-encoded
+ * JSON. Users routinely paste the SA JSON file contents directly; base64
+ * of a JSON object always starts with `ey` (from `{"`), while raw JSON
+ * starts with `{`, so the leading char disambiguates with no ambiguity.
+ * Returns null when neither form yields valid JSON.
+ */
+function parseSaCredentials(input: string): { project_id?: string } | null {
+    const trimmed = (input || '').trim();
+    if (!trimmed) return null;
+    const jsonText = trimmed.startsWith('{')
+        ? trimmed
+        : Buffer.from(trimmed, 'base64').toString('utf-8');
+    try {
+        return JSON.parse(jsonText) as { project_id?: string };
+    } catch {
+        return null;
+    }
+}
+
 function vertexModelFromSaJson(
-    base64SaJson: string,
+    saJsonOrBase64: string,
     modelId: string,
     locationOverride?: string,
 ): LanguageModel | null {
     try {
-        const decoded = Buffer.from(base64SaJson, 'base64').toString('utf-8');
-        const credentials = JSON.parse(decoded) as { project_id?: string };
+        const credentials = parseSaCredentials(saJsonOrBase64);
         if (!credentials?.project_id) return null;
         // Keep this helper pure: the caller is responsible for resolving
         // the region (BYOK config or env var) and passing it as
