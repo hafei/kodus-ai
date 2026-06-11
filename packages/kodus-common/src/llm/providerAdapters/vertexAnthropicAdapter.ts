@@ -84,10 +84,13 @@ export class VertexAnthropicAdapter implements ProviderAdapter {
             ? rawKey
             : Buffer.from(rawKey, 'base64').toString('utf-8');
         const credentials = JSON.parse(decoded) as VertexCredentials;
-        const region =
-            vertexLocation?.trim() ||
-            process.env.API_VERTEX_AI_LOCATION ||
-            'global';
+        // Default to the GLOBAL endpoint when no region is given — it routes
+        // dynamically so callers don't need per-model region availability.
+        // Deliberately NOT falling back to API_VERTEX_AI_LOCATION: that env is
+        // the Gemini default (often us-central1), and regional endpoints don't
+        // serve most Claude models (e.g. claude-haiku-4-5 is global-only). This
+        // mirrors the v5 byok-to-vercel default and keeps both engines aligned.
+        const region = vertexLocation?.trim() || 'global';
         const host =
             region === 'global'
                 ? 'aiplatform.googleapis.com'
