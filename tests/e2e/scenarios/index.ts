@@ -1,5 +1,6 @@
 import type { Scenario } from "../lib/types.js";
 import codeReviewBasic from "./code-review-basic.js";
+import codeReviewVertexByok from "./code-review-vertex-byok.js";
 import commandReview from "./command-review.js";
 import kodyRulesCreateAndApply from "./kody-rules.js";
 import licenseAttribution from "./license-attribution.js";
@@ -19,6 +20,7 @@ import upgradeNMinusOneToN from "./upgrade.js";
 export const allScenarios: Record<string, Scenario> = {
     [onboardingWebhookRegistration.id]: onboardingWebhookRegistration,
     [codeReviewBasic.id]: codeReviewBasic,
+    [codeReviewVertexByok.id]: codeReviewVertexByok,
     [commandReview.id]: commandReview,
     [kodyRulesCreateAndApply.id]: kodyRulesCreateAndApply,
     [licenseAttribution.id]: licenseAttribution,
@@ -49,6 +51,7 @@ export function resolveScenarios(ids: string[]): Scenario[] {
 
 export {
     codeReviewBasic,
+    codeReviewVertexByok,
     commandReview,
     kodyRulesCreateAndApply,
     licenseAttribution,
