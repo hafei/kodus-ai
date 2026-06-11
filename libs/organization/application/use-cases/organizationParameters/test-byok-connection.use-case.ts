@@ -350,7 +350,10 @@ export class TestByokConnectionUseCase {
                 scopes: ['https://www.googleapis.com/auth/cloud-platform'],
             });
             const client = await auth.getClient();
-            const region = location?.trim() || 'us-central1';
+            // Default to the global endpoint — serves all Claude + Gemini
+            // models on Vertex, so users don't need to know per-model region
+            // availability (us-central1 doesn't serve Claude).
+            const region = location?.trim() || 'global';
             assertSafeRegion(region);
             // GCP project IDs: 6-30 chars, lowercase letters/digits/hyphens,
             // must start with a letter. Sanity-check the SA key's project.
@@ -433,11 +436,17 @@ export class TestByokConnectionUseCase {
                     (probeErr as any)?.status ??
                     (probeErr as any)?.code;
                 if (status === 404) {
+                    // Vertex returns 404 NOT_FOUND both when the model doesn't
+                    // exist in the region AND when the project hasn't enabled
+                    // it. The latter is the common case for Anthropic models
+                    // (each must be enabled in Model Garden first), so guide
+                    // the user there.
+                    const provider = isClaude ? 'Anthropic' : 'Google';
                     return {
                         ok: false,
                         code: 'bad_request',
                         latencyMs: Date.now() - start,
-                        message: `Model "${model}" isn't available on Vertex in region "${region}". Availability varies by region — for Claude use region "global" (recommended) or a region that serves it (e.g. us-east5).`,
+                        message: `Your Google Cloud project doesn't have access to "${model}" in region "${region}". Enable it for the project in Vertex AI Model Garden (search "${provider}" → the model → "Enable"/accept terms), then test again. If it's already enabled, double-check the model id and region.`,
                     };
                 }
                 throw probeErr; // 401/403/429/5xx → normalizeError below

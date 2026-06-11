@@ -35,7 +35,7 @@ export class VertexAdapter implements ProviderAdapter {
         const location =
             vertexLocation?.trim() ||
             process.env.API_VERTEX_AI_LOCATION ||
-            'us-central1';
+            'global';
 
         const payload: ConstructorParameters<typeof ChatVertexAI>[0] = {
             model,

@@ -64,8 +64,12 @@ function vertexModelFromSaJson(
         if (!credentials?.project_id) return null;
         // Keep this helper pure: the caller is responsible for resolving
         // the region (BYOK config or env var) and passing it as
-        // locationOverride. Default to us-central1 when omitted.
-        const location = locationOverride?.trim() || 'us-central1';
+        // locationOverride. Default to the GLOBAL endpoint when omitted —
+        // it serves every current Claude and Gemini model on Vertex and
+        // routes dynamically, so users never have to know per-model region
+        // availability. (Regional endpoints like us-central1 don't serve
+        // Claude at all.)
+        const location = locationOverride?.trim() || 'global';
         const settings = {
             project: credentials.project_id,
             location,

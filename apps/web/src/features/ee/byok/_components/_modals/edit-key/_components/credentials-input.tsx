@@ -121,12 +121,13 @@ const VertexFields = () => {
                                 onChange={(e) =>
                                     field.onChange(e.target.value || null)
                                 }
-                                placeholder="us-central1"
+                                placeholder="global"
                             />
                         </FormControl.Input>
                         <FormControl.Helper>
-                            e.g. us-central1, europe-west4, asia-northeast1.
-                            Defaults to us-central1 if empty.
+                            Leave empty for the global endpoint (recommended).
+                            Pin a region (e.g. us-east5) only for data
+                            residency.
                         </FormControl.Helper>
                     </FormControl.Root>
                 )}
