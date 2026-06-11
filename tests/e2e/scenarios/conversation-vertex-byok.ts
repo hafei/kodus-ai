@@ -35,21 +35,26 @@ export const conversationVertexByok: Scenario = {
             ctx.tenant,
             "scenario requires a tenant (set SH_TENANT_EMAIL/_PASSWORD)",
         );
+        // Skip (not fail) when a required secret is absent — keeps the matrix
+        // green on CI runners that don't have Vertex / the conversation user
+        // wired.
         const vertex = readVertexByokEnv();
-        ctx.assert(
-            vertex,
-            "VERTEX_SA_JSON not set — provide a GCP service-account JSON (raw or base64) for a project with Vertex AI on and the Claude model enabled in Model Garden",
-        );
+        if (!vertex) {
+            ctx.skip(
+                "VERTEX_SA_JSON not set — needs a GCP service-account JSON (raw or base64) for a project with Vertex AI on and the Claude model enabled in Model Garden",
+            );
+        }
 
         // Kody ignores any comment whose author login contains "kody"/"kodus"
         // (isKodyComment, LOGIN_KEYWORDS=['kody','kodus']) — and the e2e bots
         // are all `kodus-e2e-bot-N`. So the `@kody` mention MUST be posted by a
         // separate, non-Kody GitHub account.
         const userToken = process.env.CONVERSATION_USER_TOKEN;
-        ctx.assert(
-            userToken,
-            "CONVERSATION_USER_TOKEN not set — provide a GitHub token for an account whose login does NOT contain 'kody'/'kodus' (the integration bot's own comments are ignored by Kody)",
-        );
+        if (!userToken) {
+            ctx.skip(
+                "CONVERSATION_USER_TOKEN not set — needs a GitHub token for an account whose login does NOT contain 'kody'/'kodus' (the integration bot's own comments are ignored by Kody) with Pull requests R/W on the fixture repo",
+            );
+        }
 
         if (
             !ctx.provider.openPRFromBranches ||

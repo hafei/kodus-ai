@@ -85,10 +85,13 @@ export const codeReviewVertexByok: Scenario = {
         // models are per-project opt-in). `global` + a bare-id model like
         // claude-sonnet-4-6 avoids regional-availability gotchas.
         const saJson = process.env.VERTEX_SA_JSON;
-        ctx.assert(
-            saJson,
-            "VERTEX_SA_JSON not set — provide a GCP service-account JSON (raw or base64) for a project with Vertex AI on and the Claude model enabled in Model Garden",
-        );
+        // Skip (not fail) when the Vertex secret is absent — keeps the matrix
+        // green on CI runners that don't have the GCP service account wired.
+        if (!saJson) {
+            ctx.skip(
+                "VERTEX_SA_JSON not set — needs a GCP service-account JSON (raw or base64) for a project with Vertex AI on and the Claude model enabled in Model Garden",
+            );
+        }
         const region = process.env.VERTEX_REGION || "global";
         const model = process.env.VERTEX_MODEL || "claude-sonnet-4-6";
 
