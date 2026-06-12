@@ -347,35 +347,58 @@ export class CommentManagerService implements ICommentManagerService {
                         },
                     });
 
+                    // Chunk summaries are independent (each summarizes a
+                    // distinct subset of files), so run them concurrently.
+                    // allSettled (not all) so a single chunk failing — e.g. a
+                    // transient LLM / rate-limit error, more likely now that the
+                    // calls run in parallel — doesn't discard the summaries that
+                    // did succeed; the empty-result guard below handles the
+                    // all-failed case. Order is preserved by index. Chunk count
+                    // is small (2–4).
+                    const chunkResults = await Promise.allSettled(
+                        fileChunks.map((chunk, i) => {
+                            const chunkUserPrompt =
+                                `<changedFilesContext>${JSON.stringify(chunk)}</changedFilesContext>`;
+
+                            const chunkRunName = `${runName}_chunk_${i + 1}`;
+                            const chunkSpanName = `${CommentManagerService.name}::${chunkRunName}`;
+
+                            return this.runSummaryPromptV5({
+                                byokConfig: byokConfigValue,
+                                systemPrompt:
+                                    promptBase +
+                                    `\n\n**Note**: This is chunk ${i + 1} of ${fileChunks.length}. Generate a summary for these files only.`,
+                                userPrompt: chunkUserPrompt,
+                                runName: chunkRunName,
+                                spanName: chunkSpanName,
+                                attrs: {
+                                    ...spanAttrs,
+                                    chunkIndex: i,
+                                    totalChunks: fileChunks.length,
+                                },
+                                metadata: summaryMeta,
+                            });
+                        }),
+                    );
+
                     const partialSummaries: string[] = [];
-
-                    for (let i = 0; i < fileChunks.length; i++) {
-                        const chunkUserPrompt =
-                            `<changedFilesContext>${JSON.stringify(fileChunks[i])}</changedFilesContext>`;
-
-                        const chunkRunName = `${runName}_chunk_${i + 1}`;
-                        const chunkSpanName = `${CommentManagerService.name}::${chunkRunName}`;
-
-                        const chunkResult = await this.runSummaryPromptV5({
-                            byokConfig: byokConfigValue,
-                            systemPrompt:
-                                promptBase +
-                                `\n\n**Note**: This is chunk ${i + 1} of ${fileChunks.length}. Generate a summary for these files only.`,
-                            userPrompt: chunkUserPrompt,
-                            runName: chunkRunName,
-                            spanName: chunkSpanName,
-                            attrs: {
-                                ...spanAttrs,
-                                chunkIndex: i,
-                                totalChunks: fileChunks.length,
-                            },
-                            metadata: summaryMeta,
-                        });
-
-                        if (chunkResult) {
-                            partialSummaries.push(chunkResult);
+                    chunkResults.forEach((chunkResult, i) => {
+                        if (chunkResult.status === 'fulfilled') {
+                            if (chunkResult.value) {
+                                partialSummaries.push(chunkResult.value);
+                            }
+                        } else {
+                            this.logger.warn({
+                                message: `Chunk ${i + 1}/${fileChunks.length} failed for generateSummaryPR: PR#${pullRequest?.number}`,
+                                context: CommentManagerService.name,
+                                error: chunkResult.reason?.message,
+                                metadata: {
+                                    organizationAndTeamData,
+                                    pullRequestNumber: pullRequest?.number,
+                                },
+                            });
                         }
-                    }
+                    });
 
                     if (partialSummaries.length === 0) {
                         this.logger.error({
