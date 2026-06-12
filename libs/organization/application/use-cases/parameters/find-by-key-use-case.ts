@@ -1,7 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { createLogger } from '@kodus/flow';
+import { CentralizedConfigPrService } from '@libs/centralized-config/infrastructure/adapters/services/centralized-config-pr.service';
 import {
     IParametersService,
     PARAMETERS_SERVICE_TOKEN,
@@ -45,6 +46,8 @@ export class FindByKeyParametersUseCase {
         @Inject(PARAMETERS_SERVICE_TOKEN)
         private readonly parametersService: IParametersService,
         private readonly configService: ConfigService,
+        @Inject(forwardRef(() => CentralizedConfigPrService))
+        private readonly centralizedConfigPrService: CentralizedConfigPrService,
     ) {
         this.cacheTTL = this.configService.get<number>(
             'PARAMETERS_CACHE_TTL_MS',
@@ -121,7 +124,12 @@ export class FindByKeyParametersUseCase {
                 return null;
             }
 
-            const updatedParameters = this.getUpdatedParamaters(parameter);
+            const updatedParameters =
+                await this.getUpdatedParametersWithCentralizedValidation(
+                    parameter,
+                    parametersKey,
+                    organizationAndTeamData,
+                );
 
             // PERF: Cache the result
             this.setInCache(cacheKey, updatedParameters);
@@ -175,9 +183,40 @@ export class FindByKeyParametersUseCase {
         }
     }
 
-    private getUpdatedParamaters<K extends ParametersKey>(
+    private async getUpdatedParametersWithCentralizedValidation<
+        K extends ParametersKey,
+    >(
         parameter: ParametersEntity<K>,
-    ) {
+        parametersKey: K,
+        organizationAndTeamData: OrganizationAndTeamData,
+    ): Promise<IParameters<K>> {
+        if (parametersKey === ParametersKey.CENTRALIZED_CONFIG) {
+            const validatedConfigValue =
+                await this.centralizedConfigPrService.getCentralizedConfigWithValidatedPullRequest(
+                    organizationAndTeamData,
+                );
+
+            if (validatedConfigValue) {
+                return {
+                    configKey: parameter.configKey,
+                    configValue: validatedConfigValue as any,
+                    team: parameter.team,
+                    uuid: parameter.uuid,
+                    active: parameter.active,
+                    description: parameter.description,
+                    version: parameter.version,
+                    createdAt: parameter.createdAt,
+                    updatedAt: parameter.updatedAt,
+                };
+            }
+        }
+
+        return this.getUpdatedParameters(parameter);
+    }
+
+    private getUpdatedParameters<K extends ParametersKey>(
+        parameter: ParametersEntity<K>,
+    ): IParameters<K> {
         if (parameter.configKey === ParametersKey.CODE_REVIEW_CONFIG) {
             /**
              * TEMPORARY LOGIC: Show/hide code review version toggle based on user registration date
@@ -217,7 +256,7 @@ export class FindByKeyParametersUseCase {
                 active: parameter.active,
                 description: parameter.description,
                 version: parameter.version,
-            };
+            } as IParameters<K>;
         } else {
             return {
                 configKey: parameter.configKey,
@@ -229,7 +268,7 @@ export class FindByKeyParametersUseCase {
                 version: parameter.version,
                 createdAt: parameter.createdAt,
                 updatedAt: parameter.updatedAt,
-            };
+            } as IParameters<K>;
         }
     }
 }
