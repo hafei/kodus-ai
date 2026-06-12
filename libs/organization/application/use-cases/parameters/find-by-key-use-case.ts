@@ -123,21 +123,12 @@ export class FindByKeyParametersUseCase {
                 return null;
             }
 
-            let updatedParameters = this.getUpdatedParamaters(parameter);
-
-            if (parametersKey === ParametersKey.CENTRALIZED_CONFIG) {
-                const validatedConfigValue =
-                    await this.centralizedConfigPrService.getCentralizedConfigWithValidatedPullRequest(
-                        organizationAndTeamData,
-                    );
-
-                if (validatedConfigValue) {
-                    updatedParameters = {
-                        ...updatedParameters,
-                        configValue: validatedConfigValue,
-                    };
-                }
-            }
+            const updatedParameters =
+                await this.getUpdatedParametersWithCentralizedValidation(
+                    parameter,
+                    parametersKey,
+                    organizationAndTeamData,
+                );
 
             // PERF: Cache the result
             this.setInCache(cacheKey, updatedParameters);
@@ -191,9 +182,40 @@ export class FindByKeyParametersUseCase {
         }
     }
 
-    private getUpdatedParamaters<K extends ParametersKey>(
+    private async getUpdatedParametersWithCentralizedValidation<
+        K extends ParametersKey,
+    >(
         parameter: ParametersEntity<K>,
-    ) {
+        parametersKey: K,
+        organizationAndTeamData: OrganizationAndTeamData,
+    ): Promise<IParameters<K>> {
+        if (parametersKey === ParametersKey.CENTRALIZED_CONFIG) {
+            const validatedConfigValue =
+                await this.centralizedConfigPrService.getCentralizedConfigWithValidatedPullRequest(
+                    organizationAndTeamData,
+                );
+
+            if (validatedConfigValue) {
+                return {
+                    configKey: parameter.configKey,
+                    configValue: validatedConfigValue as any,
+                    team: parameter.team,
+                    uuid: parameter.uuid,
+                    active: parameter.active,
+                    description: parameter.description,
+                    version: parameter.version,
+                    createdAt: parameter.createdAt,
+                    updatedAt: parameter.updatedAt,
+                };
+            }
+        }
+
+        return this.getUpdatedParameters(parameter);
+    }
+
+    private getUpdatedParameters<K extends ParametersKey>(
+        parameter: ParametersEntity<K>,
+    ): IParameters<K> {
         if (parameter.configKey === ParametersKey.CODE_REVIEW_CONFIG) {
             /**
              * TEMPORARY LOGIC: Show/hide code review version toggle based on user registration date
@@ -233,7 +255,7 @@ export class FindByKeyParametersUseCase {
                 active: parameter.active,
                 description: parameter.description,
                 version: parameter.version,
-            };
+            } as IParameters<K>;
         } else {
             return {
                 configKey: parameter.configKey,
@@ -245,7 +267,7 @@ export class FindByKeyParametersUseCase {
                 version: parameter.version,
                 createdAt: parameter.createdAt,
                 updatedAt: parameter.updatedAt,
-            };
+            } as IParameters<K>;
         }
     }
 }
