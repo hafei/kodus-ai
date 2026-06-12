@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { createLogger } from '@kodus/flow';
@@ -46,7 +46,6 @@ export class FindByKeyParametersUseCase {
         @Inject(PARAMETERS_SERVICE_TOKEN)
         private readonly parametersService: IParametersService,
         private readonly configService: ConfigService,
-        @Inject(forwardRef(() => CentralizedConfigPrService))
         private readonly centralizedConfigPrService: CentralizedConfigPrService,
     ) {
         this.cacheTTL = this.configService.get<number>(
