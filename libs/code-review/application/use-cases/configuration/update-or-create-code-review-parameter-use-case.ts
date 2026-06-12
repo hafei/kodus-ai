@@ -646,7 +646,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                             : params.repository?.id,
                     directoryPath:
                         params.level === ConfigLevel.DIRECTORY
-                            ? params.directory?.path
+                            ? params.directory?.folders?.[0]?.path
                             : undefined,
                 },
             );
@@ -706,7 +706,13 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
         }
 
         const repositoryLabel = params.repository?.name || 'global';
-        const directoryLabel = params.directory?.path || 'root';
+        const directoryLabel =
+            params.directory?.folders?.[0]?.path || 'root';
+
+        const isDirectoryGroup =
+            params.level === ConfigLevel.DIRECTORY &&
+            !!params.directory?.folders &&
+            params.directory.folders.length > 0;
 
         const pr =
             await this.centralizedConfigPrService?.createMutationPullRequestIfEnabled(
@@ -717,10 +723,17 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                         params.level === ConfigLevel.GLOBAL
                             ? undefined
                             : params.repository?.id,
-                    directoryPath:
-                        params.level === ConfigLevel.DIRECTORY
-                            ? params.directory?.path
-                            : undefined,
+                    directoryPath: isDirectoryGroup
+                        ? undefined
+                        : params.level === ConfigLevel.DIRECTORY
+                          ? params.directory?.folders?.[0]?.path
+                          : undefined,
+                    directoryId: isDirectoryGroup
+                        ? params.directory?.id
+                        : undefined,
+                    folders: isDirectoryGroup
+                        ? params.directory?.folders
+                        : undefined,
                     configFileContent:
                         Object.keys(configFileContent).length > 0
                             ? configFileContent

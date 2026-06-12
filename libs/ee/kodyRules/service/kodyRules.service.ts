@@ -1399,6 +1399,7 @@ Analyze the suggestions and recommend the most relevant rules.`;
                 centralizedConfigPrService: ccp,
                 organizationAndTeamData,
                 repositoryId: payload.repositoryId,
+                directoryId: payload.directoryId,
                 ruleContent: payload,
                 ruleType: KodyRulesType.MEMORY,
                 operation,

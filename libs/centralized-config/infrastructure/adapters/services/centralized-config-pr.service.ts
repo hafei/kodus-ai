@@ -404,6 +404,41 @@ export class CentralizedConfigPrService {
         return `${params.repositoryFolder}/${params.relativePath}`;
     }
 
+    buildDirectoryGroupConfigPath(
+        repositoryFolder: string,
+        directoryId: string,
+    ): string {
+        if (repositoryFolder === 'global') {
+            return `.kody-directory-groups/${directoryId}/kodus-config.yml`;
+        }
+
+        return `${repositoryFolder}/.kody-directory-groups/${directoryId}/kodus-config.yml`;
+    }
+
+    buildDirectoryGroupFoldersPath(
+        repositoryFolder: string,
+        directoryId: string,
+    ): string {
+        if (repositoryFolder === 'global') {
+            return `.kody-directory-groups/${directoryId}/folders.yml`;
+        }
+
+        return `${repositoryFolder}/.kody-directory-groups/${directoryId}/folders.yml`;
+    }
+
+    buildDirectoryGroupRulesPath(
+        repositoryFolder: string,
+        directoryId: string,
+        rulesDirectory: string,
+        fileName: string,
+    ): string {
+        if (repositoryFolder === 'global') {
+            return `.kody-directory-groups/${directoryId}/.kody-rules/${rulesDirectory}/${fileName}`;
+        }
+
+        return `${repositoryFolder}/.kody-directory-groups/${directoryId}/.kody-rules/${rulesDirectory}/${fileName}`;
+    }
+
     sanitizeFileName(name?: string, fallback = 'item', maxLength = 30): string {
         const normalized = (name || '')
             .trim()
