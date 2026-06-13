@@ -102,17 +102,34 @@ export class DeleteRepositoryCodeReviewParameterUseCase {
                 throw new Error('Code review config not found');
             }
 
+            // Structural change (removing a scope) is symmetric with the
+            // selection-only add-directory flow: we mutate the DB right away
+            // so the UI reflects the removal, and the centralized PR is a
+            // best-effort side effect to clean up the repo. Waiting for the
+            // PR merge would force the user into "delete → close PR → resync"
+            // every time, which doesn't match how add works.
+            let centralizedPr: CentralizedPrMetadata | null = null;
             if (body.actor?.source !== 'sync') {
-                const centralizedPr =
-                    await this.createCentralizedDeleteMutationIfEnabled({
-                        organizationAndTeamData,
-                        codeReviewConfig: codeReviewConfigParam.configValue,
-                        repositoryId,
-                        directoryId,
+                try {
+                    centralizedPr =
+                        await this.createCentralizedDeleteMutationIfEnabled({
+                            organizationAndTeamData,
+                            codeReviewConfig:
+                                codeReviewConfigParam.configValue,
+                            repositoryId,
+                            directoryId,
+                        });
+                } catch (error) {
+                    this.logger.warn({
+                        message:
+                            'Failed to open centralized PR for scope removal; continuing with DB removal',
+                        context:
+                            DeleteRepositoryCodeReviewParameterUseCase.name,
+                        error: this.normalizeError(error),
+                        metadata: {
+                            body,
+                        },
                     });
-
-                if (centralizedPr) {
-                    return centralizedPr;
                 }
             }
 
@@ -149,7 +166,10 @@ export class DeleteRepositoryCodeReviewParameterUseCase {
                 throw new Error('RepositoryId is required');
             }
 
-            return result;
+            // If a centralized PR was opened, surface its metadata to the
+            // caller so the UI can link to it; otherwise return the raw DB
+            // mutation result.
+            return centralizedPr ?? result;
         } catch (error) {
             this.logger.error({
                 message: 'Could not delete code review configuration',
