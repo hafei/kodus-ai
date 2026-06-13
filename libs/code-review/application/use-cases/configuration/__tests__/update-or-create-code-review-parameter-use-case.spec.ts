@@ -498,8 +498,7 @@ describe('UpdateOrCreateCodeReviewParameterUseCase', () => {
                 prUrl: 'https://example.test/pr/manual-settings',
             }),
         );
-
-        expect(createOrUpdateParametersUseCase.execute).not.toHaveBeenCalled();
+        expect(createOrUpdateParametersUseCase.execute).toHaveBeenCalled();
     });
 
     it('allows sync updates when centralized configuration is enabled', async () => {

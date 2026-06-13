@@ -540,11 +540,6 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
             newDelta: updatedConfigValue,
         });
 
-        if (centralizedPr?.mode === 'centralized-pr') {
-            return centralizedPr;
-        }
-
-        // Process references only for direct-persistence flows.
         await this.processExternalReferencesInline(
             updatedConfigValue,
             organizationAndTeamData,
@@ -561,11 +556,15 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
             repositories: filteredRepositoryInfo,
         } as CodeReviewParameter;
 
-        return await this.createOrUpdateParametersUseCase.execute(
-            ParametersKey.CODE_REVIEW_CONFIG,
-            updatedConfig,
-            organizationAndTeamData,
-        );
+        const persisted =
+            await this.createOrUpdateParametersUseCase.execute(
+                ParametersKey.CODE_REVIEW_CONFIG,
+                updatedConfig,
+                organizationAndTeamData,
+            );
+
+        // Surface the PR metadata when one was opened so the UI can link to it.
+        return centralizedPr ?? persisted;
     }
 
     private mergeRepositories(
@@ -677,9 +676,14 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
                   previousRulesFileNames,
               });
 
-        if (centralizedPr?.mode === 'centralized-pr') {
-            return centralizedPr;
-        }
+        // Every UI-triggered change (structural or config) lands in the DB
+        // immediately and the centralized PR is best-effort. If the user
+        // closes the PR without merging, the next sync brings the repo
+        // state back over the DB (repo wins via sync). This keeps the UI
+        // responsive while preserving "centralized repo as source of truth"
+        // on the next reconciliation.
+        // (`centralizedPr` is still surfaced at the end so the UI can link
+        // to the PR.)
 
         await this.processExternalReferencesInline(
             newDelta,
@@ -718,7 +722,7 @@ export class UpdateOrCreateCodeReviewParameterUseCase {
             requestUser,
         });
 
-        return true;
+        return centralizedPr ?? true;
     }
 
     private async createCentralizedMutationIfEnabled(params: {
