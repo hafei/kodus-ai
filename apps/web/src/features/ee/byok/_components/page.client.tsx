@@ -28,6 +28,7 @@ import { revalidateServerSidePath } from "src/core/utils/revalidate-server-side"
 import type { BYOKConfig } from "../_types";
 import { CuratedCatalog } from "./catalog/catalog";
 import { ConfiguredSummary } from "./configured-summary";
+import { SpendLimitSection } from "./spend-limit-section";
 
 type SlotState = "idle" | "editing";
 
@@ -41,6 +42,7 @@ const CURATED_PROVIDERS = new Set([
     "anthropic",
     "openai",
     "openai_compatible",
+    "anthropic_compatible",
     "google_gemini",
     "openrouter",
 ]);
@@ -54,6 +56,8 @@ const providerLabel = (providerId?: string) => {
             return "OpenAI";
         case "openai_compatible":
             return "OpenAI-compatible";
+        case "anthropic_compatible":
+            return "Anthropic-compatible";
         case "anthropic":
             return "Anthropic";
         case "google_gemini":
@@ -157,9 +161,11 @@ const confirmEnvOverride = (): Promise<boolean> =>
 export const ByokPageClient = ({
     config,
     llmConfigStatus,
+    teamId,
 }: {
     config: { main: BYOKConfig; fallback: BYOKConfig } | null | undefined;
     llmConfigStatus: LLMConfigStatus | null;
+    teamId?: string;
 }) => {
     const router = useRouter();
     const [mainState, setMainState] = useState<SlotState>(
@@ -408,6 +414,8 @@ export const ByokPageClient = ({
                         )}
                     </section>
                 )}
+
+                {config?.main && <SpendLimitSection teamId={teamId} />}
             </Page.Content>
         </Page.Root>
     );

@@ -33,6 +33,8 @@ packages/**/*.js
 .env.qa
 .env.prod
 .env.local
+.env.reconciled
+.env.bak.*
 
 # E2B sandbox secrets
 e2b-sandbox/config.json
@@ -152,6 +154,7 @@ skills-lock.json
 evals/promptfoo/results/
 evals/promptfoo-safeguard/results/
 scripts/benchmark/results/
+scripts/benchmark/node_modules/
 scripts/benchmark/*-trace-metrics.json
 evals/investigation/evals/
 
@@ -217,3 +220,16 @@ parity-report.json
 
 # IDE - Zed
 .zed/
+
+opus-diagnosis-ptbr/
+scripts/benchmark/node_modules/
+
+# Benchmark recall experiments — analysis outputs + session tooling (regenerated, not product code)
+docs-internal/agent-execucao/
+scripts/benchmark/process-run.sh
+scripts/benchmark/funnel-extract.js
+scripts/benchmark/funnel-report.py
+scripts/benchmark/langfuse-enrich.py
+scripts/benchmark/execucao-detalhada.py
+scripts/benchmark/golden-context.py
+scripts/benchmark/golden-context.py.bak

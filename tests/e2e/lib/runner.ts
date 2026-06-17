@@ -14,6 +14,7 @@ import type {
 } from "./types.js";
 import { ScenarioSkipError } from "./types.js";
 import { makeProvider } from "../providers/index.js";
+import { makeGithubTokenPicker } from "./github-token-pool.js";
 import {
     finishOnboarding,
     login,
@@ -22,6 +23,7 @@ import {
     signUp,
 } from "./onboarding.js";
 import { randomBytes } from "node:crypto";
+import { registryRepoFor } from "./cloud-tenant-registry.js";
 import { logger } from "./log.js";
 
 const log = logger("runner");
@@ -154,6 +156,11 @@ interface CloudTenantEntry {
     provider: ProviderName;
     organizationId?: string;
     teamId?: string;
+    // Per-tenant fixture repo persisted by setup-tenants. Drives the
+    // provider's repo for this cell so each cloud GitHub tenant runs on
+    // its own repo (1 org : 1 repo). Absent for providers that don't
+    // need isolation → falls back to the env-resolved per-target repo.
+    repoFullName?: string;
 }
 
 function readCloudTenantsFile(): CloudTenantEntry[] {
@@ -166,6 +173,42 @@ function readCloudTenantsFile(): CloudTenantEntry[] {
     } catch {
         return [];
     }
+}
+
+// Per-tenant fixture repo for a cloud cell. Prefers what the tenants file
+// (CLOUD_TENANTS_JSON in CI) says, but falls back to the canonical
+// lib/cloud-tenant-registry.ts mapping when the entry predates the
+// 1-repo-per-tenant fix (#1237) and lacks `repoFullName`. Without the
+// fallback, a stale secret silently drops every GitHub tenant onto the
+// shared env-resolved repo (GH_TEST_REPO_CLOUD) and the webhook fan-out
+// collision returns as "review never started" flakes — exactly what
+// happened 2026-06-03 when `environment: QA` started shadowing the fresh
+// repo-level secret with a 05-30 environment-scoped copy. For GitHub the
+// repo is load-bearing (1 org : 1 repo), so having NEITHER source is a
+// hard config error, not a quiet fallback.
+function resolveCloudRepo(
+    fromTenantsFile: string | undefined,
+    provider: ProviderName,
+    license: LicenseMode,
+): string | undefined {
+    if (fromTenantsFile) return fromTenantsFile;
+    const fromRegistry = registryRepoFor(provider, license);
+    if (provider !== "github") return fromRegistry;
+    if (!fromRegistry) {
+        throw new Error(
+            `cloud github tenant (license=${license}) has no dedicated fixture repo: ` +
+                `the tenants file entry lacks repoFullName AND lib/cloud-tenant-registry.ts ` +
+                `has no (github, ${license}) tenant. Re-seed with \`yarn cloud:setup-tenants\` ` +
+                `or add the tenant to the registry — falling back to a shared repo would ` +
+                `reintroduce the webhook fan-out collision (#1237).`,
+        );
+    }
+    log.info(
+        `[tenant] cloud-tenants entry for (github, ${license}) lacks repoFullName ` +
+            `(stale CLOUD_TENANTS_JSON / cloud-tenants.json) — using registry default ${fromRegistry}. ` +
+            `Re-seed with \`yarn cloud:setup-tenants\` and refresh the secret.`,
+    );
+    return fromRegistry;
 }
 
 async function resolveTenantForCell(
@@ -183,7 +226,16 @@ async function resolveTenantForCell(
         const match = entries.find(
             (e) => e.provider === provider && e.license === license,
         );
-        if (match) return { email: match.email, password: match.password };
+        if (match)
+            return {
+                email: match.email,
+                password: match.password,
+                repoFullName: resolveCloudRepo(
+                    match.repoFullName,
+                    provider,
+                    license,
+                ),
+            };
 
         // Legacy fallback: per-license env vars (CLOUD_TENANT_PAID_EMAIL
         // etc.). Kept so a one-off run can drive a hand-seeded tenant
@@ -198,7 +250,11 @@ async function resolveTenantForCell(
         const email = process.env[key[0]];
         const password = process.env[key[1]];
         if (!email || !password) return undefined;
-        return { email, password };
+        return {
+            email,
+            password,
+            repoFullName: resolveCloudRepo(undefined, provider, license),
+        };
     }
     // self-hosted: fresh tenant per matrix run. Deterministic per
     // (runId, provider) so all cells/scenarios within ONE matrix run
@@ -241,6 +297,63 @@ async function resolveTenantForCell(
     return { email, password };
 }
 
+// Failure shapes worth ONE automatic retry: ABSENCE (something expected
+// never arrived — lost webhook, review that never materialized, pipeline
+// that never woke) and NETWORK/INFRA noise. These are the flake classes
+// observed in practice (e.g. kody-rules × gitlab "No review activity on
+// PR … within timeout" while the same repo passed 3 other scenarios in
+// the same run). Deterministic mismatches — "expected deny, got allow",
+// "Kody posted one", wrong subscriptionStatus — deliberately do NOT
+// match: re-running cannot change a wrong value, it only burns an LLM
+// review and 10 minutes.
+const TRANSIENT_FAILURE_PATTERNS: RegExp[] = [
+    /\btimed?\s?-?out\b|timeout/i,
+    /within \d+\s*s/i,
+    /after \d+\s*s/i,
+    /no review activity|none arrived|never arrived|never (reached|registered|woke|started)|did not (arrive|appear|start)/i,
+    /HTTP 5\d\d|HTTP 429|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang ?up|network error|Recv failure|operation was aborted/i,
+];
+
+export function isTransientFailure(message: string): boolean {
+    return TRANSIENT_FAILURE_PATTERNS.some((re) => re.test(message ?? ""));
+}
+
+// GitHub's primary rate limit is per ACCOUNT and resets hourly, so an
+// in-run retry can't clear it — re-running just burns more of the same
+// quota. When a cell fails purely because GitHub said "rate limit
+// exceeded", we mark it SKIPPED (infra, not a product failure) so a
+// transient quota exhaustion doesn't gate a release as red. This is
+// reported LOUDLY (log.err + a github-rate-limit skipReason) precisely so
+// it can't masquerade as a clean pass — a wall of rate-limit skips means
+// "add quota / spread load", not "all green".
+const GITHUB_RATE_LIMIT_PATTERN =
+    /rate limit exceeded|api rate limit|secondary rate limit|exceeded a secondary rate limit/i;
+export function isGithubRateLimit(message: string): boolean {
+    return GITHUB_RATE_LIMIT_PATTERN.test(message ?? "");
+}
+
+// ABSENCE failures (an expected event never materialized — review never
+// started, comment never arrived) get a settle delay before the retry.
+// Rationale: the per-deploy matrix starts ~5s after the GitOps infra PR,
+// and the version gate only proves the API converged — the WORKERS are
+// still rolling when the first review scenario fires its webhook. The
+// webhook lands (200), the job dies with the old worker, and an IMMEDIATE
+// retry falls inside the same rollout window: run 27021874607 had PRs
+// #22+#23 (attempt + instant retry, 15:16–15:19) with zero comments while
+// PR #24 one minute later reviewed fine. Two minutes covers the observed
+// worker-cycle gap. Pure transport noise (5xx/ECONNRESET/fetch failed)
+// keeps the instant retry — waiting buys nothing there.
+const ABSENCE_FAILURE_PATTERNS: RegExp[] = [
+    /no review activity|none arrived|never arrived|never (reached|registered|woke|started)|did not (arrive|appear|start)/i,
+    /No .* (comment|review|status) on (PR|MR)/i,
+];
+
+export function absenceRetryDelayMs(message: string): number {
+    return ABSENCE_FAILURE_PATTERNS.some((re) => re.test(message ?? ""))
+        ? 120_000
+        : 0;
+}
+
 export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
     const startedAt = new Date().toISOString();
     const results: ScenarioResult[] = [];
@@ -257,37 +370,81 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
     // or webhook bursts on auto-closed orphans across all providers.
     // Cleaning up here makes every run start from a known-clean
     // state regardless of how the previous one ended. Deduped on
-    // provider so 4 cells × 1 provider only hit the upstream API
-    // once. `opts.dryRun` short-circuits (no upstream calls).
+    // (provider, repo): cloud GitHub tenants each own a SEPARATE repo
+    // (1 org : 1 repo), so a stale [e2e] PR can hide on a sibling
+    // tenant's repo and 409 its next run — visit every distinct repo,
+    // not just every provider. `opts.dryRun` short-circuits.
     if (!opts.dryRun) {
-        const uniqueProviders = Array.from(
-            new Set(
-                opts.cells
-                    .filter((c) => c.target === opts.target)
-                    .map((c) => c.provider),
-            ),
-        );
-        for (const providerName of uniqueProviders) {
+        // Index the cloud tenants by (provider, license) once so the
+        // per-cell repo lookup below is an O(1) Map.get instead of a
+        // .find() scan inside the loop.
+        const repoByProviderLicense = new Map<string, string | undefined>();
+        if (opts.target === "cloud") {
+            for (const e of readCloudTenantsFile()) {
+                repoByProviderLicense.set(
+                    `${e.provider}::${e.license}`,
+                    e.repoFullName,
+                );
+            }
+        }
+        const fixtures = new Map<
+            string,
+            { provider: ProviderName; repo?: string }
+        >();
+        for (const c of opts.cells) {
+            if (c.target !== opts.target) continue;
+            // Same stale-tenants-file fallback as resolveCloudRepo (non-
+            // throwing here: a cleanup miss is survivable, a dead run is
+            // not) — otherwise the sweep visits the shared default repo
+            // while the actual per-tenant repos keep their orphaned PRs.
+            const repo =
+                opts.target === "cloud"
+                    ? (repoByProviderLicense.get(
+                          `${c.provider}::${c.license}`,
+                      ) ?? registryRepoFor(c.provider, c.license))
+                    : undefined;
+            fixtures.set(`${c.provider}::${repo ?? "default"}`, {
+                provider: c.provider,
+                repo,
+            });
+        }
+        // Spread cleanup's repo/PR listing across the bot-account pool too —
+        // otherwise every fixture lists on the single default account and helps
+        // exhaust its per-account GitHub rate limit before the cells even run.
+        const pickCleanupToken = makeGithubTokenPicker();
+        for (const { provider: providerName, repo } of fixtures.values()) {
+            const label = `${providerName}${repo ? ` (${repo})` : ""}`;
             try {
-                const provider = makeProvider(providerName, opts.target);
+                const provider = makeProvider(
+                    providerName,
+                    opts.target,
+                    repo,
+                    providerName === "github"
+                        ? pickCleanupToken().token
+                        : undefined,
+                );
                 const { closed } = await provider.cleanupStaleE2EArtifacts();
                 if (closed > 0) {
                     log.info(
-                        `[cleanup] ${providerName}: abandoned ${closed} stale [e2e]-prefixed PR(s) from prior runs`,
+                        `[cleanup] ${label}: abandoned ${closed} stale [e2e]-prefixed PR(s) from prior runs`,
                     );
                 }
             } catch (err) {
                 // Best-effort. Don't poison the entire matrix run just
-                // because cleanup couldn't list PRs on one provider —
+                // because cleanup couldn't list PRs on one fixture —
                 // the per-scenario open path still throws its own
                 // specific error if a stale PR ends up blocking it,
                 // and that error is what the operator sees.
                 log.info(
-                    `[cleanup] ${providerName}: skipped (${err instanceof Error ? err.message : String(err)})`,
+                    `[cleanup] ${label}: skipped (${err instanceof Error ? err.message : String(err)})`,
                 );
             }
         }
     }
+
+    // Round-robins GitHub cells across the bot-account token pool so no single
+    // account's rate limit caps the run (no-op with a single token).
+    const pickGithubToken = makeGithubTokenPicker();
 
     for (const cell of opts.cells) {
         if (cell.target !== opts.target) continue;
@@ -331,80 +488,150 @@ export async function runMatrix(opts: RunOptions): Promise<RunOutcome> {
             }
 
             log.info(`RUN   ${cellLabel}`);
-            const t0 = Date.now();
-            try {
-                const provider = makeProvider(cell.provider, cell.target);
-                const scenarioArtifactDir = join(
-                    artifactDir,
-                    `${scenario.id}-${cell.target}-${cell.provider}-${cell.license}`,
-                );
-                mkdirSync(scenarioArtifactDir, { recursive: true });
 
-                const evidence = await scenario.run({
-                    target,
-                    provider,
-                    license: cell.license,
-                    tenant,
-                    kodus: {
-                        login: (creds) => login(target, creds),
-                        registerIntegration: (session) =>
-                            registerIntegration(target, provider, session),
-                        registerRepo: (session) =>
-                            registerRepo(target, provider, session),
-                        finishOnboarding: (session, repo) =>
-                            finishOnboarding(target, session, repo),
-                    },
-                    assert: (cond, msg) => {
-                        if (!cond) throw new Error(`Assertion failed: ${msg}`);
-                    },
-                    skip: (reason: string): never => {
-                        throw new ScenarioSkipError(reason);
-                    },
-                    artifactDir: scenarioArtifactDir,
-                    runId: opts.runId,
-                });
-
-                const duration = Date.now() - t0;
-                log.ok(`PASS  ${cellLabel}  (${(duration / 1000).toFixed(1)}s)`);
-                results.push(
-                    makeResult(scenario, cell, "passed", duration, evidence),
+            // Assign this GitHub run a token from the bot-account pool
+            // (round-robin). Same token across both attempts so a retry stays
+            // on the same account; other cells keep draining the other tokens.
+            const ghAssignment =
+                cell.provider === "github" ? pickGithubToken() : undefined;
+            const githubToken = ghAssignment?.token;
+            if (ghAssignment && ghAssignment.size > 1) {
+                log.info(
+                    `  github → token slot ${ghAssignment.slot}/${ghAssignment.size}`,
                 );
-            } catch (err) {
-                const duration = Date.now() - t0;
-                const e = err as Error;
-                // ctx.skip() surfaces here as a recognized sentinel.
-                // Mark the cell as skipped (not failed) so the bottom-
-                // line summary stays accurate and the matrix run as a
-                // whole isn't dragged into "failed" by a precondition
-                // gap (e.g. upgrade-n-1-to-n outside the upgrade flow).
-                // Identity check by .name to survive bundlers that
-                // drop the prototype chain.
-                if (
-                    e instanceof ScenarioSkipError ||
-                    e?.name === "ScenarioSkipError"
-                ) {
-                    log.info(`SKIP  ${cellLabel}  (${e.message})`);
-                    results.push(
-                        makeResult(scenario, cell, "skipped", duration, {
-                            skipReason: e.message,
-                        }),
-                    );
-                    continue;
-                }
-                log.err(`FAIL  ${cellLabel}: ${e.message}`);
-                results.push(
-                    makeResult(
-                        scenario,
-                        cell,
-                        "failed",
-                        duration,
-                        {},
-                        e.message,
-                        e.stack,
-                    ),
-                );
-                if (opts.failFast) break;
             }
+
+            // One automatic retry for TRANSIENT failure shapes (lost
+            // webhook, provider hiccup, network) — see isTransientFailure.
+            // Deterministic assertion mismatches ("expected deny, got
+            // allow", "Kody posted one") never retry: re-running can't
+            // change a wrong value, only waste an LLM review.
+            let failFastHit = false;
+            let retriedAfter: string | undefined;
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                const t0 = Date.now();
+                try {
+                    const provider = makeProvider(
+                        cell.provider,
+                        cell.target,
+                        tenant?.repoFullName,
+                        githubToken,
+                    );
+                    const scenarioArtifactDir = join(
+                        artifactDir,
+                        `${scenario.id}-${cell.target}-${cell.provider}-${cell.license}`,
+                    );
+                    mkdirSync(scenarioArtifactDir, { recursive: true });
+
+                    const evidence = await scenario.run({
+                        target,
+                        provider,
+                        license: cell.license,
+                        tenant,
+                        kodus: {
+                            login: (creds) => login(target, creds),
+                            registerIntegration: (session) =>
+                                registerIntegration(target, provider, session),
+                            registerRepo: (session, repoOpts) =>
+                                registerRepo(target, provider, session, repoOpts),
+                            finishOnboarding: (session, repo) =>
+                                finishOnboarding(target, session, repo),
+                        },
+                        assert: (cond, msg) => {
+                            if (!cond) throw new Error(`Assertion failed: ${msg}`);
+                        },
+                        skip: (reason: string): never => {
+                            throw new ScenarioSkipError(reason);
+                        },
+                        artifactDir: scenarioArtifactDir,
+                        runId: opts.runId,
+                    });
+
+                    const duration = Date.now() - t0;
+                    log.ok(
+                        `PASS  ${cellLabel}  (${(duration / 1000).toFixed(1)}s)${retriedAfter ? " [on retry]" : ""}`,
+                    );
+                    results.push(
+                        makeResult(
+                            scenario,
+                            cell,
+                            "passed",
+                            duration,
+                            retriedAfter
+                                ? { ...evidence, retriedAfter }
+                                : evidence,
+                        ),
+                    );
+                    break;
+                } catch (err) {
+                    const duration = Date.now() - t0;
+                    const e = err as Error;
+                    // ctx.skip() surfaces here as a recognized sentinel.
+                    // Mark the cell as skipped (not failed) so the bottom-
+                    // line summary stays accurate and the matrix run as a
+                    // whole isn't dragged into "failed" by a precondition
+                    // gap (e.g. upgrade-n-1-to-n outside the upgrade flow).
+                    // Identity check by .name to survive bundlers that
+                    // drop the prototype chain.
+                    if (
+                        e instanceof ScenarioSkipError ||
+                        e?.name === "ScenarioSkipError"
+                    ) {
+                        log.info(`SKIP  ${cellLabel}  (${e.message})`);
+                        results.push(
+                            makeResult(scenario, cell, "skipped", duration, {
+                                skipReason: e.message,
+                            }),
+                        );
+                        break;
+                    }
+                    // GitHub rate limit (per-account, hourly reset): an in-run
+                    // retry can't clear it, so SKIP (infra, non-gating) instead
+                    // of failing the release red. Logged loudly so a wall of
+                    // these reads as "out of quota / spread load", not a pass.
+                    if (isGithubRateLimit(e.message)) {
+                        log.err(
+                            `SKIP  ${cellLabel}: GitHub rate limit — quota exhausted, NOT a product pass (${e.message.slice(0, 160)})`,
+                        );
+                        results.push(
+                            makeResult(scenario, cell, "skipped", duration, {
+                                skipReason: `github-rate-limit: ${e.message.slice(0, 200)}`,
+                            }),
+                        );
+                        break;
+                    }
+                    if (
+                        attempt === 1 &&
+                        !opts.failFast &&
+                        isTransientFailure(e.message)
+                    ) {
+                        retriedAfter = e.message;
+                        const settleMs = absenceRetryDelayMs(e.message);
+                        log.info(
+                            `RETRY ${cellLabel}: transient failure shape, re-running once${settleMs ? ` after a ${settleMs / 1000}s settle (absence shape — likely a deploy/worker rollout window)` : ""} (${e.message.slice(0, 160)})`,
+                        );
+                        if (settleMs) {
+                            await new Promise((r) => setTimeout(r, settleMs));
+                        }
+                        continue;
+                    }
+                    log.err(`FAIL  ${cellLabel}: ${e.message}`);
+                    results.push(
+                        makeResult(
+                            scenario,
+                            cell,
+                            "failed",
+                            duration,
+                            retriedAfter ? { retriedAfter } : {},
+                            e.message,
+                            e.stack,
+                        ),
+                    );
+                    if (opts.failFast) failFastHit = true;
+                    break;
+                }
+            }
+            if (failFastHit) break;
         }
     }
 

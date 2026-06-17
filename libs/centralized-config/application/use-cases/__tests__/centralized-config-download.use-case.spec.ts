@@ -67,6 +67,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
                                     id: 'dir-1',
                                     path: '/src',
                                     isSelected: true,
+                                    folders: [{ path: '/src' }],
                                 },
                             ],
                         },
@@ -167,17 +168,20 @@ describe('CentralizedConfigDownloadUseCase', () => {
         const repoEntry = entries.find(
             (e) => e.path === 'repo-one/kodus-config.yml',
         );
-        const dirEntry = entries.find(
+        const dirConfigEntry = entries.find(
             (e) => e.path === 'repo-one/src/kodus-config.yml',
         );
 
         expect(globalEntry).toBeDefined();
         expect(repoEntry).toBeDefined();
-        expect(dirEntry).toBeDefined();
+        expect(dirConfigEntry).toBeDefined();
+        expect(
+            entries.some((e) => e.path.includes('folders.yml')),
+        ).toBe(false);
 
         const globalConfig = yaml.load(globalEntry.content) as any;
         const repoConfig = yaml.load(repoEntry.content) as any;
-        const dirConfig = yaml.load(dirEntry.content) as any;
+        const dirConfig = yaml.load(dirConfigEntry.content) as any;
 
         expect(globalConfig.customMessages.startReviewMessage.content).toBe(
             'global-start',
@@ -290,11 +294,13 @@ describe('CentralizedConfigDownloadUseCase', () => {
                                     id: 'dir-parent',
                                     path: '/src',
                                     isSelected: true,
+                                    folders: [{ path: '/src' }],
                                 },
                                 {
                                     id: 'dir-child',
                                     path: '/src/app',
                                     isSelected: true,
+                                    folders: [{ path: '/src/app' }],
                                 },
                             ],
                         },
@@ -391,20 +397,23 @@ describe('CentralizedConfigDownloadUseCase', () => {
         const repoEntry = entries.find(
             (entry) => entry.path === 'repo-one/kodus-config.yml',
         );
-        const parentDirEntry = entries.find(
+        const parentDirConfigEntry = entries.find(
             (entry) => entry.path === 'repo-one/src/kodus-config.yml',
         );
-        const childDirEntry = entries.find(
-            (entry) => entry.path === 'repo-one/src/app/kodus-config.yml',
+        const childDirConfigEntry = entries.find(
+            (entry) => entry.path === 'repo-one/src%2Fapp/kodus-config.yml',
         );
 
         expect(globalEntry).toBeDefined();
-        expect(parentDirEntry).toBeDefined();
+        expect(parentDirConfigEntry).toBeDefined();
         expect(repoEntry).toBeUndefined();
-        expect(childDirEntry).toBeUndefined();
+        expect(childDirConfigEntry).toBeUndefined();
+        expect(
+            entries.some((e) => e.path.includes('folders.yml')),
+        ).toBe(false);
 
         const globalConfig = yaml.load(globalEntry.content) as any;
-        const parentDirConfig = yaml.load(parentDirEntry.content) as any;
+        const parentDirConfig = yaml.load(parentDirConfigEntry.content) as any;
 
         expect(globalConfig.customMessages.startReviewMessage.content).toBe(
             'global-custom',
@@ -495,7 +504,7 @@ describe('CentralizedConfigDownloadUseCase', () => {
             }),
             'org-1',
             {
-                userId: 'user-1',
+                userId: 'kody',
                 userEmail: 'kody@kodus.io',
             },
             true,

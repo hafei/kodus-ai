@@ -36,7 +36,8 @@
                                 "group": "Billing & Licenses",
                                 "pages": [
                                     "how_to_use/en/pricing",
-                                    "how_to_use/en/byok"
+                                    "how_to_use/en/byok",
+                                    "how_to_use/en/spend-limit"
                                 ]
                             },
                             {
@@ -90,6 +91,7 @@
                                 "group": "Cockpit",
                                 "pages": [
                                     "how_to_use/en/cockpit/overview",
+                                    "how_to_use/en/cockpit/kodus_review",
                                     {
                                         "group": "Metrics",
                                         "pages": [
@@ -126,7 +128,8 @@
                                             "how_to_use/en/code_review/general_config/github_pat",
                                             "how_to_use/en/code_review/general_config/gitlab_pat",
                                             "how_to_use/en/code_review/general_config/bitbucket_pat",
-                                            "how_to_use/en/code_review/general_config/azure_devops_pat"
+                                            "how_to_use/en/code_review/general_config/azure_devops_pat",
+                                            "how_to_use/en/code_review/general_config/forgejo_pat"
                                         ]
                                     },
                                     "how_to_use/en/security/data_usage"
@@ -199,6 +202,13 @@
                                         "icon": "microsoft",
                                         "pages": [
                                             "how_to_deploy/en/platforms/azure_devops/azdevops_webhook"
+                                        ]
+                                    },
+                                    {
+                                        "group": "Forgejo",
+                                        "icon": "/images/forgejo.svg",
+                                        "pages": [
+                                            "how_to_deploy/en/platforms/forgejo/forgejo_webhook"
                                         ]
                                     }
                                 ]
@@ -302,6 +312,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -377,6 +392,7 @@
                                 "group": "Cockpit",
                                 "pages": [
                                     "how_to_use/es/cockpit/overview",
+                                    "how_to_use/es/cockpit/kodus_review",
                                     {
                                         "group": "Métricas",
                                         "pages": [
@@ -413,7 +429,8 @@
                                             "how_to_use/es/code_review/general_config/github_pat",
                                             "how_to_use/es/code_review/general_config/gitlab_pat",
                                             "how_to_use/es/code_review/general_config/bitbucket_pat",
-                                            "how_to_use/es/code_review/general_config/azure_devops_pat"
+                                            "how_to_use/es/code_review/general_config/azure_devops_pat",
+                                            "how_to_use/es/code_review/general_config/forgejo_pat"
                                         ]
                                     },
                                     "how_to_use/es/security/data_usage"
@@ -486,6 +503,13 @@
                                         "icon": "microsoft",
                                         "pages": [
                                             "how_to_deploy/es/platforms/azure_devops/azdevops_webhook"
+                                        ]
+                                    },
+                                    {
+                                        "group": "Forgejo",
+                                        "icon": "/images/forgejo.svg",
+                                        "pages": [
+                                            "how_to_deploy/es/platforms/forgejo/forgejo_webhook"
                                         ]
                                     }
                                 ]
@@ -589,6 +613,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -664,6 +693,7 @@
                                 "group": "Cockpit",
                                 "pages": [
                                     "how_to_use/pt-br/cockpit/overview",
+                                    "how_to_use/pt-br/cockpit/kodus_review",
                                     {
                                         "group": "Métricas",
                                         "pages": [
@@ -700,7 +730,8 @@
                                             "how_to_use/pt-br/code_review/general_config/github_pat",
                                             "how_to_use/pt-br/code_review/general_config/gitlab_pat",
                                             "how_to_use/pt-br/code_review/general_config/bitbucket_pat",
-                                            "how_to_use/pt-br/code_review/general_config/azure_devops_pat"
+                                            "how_to_use/pt-br/code_review/general_config/azure_devops_pat",
+                                            "how_to_use/pt-br/code_review/general_config/forgejo_pat"
                                         ]
                                     },
                                     "how_to_use/pt-br/security/data_usage"
@@ -773,6 +804,13 @@
                                         "icon": "microsoft",
                                         "pages": [
                                             "how_to_deploy/pt-br/platforms/azure_devops/azdevops_webhook"
+                                        ]
+                                    },
+                                    {
+                                        "group": "Forgejo",
+                                        "icon": "/images/forgejo.svg",
+                                        "pages": [
+                                            "how_to_deploy/pt-br/platforms/forgejo/forgejo_webhook"
                                         ]
                                     }
                                 ]
@@ -876,6 +914,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -951,6 +994,7 @@
                                 "group": "コックピット",
                                 "pages": [
                                     "how_to_use/ja/cockpit/overview",
+                                    "how_to_use/ja/cockpit/kodus_review",
                                     {
                                         "group": "メトリクス",
                                         "pages": [
@@ -987,7 +1031,8 @@
                                             "how_to_use/ja/code_review/general_config/github_pat",
                                             "how_to_use/ja/code_review/general_config/gitlab_pat",
                                             "how_to_use/ja/code_review/general_config/bitbucket_pat",
-                                            "how_to_use/ja/code_review/general_config/azure_devops_pat"
+                                            "how_to_use/ja/code_review/general_config/azure_devops_pat",
+                                            "how_to_use/ja/code_review/general_config/forgejo_pat"
                                         ]
                                     },
                                     "how_to_use/ja/security/data_usage"
@@ -1060,6 +1105,13 @@
                                         "icon": "microsoft",
                                         "pages": [
                                             "how_to_deploy/ja/platforms/azure_devops/azdevops_webhook"
+                                        ]
+                                    },
+                                    {
+                                        "group": "Forgejo",
+                                        "icon": "/images/forgejo.svg",
+                                        "pages": [
+                                            "how_to_deploy/ja/platforms/forgejo/forgejo_webhook"
                                         ]
                                     }
                                 ]
@@ -1163,6 +1215,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             },
@@ -1238,6 +1295,7 @@
                                 "group": "驾驶舱",
                                 "pages": [
                                     "how_to_use/zh/cockpit/overview",
+                                    "how_to_use/zh/cockpit/kodus_review",
                                     {
                                         "group": "指标",
                                         "pages": [
@@ -1274,7 +1332,8 @@
                                             "how_to_use/zh/code_review/general_config/github_pat",
                                             "how_to_use/zh/code_review/general_config/gitlab_pat",
                                             "how_to_use/zh/code_review/general_config/bitbucket_pat",
-                                            "how_to_use/zh/code_review/general_config/azure_devops_pat"
+                                            "how_to_use/zh/code_review/general_config/azure_devops_pat",
+                                            "how_to_use/zh/code_review/general_config/forgejo_pat"
                                         ]
                                     },
                                     "how_to_use/zh/security/data_usage"
@@ -1347,6 +1406,13 @@
                                         "icon": "microsoft",
                                         "pages": [
                                             "how_to_deploy/zh/platforms/azure_devops/azdevops_webhook"
+                                        ]
+                                    },
+                                    {
+                                        "group": "Forgejo",
+                                        "icon": "/images/forgejo.svg",
+                                        "pages": [
+                                            "how_to_deploy/zh/platforms/forgejo/forgejo_webhook"
                                         ]
                                     }
                                 ]
@@ -1450,6 +1516,11 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Changelog",
+                        "icon": "newspaper",
+                        "pages": ["changelog/index"]
                     }
                 ]
             }
@@ -1494,6 +1565,10 @@
         }
     },
     "redirects": [
+        {
+            "source": "/changelog.xml",
+            "destination": "/changelog/rss.xml"
+        },
         {
             "source": "/how_to_use/en/cli/overview",
             "destination": "/how_to_use/en/cli/introduction"

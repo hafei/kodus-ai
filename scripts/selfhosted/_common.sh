@@ -12,7 +12,7 @@ mkdir -p "$STATE_DIR" "$SSH_KEY_DIR"
 chmod 700 "$SSH_KEY_DIR"
 
 # Load env config in priority order. Already-exported env vars win — that lets
-# you override a single value inline (e.g. IMAGE_TAG=foo yarn selfhosted:provision)
+# you override a single value inline (e.g. IMAGE_TAG=foo pnpm run selfhosted:provision)
 # without editing the config file.
 #
 #   1. Already-exported env (highest — caller's shell wins)
@@ -188,5 +188,7 @@ ssh_to() {
         -o UserKnownHostsFile=/dev/null \
         -o LogLevel=ERROR \
         -o ConnectTimeout=10 \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
         "root@$ip" "$@"
 }

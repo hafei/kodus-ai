@@ -4,6 +4,12 @@ import { EmailFrom } from '@libs/common/email/from';
 import ByokErrorsThresholdEmail, {
     byokErrorsThresholdEmailMeta,
 } from '@libs/common/email/templates/byok-errors-threshold';
+import SpendLimitThresholdEmail, {
+    spendLimitThresholdEmailMeta,
+} from '@libs/common/email/templates/spend-limit-threshold';
+import SpendLimitExceededEmail, {
+    spendLimitExceededEmailMeta,
+} from '@libs/common/email/templates/spend-limit-exceeded';
 import ConfirmationEmail, {
     confirmationEmailMeta,
 } from '@libs/common/email/templates/confirmation';
@@ -40,6 +46,18 @@ import TrialExpiringEmail, {
 import WeeklyRecapEmail, {
     weeklyRecapEmailMeta,
 } from '@libs/common/email/templates/weekly-recap';
+import IdeRulesSyncedEmail, {
+    ideRulesSyncedEmailMeta,
+} from '@libs/common/email/templates/ide-rules-synced';
+import OrgRoleChangedEmail, {
+    orgRoleChangedEmailMeta,
+} from '@libs/common/email/templates/org-role-changed';
+import ReviewAutoApprovedEmail, {
+    reviewAutoApprovedEmailMeta,
+} from '@libs/common/email/templates/review-auto-approved';
+import ReviewSkippedNoLicenseEmail, {
+    reviewSkippedNoLicenseEmailMeta,
+} from '@libs/common/email/templates/review-skipped-no-license';
 
 import { NotificationEvent } from '../../../domain/catalog/events';
 
@@ -109,12 +127,9 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
         const inviterEmail = metadata.inviterEmail as string;
         const inviteLink = metadata.inviteLink as string;
         const inviteeName =
-            user?.teamMember?.[0]?.name ??
-            user?.email?.split('@')[0] ??
-            '';
+            user?.teamMember?.[0]?.name ?? user?.email?.split('@')[0] ?? '';
         const organizationName = user?.organization?.name ?? '';
-        const teamName =
-            user?.teamMember?.[0]?.team?.name ?? organizationName;
+        const teamName = user?.teamMember?.[0]?.team?.name ?? organizationName;
         return {
             ...inviteEmailMeta({ teamName }),
             react: InviteEmail({
@@ -138,7 +153,7 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
                 organizationName,
                 rules,
                 rulesCount: rules.length,
-                rulesLink: `${webUrl}/kody-rules`,
+                rulesLink: `${webUrl}/settings/code-review/global/kody-rules`,
             }),
         };
     },
@@ -169,11 +184,11 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
     },
 
     [NotificationEvent.ORG_MEMBER_REMOVED]: (metadata) => {
-        const removed = (metadata.removedUser as
-            | { name?: string; email?: string }
-            | undefined) ?? {};
-        const removedUserName =
-            removed.name ?? removed.email ?? 'there';
+        const removed =
+            (metadata.removedUser as
+                | { name?: string; email?: string }
+                | undefined) ?? {};
+        const removedUserName = removed.name ?? removed.email ?? 'there';
         const organizationName = metadata.organizationName as string;
         const removedBy = metadata.removedBy as string;
         return {
@@ -198,6 +213,60 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
                 repoName,
                 reason,
                 correlationId,
+            }),
+        };
+    },
+
+    [NotificationEvent.REVIEW_AUTO_APPROVED]: (metadata) => {
+        const prUrl = metadata.prUrl as string;
+        const repoName = metadata.repoName as string;
+        return {
+            ...reviewAutoApprovedEmailMeta({ repoName }),
+            react: ReviewAutoApprovedEmail({ prUrl, repoName }),
+        };
+    },
+
+    [NotificationEvent.REVIEW_SKIPPED_NO_LICENSE]: (metadata) => {
+        const prUrl = metadata.prUrl as string;
+        const repoName = metadata.repoName as string;
+        const ownerContact = metadata.ownerContact as string | undefined;
+        return {
+            ...reviewSkippedNoLicenseEmailMeta({ repoName }),
+            react: ReviewSkippedNoLicenseEmail({
+                prUrl,
+                repoName,
+                ownerContact,
+            }),
+        };
+    },
+
+    [NotificationEvent.IDE_RULES_SYNCED]: (metadata, { webUrl }) => {
+        const repoName = metadata.repoName as string;
+        const rulesCount = (metadata.rulesCount as number | undefined) ?? 0;
+        return {
+            ...ideRulesSyncedEmailMeta({ repoName }),
+            react: IdeRulesSyncedEmail({
+                repoName,
+                rulesCount,
+                rulesLink: `${webUrl}/settings/code-review/global/kody-rules`,
+            }),
+        };
+    },
+
+    [NotificationEvent.ORG_ROLE_CHANGED]: (metadata) => {
+        const affectedUserEmail = metadata.affectedUserEmail as string;
+        const previousRole = metadata.previousRole as string;
+        const newRole = metadata.newRole as string;
+        const organizationName = metadata.organizationName as string;
+        const changedBy = metadata.changedBy as string | undefined;
+        return {
+            ...orgRoleChangedEmailMeta({ affectedUserEmail, organizationName }),
+            react: OrgRoleChangedEmail({
+                affectedUserEmail,
+                previousRole,
+                newRole,
+                organizationName,
+                changedBy,
             }),
         };
     },
@@ -291,6 +360,36 @@ export const EMAIL_TEMPLATE_REGISTRY: Partial<
                 windowStartLabel: labelFormat(windowStart),
                 windowEndLabel: labelFormat(windowEnd),
                 sampleError,
+            }),
+        };
+    },
+
+    [NotificationEvent.SPEND_LIMIT_THRESHOLD_REACHED]: (metadata) => {
+        const percentage = (metadata.percentage as number) ?? 0;
+        const usd = (value: unknown) => {
+            const n = typeof value === 'number' ? value : Number(value);
+            return Number.isFinite(n) ? `$${n.toLocaleString('en-US')}` : '$0';
+        };
+        return {
+            ...spendLimitThresholdEmailMeta({ percentage }),
+            react: SpendLimitThresholdEmail({
+                percentage,
+                limitLabel: usd(metadata.monthlyLimitUsd),
+                spentLabel: usd(metadata.spentUsd),
+            }),
+        };
+    },
+
+    [NotificationEvent.SPEND_LIMIT_EXCEEDED_FINAL]: (metadata) => {
+        const usd = (value: unknown) => {
+            const n = typeof value === 'number' ? value : Number(value);
+            return Number.isFinite(n) ? `$${n.toLocaleString('en-US')}` : '$0';
+        };
+        return {
+            ...spendLimitExceededEmailMeta(),
+            react: SpendLimitExceededEmail({
+                limitLabel: usd(metadata.monthlyLimitUsd),
+                spentLabel: usd(metadata.spentUsd),
             }),
         };
     },

@@ -9,9 +9,14 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+import { createVertexAnthropic } from '@ai-sdk/google-vertex/anthropic';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { BYOKConfig, BYOKProvider } from '@kodus/kodus-common/llm';
+import {
+    anthropicCompatibleRootURL,
+    BYOKConfig,
+    BYOKProvider,
+} from '@kodus/kodus-common/llm';
 import { decrypt } from '@libs/common/utils/crypto';
 
 /**
@@ -20,27 +25,60 @@ import { decrypt } from '@libs/common/utils/crypto';
  * so self-hosted deployments using the same `API_VERTEX_AI_API_KEY` env var
  * format (base64 SA JSON) work on both the v2 engine and the v5 agent.
  *
+ * Routes by model id: `claude-*` models on Vertex speak the Anthropic
+ * Messages protocol (Vertex MaaS), not the Gemini protocol, so they need
+ * `createVertexAnthropic` from `@ai-sdk/google-vertex/anthropic`. Every
+ * other model id (Gemini) uses `createVertex`. Using `createVertex` for a
+ * Claude model id builds a Gemini-protocol client and fails at call time.
+ *
  * Returns null when the value is not a valid base64-encoded JSON with a
  * `project_id` — the caller should fall back to another provider path.
  */
+/**
+ * Parse a Google Service Account from either raw JSON or base64-encoded
+ * JSON. Users routinely paste the SA JSON file contents directly; base64
+ * of a JSON object always starts with `ey` (from `{"`), while raw JSON
+ * starts with `{`, so the leading char disambiguates with no ambiguity.
+ * Returns null when neither form yields valid JSON.
+ */
+function parseSaCredentials(input: string): { project_id?: string } | null {
+    const trimmed = (input || '').trim();
+    if (!trimmed) return null;
+    const jsonText = trimmed.startsWith('{')
+        ? trimmed
+        : Buffer.from(trimmed, 'base64').toString('utf-8');
+    try {
+        return JSON.parse(jsonText) as { project_id?: string };
+    } catch {
+        return null;
+    }
+}
+
 function vertexModelFromSaJson(
-    base64SaJson: string,
+    saJsonOrBase64: string,
     modelId: string,
     locationOverride?: string,
 ): LanguageModel | null {
     try {
-        const decoded = Buffer.from(base64SaJson, 'base64').toString('utf-8');
-        const credentials = JSON.parse(decoded) as { project_id?: string };
+        const credentials = parseSaCredentials(saJsonOrBase64);
         if (!credentials?.project_id) return null;
         // Keep this helper pure: the caller is responsible for resolving
         // the region (BYOK config or env var) and passing it as
-        // locationOverride. Default to us-central1 when omitted.
-        const location = locationOverride?.trim() || 'us-central1';
-        return createVertex({
+        // locationOverride. Default to the GLOBAL endpoint when omitted —
+        // it serves every current Claude and Gemini model on Vertex and
+        // routes dynamically, so users never have to know per-model region
+        // availability. (Regional endpoints like us-central1 don't serve
+        // Claude at all.)
+        const location = locationOverride?.trim() || 'global';
+        const settings = {
             project: credentials.project_id,
             location,
             googleAuthOptions: { credentials: credentials as any },
-        })(modelId);
+        };
+        if (CLAUDE_MODEL_PATTERN.test(modelId)) {
+            return createVertexAnthropic(settings)(modelId);
+        }
+        return createVertex(settings)(modelId);
     } catch {
         return null;
     }
@@ -212,11 +250,20 @@ export function byokToVercelModel(
     byokConfig?: BYOKConfig,
     role: 'main' | 'fallback' = 'main',
     options: ByokModelOptions = {},
+    /**
+     * Override the hardcoded `DEFAULT_MODEL.model` when there's no BYOK
+     * config. Used by the public-demo / trial flow to force a cheaper
+     * model (gemini-2.5-flash) for anonymous reviews — the production
+     * default of gemini-3.1-pro-preview is ~5–10× slower and overkill
+     * for a free demo.
+     */
+    defaultModelOverride?: string,
 ): LanguageModel {
     const config =
         role === 'fallback' ? byokConfig?.fallback : byokConfig?.main;
 
     if (!config) {
+        const defaultModel = defaultModelOverride || DEFAULT_MODEL.model;
         // No BYOK — pick the default based on deployment mode.
         // Self-hosted: honor `API_LLM_PROVIDER_MODEL` (+ `API_OPEN_AI_API_KEY` /
         //   `API_OPENAI_FORCE_BASE_URL` / `API_VERTEX_AI_API_KEY`) so the
@@ -234,7 +281,8 @@ export function byokToVercelModel(
             // every supported provider — the prefix of the model name picks
             // the right SDK so tools/auth/protocol match:
             //   gemini-*  → Vertex (SA JSON in API_VERTEX_AI_API_KEY)
-            //   claude-*  → Anthropic native Messages API
+            //   claude-*  → Anthropic native (API_OPEN_AI_API_KEY) when set,
+            //               else Vertex Anthropic (SA JSON in API_VERTEX_AI_API_KEY)
             //   any other → OpenAI-compatible (OpenAI, Moonshot, z.AI, etc.)
             const isGemini = GEMINI_MODEL_PATTERN.test(envMode);
             const isClaude = CLAUDE_MODEL_PATTERN.test(envMode);
@@ -284,6 +332,18 @@ export function byokToVercelModel(
                     ...(openaiBaseURL ? { baseURL: openaiBaseURL } : {}),
                 })(envMode);
             }
+            if (isClaude && vertexKey && !viaProxy) {
+                // Claude on Vertex (MaaS): the SA JSON in API_VERTEX_AI_API_KEY
+                // routes through @ai-sdk/google-vertex/anthropic. Only reached
+                // when no direct Anthropic key (API_OPEN_AI_API_KEY) is set —
+                // that native path above takes precedence.
+                const vertexModel = vertexModelFromSaJson(
+                    vertexKey,
+                    envMode,
+                    process.env.API_VERTEX_AI_LOCATION,
+                );
+                if (vertexModel) return vertexModel;
+            }
             if (openaiKey) {
                 return createOpenAICompatible({
                     name: 'self-hosted',
@@ -303,12 +363,28 @@ export function byokToVercelModel(
             // (it'll fail fast on the API call instead of here).
         }
 
+        // Kimi (Moonshot AI) — used by the public-demo trial flow.
+        // Detected by model-name prefix so we don't need a new BYOK
+        // provider entry just for the default-only path. Wires through
+        // the OpenAI-compatible adapter pointed at Moonshot's endpoint.
+        if (/^kimi[-_.]/i.test(defaultModel)) {
+            const moonshotKey =
+                process.env.API_MOONSHOT_API_KEY ||
+                process.env.MOONSHOT_API_KEY ||
+                '';
+            return createOpenAICompatible({
+                name: 'moonshot',
+                apiKey: moonshotKey,
+                baseURL: 'https://api.moonshot.ai/v1',
+            })(defaultModel);
+        }
+
         const googleKey =
             process.env.API_GOOGLE_AI_API_KEY ||
             process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
             '';
         return createGoogleGenerativeAI({ apiKey: googleKey })(
-            DEFAULT_MODEL.model,
+            defaultModel,
         );
     }
 
@@ -326,6 +402,15 @@ export function byokToVercelModel(
             return createAnthropic({
                 apiKey,
                 ...(baseURL ? { baseURL } : {}),
+            })(model);
+
+        case BYOKProvider.ANTHROPIC_COMPATIBLE:
+            // Anthropic-compatible endpoints (Kimi Code, Z.ai, DeepSeek):
+            // @ai-sdk/anthropic appends /messages to the base, so the base
+            // must carry the /v1 suffix — normalize whatever the user pasted.
+            return createAnthropic({
+                apiKey,
+                baseURL: `${anthropicCompatibleRootURL(baseURL || '')}/v1`,
             })(model);
 
         case BYOKProvider.GOOGLE_GEMINI:
@@ -405,7 +490,10 @@ export function byokToVercelModel(
  * Mirrors the fallback logic in `byokToVercelModel` so telemetry/logs
  * reflect the model that will actually be used.
  */
-export function getModelName(byokConfig?: BYOKConfig): string {
+export function getModelName(
+    byokConfig?: BYOKConfig,
+    defaultModelOverride?: string,
+): string {
     if (byokConfig?.main) {
         return `${byokConfig.main.provider}:${byokConfig.main.model}`;
     }
@@ -430,12 +518,15 @@ export function getModelName(byokConfig?: BYOKConfig): string {
         if (isClaude && process.env.API_OPEN_AI_API_KEY && !viaProxy) {
             return `anthropic:${envMode}`;
         }
+        if (isClaude && process.env.API_VERTEX_AI_API_KEY && !viaProxy) {
+            return `google_vertex:${envMode}`;
+        }
         if (process.env.API_OPEN_AI_API_KEY) {
             return `openai_compatible:${envMode}`;
         }
     }
 
-    return DEFAULT_MODEL.model;
+    return defaultModelOverride || DEFAULT_MODEL.model;
 }
 
 /**
@@ -494,6 +585,15 @@ export function getInternalModel(
                 apiKey: openaiKey,
                 ...(openaiBaseURL ? { baseURL: openaiBaseURL } : {}),
             })(envMode);
+        }
+        if (isClaude && vertexKey && !viaProxy) {
+            // Claude on Vertex (MaaS) — see byokToVercelModel for rationale.
+            const vertexModel = vertexModelFromSaJson(
+                vertexKey,
+                envMode,
+                process.env.API_VERTEX_AI_LOCATION,
+            );
+            if (vertexModel) return vertexModel;
         }
         if (openaiKey) {
             return createOpenAICompatible({

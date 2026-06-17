@@ -111,6 +111,7 @@ describe('KodyRulesService.createOrUpdateMemory', () => {
             resolveRepositoryFolderName: jest
                 .fn()
                 .mockResolvedValue('repo-1-name'),
+            resolveDirectoryGroupFolderName: jest.fn().mockResolvedValue(null),
             sanitizeFileName: jest.fn().mockReturnValue('memory-rule'),
             buildCentralizedPath: jest
                 .fn()
@@ -647,12 +648,20 @@ describe('KodyRulesService.createOrUpdateMemory', () => {
             buildCentralizedPath: jest.fn(),
         };
 
+        const permissionValidationServiceMock = {
+            shouldLimitResources: jest.fn().mockResolvedValue(false),
+        };
+
+        const validationService = new KodyRulesValidationService(
+            permissionValidationServiceMock as any,
+        );
+
         const service = new KodyRulesService(
             repositoryMock as any,
             { emit: jest.fn() } as any,
             {} as any,
             {} as any,
-            new KodyRulesValidationService({} as any),
+            validationService,
             {} as any,
             {} as any,
             {} as any,

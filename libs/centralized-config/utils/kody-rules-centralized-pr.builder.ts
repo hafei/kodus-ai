@@ -16,6 +16,7 @@ interface BuildKodyRuleCentralizedMutationRequestParams {
     centralizedConfigPrService: CentralizedConfigPrService;
     organizationAndTeamData: OrganizationAndTeamData;
     repositoryId?: string;
+    groupFolderName?: string;
     ruleContent: Partial<IKodyRule>;
     ruleType: KodyRulesType;
     operation: KodyRuleMutationOperation;
@@ -38,6 +39,7 @@ export function buildKodyRuleCentralizedMutationRequest(
                 repositoryFolder,
                 rulesDirectory,
                 ruleContent: params.ruleContent,
+                groupFolderName: params.groupFolderName,
             });
 
             if (params.operation === 'delete') {
@@ -69,6 +71,7 @@ export function buildKodyRuleCentralizedFilePath(params: {
     repositoryFolder: string;
     rulesDirectory: string;
     ruleContent: Partial<IKodyRule>;
+    groupFolderName?: string;
 }): string {
     const normalizedPath = normalizeCentralizedPath(
         params.ruleContent.centralizedConfig?.path,
@@ -79,6 +82,15 @@ export function buildKodyRuleCentralizedFilePath(params: {
     }
 
     const fileName = `${params.centralizedConfigPrService.sanitizeFileName(params.ruleContent.title, 'rule')}.yml`;
+
+    if (params.groupFolderName) {
+        return params.centralizedConfigPrService.buildDirectoryGroupRulesPath(
+            params.repositoryFolder,
+            params.groupFolderName,
+            params.rulesDirectory,
+            fileName,
+        );
+    }
 
     return params.centralizedConfigPrService.buildCentralizedPath({
         repositoryFolder: params.repositoryFolder,
@@ -100,7 +112,7 @@ function normalizeCentralizedPath(path?: string): string | null {
     return normalized;
 }
 
-function formatRuleToYaml(rule: Partial<IKodyRule>): string {
+export function formatRuleToYaml(rule: Partial<IKodyRule>): string {
     const ruleForYaml = {
         title: rule.title,
         rule: rule.rule,

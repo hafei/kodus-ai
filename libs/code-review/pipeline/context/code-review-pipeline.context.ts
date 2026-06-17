@@ -92,14 +92,27 @@ export interface CodeReviewPipelineContext extends PipelineContext {
         lastAnalyzedCommit?: any;
     };
     pipelineMetadata?: {
+        // Inherited from PipelineContext.pipelineMetadata — re-declared here
+        // because TS treats the child shape as a full override of the parent,
+        // not an intersection, and the PipelineExecutor populates these at
+        // runtime (see pipeline-executor.service.ts).
+        pipelineId?: string;
+        pipelineName?: string;
+        parentPipelineId?: string;
+        rootPipelineId?: string;
         lastExecution?: AutomationExecutionEntity;
         notificationHandled?: boolean;
         showStatusFeedback?: boolean;
         forceFullRerun?: boolean;
+        /** Org subscription status (e.g. 'trial', 'active'), captured by
+         *  ValidatePrerequisitesStage from the license validation so later
+         *  stages can pick a trial-specific model. */
+        subscriptionStatus?: string;
         /** Set by the pipeline provider before execution. When true, the
          *  agent (v4) engine will run, which has its own token-budget chunking
          *  and tolerates much larger PRs than the legacy engine. */
         useAgentEngine?: boolean;
+        [key: string]: any;
     };
 
     initialCommentData?: {

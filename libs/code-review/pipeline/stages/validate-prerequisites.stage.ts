@@ -44,6 +44,7 @@ import { NotificationService } from '@libs/notifications/application/notificatio
 import { NotificationRateLimiter } from '@libs/notifications/application/notification-rate-limiter.service';
 import { PrAuthorRecipientResolver } from '@libs/notifications/application/pr-author-recipient.resolver';
 import { NotificationEvent } from '@libs/notifications/domain/catalog/events';
+import { recipientByRole } from '@libs/notifications/domain/recipient';
 import { Role } from '@libs/identity/domain/permissions/enums/permissions.enum';
 import { STATUS } from '@libs/core/infrastructure/config/types/database/status.type';
 import {
@@ -217,6 +218,13 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
                     }
                     draft.codeReviewConfig.byokConfig =
                         validationResult.byokConfig;
+                }
+                if (validationResult.subscriptionStatus) {
+                    if (!draft.pipelineMetadata) {
+                        draft.pipelineMetadata = {};
+                    }
+                    draft.pipelineMetadata.subscriptionStatus =
+                        validationResult.subscriptionStatus;
                 }
             });
         }
@@ -827,13 +835,26 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
                 | { email?: string; username?: string }
                 | undefined;
 
-            const recipient = await this.prAuthorRecipientResolver.resolve(
-                { email: author?.email, login: author?.username },
-                organizationAndTeamData.organizationId,
-            );
-            if (!recipient || recipient.kind !== 'user') return;
+            const authorRecipient =
+                await this.prAuthorRecipientResolver.resolve(
+                    { email: author?.email, login: author?.username },
+                    organizationAndTeamData.organizationId,
+                );
 
-            const rateLimitKey = `notif-rate:review_skipped_no_license:${recipient.userId}:${organizationAndTeamData.organizationId}`;
+            // Notify the PR author when they're a Kodus user; otherwise fall
+            // back to the org owners so an external-contributor / bot PR still
+            // alerts someone. Rate-limit per recipient target (the author, or
+            // a single "owners" bucket) so a burst of PRs sends one alert.
+            const recipients =
+                authorRecipient != null && authorRecipient.kind === 'user'
+                    ? authorRecipient
+                    : recipientByRole(Role.OWNER);
+            const rateLimitTarget =
+                authorRecipient != null && authorRecipient.kind === 'user'
+                    ? authorRecipient.userId
+                    : 'owners';
+
+            const rateLimitKey = `notif-rate:review_skipped_no_license:${rateLimitTarget}:${organizationAndTeamData.organizationId}`;
             const allowed = await this.notificationRateLimiter.shouldEmit(
                 rateLimitKey,
                 SKIPPED_NO_LICENSE_RATE_LIMIT_TTL_SECONDS,
@@ -860,7 +881,7 @@ export class ValidatePrerequisitesStage extends BasePipelineStage<CodeReviewPipe
                     ownerContact,
                 },
                 organizationId: organizationAndTeamData.organizationId,
-                recipients: recipient,
+                recipients,
             });
         } catch (error) {
             this.logger.error({

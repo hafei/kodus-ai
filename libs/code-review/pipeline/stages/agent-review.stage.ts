@@ -509,6 +509,36 @@ export class AgentReviewStage extends BasePipelineStage<CodeReviewPipelineContex
                 callGraph,
                 callGraphJson: context.callGraphJson,
                 reviewMode: context.codeReviewConfig?.reviewMode || 'normal',
+                // Trial reviews get a forced default model (only consulted
+                // when there's no BYOK config). Two distinct "trial" surfaces,
+                // each with its OWN model:
+                //   1. Subscription trial — signed-up orgs in their 14-day
+                //      trial (`subscriptionStatus === 'trial'`, captured by
+                //      ValidatePrerequisitesStage). Routed to Kimi K2.6: they
+                //      run the managed pipeline with no BYOK, so without this
+                //      they'd burn the expensive 3.1-pro default on Kodus's
+                //      dime for the whole trial window. The `kimi-` prefix
+                //      routes through Moonshot's OpenAI-compatible endpoint in
+                //      byokToVercelModel (reads API_MOONSHOT_API_KEY — that env
+                //      MUST be set in the cloud deployment).
+                //   2. Anonymous public demo (`isTrialMode`, try.kodus.io) —
+                //      kept on Gemini 3 Flash: it's a latency-sensitive public
+                //      demo and the try UI advertises "Gemini 3 Flash". Without
+                //      this it would fall back to the slow 3.1-pro default
+                //      (~4-5 min).
+                // Either override is ignored when a BYOK config is present
+                // (byokToVercelModel prefers BYOK), so a trial org that
+                // configured its own key keeps using it.
+                // `isTrialMode` lives on the CLI pipeline context — we can't
+                // import that type here without inverting the dep graph
+                // (cli-review depends on code-review), so the cast is
+                // intentional.
+                defaultModelOverride:
+                    context.pipelineMetadata?.subscriptionStatus === 'trial'
+                        ? 'kimi-k2.6'
+                        : (context as { isTrialMode?: boolean }).isTrialMode
+                          ? 'gemini-3-flash-preview'
+                          : undefined,
                 // Per-repo/directory model override resolved by ValidateConfigStage.
                 byokModel: context.codeReviewConfig?.byokModel,
                 // Adaptive-fit profile: agents read this to decide whether
@@ -1525,11 +1555,19 @@ ${summaries}`,
             const result: Partial<CodeSuggestion>[] = [];
             const uniqueSuggestions: DedupTraceSuggestionSummary[] = [];
             const groupSummaries: DedupTraceGroupSummary[] = [];
+            const addedIndices = new Set<number>();
+            const classifiedIndices = new Set<number>();
+            const indexToResult = new Map<number, number>();
+
+            // Layer 1: Number.isInteger guard — NaN and non-integer floats rejected immediately
 
             // Add unique suggestions as-is
             for (const idx of unique) {
-                if (idx >= 0 && idx < suggestions.length) {
+                if (Number.isInteger(idx) && idx >= 0 && idx < suggestions.length) {
+                    indexToResult.set(idx, result.length);
                     result.push(suggestions[idx]);
+                    addedIndices.add(idx);
+                    classifiedIndices.add(idx);
                     uniqueSuggestions.push(
                         this.summarizeDedupSuggestion(suggestions[idx]),
                     );
@@ -1541,19 +1579,66 @@ ${summaries}`,
                 const keepIdx = group.keep;
                 const dupIndices = group.duplicates || [];
 
-                if (keepIdx < 0 || keepIdx >= suggestions.length) {
+                if (!Number.isInteger(keepIdx) || keepIdx < 0 || keepIdx >= suggestions.length) {
+                    // Layer 2: keep is invalid — preserve valid duplicates as independent results
+                    for (const dupIdx of dupIndices) {
+                        classifiedIndices.add(dupIdx);
+                        if (Number.isInteger(dupIdx) && dupIdx >= 0 && dupIdx < suggestions.length && !addedIndices.has(dupIdx)) {
+                            indexToResult.set(dupIdx, result.length);
+                            result.push(suggestions[dupIdx]);
+                            addedIndices.add(dupIdx);
+                            uniqueSuggestions.push(
+                                this.summarizeDedupSuggestion(suggestions[dupIdx]),
+                            );
+                        }
+                    }
+                    continue;
+                }
+
+                // Skip if this keep was already added (malformed groups with overlapping indices)
+                if (addedIndices.has(keepIdx)) {
+                    // Merge duplicate locations into the already-added suggestion
+                    const existingIdx = indexToResult.get(keepIdx);
+                    if (existingIdx !== undefined) {
+                        const locations: string[] = [];
+                        for (const dupIdx of dupIndices) {
+                            if (Number.isInteger(dupIdx) && dupIdx >= 0 && dupIdx < suggestions.length) {
+                                classifiedIndices.add(dupIdx);
+                                const dup = suggestions[dupIdx];
+                                const loc = `${dup.relevantFile}:${dup.relevantLinesStart}-${dup.relevantLinesEnd}`;
+                                const keptLoc = `${suggestions[keepIdx].relevantFile}:${suggestions[keepIdx].relevantLinesStart}-${suggestions[keepIdx].relevantLinesEnd}`;
+                                if (loc !== keptLoc) {
+                                    locations.push(loc);
+                                }
+                            }
+                        }
+                        if (locations.length > 0) {
+                            const existing = result[existingIdx];
+                            const locList = locations.map((l) => `- \`${l}\``).join('\n');
+                            existing.suggestionContent = `${existing.suggestionContent}\n\n**Also found in:**\n${locList}`;
+                        }
+                    } else {
+                        for (const dupIdx of dupIndices) {
+                            if (Number.isInteger(dupIdx) && dupIdx >= 0 && dupIdx < suggestions.length) {
+                                classifiedIndices.add(dupIdx);
+                            }
+                        }
+                    }
                     continue;
                 }
 
                 const kept = { ...suggestions[keepIdx] };
+                addedIndices.add(keepIdx);
+                classifiedIndices.add(keepIdx);
                 const duplicateSummaries: DedupTraceSuggestionSummary[] = [];
 
                 // Collect locations from duplicates that are in DIFFERENT locations
                 const otherLocations: string[] = [];
                 for (const dupIdx of dupIndices) {
-                    if (dupIdx < 0 || dupIdx >= suggestions.length) {
+                    if (!Number.isInteger(dupIdx) || dupIdx < 0 || dupIdx >= suggestions.length) {
                         continue;
                     }
+                    classifiedIndices.add(dupIdx);
                     const dup = suggestions[dupIdx];
                     duplicateSummaries.push(this.summarizeDedupSuggestion(dup));
                     const dupLocation = `${dup.relevantFile}:${dup.relevantLinesStart}-${dup.relevantLinesEnd}`;
@@ -1581,7 +1666,20 @@ ${summaries}`,
                     keep: this.summarizeDedupSuggestion(kept),
                     duplicates: duplicateSummaries,
                 });
+                indexToResult.set(keepIdx, result.length);
                 result.push(kept);
+            }
+
+            // Layer 3: Safety net — add any suggestions not classified by dedup
+            // (neither in unique nor in any group's keep/duplicates). This handles
+            // malformed LLM output that omits some indices entirely.
+            for (let i = 0; i < suggestions.length; i++) {
+                if (!classifiedIndices.has(i)) {
+                    result.push(suggestions[i]);
+                    uniqueSuggestions.push(
+                        this.summarizeDedupSuggestion(suggestions[i]),
+                    );
+                }
             }
 
             const totalRemoved = suggestions.length - result.length;

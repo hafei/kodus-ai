@@ -17,8 +17,7 @@ import { KODY_RULES_PATHS } from "@services/kodyRules";
 import { changeStatusKodyRules } from "@services/kodyRules/fetch";
 import {
     useKodyRulesLimits,
-    useSuspenseGetInheritedKodyRules,
-    useSuspenseKodyRulesByRepositoryId,
+    useSuspenseKodyRulesPageData,
 } from "@services/kodyRules/hooks";
 import {
     KodyRuleCentralizedStatus,
@@ -31,6 +30,7 @@ import {
 import { usePermission } from "@services/permissions/hooks";
 import { Action, ResourceType } from "@services/permissions/types";
 import { useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { BellRing, PlusIcon } from "lucide-react";
 import { PageBoundary } from "src/core/components/page-boundary";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
@@ -51,6 +51,8 @@ import { KodyRulesEmptyState } from "./empty";
 import {
     compareRules,
     EMPTY_LIST_FILTERS,
+    isOrphanAutoSyncRule,
+    matchesKodySyncFilter,
     matchesOriginFilter,
     matchesPausedOnlyFilter,
     matchesSeverityFilter,
@@ -59,7 +61,6 @@ import {
     type ListFilters,
     type SortOption,
 } from "src/core/utils/kody-rules/apply-filters";
-import { inferRuleOrigin } from "src/core/utils/kody-rules/infer-origin";
 import {
     applyFiltersToParams,
     parseFiltersFromParams,
@@ -88,13 +89,33 @@ const getRuleType = (rule: Pick<KodyRule, "type">) =>
 const isRulePendingCentralizedChange = (rule: KodyRule) => {
     return (
         rule.centralizedConfig?.status ===
-            KodyRuleCentralizedStatus.PENDING_ADD ||
+        KodyRuleCentralizedStatus.PENDING_ADD ||
         rule.centralizedConfig?.status ===
-            KodyRuleCentralizedStatus.PENDING_EDIT ||
+        KodyRuleCentralizedStatus.PENDING_EDIT ||
         rule.centralizedConfig?.status ===
-            KodyRuleCentralizedStatus.PENDING_DELETE
+        KodyRuleCentralizedStatus.PENDING_DELETE
     );
 };
+
+// A 403 means the backend policy rejected the mutation (e.g. a repo admin
+// acting on rules outside their assigned repos) — retrying will never
+// succeed, so surface the real cause instead of the generic "try again".
+const bulkActionErrorToast = (
+    action: "pause" | "resume" | "delete",
+    error: unknown,
+) => ({
+    title: `Could not ${action} rules`,
+    description:
+        isAxiosError(error) && error.response?.status === 403
+            ? `You don't have permission to ${action} rules in this scope.`
+            : isAxiosError(error) &&
+                error.response?.data?.message ===
+                    "Free plan's limit of Kody Rules reached."
+              ? "You have reached the limit of 10 active Kody rules. Pause or delete another rule first."
+              : "Please try again in a moment.",
+    variant: "danger" as const,
+});
+
 
 const KodyRulesPageContent = () => {
     const platformConfig = usePlatformConfig();
@@ -113,20 +134,21 @@ const KodyRulesPageContent = () => {
         repositoryId,
     );
 
-    const scopeKodyRules = useSuspenseKodyRulesByRepositoryId(
-        repositoryId,
-        directoryId,
-    );
+    // Scope rules and inherited rules are loaded in parallel (single
+    // suspense boundary, both requests fired at once) to avoid the waterfall
+    // that two back-to-back useSuspense* hooks produce.
+    const { scopeRules: scopeKodyRules, inherited } =
+        useSuspenseKodyRulesPageData({
+            teamId,
+            repositoryId,
+            directoryId,
+        });
 
     const {
         directoryRules: inheritedDirectoryRules = [],
         globalRules: inheritedGlobalRules = [],
         repoRules: inheritedRepoRules = [],
-    } = useSuspenseGetInheritedKodyRules({
-        teamId,
-        repositoryId,
-        directoryId,
-    });
+    } = inherited;
 
     const { activeRules: kodyRules, pendingRules } = safeArray(
         scopeKodyRules,
@@ -161,7 +183,7 @@ const KodyRulesPageContent = () => {
     const activeTabSearchParam = searchParams.get(TAB_QUERY_PARAM);
     const activeTab: KodyRulesTab =
         activeTabSearchParam === "memories" ||
-        activeTabSearchParam === "configuration"
+            activeTabSearchParam === "configuration"
             ? activeTabSearchParam
             : DEFAULT_TAB;
 
@@ -251,28 +273,11 @@ const KodyRulesPageContent = () => {
     // carries `@kody-sync`, so the backend keeps syncing them even
     // when the repo toggle is off. They're actively maintained, not
     // orphans. See `kodyRulesSync.service.ts:shouldForceSync`.
-    const autoSyncedActiveCount = useMemo(
-        () =>
-            kodyRules.filter(
-                (rule) =>
-                    (rule.status === KodyRulesStatus.ACTIVE ||
-                        rule.status === KodyRulesStatus.PAUSED) &&
-                    inferRuleOrigin(rule) === "Auto-sync" &&
-                    !rule.pinnedSync,
-            ).length,
-        [kodyRules],
-    );
-
-    // Orphan auto-sync rules: rules imported by auto-sync that survived a
-    // sync-off event and aren't being maintained anymore. Surfaced as a
-    // small chip near the filters (see OrphanRulesChip). The chip itself
-    // returns null when count is 0, so we can pass through unconditionally;
-    // the only gate worth keeping here is "we're in a repo scope and the
-    // toggle is currently off" — otherwise the chip is meaningless.
-    const orphanRulesCount =
-        !isGlobalView && !ideRulesSyncEnabledForRepo
-            ? autoSyncedActiveCount
-            : 0;
+    // Orphan auto-sync count is derived from the rules ACTUALLY ON SCREEN
+    // (self + inherited, per visibleScopes) inside getRulesViewState as
+    // `orphanCount`, then gated for the chip after reviewRulesState below.
+    // This keeps the banner number equal to the cards showing the "Orphan"
+    // badge — including inherited ones — instead of a separate scope-fetch.
 
     const getRulesViewState = (ruleType: KodyRulesType) => {
         const activeRulesByType = kodyRules.filter(
@@ -297,8 +302,8 @@ const KodyRulesPageContent = () => {
             !directoryId || repositoryId === "global"
                 ? []
                 : activeRulesByType.filter(
-                      (rule) => rule.directoryId === directoryId,
-                  );
+                    (rule) => rule.directoryId === directoryId,
+                );
 
         const sourceRuleSets = [] as (
             | KodyRule
@@ -326,8 +331,8 @@ const KodyRulesPageContent = () => {
         const activeRules = visibleScopes.disabled
             ? combinedRules
             : combinedRules.filter(
-                  (rule) => !("excluded" in rule) || !rule.excluded,
-              );
+                (rule) => !("excluded" in rule) || !rule.excluded,
+            );
 
         const uniqueRulesMap = new Map<
             string,
@@ -340,6 +345,11 @@ const KodyRulesPageContent = () => {
         }
         const uniqueRules = Array.from(uniqueRulesMap.values());
 
+        const orphanCount =
+            ruleType === KodyRulesType.STANDARD
+                ? uniqueRules.filter(isOrphanAutoSyncRule).length
+                : 0;
+
         const pendingCentralizedCount = activeRulesByType.filter((rule) =>
             isRulePendingCentralizedChange(rule),
         ).length;
@@ -347,59 +357,57 @@ const KodyRulesPageContent = () => {
         const statusFilteredRules =
             statusFilter === "pending-centralized"
                 ? uniqueRules.filter((rule) =>
-                      isRulePendingCentralizedChange(rule as KodyRule),
-                  )
+                    isRulePendingCentralizedChange(rule as KodyRule),
+                )
                 : uniqueRules;
 
-        // Banner CTA quick-filter (forces "Auto-sync only") wins over the
-        // popover filters so the orphan review experience stays focused.
-        // Same exclusion as `autoSyncedActiveCount`: pinned-sync rules
-        // are actively maintained via `@kody-sync` so they shouldn't
-        // appear in the orphan review view either.
         const bannerFilteredRules =
             onlyIdeSynced && ruleType === KodyRulesType.STANDARD
-                ? statusFilteredRules.filter(
-                      (rule) =>
-                          inferRuleOrigin(rule as KodyRule) === "Auto-sync" &&
-                          !(rule as KodyRule).pinnedSync,
-                  )
+                ? statusFilteredRules.filter(isOrphanAutoSyncRule)
                 : statusFilteredRules;
 
         // Popover filters: origin (Auto-sync / Onboard / Kody-generated /
-        // manual) and severity. Origin only applies to standard rules
-        // (memories don't have these origins).
-        const listFilteredRules = bannerFilteredRules.filter((rule) => {
-            const passesOrigin =
-                ruleType !== KodyRulesType.STANDARD ||
-                matchesOriginFilter(rule as KodyRule, listFilters);
-            const passesSeverity = matchesSeverityFilter(
-                rule as KodyRule,
-                listFilters,
-            );
-            const passesSyncErrors = matchesSyncErrorsFilter(
-                rule as KodyRule,
-                listFilters,
-            );
-            const passesPausedOnly = matchesPausedOnlyFilter(
-                rule as KodyRule,
-                listFilters,
-            );
-            return (
-                passesOrigin &&
-                passesSeverity &&
-                passesSyncErrors &&
-                passesPausedOnly
-            );
-        });
+        // manual), sync state, paused-only — everything EXCEPT severity,
+        // which is applied last (below) so the heatmap can count this
+        // pool. Origin only applies to standard rules (memories don't
+        // have these origins).
+        const nonSeverityFilteredRules = bannerFilteredRules.filter(
+            (rule) => {
+                const passesOrigin =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesOriginFilter(rule as KodyRule, listFilters);
+                const passesSyncErrors =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesSyncErrorsFilter(rule as KodyRule, listFilters);
+                const passesPausedOnly =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesPausedOnlyFilter(rule as KodyRule, listFilters);
+                const passesKodySync =
+                    ruleType !== KodyRulesType.STANDARD ||
+                    matchesKodySyncFilter(rule as KodyRule, listFilters);
+                return (
+                    passesOrigin &&
+                    passesSyncErrors &&
+                    passesPausedOnly &&
+                    passesKodySync
+                );
+            },
+        );
 
         const filterQueryLowercase = filterQuery.toLowerCase();
         const queryFilteredRules = !filterQuery
-            ? listFilteredRules
-            : listFilteredRules.filter((rule) =>
-                  matchesTextQuery(rule as KodyRule, filterQueryLowercase),
-              );
+            ? nonSeverityFilteredRules
+            : nonSeverityFilteredRules.filter((rule) =>
+                matchesTextQuery(rule as KodyRule, filterQueryLowercase),
+            );
 
-        const rulesToDisplay = [...queryFilteredRules].sort((x, y) =>
+        const listFilteredRules = queryFilteredRules.filter(
+            (rule) =>
+                ruleType !== KodyRulesType.STANDARD ||
+                matchesSeverityFilter(rule as KodyRule, listFilters),
+        );
+
+        const rulesToDisplay = [...listFilteredRules].sort((x, y) =>
             compareRules(x as KodyRule, y as KodyRule, sortOption),
         );
 
@@ -409,16 +417,19 @@ const KodyRulesPageContent = () => {
             inheritedRepoRulesByType.length > 0 ||
             inheritedDirectoryRulesByType.length > 0;
 
-        // Severity distribution computed BEFORE severity filtering so the
-        // heatmap counters always reflect the full pool (otherwise clicking
-        // "Critical" would zero out the High/Medium/Low counters).
+        // Severity distribution over the pool with every OTHER filter
+        // (origin, sync, paused, text query) already applied, but NOT the
+        // severity selection itself: each chip must match the cards on
+        // screen when other filters are active (e.g. Origin: Library → "2
+        // High", not the unfiltered "4 High"), while clicking "Critical"
+        // still must not zero out the High/Medium/Low counters.
         const severityCounts: Record<string, number> = {
             critical: 0,
             high: 0,
             medium: 0,
             low: 0,
         };
-        for (const rule of bannerFilteredRules) {
+        for (const rule of queryFilteredRules) {
             const sev = (rule as KodyRule).severity?.toLowerCase();
             if (sev && severityCounts[sev] !== undefined) {
                 severityCounts[sev] += 1;
@@ -430,6 +441,7 @@ const KodyRulesPageContent = () => {
             hasAnyRulesInSystem,
             pendingCentralizedCount,
             severityCounts,
+            orphanCount,
         };
     };
 
@@ -453,6 +465,14 @@ const KodyRulesPageContent = () => {
         ],
     );
 
+    // The chip is meaningful only inside a repo/dir scope with sync off; the
+    // value itself counts every orphan-badged rule currently on screen
+    // (self + inherited), so the banner number matches the cards exactly.
+    const orphanRulesCount =
+        !isGlobalView && !ideRulesSyncEnabledForRepo
+            ? reviewRulesState.orphanCount
+            : 0;
+
     const memoriesState = useMemo(
         () => getRulesViewState(KodyRulesType.MEMORY),
         [
@@ -467,6 +487,10 @@ const KodyRulesPageContent = () => {
             directoryId,
             repositoryId,
             statusFilter,
+            // onlyIdeSynced is read inside getRulesViewState; even though
+            // it only affects STANDARD rules today, omitting it here would
+            // produce a stale memory list the moment that guard changes.
+            onlyIdeSynced,
             listFilters,
             sortOption,
         ],
@@ -558,11 +582,7 @@ const KodyRulesPageContent = () => {
                 await refreshRulesList();
             } catch (error) {
                 console.error("Failed to bulk delete rules", error);
-                toast({
-                    title: "Could not delete rules",
-                    description: "Please try again in a moment.",
-                    variant: "danger",
-                });
+                toast(bulkActionErrorToast("delete", error));
             }
         },
     );
@@ -606,11 +626,7 @@ const KodyRulesPageContent = () => {
                 await refreshRulesList();
             } catch (error) {
                 console.error("Failed to bulk pause rules", error);
-                toast({
-                    title: "Could not pause rules",
-                    description: "Please try again in a moment.",
-                    variant: "danger",
-                });
+                toast(bulkActionErrorToast("pause", error));
             }
         },
     );
@@ -634,11 +650,7 @@ const KodyRulesPageContent = () => {
                 await refreshRulesList();
             } catch (error) {
                 console.error("Failed to bulk resume rules", error);
-                toast({
-                    title: "Could not resume rules",
-                    description: "Please try again in a moment.",
-                    variant: "danger",
-                });
+                toast(bulkActionErrorToast("resume", error));
             }
         },
     );
@@ -875,30 +887,30 @@ const KodyRulesPageContent = () => {
                         <div className="flex justify-end gap-2">
                             {activeTab === "memories"
                                 ? pendingMemoriesCount > 0 && (
-                                      <Button
-                                          size="md"
-                                          variant="helper"
-                                          className="border-e-primary-light rounded-e-none border-e-4"
-                                          leftIcon={<BellRing />}
-                                          onClick={showPendingMemories}>
-                                          Review pending memories
-                                      </Button>
-                                  )
+                                    <Button
+                                        size="md"
+                                        variant="helper"
+                                        className="border-e-primary-light rounded-e-none border-e-4"
+                                        leftIcon={<BellRing />}
+                                        onClick={showPendingMemories}>
+                                        Review pending memories
+                                    </Button>
+                                )
                                 : pendingReviewRules.length > 0 && (
-                                      <Button
-                                          size="md"
-                                          variant="helper"
-                                          className="border-e-primary-light rounded-e-none border-e-4"
-                                          leftIcon={<BellRing />}
-                                          onClick={() =>
-                                              showPendingRules(
-                                                  pendingReviewRules,
-                                                  pendingEntityLabel,
-                                              )
-                                          }>
-                                          Check out new {pendingEntityLabel}!
-                                      </Button>
-                                  )}
+                                    <Button
+                                        size="md"
+                                        variant="helper"
+                                        className="border-e-primary-light rounded-e-none border-e-4"
+                                        leftIcon={<BellRing />}
+                                        onClick={() =>
+                                            showPendingRules(
+                                                pendingReviewRules,
+                                                pendingEntityLabel,
+                                            )
+                                        }>
+                                        Check out new {pendingEntityLabel}!
+                                    </Button>
+                                )}
                         </div>
                     </div>
                 )}
@@ -949,6 +961,7 @@ const KodyRulesPageContent = () => {
                             <ActiveFiltersChips
                                 filters={listFilters}
                                 onChange={setListFilters}
+                                entityLabel="rules"
                             />
                             <SeverityHeatmap
                                 counts={reviewRulesState.severityCounts}
@@ -958,20 +971,26 @@ const KodyRulesPageContent = () => {
                             {renderPendingMergeFilter(
                                 reviewRulesState.pendingCentralizedCount,
                             )}
-                            <BulkActionToolbar
-                                selectedCount={selection.size}
-                                eligibleCount={eligibleSelectableIds.length}
-                                pauseableCount={pauseableIds.length}
-                                resumableCount={resumableIds.length}
-                                isDeleting={isBulkDeleting}
-                                isPausing={isBulkPausing}
-                                isResuming={isBulkResuming}
-                                onSelectAll={selectAllVisible}
-                                onClear={clearSelection}
-                                onDelete={handleBulkDelete}
-                                onPause={handleBulkPause}
-                                onResume={handleBulkResume}
-                            />
+                            {/* Bulk actions are mutations — without Update
+                                permission on this scope (e.g. repo admin on
+                                the Global page) the backend rejects them all,
+                                so don't offer selection at all. */}
+                            {canEdit && (
+                                <BulkActionToolbar
+                                    selectedCount={selection.size}
+                                    eligibleCount={eligibleSelectableIds.length}
+                                    pauseableCount={pauseableIds.length}
+                                    resumableCount={resumableIds.length}
+                                    isDeleting={isBulkDeleting}
+                                    isPausing={isBulkPausing}
+                                    isResuming={isBulkResuming}
+                                    onSelectAll={selectAllVisible}
+                                    onClear={clearSelection}
+                                    onDelete={handleBulkDelete}
+                                    onPause={handleBulkPause}
+                                    onResume={handleBulkResume}
+                                />
+                            )}
                             {(() => {
                                 const empty =
                                     !reviewRulesState.rulesToDisplay.length;
@@ -983,11 +1002,17 @@ const KodyRulesPageContent = () => {
                                             }
                                             tab="review-rules"
                                             onAnyChange={refreshRulesList}
-                                            bulkSelection={{
-                                                selection,
-                                                onToggle: toggleSelection,
-                                                isEligible: isBulkEligible,
-                                            }}
+                                            bulkSelection={
+                                                canEdit
+                                                    ? {
+                                                          selection,
+                                                          onToggle:
+                                                              toggleSelection,
+                                                          isEligible:
+                                                              isBulkEligible,
+                                                      }
+                                                    : undefined
+                                            }
                                             syncEnabledForRepo={
                                                 isGlobalView
                                                     ? undefined
@@ -1049,6 +1074,7 @@ const KodyRulesPageContent = () => {
                             <ActiveFiltersChips
                                 filters={listFilters}
                                 onChange={setListFilters}
+                                entityLabel="memories"
                             />
                             {renderPendingMergeFilter(
                                 memoriesState.pendingCentralizedCount,
