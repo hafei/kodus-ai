@@ -251,6 +251,22 @@ describe('ForgejoPullRequestHandler push events', () => {
         expect(outboxRepository.create).not.toHaveBeenCalled();
     });
 
+    it('does not evaluate force pushes for new branch pushes (before is zero SHA)', async () => {
+        const payload = makeForgejoPushPayload();
+        payload.before = '0000000000000000000000000000000000000000';
+
+        await handler.execute({
+            event: 'push',
+            platformType: PlatformType.FORGEJO,
+            payload,
+        } as any);
+
+        expect(
+            codeManagementService.getCommitsForPullRequestForCodeReview,
+        ).not.toHaveBeenCalled();
+        expect(outboxRepository.create).not.toHaveBeenCalled();
+    });
+
     it('does not evaluate force pushes when push after sha does not match current PR head', async () => {
         codeManagementService.getPullRequests.mockResolvedValue([
             {

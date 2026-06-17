@@ -386,6 +386,7 @@ export class ForgejoPullRequestHandler implements IWebhookEventHandler {
             !branchName ||
             !payload?.before ||
             !payload?.after ||
+            payload.before === '0000000000000000000000000000000000000000' ||
             payload.after === '0000000000000000000000000000000000000000' ||
             payload.before === payload.after
         ) {
