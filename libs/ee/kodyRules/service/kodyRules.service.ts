@@ -385,7 +385,7 @@ export class KodyRulesService implements IKodyRulesService {
                 ruleTitle: newRule.title,
             });
 
-            this.ensureRepositoryCodeReviewConfig(
+            await this.ensureRepositoryCodeReviewConfig(
                 organizationAndTeamData,
                 newRule,
             );
@@ -460,7 +460,7 @@ export class KodyRulesService implements IKodyRulesService {
                 ruleTitle: newRule.title,
             });
 
-            this.ensureRepositoryCodeReviewConfig(
+            await this.ensureRepositoryCodeReviewConfig(
                 organizationAndTeamData,
                 newRule,
             );
