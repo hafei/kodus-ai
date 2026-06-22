@@ -3,8 +3,10 @@ import { Controller, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
+import { Public } from '@libs/identity/infrastructure/adapters/services/auth/public.decorator';
 import { EnqueueWebhookUseCase } from '@libs/platform/application/use-cases/webhook/enqueue-webhook.use-case';
 
+@Public()
 @Controller('bitbucket')
 export class BitbucketController {
     private readonly logger = createLogger(BitbucketController.name);
@@ -20,11 +22,20 @@ export class BitbucketController {
 
         // Filter unsupported events before enqueueing
         const supportedEvents = [
+            // cloud
             'pullrequest:created',
             'pullrequest:updated',
             'pullrequest:fulfilled',
             'pullrequest:rejected',
             'pullrequest:comment_created',
+
+            // data center
+            'pr:opened',
+            'pr:modified',
+            'pr:reviewer:updated',
+            'pr:comment:added',
+            'pr:merged',
+            'pr:declined',
         ];
         if (!supportedEvents.includes(event)) {
             return res
@@ -35,11 +46,16 @@ export class BitbucketController {
         res.status(HttpStatus.OK).send('Webhook received');
 
         setImmediate(() => {
+            const isDataCenterEvent = event.startsWith('pr:');
+
             void this.enqueueWebhookUseCase
                 .execute({
                     platformType: PlatformType.BITBUCKET,
                     event,
-                    payload,
+                    payload: {
+                        ...payload,
+                        isDataCenterEvent,
+                    },
                 })
                 .then(() => {
                     this.logger.log({
@@ -49,6 +65,7 @@ export class BitbucketController {
                             event,
                             installationId: payload?.installation?.id,
                             repository: payload?.repository?.name,
+                            isDataCenterEvent,
                         },
                     });
                 })
@@ -60,6 +77,7 @@ export class BitbucketController {
                         metadata: {
                             event,
                             platformType: PlatformType.BITBUCKET,
+                            isDataCenterEvent,
                         },
                     });
                 });

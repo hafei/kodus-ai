@@ -3,15 +3,26 @@ import {
     COMMENT_MANAGER_SERVICE_TOKEN,
     ICommentManagerService,
 } from '@libs/code-review/domain/contracts/CommentManagerService.contract';
+import {
+    PULL_REQUEST_MANAGER_SERVICE_TOKEN,
+    IPullRequestManagerService,
+} from '@libs/code-review/domain/contracts/PullRequestManagerService.contract';
 import { createLogger } from '@kodus/flow';
 import { PullRequestMessageStatus } from '@libs/core/infrastructure/config/types/general/pullRequestMessages.type';
-import { BehaviourForNewCommits } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import {
+    BehaviourForNewCommits,
+    FileChange,
+} from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
+import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
+import { PipelineError } from '@libs/core/infrastructure/pipeline/interfaces/pipeline-context.interface';
 
 @Injectable()
 export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<CodeReviewPipelineContext> {
     readonly stageName = 'UpdateCommentsAndGenerateSummaryStage';
+    readonly label = 'Generating Summary';
+    readonly visibility = StageVisibility.PRIMARY;
 
     private readonly logger = createLogger(
         UpdateCommentsAndGenerateSummaryStage.name,
@@ -20,6 +31,8 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
     constructor(
         @Inject(COMMENT_MANAGER_SERVICE_TOKEN)
         private readonly commentManagerService: ICommentManagerService,
+        @Inject(PULL_REQUEST_MANAGER_SERVICE_TOKEN)
+        private readonly pullRequestManagerService: IPullRequestManagerService,
     ) {
         super();
     }
@@ -37,6 +50,23 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
             initialCommentData,
             lineComments,
         } = context;
+
+        // A "failed" review (from the user's perspective) is one with a
+        // critical pipeline error — main agent rejected, sandbox blew up,
+        // validation aborted, etc. Partial failures (kody-rules agent,
+        // pr-level comment posting, business-logic validation, etc.)
+        // don't get the error variant of the message but DO get a short
+        // generic notice appended explaining *why* auto-approve was
+        // skipped — otherwise the user sees "review completed" + no
+        // approval and assumes auto-approve is broken. Default severity
+        // for a pushed error is 'critical' per PipelineErrorSeverity docs.
+        const errors = context.errors ?? [];
+        const reviewFailed = errors.some(
+            (e) => (e?.severity ?? 'critical') === 'critical',
+        );
+        const reviewHasPartialErrors =
+            !reviewFailed && errors.some((e) => e?.severity === 'partial');
+        const reviewErrorMessage = context.lastReviewError?.friendlyMessage;
 
         const isCommitRun = Boolean(lastExecution);
         const commitBehaviour =
@@ -61,43 +91,91 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
         }
 
         if (shouldGenerateOrUpdateSummary) {
-            this.logger.log({
-                message: `Generating summary for PR#${pullRequest.number}`,
-                context: this.stageName,
-                metadata: {
+            try {
+                this.logger.log({
+                    message: `Generating summary for PR#${pullRequest.number}`,
+                    context: this.stageName,
+                    metadata: {
+                        organizationAndTeamData,
+                        prNumber: context.pullRequest.number,
+                        repository: context.repository,
+                    },
+                });
+
+                // For REPLACE on commit runs, fetch the full PR diff (base...head)
+                // so the LLM generates a complete summary, not just incremental.
+                const useFullDiff =
+                    isCommitRun &&
+                    commitBehaviour === BehaviourForNewCommits.REPLACE;
+
+                let changedFiles: Partial<FileChange>[];
+
+                if (useFullDiff) {
+                    const fullDiffFiles =
+                        await this.pullRequestManagerService.getChangedFilesMetadata(
+                            organizationAndTeamData,
+                            repository,
+                            pullRequest,
+                        );
+                    changedFiles = fullDiffFiles.map((file) => ({
+                        filename: file.filename,
+                        patch: file.patch,
+                        status: file.status,
+                    }));
+                } else {
+                    changedFiles = context.changedFiles.map((file) => ({
+                        filename: file.filename,
+                        patch: file.patch,
+                        status: file.status,
+                    }));
+                }
+
+                const summaryPR =
+                    await this.commentManagerService.generateSummaryPR(
+                        pullRequest,
+                        repository,
+                        changedFiles,
+                        organizationAndTeamData,
+                        codeReviewConfig.languageResultPrompt,
+                        codeReviewConfig.summary,
+                        codeReviewConfig?.byokConfig ?? null,
+                        isCommitRun,
+                        false,
+                        context.externalPromptContext,
+                        platformType,
+                    );
+
+                await this.commentManagerService.updateSummarizationInPR(
                     organizationAndTeamData,
-                    prNumber: context.pullRequest.number,
-                    repository: context.repository,
-                },
-            });
-
-            const changedFiles = context.changedFiles.map((file) => ({
-                filename: file.filename,
-                patch: file.patch,
-                status: file.status,
-            }));
-
-            const summaryPR =
-                await this.commentManagerService.generateSummaryPR(
-                    pullRequest,
+                    pullRequest.number,
                     repository,
-                    changedFiles,
-                    organizationAndTeamData,
-                    codeReviewConfig.languageResultPrompt,
-                    codeReviewConfig.summary,
-                    codeReviewConfig?.byokConfig ?? null,
-                    isCommitRun,
-                    false,
-                    context.externalPromptContext,
+                    summaryPR,
+                    context.dryRun,
                 );
+            } catch (error) {
+                this.logger.error({
+                    message: `Failed to generate summary for PR#${pullRequest.number}`,
+                    context: this.stageName,
+                    error,
+                });
 
-            await this.commentManagerService.updateSummarizationInPR(
-                organizationAndTeamData,
-                pullRequest.number,
-                repository,
-                summaryPR,
-                context.dryRun,
-            );
+                const pipelineError: PipelineError = {
+                    stage: this.stageName,
+                    error:
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error)),
+                    metadata: {
+                        message: 'Failed to generate summary',
+                        reason: 'summary_generation_failed',
+                    },
+                };
+
+                if (!context.errors) {
+                    context.errors = [];
+                }
+                context.errors.push(pipelineError);
+            }
         }
 
         const startReviewMessage =
@@ -118,6 +196,9 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 initialCommentData.threadId,
                 undefined,
                 context.dryRun,
+                reviewFailed,
+                reviewErrorMessage,
+                reviewHasPartialErrors,
             );
             return context;
         }
@@ -175,6 +256,9 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 initialCommentData.threadId,
                 finalCommentBody,
                 context.dryRun,
+                reviewFailed,
+                reviewErrorMessage,
+                reviewHasPartialErrors,
             );
             return context;
         }
@@ -209,6 +293,9 @@ export class UpdateCommentsAndGenerateSummaryStage extends BasePipelineStage<Cod
                 context.pullRequestMessagesConfig,
                 context.dryRun,
                 context.prLevelCommentResults ?? [],
+                reviewFailed,
+                reviewErrorMessage,
+                reviewHasPartialErrors,
             );
         }
 

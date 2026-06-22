@@ -32,8 +32,9 @@ fi
 # ----------------------------------------------------------------
 # Dynamic Environment Configuration
 # ----------------------------------------------------------------
-# Generates the environment.js file at runtime based on ENV vars.
-# This allows changing CLOUD_MODE/DEV_MODE without rebuilding the image.
+# In production images, environment values are compiled into dist at build time.
+# We only log effective runtime flags here and avoid mutating ./dist, which may
+# be non-writable in ECS (non-root user/read-only filesystem).
 # ----------------------------------------------------------------
 
 CLOUD_MODE=${API_CLOUD_MODE:-false}
@@ -43,41 +44,6 @@ echo "▶ Configuring Environment..."
 echo "  - API_CLOUD_MODE: $CLOUD_MODE"
 echo "  - API_DEVELOPMENT_MODE: $DEV_MODE"
 
-# Create the JS content
-# We use a temporary file first
-cat <<EOF > /tmp/env_config.js
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.environment = {
-    API_CLOUD_MODE: ${CLOUD_MODE},
-    API_DEVELOPMENT_MODE: ${DEV_MODE},
-};
-EOF
-
-# Distribute the config file to potential locations where the app might look for it.
-# We search for any directory named "environment" inside dist and drop the config there.
-# This covers:
-# - dist/libs/ee/configs/environment (Standard Monorepo)
-# - dist/apps/worker/libs/ee/configs/environment (App-specific build)
-# - dist/apps/api/libs/ee/configs/environment (App-specific build)
-
-echo "▶ Distributing environment config..."
-find ./dist -type d -name "environment" 2>/dev/null | while read dir; do
-    echo "  - Writing to $dir/environment.js"
-    cp /tmp/env_config.js "$dir/environment.js"
-done
-
-# Also put in apps root for good measure (for Webpack bundles if any remain or flatten structure)
-for app_dir in ./dist/apps/*; do
-    if [ -d "$app_dir" ]; then
-        # Check if it's not already covered (avoid overwriting if 'libs' exists inside)
-        if [ ! -d "$app_dir/libs" ]; then
-             echo "  - Writing to $app_dir/environment.js (Bundle fallback)"
-             cp /tmp/env_config.js "$app_dir/environment.js"
-        fi
-    fi
-done
-
-
 # ----------------------------------------------------------------
 # Standard Startup
 # ----------------------------------------------------------------
@@ -86,13 +52,31 @@ RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
 RUN_SEEDS="${RUN_SEEDS:-false}"
 
 if [ "$RUN_MIGRATIONS" = "true" ]; then
-  echo "▶ Running Migrations (PROD)..."
+  echo "▶ Running OLTP migrations (PROD)..."
   # Use node with compiled migrations in prod
   if [ -f "dist/libs/core/infrastructure/database/typeorm/ormconfig.js" ]; then
-      yarn migration:run:prod
+      npm run migration:run:prod
   else
       echo "⚠️ Migration config not found at dist/libs/core/infrastructure/database/typeorm/ormconfig.js. Skipping."
   fi
+
+  echo "▶ Ensuring analytics schema exists (PROD)..."
+  # See dev-entrypoint.sh for rationale. Idempotent.
+  if [ -f "dist/scripts/analytics/ensure-schema.cli.js" ]; then
+      npm run analytics:ensure-schema:prod
+  else
+      echo "⚠️ ensure-schema CLI not found in dist/. Skipping (migration may fail on first boot)."
+  fi
+
+  echo "▶ Running analytics warehouse migrations (PROD)..."
+  if [ -f "dist/libs/ee/analytics-warehouse/infrastructure/ormconfig.js" ]; then
+      npm run analytics:migration:run:prod
+  else
+      echo "⚠️ Analytics ormconfig not found at dist/libs/ee/analytics-warehouse/infrastructure/ormconfig.js. Skipping."
+  fi
+
+  # MCP manager owns its own schema and runs its migration from a
+  # dedicated entrypoint. The API container does NOT touch it.
 else
   echo "▶ Skipping migrations (RUN_MIGRATIONS=$RUN_MIGRATIONS)"
 fi
@@ -100,7 +84,7 @@ fi
 if [ "$RUN_SEEDS" = "true" ]; then
   echo "▶ Running Seeds (PROD)..."
   # Seeds might also need a prod version if they rely on TS
-  yarn seed:prod
+  npm run seed:prod
 else
   echo "▶ Skipping seeds (RUN_SEEDS=$RUN_SEEDS)"
 fi

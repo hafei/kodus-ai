@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FileReviewContextPreparation } from '@/ee/codeReview/fileReviewContextPreparation/file-review-context-preparation.service';
 import { LLM_ANALYSIS_SERVICE_TOKEN } from '@/code-review/infrastructure/adapters/services/llmAnalysis.service';
-import { ReviewModeResponse, ReviewModeConfig } from '@/core/infrastructure/config/types/general/codeReview.type';
-import { TaskStatus } from '@/ee/kodyAST/interfaces/code-ast-analysis.interface';
+import {
+    ReviewModeResponse,
+    ReviewModeConfig,
+} from '@/core/infrastructure/config/types/general/codeReview.type';
 
 describe('FileReviewContextPreparation (EE)', () => {
     let service: FileReviewContextPreparation;
@@ -14,11 +16,16 @@ describe('FileReviewContextPreparation (EE)', () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 FileReviewContextPreparation,
-                { provide: LLM_ANALYSIS_SERVICE_TOKEN, useValue: mockAiAnalysisService },
+                {
+                    provide: LLM_ANALYSIS_SERVICE_TOKEN,
+                    useValue: mockAiAnalysisService,
+                },
             ],
         }).compile();
 
-        service = module.get<FileReviewContextPreparation>(FileReviewContextPreparation);
+        service = module.get<FileReviewContextPreparation>(
+            FileReviewContextPreparation,
+        );
     });
 
     it('should be defined', () => {
@@ -26,7 +33,7 @@ describe('FileReviewContextPreparation (EE)', () => {
     });
 
     describe('getRelevantFileContent', () => {
-        it('should return full file content and hasRelevantContent false when AST is removed', async () => {
+        it('should return full file content and hasRelevantContent false when no graph content', async () => {
             const file = {
                 filename: 'test.ts',
                 fileContent: 'const a = 1;',
@@ -34,18 +41,20 @@ describe('FileReviewContextPreparation (EE)', () => {
             } as any;
 
             const context = {
-                organizationAndTeamData: { organizationId: 'org', teamId: 'team' },
-                tasks: {
-                    astAnalysis: { taskId: null }, // Simulated missing task
+                organizationAndTeamData: {
+                    organizationId: 'org',
+                    teamId: 'team',
                 },
             } as any;
 
             // Accessing protected method for unit test
-            const result = await (service as any).getRelevantFileContent(file, context);
+            const result = await (service as any).getRelevantFileContent(
+                file,
+                context,
+            );
 
             expect(result.relevantContent).toBe('const a = 1;');
             expect(result.hasRelevantContent).toBe(false);
-            expect(result.taskStatus).toBe(TaskStatus.TASK_STATUS_FAILED);
         });
 
         it('should fallback to file.content if fileContent is missing', async () => {
@@ -56,12 +65,12 @@ describe('FileReviewContextPreparation (EE)', () => {
 
             const context = {
                 organizationAndTeamData: {},
-                tasks: {
-                    astAnalysis: { taskId: null },
-                },
             } as any;
 
-            const result = await (service as any).getRelevantFileContent(file, context);
+            const result = await (service as any).getRelevantFileContent(
+                file,
+                context,
+            );
 
             expect(result.relevantContent).toBe('const b = 2;');
             expect(result.hasRelevantContent).toBe(false);
@@ -73,34 +82,34 @@ describe('FileReviewContextPreparation (EE)', () => {
             const options = {
                 context: {
                     codeReviewConfig: {
-                        reviewModeConfig: null
-                    }
-                }
+                        reviewModeConfig: null,
+                    },
+                },
             } as any;
 
             const result = await (service as any).determineReviewMode(options);
             expect(result).toBe(ReviewModeResponse.HEAVY_MODE);
         });
 
-        it('should call aiAnalysisService when LIGHT_MODE_FULL is configured', async () => {
+        it('should always return HEAVY_MODE regardless of config', async () => {
             const options = {
                 context: {
                     organizationAndTeamData: {},
                     pullRequest: { number: 1 },
                     codeReviewConfig: {
-                        reviewModeConfig: ReviewModeConfig.LIGHT_MODE_FULL
-                    }
+                        reviewModeConfig: ReviewModeConfig.LIGHT_MODE_FULL,
+                    },
                 },
                 fileChangeContext: { file: {} },
-                patch: 'diff'
+                patch: 'diff',
             } as any;
 
-            mockAiAnalysisService.selectReviewMode.mockResolvedValue(ReviewModeResponse.LIGHT_MODE);
-
             const result = await (service as any).determineReviewMode(options);
-            
-            expect(mockAiAnalysisService.selectReviewMode).toHaveBeenCalled();
-            expect(result).toBe(ReviewModeResponse.LIGHT_MODE);
+
+            expect(
+                mockAiAnalysisService.selectReviewMode,
+            ).not.toHaveBeenCalled();
+            expect(result).toBe(ReviewModeResponse.HEAVY_MODE);
         });
     });
 });

@@ -29,6 +29,11 @@ export interface BYOKProviderConfig {
     baseURL?: string;
     projectId?: string;
     region?: string;
+    disableReasoning?: boolean;
+    temperature?: number;
+    maxInputTokens?: number;
+    maxConcurrentRequests?: number;
+    maxOutputTokens?: number;
 }
 
 //#region Types
@@ -208,12 +213,16 @@ export class PromptBuilderWithProviders {
             PromptRunnerParams<void, NewOutputType>,
             'provider' | 'fallbackProvider'
         >,
-    ): ConfigurablePromptBuilderWithoutPayload<
-        NewOutputType | string | InferInteropZodOutput<InteropZodType>,
-        ParserType
-    > {
+    ): ConfigurablePromptBuilderWithoutPayload<unknown, ParserType> {
         const newParams = {
             ...this.params,
+            ...(this.byokConfig?.temperature !== undefined
+                ? { temperature: this.byokConfig.temperature }
+                : {}),
+            ...(this.byokConfig?.maxOutputTokens != null &&
+            this.byokConfig.maxOutputTokens > 0
+                ? { maxTokens: this.byokConfig.maxOutputTokens }
+                : {}),
             byokConfig: this.byokConfig ? { main: this.byokConfig } : undefined,
             byokFallbackConfig: this.byokFallbackConfig
                 ? { main: this.byokFallbackConfig }
@@ -278,10 +287,10 @@ export class PromptBuilderWithProviders {
                     );
                 }
 
-                const schema = parserOrSchema as InteropZodType;
+                const schema = parserOrSchema as InteropZodType<unknown>;
 
                 return new ConfigurablePromptBuilderWithoutPayload<
-                    InferInteropZodOutput<typeof schema>,
+                    unknown,
                     ParserType.ZOD
                 >(
                     this.runner,
@@ -449,7 +458,10 @@ export class ConfigurablePromptBuilder<
             PromptRunnerParams<Payload, OutputType>['temperature']
         >,
     ): this {
-        this.params.temperature = temperature;
+        const byokTemp = this.params.byokConfig?.main?.temperature;
+
+        this.params.temperature =
+            byokTemp !== undefined ? byokTemp : temperature;
         return this;
     }
 
@@ -537,7 +549,9 @@ export class ConfigurablePromptBuilder<
             PromptRunnerParams<Payload, OutputType>['maxTokens']
         >,
     ): this {
-        this.params.maxTokens = maxTokens;
+        const byokMax = this.params.byokConfig?.main?.maxOutputTokens;
+        this.params.maxTokens =
+            byokMax != null && byokMax > 0 ? byokMax : maxTokens;
         return this;
     }
 

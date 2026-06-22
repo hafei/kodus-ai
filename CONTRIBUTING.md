@@ -16,7 +16,7 @@ Thank you for your interest in contributing to Kodus! This document provides gui
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:
-- Node.js (LTS version)
+- Node.js 22.x
 - Docker
 - Yarn or NPM
 - Git
@@ -31,15 +31,28 @@ cd kodus-ai
 
 ### 2. Install Dependencies
 ```bash
-yarn install
+pnpm install
 ```
 
 ### 3. Configure Environment Variables
+
+**Kodus engineers (1Password):**
+
+```bash
+pnpm run env:pull
+```
+
+Pulls secrets from the `Kodus Dev` 1Password vault into a fresh `.env`.
+First-time setup (install `op` CLI, get vault access) is in
+[`scripts/env/README.md`](./scripts/env/README.md#pulling-values-from-1password).
+
+**External contributors:**
+
 ```bash
 cp .env.example .env
 ```
 
-Configure your `.env` file with the required variables. Refer to the [Orchestrator documentation](https://docs.kodus.io/how_to_deploy/en/local_quickstart/orchestrator) for detailed configuration instructions.
+Then fill in required values by hand — comments in `.env.example` say which are required. Refer to the [Orchestrator documentation](https://docs.kodus.io/how_to_deploy/en/local_quickstart/orchestrator) for detailed configuration instructions.
 
 ### 4. Set Up Docker Networks
 ```bash
@@ -49,36 +62,42 @@ docker network create shared-network
 
 ### 5. Start Development Environment
 ```bash
-yarn docker:start
+pnpm run docker:start
 ```
 
 ### 6. First-time Setup
-```bash
-yarn migrate:dev
-yarn seed
-```
+No additional command is needed for migrations/seed in the default Docker flow.
+`pnpm run docker:start` already runs backend migrations + seed automatically.
 
-### Important Note About Frontend
-For a complete development environment, you'll also need to set up the [frontend](https://github.com/kodustech/web). Please follow the frontend setup guide in our [web documentation](https://docs.kodus.io/how_to_deploy/en/local_quickstart/web) after setting up this repository.
+### Frontend in Monorepo
+The web frontend is now in this same repository under `apps/web`.
 
-The frontend will be available at `http://localhost:3000` and will communicate with this API at `http://localhost:3331`.
+- Run full stack (backend + web): `pnpm run docker:start`
+- Run only web locally: `pnpm run web:install && pnpm run web:dev`
+
+Default local endpoints:
+
+- Web: `http://localhost:3000`
+- API: `http://localhost:3001`
 
 ## Project Structure
 
-The project follows a clean, modular architecture:
+The repository is organized as a monorepo:
 
 ```
-├── src/
-│   ├── config/
-│   ├── core/
-│   ├── shared/
-│   └── modules/
+├── apps/
+│   ├── api/
+│   ├── webhooks/
+│   ├── worker/
+│   └── web/
+├── libs/
+├── packages/
 ├── test/
 ├── scripts/
 │   ├── dev/
 │   ├── docker/
 │   ├── gitops/
-│   └── seed/
+│   └── ...
 ├── docker/
 └── docs/
 ```
@@ -112,14 +131,14 @@ The project follows a clean, modular architecture:
 
 We use Jest for testing. Run tests with:
 ```bash
-yarn test
+pnpm run test
 ```
 
 For specific test types:
 ```bash
-yarn test:unit    # Unit tests
-yarn test:e2e     # End-to-end tests
-yarn test:cov     # Test coverage
+pnpm run test:e2e     # End-to-end tests
+pnpm run test:cov     # Test coverage
+pnpm run test:watch   # Watch mode
 ```
 
 ## Documentation

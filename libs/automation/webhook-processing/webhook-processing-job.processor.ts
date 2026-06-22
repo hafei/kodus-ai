@@ -16,6 +16,7 @@ import {
     IWorkflowJobRepository,
     WORKFLOW_JOB_REPOSITORY_TOKEN,
 } from '@libs/core/workflow/domain/contracts/workflow-job.repository.contract';
+import { raceWithAbortSignal } from '@libs/core/workflow/infrastructure/abort-signal-race';
 
 /**
  * Processor for WEBHOOK_PROCESSING jobs
@@ -43,6 +44,8 @@ export class WebhookProcessingJobProcessorService implements IJobProcessorServic
         private readonly bitbucketPullRequestHandler: IWebhookEventHandler,
         @Inject('AZURE_REPOS_WEBHOOK_HANDLER')
         private readonly azureReposPullRequestHandler: IWebhookEventHandler,
+        @Inject('FORGEJO_WEBHOOK_HANDLER')
+        private readonly forgejoPullRequestHandler: IWebhookEventHandler,
         private readonly observability?: ObservabilityService,
     ) {
         // Initialize handlers map
@@ -51,13 +54,18 @@ export class WebhookProcessingJobProcessorService implements IJobProcessorServic
             [PlatformType.GITLAB, gitlabMergeRequestHandler],
             [PlatformType.BITBUCKET, bitbucketPullRequestHandler],
             [PlatformType.AZURE_REPOS, azureReposPullRequestHandler],
+            [PlatformType.FORGEJO, forgejoPullRequestHandler],
         ]);
     }
 
-    async process(jobId: string): Promise<void> {
+    async process(jobId: string, signal?: AbortSignal): Promise<void> {
         const job = await this.jobRepository.findOne(jobId);
         if (!job) {
             throw new Error(`Workflow job ${jobId} not found`);
+        }
+
+        if (signal?.aborted) {
+            throw new Error(`Job ${jobId} aborted before start`);
         }
 
         // Validate job type
@@ -76,7 +84,7 @@ export class WebhookProcessingJobProcessorService implements IJobProcessorServic
                 });
             }
 
-            this.logger.log({
+            this.logger.debug({
                 message: `Processing WEBHOOK_PROCESSING job ${jobId}`,
                 context: WebhookProcessingJobProcessorService.name,
                 metadata: {
@@ -99,9 +107,7 @@ export class WebhookProcessingJobProcessorService implements IJobProcessorServic
 
                 const event = job.metadata?.event as string | undefined;
                 if (!event) {
-                    throw new Error(
-                        `Job ${jobId} missing event in metadata`,
-                    );
+                    throw new Error(`Job ${jobId} missing event in metadata`);
                 }
 
                 // Get handler for platform
@@ -137,7 +143,19 @@ export class WebhookProcessingJobProcessorService implements IJobProcessorServic
                     });
                     return;
                 }
-                await handler.execute(webhookParams);
+                // Race the handler against the parent's AbortSignal. When
+                // the router's 9-min timeout fires, the signal aborts and
+                // this line throws a JobAbortedError — the catch below
+                // marks the job FAILED and releases the worker slot
+                // instead of staying pinned for the full octokit
+                // retry-after (which can be ~1h on an exhausted GitHub
+                // App bucket). The handler promise keeps running zombie
+                // in the background until octokit settles; its result is
+                // discarded. See test/unit/automation/webhook-processing.
+                await raceWithAbortSignal(
+                    handler.execute(webhookParams),
+                    signal,
+                );
 
                 await this.jobRepository.update(jobId, {
                     status: JobStatus.COMPLETED,

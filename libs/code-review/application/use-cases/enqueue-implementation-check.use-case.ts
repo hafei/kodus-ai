@@ -29,7 +29,7 @@ export class EnqueueImplementationCheckUseCase implements IUseCase {
             workflowType: WorkflowType.CHECK_SUGGESTION_IMPLEMENTATION,
             handlerType: HandlerType.SIMPLE_FUNCTION,
             payload: jobPayload,
-            organizationAndTeam: input.organizationAndTeamData,
+            organizationAndTeamData: input.organizationAndTeamData,
             status: JobStatus.PENDING,
             priority: 0,
             retryCount: 0,

@@ -4,7 +4,15 @@ import { CodeReviewConfig } from '@libs/core/infrastructure/config/types/general
 
 import { SeverityLevel } from '../../enums/severityLevel.enum';
 import { getDefaultKodusConfigFile } from '../../validateCodeReviewConfigFile';
-import { getTextOrDefault } from './prompt.helpers';
+import { getTextOrDefault, sanitizePromptText } from './prompt.helpers';
+
+export interface CrossFileContextForPrompt {
+    filePath: string;
+    content: string;
+    rationale: string;
+    relationship: string;
+    relatedSymbol?: string;
+}
 
 export interface CrossFileAnalysisPayload {
     files: {
@@ -18,6 +26,99 @@ export interface CrossFileAnalysisPayload {
         CodeReviewConfig['v2PromptOverrides'],
         'categories'
     >;
+    crossFileContexts?: CrossFileContextForPrompt[];
+    memories?: Array<{
+        title?: string;
+        rule?: string;
+    }>;
+    externalReferences?: unknown[];
+    externalReferenceErrors?: unknown[] | string;
+}
+
+function formatSyncErrors(errors: unknown[] | string | undefined): string {
+    if (!errors) {
+        return '';
+    }
+
+    const normalized = Array.isArray(errors) ? errors : [errors];
+    const formatted = normalized
+        .map((error) => {
+            if (!error) {
+                return null;
+            }
+            if (typeof error === 'string') {
+                return `- ${error}`;
+            }
+            if (typeof error === 'object') {
+                const message =
+                    typeof (error as Record<string, unknown>).message ===
+                    'string'
+                        ? ((error as Record<string, unknown>).message as string)
+                        : 'Unknown reference error';
+                return `- ${message}`;
+            }
+            return null;
+        })
+        .filter((line): line is string => Boolean(line));
+
+    if (!formatted.length) {
+        return '';
+    }
+
+    return `### Source: System Messages\n**Reference issues detected:**\n${formatted.join('\n')}`;
+}
+
+function formatReferenceSection(references: unknown[] | undefined): string {
+    if (!Array.isArray(references) || !references.length) {
+        return '';
+    }
+
+    return (references as Array<Record<string, unknown>>)
+        .map((ref) => {
+            const lineRangeInfo = ref.lineRange
+                ? ` (lines ${(ref.lineRange as Record<string, unknown>).start}-${(ref.lineRange as Record<string, unknown>).end})`
+                : '';
+            const header = `### Source: File - ${ref.filePath}${lineRangeInfo}`;
+            return `${header}\n${ref.content}`;
+        })
+        .join('\n\n');
+}
+
+function appendExternalContext(basePrompt: string, sections: string[]): string {
+    const contextBlocks = sections.filter((section) => section?.trim().length);
+
+    if (!contextBlocks.length) {
+        return basePrompt;
+    }
+
+    return `${basePrompt}\n\n## External Context & Injected Knowledge\n\nThe following information is provided to ground your analysis in the broader system reality. Use this as your source of truth.\n\n---\n\n${contextBlocks.join('\n\n---\n\n')}`;
+}
+
+function formatMemoriesSection(
+    memories: CrossFileAnalysisPayload['memories'],
+): string {
+    if (!Array.isArray(memories) || !memories.length) {
+        return '';
+    }
+
+    const formattedMemories = memories
+        .map((memory) => {
+            const title = getTextOrDefault(memory?.title, '').trim();
+            const rule = getTextOrDefault(memory?.rule, '').trim();
+
+            if (!title || !rule) {
+                return null;
+            }
+
+            return `- Title: ${sanitizePromptText(title)}\n  Rule: ${sanitizePromptText(rule)}`;
+        })
+        .filter((entry): entry is string => Boolean(entry));
+
+    if (!formattedMemories.length) {
+        return '';
+    }
+
+    return `## Memories\n\nAdditional context from past learnings in Kody Rules format.\n\n${formattedMemories.join('\n\n')}`;
 }
 
 export const CrossFileAnalysisSchema = z.object({
@@ -69,12 +170,12 @@ export const prompt_codereview_cross_file_analysis = (
         overrides?.generation?.main,
         defaultGeneration?.main,
     );
+    const memoriesBlock = formatMemoriesSection(payload?.memories);
 
-    return `You are Kody PR-Reviewer, a senior engineer specialized in understanding and reviewing code, with deep knowledge of how LLMs function.
+    const basePrompt = `You are Kody PR-Reviewer, a senior engineer specialized in understanding and reviewing code, with deep knowledge of how LLMs function. You are **context-aware** and prioritize **developer intent** over rigid rule-following.
 
 # Cross-File Code Analysis
 Analyze the following PR files for patterns that require multiple file context: duplicate implementations, inconsistent error handling, configuration drift, interface inconsistencies, and redundant operations.
-
 ## Input Data
 - Array of files with their respective code diffs from a Pull Request
 - Each file contains metadata (filename, codeDiff content)
@@ -89,9 +190,34 @@ ${JSON.stringify(
     2,
 )}
 
+${
+    payload?.crossFileContexts?.length
+        ? `## Retrieved Cross-File Context
+
+The following code snippets were retrieved from files OUTSIDE this PR that consume or depend on the changed code. Use these to detect real breakage, inconsistencies, or missed updates.
+
+${payload.crossFileContexts
+    .map(
+        (ctx) => `### ${ctx.filePath}
+**Relationship:** ${ctx.relationship}${ctx.relatedSymbol ? ` (symbol: ${ctx.relatedSymbol})` : ''}
+**Rationale:** ${ctx.rationale}
+
+\`\`\`
+${ctx.content}
+\`\`\``,
+    )
+    .join('\n\n')}
+
+### Cross-File Context Analysis Rules
+- **PRIORITIZE** real breakage detected in the retrieved snippets (e.g., callers using removed parameters, consumers expecting old return types)
+- Issues backed by retrieved context evidence should be rated at least **HIGH** severity
+- Do not re-report issues that are already visible in the PR diff alone — focus on cross-file impact revealed by the retrieved context
+`
+        : ''
+}
 ## Analysis Focus
 
-Look for cross-file issues that require multiple file context:
+Look for cross-file issues that require multiple file context **AND represent an unintentional oversight**:
 - Same logic implemented across multiple files in the diff
 - Different error handling patterns for similar scenarios across files
 - Hardcoded values duplicated across files that should use shared constants
@@ -108,37 +234,53 @@ Look for cross-file issues that require multiple file context:
 - Magic numbers/strings repeated in multiple files
 - Redundant null checks when validation exists in another layer
 
+## Suppression Criteria (MANDATORY)
+
+**You MUST IGNORE and SUPPRESS suggestions in the following scenarios. Silence is better than noise.**
+
+1.  **Documented Intent / Technical Debt:**
+    - Code explicitly commented with \`TODO\`, \`FIXME\`, \`HACK\`, or \`Legacy\`.
+    - Comments explaining why duplication exists (e.g., "// Decoupled for microservice architecture", "// Kept for backward compatibility").
+    - Explicit deprecation warnings (e.g., \`@deprecated\`).
+
+2.  **Testing & Mocks:**
+    - Hardcoded values or duplications found inside \`test/\`, \`spec/\`, or \`mock/\` files.
+    - Configuration drift between \`prod\` configs and \`test\` configs (this is expected behavior).
+    - Security "issues" (like hardcoded tokens) inside test files that are clearly fake data.
+
+3.  **Auto-Generated Code:**
+    - Files with headers like \`GENERATED CODE\`, \`DO NOT EDIT\`, or extensions like \`.pb.js\`, \`.min.js\`.
+
+4.  **Feature Flags / Progressive Rollout:**
+    - Duplicate logic wrapped in feature flag conditionals (e.g., \`if (flags.v2_enabled) ... else ...\`). This is a temporary and valid state.
+
 ## Analysis Instructions
 
-1. **Compare code diffs across all files** to identify:
-   - Duplicate or highly similar code blocks
-   - Inconsistent implementation patterns
-   - Repeated constants or configuration values
-   - Interface usage inconsistencies
-   - Redundant operations across layers
+0. **Memory Compliance Pre-check (CRITICAL):**
+    - If a **Memories** section is present in external context, evaluate every memory rule against the changed files before any other analysis step.
+    - Treat applicable memory rules as high-priority signals and report their violations with concrete cross-file evidence.
 
-2. **Focus only on cross-file issues** that require multiple file context:
-   - Skip issues detectable in single-file analysis
-   - Prioritize patterns that span multiple files
-   - Look for opportunities to consolidate or standardize
-   - Identify duplicate code or operations already handled in other layers
-   - Focus on redundant validations, checks, or database operations
+1.  **Exhaustive Cross-Reference (CRITICAL):**
+    - You MUST compare **every file against every other file** in the input.
+    - Do not stop after finding the first issue. Keep scanning until all file combinations are checked.
+    - Expect to find multiple distinct issues in a single review.
+    - List **ALL** valid cross-file issues found.
 
-3. **Provide specific evidence**:
-   - Reference exact file names and line ranges
-   - Show concrete code examples from multiple files
-   - Explain the relationship between files
+2.  **Verify Context & Suppression:**
+    - For EACH potential issue identified in step 1, check strictly against the **Suppression Criteria**.
+    - If a specific issue is suppressed (e.g., by a TODO), discard ONLY that specific issue and keep the others.
 
-4. **Keep suggestions concise**:
-   - Focus on the core issue and solution
-   - Mention affected files and line ranges
-   - Avoid lengthy explanations of best practices
-   - Be direct about the problem and fix
+3.  **Impact Filtering:**
+    - Focus only on issues that require multiple file context.
+    - Discard trivial single-file findings.
 
-5. **Base solutions on existing patterns**:
-   - Suggest refactoring using patterns already present in the codebase
-   - Avoid assuming external frameworks or files not visible in the diff
-   - Focus on extracting shared utilities within the current structure
+4.  **Provide specific evidence:**
+    - Reference exact file names and line ranges.
+    - Show concrete code examples.
+
+5.  **Final Output Generation:**
+    - If multiple valid issues remain after suppression, include ALL of them in the \`suggestions\` array.
+    - If all are suppressed, return an empty array.
 
 ## Severity Assessment
 
@@ -226,5 +368,17 @@ Generate suggestions in JSON format:
 - **Focus on actionable improvements**
 - **Prioritize high-impact consolidation opportunities**
 - **Language: All suggestions and feedback must be provided in ${payload?.language || 'en-US'} language**
+- **Current date: ${new Date().toLocaleDateString('en-GB')}**
 `;
+
+    const referenceSection = formatReferenceSection(
+        payload?.externalReferences,
+    );
+    const referenceErrors = formatSyncErrors(payload?.externalReferenceErrors);
+
+    return appendExternalContext(basePrompt, [
+        memoriesBlock,
+        referenceSection,
+        referenceErrors,
+    ]);
 };

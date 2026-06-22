@@ -14,6 +14,7 @@ export enum LabelType {
     BUG = 'bug',
     PERFORMANCE = 'performance',
     CROSS_FILE = 'cross_file',
+    BUSINESS_LOGIC = 'business_logic',
 }
 
 enum ShieldColor {
@@ -40,7 +41,7 @@ const getLabelShield = (label: string) => {
         return '';
     }
 
-    const shield = `![${labelData?.name}](https://img.shields.io/badge/${labelData?.name?.replace(/ /g, '\_')}-`;
+    const shield = `![${labelData?.name}](https://img.shields.io/badge/${labelData?.name?.replace(/ /g, '_')}-`;
 
     switch (labelData.type) {
         case LabelType.PERFORMANCE_AND_OPTIMIZATION:
@@ -69,6 +70,8 @@ const getLabelShield = (label: string) => {
             return `${shield}${ShieldColor.ORANGE})`;
         case LabelType.CROSS_FILE:
             return `${shield}${ShieldColor.LIGHT_PURPLE})`;
+        case LabelType.BUSINESS_LOGIC:
+            return `${shield}${ShieldColor.TEAL})`;
         default:
             return '';
     }

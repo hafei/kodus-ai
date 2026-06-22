@@ -33,11 +33,13 @@ export class TeamCliKeyDatabaseRepository implements ITeamCliKeyRepository {
 
             return mapSimpleModelsToEntities(keys, TeamCliKeyEntity);
         } catch (error) {
-            throw new Error('Error finding team CLI keys');
+            throw new Error('Erro   r finding team CLI keys', { cause: error });
         }
     }
 
-    async findOne(filter: Partial<ITeamCliKey>): Promise<TeamCliKeyEntity | undefined> {
+    async findOne(
+        filter: Partial<ITeamCliKey>,
+    ): Promise<TeamCliKeyEntity | undefined> {
         try {
             const { team, createdBy, ...otherAttributes } = filter;
 
@@ -50,9 +52,13 @@ export class TeamCliKeyDatabaseRepository implements ITeamCliKeyRepository {
                 relations: ['team', 'team.organization', 'createdBy'],
             });
 
-            return key ? mapSimpleModelToEntity(key, TeamCliKeyEntity) : undefined;
+            return key
+                ? mapSimpleModelToEntity(key, TeamCliKeyEntity)
+                : undefined;
         } catch (error) {
-            throw new Error('Error finding team CLI key');
+            throw new Error('Error finding team CLI key by filter', {
+                cause: error,
+            });
         }
     }
 
@@ -64,22 +70,27 @@ export class TeamCliKeyDatabaseRepository implements ITeamCliKeyRepository {
         return this.find({ team: { uuid: teamId } as any });
     }
 
-    async create(data: Partial<ITeamCliKey>): Promise<TeamCliKeyEntity | undefined> {
+    async create(
+        data: Partial<ITeamCliKey>,
+    ): Promise<TeamCliKeyEntity | undefined> {
         try {
             const key = this.teamCliKeyRepository.create({
                 name: data.name,
                 keyHash: data.keyHash,
                 keyPrefix: data.keyPrefix,
                 active: data.active ?? true,
+                config: data.config ?? {},
                 team: data.team ? ({ uuid: data.team.uuid } as any) : undefined,
-                createdBy: data.createdBy ? ({ uuid: data.createdBy.uuid } as any) : undefined,
+                createdBy: data.createdBy
+                    ? ({ uuid: data.createdBy.uuid } as any)
+                    : undefined,
             });
 
             const savedKey = await this.teamCliKeyRepository.save(key);
 
             return mapSimpleModelToEntity(savedKey, TeamCliKeyEntity);
         } catch (error) {
-            throw new Error('Error creating team CLI key');
+            throw new Error('Error creating team CLI key', { cause: error });
         }
     }
 
@@ -101,7 +112,7 @@ export class TeamCliKeyDatabaseRepository implements ITeamCliKeyRepository {
 
             return mapSimpleModelToEntity(updatedKey, TeamCliKeyEntity);
         } catch (error) {
-            throw new Error('Error updating team CLI key');
+            throw new Error('Error updating team CLI key', { cause: error });
         }
     }
 
@@ -109,7 +120,7 @@ export class TeamCliKeyDatabaseRepository implements ITeamCliKeyRepository {
         try {
             await this.teamCliKeyRepository.delete({ uuid });
         } catch (error) {
-            throw new Error('Error deleting team CLI key');
+            throw new Error('Error deleting team CLI key', { cause: error });
         }
     }
 }

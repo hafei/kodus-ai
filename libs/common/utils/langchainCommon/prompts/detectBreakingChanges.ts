@@ -28,8 +28,8 @@ Your final response must be a JSON object in the following format:
             "existingCode": "Snippet of the problematic code or contract in the newFunction",
             "improvedCode": "Proposed correction to ensure compatibility with the callers",
             "oneSentenceSummary": "Concise summary of the suggestion",
-            "relevantLinesStart": "starting_line_number",
-            "relevantLinesEnd": "ending_line_number",
+            "relevantLinesStart": 1,
+            "relevantLinesEnd": 10,
         }
     ]
 }
@@ -37,5 +37,6 @@ Your final response must be a JSON object in the following format:
 ### Important:
 - If no compatibility issues are found in the newFunction, the "codeSuggestions" array must be empty.
 - All the answers must be concise and direct language.
-- Responde ALWAYS only in ${payload?.languageResultPrompt}.`;
+- Responde ALWAYS only in ${payload?.languageResultPrompt}.
+- The current date is ${new Date().toLocaleDateString('en-GB')}.`;
 };

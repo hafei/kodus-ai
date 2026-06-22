@@ -27,21 +27,27 @@ export class MongooseFactory implements MongooseOptionsFactory {
             mongoose.set('debug', true);
         }
 
-        let uri = new ConnectionString('', {
-            user: this.config.username,
-            password: this.config.password,
-            protocol: this.config.port ? 'mongodb' : 'mongodb+srv',
-            hosts: [{ name: this.config.host, port: this.config.port }],
-        }).toString();
+        let uri: string;
+
+        if (this.config.url) {
+            uri = this.config.url;
+        } else {
+            uri = new ConnectionString('', {
+                user: this.config.username,
+                password: this.config.password,
+                protocol: this.config.port ? 'mongodb' : 'mongodb+srv',
+                hosts: [{ name: this.config.host, port: this.config.port }],
+            }).toString();
+
+            const shouldAppendClusterConfig =
+                isProduction && !!process.env.API_MG_DB_PRODUCTION_CONFIG;
+
+            if (shouldAppendClusterConfig) {
+                uri = `${uri}/${process.env.API_MG_DB_PRODUCTION_CONFIG}`;
+            }
+        }
 
         const { createForInstance } = MongooseConnectionFactory;
-
-        const shouldAppendClusterConfig =
-            isProduction && !!process.env.API_MG_DB_PRODUCTION_CONFIG;
-
-        if (shouldAppendClusterConfig) {
-            uri = `${uri}/${process.env.API_MG_DB_PRODUCTION_CONFIG}`;
-        }
 
         // Detect component type to adjust connection pool
         const componentType = process.env.COMPONENT_TYPE || 'default';
@@ -69,7 +75,10 @@ export class MongooseFactory implements MongooseOptionsFactory {
         // PERF: Increased from 50s to 5min to reduce connection churn
         // The connection_pool.js ensureMinPoolSize was consuming ~20% CPU
         // due to frequent connection destruction/recreation cycles
-        const maxIdleTimeMS = this.configService.get<number>('MG_MAX_IDLE_TIME_MS', 300000);
+        const maxIdleTimeMS = this.configService.get<number>(
+            'MG_MAX_IDLE_TIME_MS',
+            300000,
+        );
 
         return {
             uri: uri,

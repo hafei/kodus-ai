@@ -9,6 +9,7 @@ import {
     LLMModelProvider,
     MODEL_STRATEGIES,
     getChatGPT,
+    getChatVertexAI,
 } from './helper';
 import { supportsJsonMode } from './providerAdapters';
 
@@ -18,6 +19,7 @@ export type LLMProviderOptions = FactoryArgs & {
     maxTokens?: number;
     jsonMode?: boolean;
     maxReasoningTokens?: number;
+    disableReasoning?: boolean;
     byokConfig?: BYOKConfig;
 };
 
@@ -61,16 +63,62 @@ export class LLMProviderService {
             const envMode = process.env.API_LLM_PROVIDER_MODEL ?? 'auto';
 
             if (envMode !== 'auto') {
-                // for self-hosted: using openAI provider and changing baseURL
+                // Check if Vertex AI Service Account is configured
+                const useVertexAI = !!process.env.API_VERTEX_AI_API_KEY;
+
+                if (useVertexAI) {
+                    // Use Vertex AI with Service Account credentials
+                    const llm = getChatVertexAI({
+                        ...options,
+                        model: envMode,
+                    });
+
+                    return llm;
+                }
+
+                // Fallback to OpenAI-compatible provider
                 if (!process.env.API_OPEN_AI_API_KEY) {
                     throw new Error(
-                        'API_OPEN_AI_API_KEY not configured for self-hosted mode',
+                        'API_OPEN_AI_API_KEY or API_VERTEX_AI_API_KEY not configured for self-hosted mode',
                     );
                 }
+
+                // Resolve temperature for env-mode self-hosted installs.
+                //
+                // Order of precedence (highest wins):
+                //   1. `API_LLM_TEMPERATURE_OVERRIDE` — explicit operator
+                //      override. Set this if the model the operator picked
+                //      restricts the allowed range (e.g. reasoning models
+                //      that demand `temperature=1`) and they don't want to
+                //      patch each prompt. Empty / unparseable values fall
+                //      through.
+                //   2. Auto-clamp for known reasoning models — Moonshot's
+                //      `kimi-k2.6` and `kimi-k2-thinking*` reject any
+                //      temperature ≠ 1 with HTTP 400. Most Kodus review
+                //      prompts pin `setTemperature(0)` for determinism, so
+                //      without this clamp the pipeline 400s mid-review.
+                //   3. Whatever the caller passed via `setTemperature()`.
+                //
+                // Operators who hit a similar restriction on a model not
+                // in the auto-clamp regex can bypass it with
+                // `API_LLM_TEMPERATURE_OVERRIDE=1` (or any other value
+                // their provider accepts).
+                const REASONING_TEMP_ONE = /^kimi-k2(\.6|-thinking)/i;
+                const overrideRaw = process.env.API_LLM_TEMPERATURE_OVERRIDE;
+                const overrideTemp =
+                    overrideRaw !== undefined && overrideRaw !== ''
+                        ? Number.parseFloat(overrideRaw)
+                        : Number.NaN;
+                const effectiveTemperature = !Number.isNaN(overrideTemp)
+                    ? overrideTemp
+                    : REASONING_TEMP_ONE.test(envMode)
+                      ? 1
+                      : options.temperature;
 
                 const llm = getChatGPT({
                     ...options,
                     model: envMode,
+                    temperature: effectiveTemperature,
                     baseURL: process.env.API_OPENAI_FORCE_BASE_URL,
                     apiKey: process.env.API_OPEN_AI_API_KEY,
                 });
@@ -98,6 +146,17 @@ export class LLMProviderService {
                     },
                     context: LLMProviderService.name,
                 });
+
+                // Use Vertex AI if configured, otherwise fallback to OpenAI
+                const useVertexAI = !!process.env.API_VERTEX_AI_API_KEY;
+                if (useVertexAI) {
+                    return getChatVertexAI({
+                        ...options,
+                        model: MODEL_STRATEGIES[
+                            LLMModelProvider.VERTEX_GEMINI_2_5_FLASH
+                        ].modelName,
+                    });
+                }
 
                 const llm = getChatGPT({
                     ...options,
@@ -169,6 +228,17 @@ export class LLMProviderService {
                 error:
                     error instanceof Error ? error : new Error(String(error)),
             });
+
+            // Use Vertex AI if configured, otherwise fallback to OpenAI
+            const useVertexAI = !!process.env.API_VERTEX_AI_API_KEY;
+            if (useVertexAI) {
+                return getChatVertexAI({
+                    ...options,
+                    model: MODEL_STRATEGIES[
+                        LLMModelProvider.VERTEX_GEMINI_2_5_FLASH
+                    ].modelName,
+                });
+            }
 
             const llm = getChatGPT({
                 ...options,

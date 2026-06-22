@@ -16,6 +16,7 @@ import {
 } from '@libs/platformData/infrastructure/adapters/repositories/schemas/pullRequests.model';
 import { PullRequestsRepository } from '@libs/platformData/infrastructure/adapters/repositories/pullRequests.repository';
 import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
+import { PriorityStatus } from '@libs/platformData/domain/pullRequests/enums/priorityStatus.enum';
 import { IPullRequests } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
 
 /**
@@ -75,13 +76,18 @@ const shouldSkip = !MONGODB_URI;
                     ConfigModule.forRoot(),
                     MongooseModule.forRoot(mongoUri),
                     MongooseModule.forFeature([
-                        { name: PullRequestsModel.name, schema: PullRequestsSchema },
+                        {
+                            name: PullRequestsModel.name,
+                            schema: PullRequestsSchema,
+                        },
                     ]),
                 ],
                 providers: [PullRequestsRepository],
             }).compile();
 
-            repository = module.get<PullRequestsRepository>(PullRequestsRepository);
+            repository = module.get<PullRequestsRepository>(
+                PullRequestsRepository,
+            );
             model = module.get<Model<PullRequestsModel>>(
                 getModelToken(PullRequestsModel.name),
             );
@@ -148,7 +154,7 @@ const shouldSkip = !MONGODB_URI;
                         relevantLinesEnd: 10,
                         label: 'code_style',
                         severity: 'low',
-                        priorityStatus: 'medium',
+                        priorityStatus: PriorityStatus.PRIORITIZED,
                         deliveryStatus: s.deliveryStatus,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
@@ -162,8 +168,8 @@ const shouldSkip = !MONGODB_URI;
                 isDraft: false,
             };
 
-            const created = await model.create(pr);
-            return created.toObject() as IPullRequests;
+            const created = await model.create(pr as any);
+            return created.toObject() as unknown as IPullRequests;
         }
 
         describe('CRITICAL: Aggregation must match in-memory counting', () => {
@@ -251,7 +257,9 @@ const shouldSkip = !MONGODB_URI;
                     );
                 const inMemoryResult = extractSuggestionsCountInMemory(pr);
 
-                expect(aggregationResult.get('repo-1_3')).toEqual(inMemoryResult);
+                expect(aggregationResult.get('repo-1_3')).toEqual(
+                    inMemoryResult,
+                );
                 expect(inMemoryResult).toEqual({ sent: 3, filtered: 0 });
             });
 
@@ -276,7 +284,9 @@ const shouldSkip = !MONGODB_URI;
                     );
                 const inMemoryResult = extractSuggestionsCountInMemory(pr);
 
-                expect(aggregationResult.get('repo-1_4')).toEqual(inMemoryResult);
+                expect(aggregationResult.get('repo-1_4')).toEqual(
+                    inMemoryResult,
+                );
                 expect(inMemoryResult).toEqual({ sent: 0, filtered: 2 });
             });
 
@@ -345,14 +355,23 @@ const shouldSkip = !MONGODB_URI;
                 );
 
                 // Verify actual values
-                expect(aggregationResult.get('repo-A_10')).toEqual({ sent: 1, filtered: 1 });
-                expect(aggregationResult.get('repo-A_20')).toEqual({ sent: 3, filtered: 0 });
-                expect(aggregationResult.get('repo-B_30')).toEqual({ sent: 0, filtered: 1 });
+                expect(aggregationResult.get('repo-A_10')).toEqual({
+                    sent: 1,
+                    filtered: 1,
+                });
+                expect(aggregationResult.get('repo-A_20')).toEqual({
+                    sent: 3,
+                    filtered: 0,
+                });
+                expect(aggregationResult.get('repo-B_30')).toEqual({
+                    sent: 0,
+                    filtered: 1,
+                });
             });
 
             it('should handle large PR with many files and suggestions', async () => {
                 // Simulate realistic scenario: 50 files, 20 suggestions each
-                const files = Array.from({ length: 50 }, (_, fileIdx) => ({
+                const files = Array.from({ length: 50 }, (_, _fileIdx) => ({
                     suggestions: Array.from({ length: 20 }, (_, suggIdx) => {
                         // Distribute: 50% SENT, 30% NOT_SENT, 20% FAILED
                         const idx = suggIdx % 10;
@@ -377,7 +396,9 @@ const shouldSkip = !MONGODB_URI;
                     );
                 const inMemoryResult = extractSuggestionsCountInMemory(pr);
 
-                expect(aggregationResult.get('repo-large_100')).toEqual(inMemoryResult);
+                expect(aggregationResult.get('repo-large_100')).toEqual(
+                    inMemoryResult,
+                );
 
                 // 50 files × 20 suggestions = 1000 total
                 // 50% SENT = 500, 30% NOT_SENT = 300, 20% FAILED = 200
@@ -414,7 +435,7 @@ const shouldSkip = !MONGODB_URI;
                     user: { id: 'user-1', username: 'testuser' },
                     commits: [],
                     isDraft: false,
-                });
+                } as any);
 
                 const result =
                     await repository.findSuggestionCountsByNumbersAndRepositoryIds(
@@ -422,7 +443,10 @@ const shouldSkip = !MONGODB_URI;
                         TEST_ORG_ID,
                     );
 
-                expect(result.get('repo-empty_999')).toEqual({ sent: 0, filtered: 0 });
+                expect(result.get('repo-empty_999')).toEqual({
+                    sent: 0,
+                    filtered: 0,
+                });
             });
 
             it('should return empty map for non-existent PRs', async () => {

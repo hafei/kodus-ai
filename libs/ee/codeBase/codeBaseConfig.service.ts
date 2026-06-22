@@ -1,10 +1,11 @@
 import { createLogger } from '@kodus/flow';
-import { Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 
 import { LanguageValue } from '@libs/core/domain/enums/language-parameter.enum';
 
 import { ICodeBaseConfigService } from '@libs/code-review/domain/contracts/CodeBaseConfigService.contract';
 import globalIgnorePathsJson from '@libs/common/utils/codeBase/ignorePaths/generated/paths.json';
+import { GlobalParametersKey } from '@libs/core/domain/enums/global-parameters-key.enum';
 import { IntegrationCategory } from '@libs/core/domain/enums/integration-category.enum';
 import { IntegrationConfigKey } from '@libs/core/domain/enums/Integration-config-key.enum';
 import { OrganizationParametersKey } from '@libs/core/domain/enums/organization-parameters-key.enum';
@@ -30,6 +31,8 @@ import { decrypt } from '@libs/common/utils/crypto';
 import { ValidateCodeManagementIntegration } from '@libs/common/utils/decorators/validate-code-management-integration.decorator';
 import { deepMerge } from '@libs/common/utils/deep';
 import { getDefaultKodusConfigFile } from '@libs/common/utils/validateCodeReviewConfigFile';
+import { CacheService } from '@libs/core/cache/cache.service';
+import { PermissionValidationService } from '@libs/ee/shared/services/permissionValidation.service';
 import {
     IIntegrationConfigService,
     INTEGRATION_CONFIG_SERVICE_TOKEN,
@@ -43,6 +46,10 @@ import {
     KODY_RULES_SERVICE_TOKEN,
 } from '@libs/kodyRules/domain/contracts/kodyRules.service.contract';
 import {
+    GLOBAL_PARAMETERS_SERVICE_TOKEN,
+    IGlobalParametersService,
+} from '@libs/organization/domain/global-parameters/contracts/global-parameters.service.contract';
+import {
     IOrganizationParametersService,
     ORGANIZATION_PARAMETERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/organizationParameters/contracts/organizationParameters.service.contract';
@@ -53,6 +60,12 @@ import {
 import { AuthMode } from '@libs/platform/domain/platformIntegrations/enums/codeManagement/authMode.enum';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { KodyRulesValidationService } from '../kodyRules/service/kody-rules-validation.service';
+
+const GLOBAL_IGNORE_PATHS_CACHE_KEY = 'global:ignore_paths';
+const GLOBAL_IGNORE_PATHS_CACHE_TTL = 43200000; // 12 hours
+
+const IP_E2B_CACHE_KEY = 'global:ip_e2b';
+const IP_E2B_CACHE_TTL = 604800000; // 1 week
 
 @Injectable()
 export default class CodeBaseConfigService implements ICodeBaseConfigService {
@@ -68,10 +81,14 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         private readonly organizationParametersService: IOrganizationParametersService,
         @Inject(PARAMETERS_SERVICE_TOKEN)
         private readonly parametersService: IParametersService,
-        @Inject(KODY_RULES_SERVICE_TOKEN)
+        @Inject(forwardRef(() => KODY_RULES_SERVICE_TOKEN))
         private readonly kodyRulesService: IKodyRulesService,
+        @Inject(GLOBAL_PARAMETERS_SERVICE_TOKEN)
+        private readonly globalParametersService: IGlobalParametersService,
         private readonly codeManagementService: CodeManagementService,
         private readonly kodyRulesValidationService: KodyRulesValidationService,
+        private readonly permissionValidationService: PermissionValidationService,
+        private readonly cacheService: CacheService,
     ) {
         this.DEFAULT_CONFIG = this.getDefaultConfigs();
     }
@@ -116,10 +133,22 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                 preliminaryFiles || [],
             );
 
-            const kodyRules = this.kodyRulesValidationService.filterKodyRules(
-                kodyRulesEntity?.toObject()?.rules,
-                repository.id,
-                mergedConfigs.directoryId,
+            const limited =
+                await this.permissionValidationService.shouldLimitResources(
+                    organizationAndTeamData,
+                    CodeBaseConfigService.name,
+                );
+
+            const { standardRules, memoryRules } =
+                this.kodyRulesValidationService.filterKodyRules(
+                    kodyRulesEntity?.toObject()?.rules || [],
+                    repository.id,
+                    mergedConfigs.directoryId,
+                    limited,
+                ) || { standardRules: [], memoryRules: [] };
+
+            const globalIgnorePaths = await this.getGlobalIgnorePaths(
+                organizationAndTeamData,
             );
 
             const fullConfig = {
@@ -128,12 +157,12 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                     language?.configValue ??
                     this.DEFAULT_CONFIG.languageResultPrompt,
                 baseBranchDefault: defaultBranch,
-                kodyRules,
+                kodyRules: standardRules,
+                kodyMemoryRules: memoryRules,
                 reviewModeConfig,
                 kodyFineTuningConfig,
-                ignorePaths: mergedConfigs.ignorePaths.concat(
-                    globalIgnorePathsJson?.paths ?? [],
-                ),
+                ignorePaths:
+                    mergedConfigs.ignorePaths.concat(globalIgnorePaths),
                 // v2-only prompt overrides (categories and severity guidance). Read from repo/global parameters.
                 v2PromptOverrides: this.sanitizeV2PromptOverrides(
                     mergedConfigs.v2PromptOverrides,
@@ -148,7 +177,97 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                 error,
                 metadata: { organizationAndTeamData },
             });
-            throw new Error('Error getting code review config parameters');
+            throw new Error('Error getting code review config parameters', {
+                cause: error,
+            });
+        }
+    }
+
+    async getSimpleConfig(
+        organizationAndTeamData: OrganizationAndTeamData,
+        params: {
+            repositoryId?: string;
+            directoryId?: string;
+            preliminaryFiles?: FileChange[];
+        },
+    ): Promise<CodeReviewConfigWithoutLLMProvider> {
+        try {
+            const parameter = await this.parametersService.findOne({
+                configKey: ParametersKey.CODE_REVIEW_CONFIG,
+                team: { uuid: organizationAndTeamData.teamId },
+                active: true,
+            });
+
+            if (!parameter?.configValue) {
+                return this.DEFAULT_CONFIG;
+            }
+
+            const globalDelta = parameter.configValue?.configs;
+
+            const repoConfig = params.repositoryId
+                ? parameter.configValue?.repositories?.find(
+                      (repo) => repo.id === params.repositoryId,
+                  )
+                : undefined;
+
+            const repoDelta = repoConfig?.configs;
+
+            const directoryConfig = params.directoryId
+                ? repoConfig?.directories?.find(
+                      (directory) => directory.id === params.directoryId,
+                  )
+                : repoConfig
+                  ? this.resolveConfigByDirectories(
+                        organizationAndTeamData,
+                        repoConfig,
+                        this.extractUniqueDirectoryPaths(
+                            params.preliminaryFiles || [],
+                        ),
+                    )
+                  : undefined;
+
+            const directoryDelta = directoryConfig?.configs;
+
+            const merged = deepMerge(
+                this.DEFAULT_CONFIG,
+                globalDelta || {},
+                repoDelta || {},
+                directoryDelta || {},
+            );
+
+            let configLevel = ConfigLevel.GLOBAL;
+            let directoryId: string | undefined = undefined;
+            let directoryPath: string | undefined = undefined;
+
+            if (directoryDelta) {
+                configLevel = ConfigLevel.DIRECTORY;
+                directoryId = directoryConfig?.id;
+                directoryPath = this.getDirectoryPrimaryPath(directoryConfig);
+            } else if (repoDelta) {
+                configLevel = ConfigLevel.REPOSITORY;
+            }
+
+            return {
+                ...merged,
+                configLevel,
+                directoryId,
+                directoryPath,
+                directoryFolders: this.getDirectoryFolders(directoryConfig),
+                v2PromptOverrides: this.sanitizeV2PromptOverrides(
+                    merged.v2PromptOverrides,
+                ),
+            } as CodeReviewConfigWithoutLLMProvider;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error getting simple code review config parameters',
+                context: CodeBaseConfigService.name,
+                error,
+                metadata: { organizationAndTeamData, params },
+            });
+            throw new Error(
+                'Error getting simple code review config parameters',
+                { cause: error },
+            );
         }
     }
 
@@ -248,7 +367,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         const directoryFileDelta = await this.getKodusConfigFile({
             organizationAndTeamData,
             repository,
-            directoryPath: directoryConfig?.path,
+            directoryId: directoryConfig?.id,
             defaultBranch,
             overrideConfig: this.getFileOverridePreference(
                 repoConfig,
@@ -271,7 +390,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         if (directoryDelta || directoryFileDelta) {
             configLevel = ConfigLevel.DIRECTORY;
             directoryId = directoryConfig?.id;
-            directoryPath = directoryConfig?.path;
+            directoryPath = this.getDirectoryPrimaryPath(directoryConfig);
         } else if (repoDelta || repositoryFileDelta) {
             configLevel = ConfigLevel.REPOSITORY;
         }
@@ -281,6 +400,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
             configLevel,
             directoryId,
             directoryPath,
+            directoryFolders: this.getDirectoryFolders(directoryConfig),
         } as CodeReviewConfigWithoutLLMProvider;
     }
 
@@ -366,7 +486,9 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                 error,
                 metadata: { organizationAndTeamData },
             });
-            throw new Error('Error getting code management pat config');
+            throw new Error('Error getting code management pat config', {
+                cause: error,
+            });
         }
     }
 
@@ -445,6 +567,7 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
             });
             throw new Error(
                 'Error getting code management config with repositories',
+                { cause: error },
             );
         }
     }
@@ -515,19 +638,29 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         repository: { id: string; name: string };
         overrideConfig?: boolean;
         directoryPath?: string;
+        directoryId?: string;
         defaultBranch?: string;
+        removeProperties?: boolean;
     }): Promise<KodusConfigFile | undefined> {
         const {
             organizationAndTeamData,
             repository,
             directoryPath,
+            directoryId,
             defaultBranch,
             overrideConfig = true,
+            removeProperties = true,
         } = params;
 
         if (!overrideConfig) {
             return;
         }
+
+        const hasIntegration =
+            await this.codeManagementService.getTypeIntegration(
+                organizationAndTeamData,
+            );
+        if (!hasIntegration) return;
 
         const defaultBranchName =
             defaultBranch ||
@@ -538,15 +671,18 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
             repository,
             defaultBranchName,
             directoryPath,
+            directoryId,
         );
 
         if (!kodusConfigFileContent) {
             return;
         }
 
-        const kodusConfigYMLfile = yaml.load(
-            kodusConfigFileContent,
-        ) as KodusConfigFile;
+        const parsedConfig = yaml.load(kodusConfigFileContent);
+        const kodusConfigYMLfile =
+            parsedConfig && typeof parsedConfig === 'object'
+                ? (parsedConfig as KodusConfigFile)
+                : ({} as KodusConfigFile);
 
         // strip properties not in default config
         for (const key in kodusConfigYMLfile) {
@@ -555,8 +691,10 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
             }
         }
 
-        delete kodusConfigYMLfile.version;
-        delete kodusConfigYMLfile.kodusConfigFileOverridesWebPreferences;
+        if (removeProperties) {
+            delete kodusConfigYMLfile.version;
+            delete kodusConfigYMLfile.kodusConfigFileOverridesWebPreferences;
+        }
 
         return kodusConfigYMLfile;
     }
@@ -566,9 +704,16 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         repository: { id: string; name: string },
         defaultBranchName = 'main',
         directoryPath?: string,
+        directoryId?: string,
     ): Promise<string | null> {
         const configFileName = 'kodus-config.yml';
         let fullPath = configFileName;
+
+        // Directory groups override config through the centralized config
+        // repo only — there is no managed-repo override file at a group level.
+        if (directoryId && !directoryPath) {
+            return null;
+        }
 
         if (directoryPath) {
             const normalizedPath = directoryPath.endsWith('/')
@@ -602,29 +747,9 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
     }
 
     private async getReviewModeConfigParameter(
-        organizationAndTeamData: OrganizationAndTeamData,
+        _organizationAndTeamData: OrganizationAndTeamData,
     ): Promise<ReviewModeConfig> {
-        try {
-            const reviewModeConfig =
-                await this.organizationParametersService.findByKey(
-                    OrganizationParametersKey.REVIEW_MODE_CONFIG,
-                    organizationAndTeamData,
-                );
-
-            return (
-                reviewModeConfig?.configValue?.reviewMode ??
-                ReviewModeConfig.LIGHT_MODE_FULL
-            );
-        } catch (error) {
-            this.logger.error({
-                message: 'Error getting review mode config',
-                error,
-                context: CodeBaseConfigService.name,
-                metadata: { organizationAndTeamData },
-            });
-
-            return ReviewModeConfig.LIGHT_MODE_FULL;
-        }
+        return ReviewModeConfig.HEAVY_MODE;
     }
 
     private async getKodyFineTuningConfigParameter(
@@ -644,6 +769,181 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
         return {
             enabled: enableService,
         };
+    }
+
+    private async getGlobalIgnorePaths(
+        organizationAndTeamData: OrganizationAndTeamData,
+    ): Promise<string[]> {
+        try {
+            // Try to get from cache first
+            const cachedData = await this.cacheService.getFromCache<{
+                paths: string[];
+                updatedAt: string;
+            }>(GLOBAL_IGNORE_PATHS_CACHE_KEY);
+
+            if (cachedData) {
+                // Light query: fetch only updatedAt to check if cache is stale
+                const dbUpdatedAt =
+                    await this.globalParametersService.findUpdatedAtByKey(
+                        GlobalParametersKey.IGNORE_PATHS_GLOBAL,
+                    );
+
+                // If no record in DB or cache is still valid, use cached data
+                if (
+                    !dbUpdatedAt ||
+                    new Date(cachedData.updatedAt) >= new Date(dbUpdatedAt)
+                ) {
+                    this.logger.log({
+                        message: 'Global ignore paths loaded from cache',
+                        context: CodeBaseConfigService.name,
+                        metadata: { organizationAndTeamData },
+                    });
+                    return cachedData.paths;
+                }
+            }
+
+            // Fetch full record from database
+            const globalParameters =
+                await this.globalParametersService.findByKey(
+                    GlobalParametersKey.IGNORE_PATHS_GLOBAL,
+                );
+
+            if (globalParameters?.configValue?.paths) {
+                const paths = globalParameters.configValue.paths as string[];
+
+                // Save to cache with updatedAt
+                await this.cacheService.addToCache(
+                    GLOBAL_IGNORE_PATHS_CACHE_KEY,
+                    {
+                        paths,
+                        updatedAt:
+                            globalParameters.updatedAt?.toISOString() ??
+                            new Date().toISOString(),
+                    },
+                    GLOBAL_IGNORE_PATHS_CACHE_TTL,
+                );
+
+                this.logger.log({
+                    message:
+                        'Global ignore paths loaded from global parameters',
+                    context: CodeBaseConfigService.name,
+                    metadata: { organizationAndTeamData },
+                });
+
+                return paths;
+            }
+
+            // Fallback to JSON file
+            this.logger.log({
+                message: 'Global ignore paths loaded from file (fallback)',
+                context: CodeBaseConfigService.name,
+                metadata: { organizationAndTeamData },
+            });
+
+            return globalIgnorePathsJson?.paths ?? [];
+        } catch (error) {
+            this.logger.error({
+                message:
+                    'Error getting global ignore paths, using file fallback',
+                context: CodeBaseConfigService.name,
+                error,
+                metadata: { organizationAndTeamData },
+            });
+
+            return globalIgnorePathsJson?.paths ?? [];
+        }
+    }
+
+    async getE2BIpAddress(): Promise<string | null> {
+        try {
+            const cachedData = await this.cacheService.getFromCache<{
+                ip: string;
+                updatedAt: string;
+            }>(IP_E2B_CACHE_KEY);
+
+            if (cachedData) {
+                const dbUpdatedAt =
+                    await this.globalParametersService.findUpdatedAtByKey(
+                        GlobalParametersKey.IP_E2B,
+                    );
+
+                if (
+                    !dbUpdatedAt ||
+                    new Date(cachedData.updatedAt) >= new Date(dbUpdatedAt)
+                ) {
+                    return cachedData.ip;
+                }
+            }
+
+            const globalParameters =
+                await this.globalParametersService.findByKey(
+                    GlobalParametersKey.IP_E2B,
+                );
+
+            if (globalParameters?.configValue?.ip) {
+                const ip = globalParameters.configValue.ip as string;
+
+                await this.cacheService.addToCache(
+                    IP_E2B_CACHE_KEY,
+                    {
+                        ip,
+                        updatedAt:
+                            globalParameters.updatedAt?.toISOString() ??
+                            new Date().toISOString(),
+                    },
+                    IP_E2B_CACHE_TTL,
+                );
+
+                return ip;
+            }
+
+            return null;
+        } catch (error) {
+            this.logger.error({
+                message: 'Error getting E2B IP address',
+                context: CodeBaseConfigService.name,
+                error,
+            });
+
+            return null;
+        }
+    }
+
+    /**
+     * Extracts the primary path from a directory config, supporting both
+     * the new `folders[]` format and the legacy `path` field.
+     */
+    private getDirectoryPrimaryPath(
+        directoryConfig: DirectoryCodeReviewConfig | undefined,
+    ): string | undefined {
+        if (!directoryConfig) return undefined;
+        return (
+            directoryConfig.folders?.[0]?.path ??
+            (directoryConfig as any).path ??
+            undefined
+        );
+    }
+
+    /**
+     * Extracts folders from a directory config, supporting both
+     * the new `folders[]` format and the legacy `path` field.
+     */
+    private getDirectoryFolders(
+        directoryConfig: DirectoryCodeReviewConfig | undefined,
+    ): Array<{ id: string; name: string; path: string }> | undefined {
+        if (!directoryConfig) return undefined;
+        if (directoryConfig.folders?.length > 0) return directoryConfig.folders;
+        const legacyPath = (directoryConfig as any).path;
+        if (legacyPath) {
+            return [
+                {
+                    id: directoryConfig.id,
+                    name: directoryConfig.name,
+                    path: legacyPath,
+                },
+            ];
+        }
+        return undefined;
     }
 
     private resolveConfigByDirectories(
@@ -674,14 +974,23 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                 );
             };
 
-            const directoryMatchers = repoConfig.directories.map(
-                (dir: any) => ({
-                    dir,
-                    normalizedPath: normalizePath(dir.path),
-                }),
+            // Build matchers from each group's folders (with legacy `path` fallback)
+            const groupMatchers = repoConfig.directories.flatMap(
+                (group: any) => {
+                    const folders =
+                        group.folders?.length > 0
+                            ? group.folders
+                            : group.path
+                              ? [{ path: group.path }]
+                              : [];
+                    return folders.map((folder: any) => ({
+                        group,
+                        normalizedPath: normalizePath(folder.path),
+                    }));
+                },
             );
 
-            const matchingDirectories = directoryMatchers.filter(
+            const matchingEntries = groupMatchers.filter(
                 ({ normalizedPath }) =>
                     affectedPaths.some((filePath: string) => {
                         const normalizedFile = normalizePath(filePath);
@@ -693,37 +1002,19 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
                     }),
             );
 
-            const hasNotClassifiedPaths = affectedPaths.some(
-                (filePath: string) => {
-                    const normalizedFile = normalizePath(filePath);
-
-                    return !matchingDirectories.some(({ normalizedPath }) =>
-                        isPathCoveredByDirectory(
-                            normalizedPath,
-                            normalizedFile,
-                        ),
-                    );
-                },
+            // Deduplicate by group id
+            const matchingGroupIds = new Set(
+                matchingEntries.map(({ group }) => group.id),
+            );
+            const matchingGroups = repoConfig.directories.filter((g: any) =>
+                matchingGroupIds.has(g.id),
             );
 
-            // Agrupar diretórios configurados atingidos e sinalizar paths fora de qualquer config
-            const groupedDirectories = matchingDirectories.map(
-                ({ dir }) => dir,
-            );
-
-            if (groupedDirectories.length > 0 && hasNotClassifiedPaths) {
-                groupedDirectories.push({ name: 'not classified', path: null });
-            }
-
-            if (groupedDirectories.length !== 1) {
-                return;
-            }
-
-            if (
-                groupedDirectories.length === 1 &&
-                groupedDirectories[0]?.path !== null
-            ) {
-                return groupedDirectories[0];
+            // If exactly 1 group matches, use its config
+            // (files outside any group don't invalidate the match)
+            // If 2+ groups match, fall back to repository config
+            if (matchingGroups.length === 1) {
+                return matchingGroups[0];
             }
 
             return;
@@ -764,35 +1055,50 @@ export default class CodeBaseConfigService implements ICodeBaseConfigService {
 
             const normalizedAffectedPath = normalizePath(affectedPath);
 
-            const matchingDirectories = repoConfig.directories.filter((dir) => {
-                const normalizedDirPath = normalizePath(dir.path);
-
-                // The root directory ('/' or '') is always a potential match.
-                if (normalizedDirPath === '') {
-                    return true;
-                }
-
-                // A directory matches if it's identical to the path or is a prefix.
-                // e.g., 'foo/bar' matches 'foo/bar' and 'foo/bar/baz.ts'.
-                return (
-                    normalizedAffectedPath === normalizedDirPath ||
-                    normalizedAffectedPath.startsWith(normalizedDirPath + '/')
-                );
-            });
-
-            if (matchingDirectories.length === 0) {
-                return;
-            }
-
-            const mostSpecificDirectory = matchingDirectories.reduce(
-                (bestMatch, currentDir) => {
-                    return currentDir.path.length > bestMatch.path.length
-                        ? currentDir
-                        : bestMatch;
+            // Build a flat list of { groupId, folderPath } from all groups (with legacy `path` fallback)
+            const allFolderEntries = repoConfig.directories.flatMap(
+                (group) => {
+                    const folders =
+                        group.folders?.length > 0
+                            ? group.folders
+                            : (group as any).path
+                              ? [{ path: (group as any).path }]
+                              : [];
+                    return folders.map((folder) => ({
+                        groupId: group.id,
+                        folderPath: folder.path,
+                    }));
                 },
             );
 
-            return mostSpecificDirectory.id;
+            const matchingFolders = allFolderEntries.filter(
+                ({ folderPath }) => {
+                    const normalizedDirPath = normalizePath(folderPath);
+
+                    if (normalizedDirPath === '') {
+                        return true;
+                    }
+
+                    return (
+                        normalizedAffectedPath === normalizedDirPath ||
+                        normalizedAffectedPath.startsWith(
+                            normalizedDirPath + '/',
+                        )
+                    );
+                },
+            );
+
+            if (matchingFolders.length === 0) {
+                return;
+            }
+
+            const mostSpecific = matchingFolders.reduce((bestMatch, current) =>
+                current.folderPath.length > bestMatch.folderPath.length
+                    ? current
+                    : bestMatch,
+            );
+
+            return mostSpecific.groupId;
         } catch (error) {
             this.logger.error({
                 message: 'Error resolving the most specific config for a path',

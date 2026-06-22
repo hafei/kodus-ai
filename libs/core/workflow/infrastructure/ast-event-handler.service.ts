@@ -23,7 +23,7 @@ import {
     IMessageBrokerService,
     MESSAGE_BROKER_SERVICE_TOKEN,
 } from '@libs/core/domain/contracts/message-broker.service.contracts';
-import { RabbitMQErrorHandler } from '@libs/core/infrastructure/queue/rabbitmq-error.handler';
+import { createRabbitMQErrorHandlerWithFallback } from '@libs/core/infrastructure/queue/rabbitmq-error.handler';
 
 interface ASTCompletedMessage {
     taskId: string;
@@ -52,10 +52,9 @@ export class ASTEventHandler {
         queue: 'workflow.events.ast',
         allowNonJsonMessages: false,
         errorBehavior: MessageHandlerErrorBehavior.ACK,
-        errorHandler: (channel, msg, err) =>
-            RabbitMQErrorHandler.instance?.handle(channel, msg, err, {
-                dlqRoutingKey: 'workflow.events.dlq',
-            }),
+        errorHandler: createRabbitMQErrorHandlerWithFallback(
+            'workflow.events.dlq',
+        ),
         queueOptions: {
             arguments: {
                 'x-queue-type': 'quorum',
@@ -68,6 +67,11 @@ export class ASTEventHandler {
         exchange: 'workflow.events.delayed',
         routingKey: 'ast.task.completed',
         queue: 'workflow.events.ast',
+        allowNonJsonMessages: false,
+        errorBehavior: MessageHandlerErrorBehavior.ACK,
+        errorHandler: createRabbitMQErrorHandlerWithFallback(
+            'workflow.events.dlq',
+        ),
         queueOptions: {
             arguments: {
                 'x-queue-type': 'quorum',

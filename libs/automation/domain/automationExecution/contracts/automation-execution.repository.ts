@@ -33,6 +33,20 @@ export interface IAutomationExecutionRepository {
         skip?: number;
         take?: number;
         order?: 'ASC' | 'DESC';
+        includeTotal?: boolean;
+    }): Promise<{
+        data: AutomationExecutionEntity[];
+        total: number;
+    }>;
+    findCliReviewExecutionsByOrganization(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repositoryId?: string;
+        userEmail?: string;
+        since?: Date;
+        skip?: number;
+        take?: number;
+        order?: 'ASC' | 'DESC';
+        includeTotal?: boolean;
     }): Promise<{
         data: AutomationExecutionEntity[];
         total: number;
@@ -46,4 +60,9 @@ export interface IAutomationExecutionRepository {
         teamAutomationId: string,
         status?: string | string[],
     ): Promise<AutomationExecutionEntity[]>;
+    findEligiblePullRequestRefsForApprovalByPeriodAndTeamAutomationId(
+        startDate: Date,
+        endDate: Date,
+        teamAutomationId: string,
+    ): Promise<Array<{ repositoryId: string; pullRequestNumber: number }>>;
 }

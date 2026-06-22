@@ -1,7 +1,8 @@
+import { ContextPack } from '@kodus/flow';
+import { CrossFileContextSnippet } from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
+import { getDefaultKodusConfigFile } from '@libs/common/utils/validateCodeReviewConfigFile';
 import { LimitationType } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { getTextOrDefault, sanitizePromptText } from '../prompt.helpers';
-import { ContextPack } from '@kodus/flow';
-import { getDefaultKodusConfigFile } from '@libs/common/utils/validateCodeReviewConfigFile';
 
 export interface CodeReviewPayload {
     limitationType?: LimitationType;
@@ -68,6 +69,18 @@ export interface CodeReviewPayload {
         }
     >;
     contextPack?: ContextPack;
+    crossFileSnippets?: CrossFileContextSnippet[];
+    memories?: Array<{
+        title?: string;
+        rule?: string;
+    }>;
+    documentationContext?: Array<{
+        query?: string;
+        title?: string;
+        url?: string;
+        snippet?: string;
+        source?: string;
+    }>;
 }
 
 const PATH_SOURCE_TYPE_MAP: Record<string, string> = {
@@ -168,7 +181,7 @@ function formatSyncErrors(errors: unknown[] | string | undefined): string {
             if (typeof error === 'object') {
                 const message =
                     typeof (error as Record<string, unknown>).message ===
-                        'string'
+                    'string'
                         ? ((error as Record<string, unknown>).message as string)
                         : 'Unknown reference error';
                 return `- ${message}`;
@@ -290,6 +303,72 @@ function buildContextDedupeKey(
     return contextKey ?? `context:${Date.now()}`;
 }
 
+function formatMemoriesSection(
+    memories: CodeReviewPayload['memories'],
+): string {
+    if (!Array.isArray(memories) || !memories.length) {
+        return '';
+    }
+
+    const formattedMemories = memories
+        .map((memory) => {
+            const title = getTextOrDefault(memory?.title, '').trim();
+            const rule = getTextOrDefault(memory?.rule, '').trim();
+
+            if (!title || !rule) {
+                return null;
+            }
+
+            return `- Title: ${sanitizePromptText(title)}\n  Rule: ${sanitizePromptText(rule)}`;
+        })
+        .filter((entry): entry is string => Boolean(entry));
+
+    if (!formattedMemories.length) {
+        return '';
+    }
+
+    return `## Memories\n\nAdditional context from past learnings in Kody Rules format.\n\n${formattedMemories.join('\n\n')}`;
+}
+
+function formatDocumentationSection(
+    documentationContext: CodeReviewPayload['documentationContext'],
+): string | null {
+    if (!Array.isArray(documentationContext) || !documentationContext.length) {
+        return null;
+    }
+
+    const formattedDocs = documentationContext
+        .map((item, index) => {
+            const title = (item?.title || '').trim();
+            const url = (item?.url || '').trim();
+            const query = (item?.query || '').trim();
+            const snippet = (item?.snippet || '').trim();
+            const source = (item?.source || '').trim();
+
+            if (!title && !url && !query && !snippet) {
+                return null;
+            }
+
+            const lines = [
+                `### Documentation ${index + 1}`,
+                query ? `- Query: ${query}` : null,
+                title ? `- Title: ${title}` : null,
+                url ? `- URL: ${url}` : null,
+                source ? `- Source: ${source}` : null,
+                snippet ? `- Summary: ${snippet}` : null,
+            ].filter((line): line is string => Boolean(line));
+
+            return lines.join('\n');
+        })
+        .filter((section): section is string => Boolean(section));
+
+    if (!formattedDocs.length) {
+        return null;
+    }
+
+    return `## Documentation Context\n\nAdditional package/framework documentation gathered for this file.\n\n${formattedDocs.join('\n\n')}`;
+}
+
 /**
  * Builds a single, consolidated block of context from all MCP tool outputs.
  * This block is only generated if there are valid augmentations to display.
@@ -372,7 +451,7 @@ function extractLayerReferences(
                 entry &&
                 typeof entry === 'object' &&
                 typeof (entry as Record<string, unknown>).filePath ===
-                'string' &&
+                    'string' &&
                 typeof (entry as Record<string, unknown>).content === 'string',
         );
         if (hasFileContext) {
@@ -812,6 +891,8 @@ function buildFinalPrompt(
 ): string {
     return `You are Kody Bug-Hunter, a senior engineer specialized in identifying verifiable issues through mental code execution. Your mission is to detect bugs, performance problems, and security vulnerabilities that will actually occur in production by mentally simulating code execution.
 
+The current date is ${new Date().toLocaleDateString('en-GB')}.
+
 ## Core Method: Mental Simulation
 
 Instead of pattern matching, you will mentally execute the code step-by-step focusing on critical points:
@@ -827,7 +908,7 @@ Instead of pattern matching, you will mentally execute the code step-by-step foc
 ### Multiple Execution Contexts
 
 Simulate the code in different execution contexts:
-- **Repeated invocations**: What changes when the same code runs multiple times?
+- **Repeated invocations**: What changes when the same code runs multiple times? Check mutable default arguments that persist across calls.
 - **Parallel execution**: What happens when multiple executions overlap?
 - **Delayed execution**: What state exists when deferred code actually runs?
 - **State persistence**: What survives between executions and what gets reset?
@@ -844,6 +925,7 @@ For each critical code section, mentally execute with these scenarios:
 5. **Resource scenarios**: Memory limits, connection failures
 6. **Invariant violations**: System constraints that must always hold (e.g., cache size limits, unique constraints)
 7. **Failure cascades**: When one operation fails, what happens to dependent operations?
+8. **Default argument mutation**: When a method uses mutable default parameter values (hashes, arrays, objects), simulate calling the method multiple times WITHOUT passing that argument. Does the default object accumulate state across calls?
 
 ## Detection Categories
 
@@ -884,6 +966,15 @@ ${mediumText}
 **LOW** - Minimal impact
 ${lowText}
 
+## Memory Rules Precedence
+
+When the external context contains a **Memories** section:
+1. Treat every memory rule as high-priority review guidance.
+2. Run an explicit memory compliance pass on changed lines before finalizing output.
+3. If a memory rule applies, prioritize surfacing that issue with concrete evidence from the diff.
+4. Do not ignore applicable memory rules just because the issue is subtle.
+5. If a memory rule conflicts with explicit visible code behavior, prioritize visible code evidence.
+
 ## Analysis Rules
 
 ### MUST DO:
@@ -902,12 +993,17 @@ ${lowText}
 13. **Reject insecure fallbacks for secrets** - When code uses \`|| 'fallback'\` with environment variables for encryption keys, secrets, or credentials, verify it fails-fast instead of using empty/default values
 14. **Validate user-controlled indices** - When user input (cursor offset, page number, array index) is used in slicing/indexing, verify bounds validation prevents negative values or out-of-range access
 15. **Detect SSRF in network calls** - When code calls network operations (open(), fetch(), HTTP.get(), requests.get()) with variables as URLs (not hardcoded strings), flag as SSRF vulnerability unless allowlist validation is present in same function
+16. **Check mutable default arguments** - When a method parameter has a mutable default value (hash, array, list, dict, set), verify the method does not mutate it. If it does, this is a confirmed bug: the default is shared across all calls
+17. **Execute "Brevity First"**: Eliminate all introductory pleasantries. Start descriptions with the noun of the error (e.g., "Memory leak," "Null pointer dereference," "Timing attack").
+18. **Use Active Voice**: "The function leaks memory" instead of "Memory is leaked by the function."
 
 ### MUST NOT DO:
 - **NO speculation whatsoever** - If you cannot trace the exact execution path that causes the issue, DO NOT report it
 - **NO "could", "might", "possibly"** - Only report what WILL definitely happen
-- **NO assumptions about external behavior** - Don't assume how external APIs, callbacks, user code, or imported functions/constants/utilities behave. If you cannot see the implementation in the provided code, do not make assumptions about it.
-- **NO assumptions about imported code structure** - If code imports from another file, don't assume whether it's a function, constant, class, or what parameters it accepts. Only analyze what you can see being used in the visible code.
+- **NO assumptions about external behavior** - Don't assume how external APIs, callbacks, user code, or imported functions/constants/utilities behave. If you cannot see the implementation in the provided code, do not make assumptions about it. **Exception:** code provided in the "Codebase Context" section IS visible evidence — use it as you would any other code in the diff.
+- **NO assumptions about imported code structure** - If code imports from another file, don't assume whether it's a function, constant, class, or what parameters it accepts. Only analyze what you can see being used in the visible code. **Exception:** if the "Codebase Context" section shows the actual source of an import, treat it as visible code and analyze contracts between them.
+- **NO factual claims about unseen code** - This is the #1 source of false positives. If your suggestion states HOW another file/function/system works (e.g., "the authentication system hashes the full key", "these commands are executed as separate calls", "the server has a 100KB limit"), you MUST verify that code is visible in either the diff, FileContentContext, or Codebase Context. If you cannot point to a specific line of visible code that proves your claim, DO NOT make the claim. Phrases like "the system will...", "the auth module does...", "the caller expects..." are RED FLAGS — check if you actually see that code or are guessing.
+- **NO "consistency mismatch" bugs without seeing both sides** - If you claim code A is inconsistent with code B, BOTH A and B must be visible in your context. If you only see A and are guessing what B does, this is speculation, not a bug. Example: if a script hashes a value and you claim the validation code hashes it differently, you must see the validation code — do not assume how it works.
 - **NO defensive programming as bugs** - Missing try-catch, validation, or error handling is NOT a bug unless you can prove it causes actual failure
 - **NO theoretical edge cases** - Must be able to demonstrate with concrete, realistic values
 - **NO "if the user does X"** - Unless you can prove X is a normal, expected usage
@@ -916,17 +1012,34 @@ ${lowText}
 - **NO "in production this could..."** - Must be able to prove it WILL happen, not that it COULD happen
 - **NO assuming missing code is wrong** - If code isn't shown, don't assume it exists or how it works
 - **NO indentation-related issues** - Never report issues where the root cause is indentation, spacing, or whitespace - even if you believe it causes syntax errors, parsing failures, or runtime crashes. Indentation problems are NOT bugs.
+- **NO syntax error claims** - The code under review compiles and passes CI. Never report missing commas, brackets, semicolons as bugs.
+- **NO dependency version/upgrade claims** - When the diff only modifies dependency versions, refs, or tags in manifest
+  files (pubspec.yaml, package.json, pom.xml, build.gradle, Gemfile, etc.), do not generate any suggestion about what
+  changed inside the dependency. You do not have access to the dependency's source code before or after the update, which
+  means you cannot verify any claim about what changed internally. No amount of reasoning from version numbers, PR
+  summaries, or package names can substitute for actually seeing the code. Do not attempt to infer breaking changes, removed
+   APIs, contract mismatches, or compatibility issues from a version bump. Simply skip this topic entirely and focus on
+  other verifiable issues in the file, if any exist.
+- **NO "Fluff"**: No "I suggest," "Please," "Maybe," or "I found."
+- **NO redundant explanations**: If the code fix is self-explanatory, keep the description under 50 words.
 - **ONLY report if you can provide**:
   1. Exact input values that trigger the issue
   2. Step-by-step execution trace showing the failure
   3. The specific line where the failure occurs
   4. The exact incorrect behavior that results
-  5. **Proof that the issue exists in VISIBLE code only** - if the bug depends on behavior of imported code you cannot see, you CANNOT report it
+  5. **Proof that the issue exists in VISIBLE code only** - if the bug depends on behavior of imported code you cannot see, you CANNOT report it. **Exception:** code shown in the "Codebase Context" section counts as visible — if a snippet proves a caller/consumer will break due to the diff changes, you MUST report it.
+  6. **Self-check for phantom knowledge** - Before finalizing any suggestion, ask: "Am I describing how code I CANNOT see works?" If yes, STOP. You are hallucinating. Common traps:
+     - "The authentication/validation system does X" — can you see it? If not, discard.
+     - "These are separate function calls" — can you see the caller? If not, discard.
+     - "The default limit is X" — can you see the config? If not, discard.
+     - "The test is wrong because the implementation does Y" — can you see the implementation? If not, discard.
+  **Cross-file contract bugs are exempt from items 1-2 above.** When a Codebase Context snippet shows a consumer passing a string/value that no longer exists in the mapping or signature changed by the diff, the snippet IS the proof. You do not need to invent input values — the consumer code IS the input that will trigger the failure. Report it directly.
 
 ## Analysis Process
 
 1. **Understand PR intent** from summary as context for expected behavior
-2. **Identify critical points** in the changed code (+lines only)
+2. **Identify critical points** in the changed code (+lines), and check if any Codebase Context snippet references values changed or removed by the diff
+2.5. **Cross-file contract check** (if Codebase Context snippets are present): For each snippet, compare the string literals, event names, enum values, and config keys it passes to functions/mappings changed in the diff. If any value no longer exists in the new code, this is a RUNTIME BUG — report it immediately with severity high or critical. This takes priority over all other findings.
 3. **Simulate execution** through each critical path considering:
    - Variable initialization order vs usage order
    - Number of unique operations vs total iterations
@@ -937,8 +1050,8 @@ ${lowText}
 4. **Test concrete scenarios** on each path with realistic inputs
 5. **Detect verifiable issues** where behavior is definitively problematic
 6. **Confirm with available context** - must be provable with given information
-   - Can you see ALL the code involved in the bug? If NO → DO NOT REPORT
-   - Does the bug depend on imported function behavior? If YES and you can't see the import → DO NOT REPORT
+   - Can you see ALL the code involved in the bug? If NO → DO NOT REPORT. **Exception:** code in the "Codebase Context" section is real repository code — if it shows a caller/consumer that will break because of diff changes, that IS visible evidence and you MUST report it.
+   - Does the bug depend on imported function behavior? If YES and you can't see the import → DO NOT REPORT. **Exception:** if the "Codebase Context" section shows the import source, treat it as visible.
    - Are you assuming what an imported function/constant contains? If YES → DO NOT REPORT
 6.1. **Special case - inline to function refactoring**: When code changes from prop: value to myFunction(value), the function almost certainly returns an object with prop included. You cannot see inside myFunction, so you CANNOT report missing properties as bugs.
 6.2. **Indentation check**: If your issue involves the words "indent", "spacing", "whitespace", or "same level", STOP - do not report it.
@@ -950,7 +1063,7 @@ ${lowText}
 - Report ONLY issues you can definitively prove will occur
 - Focus ONLY on bugs, performance, and security categories
 - Use PR summary as auxiliary context, not absolute truth
-- Be precise and concise in descriptions
+- Be surgically precise: Focus on the *mechanics* of the failure.
 - Always respond in ${languageNote} language
 - Return ONLY the JSON object, no additional text
 
@@ -982,13 +1095,14 @@ Return only valid JSON, nothing more. Under no circumstances should there be any
             "relevantFile": "path/to/file",
             "language": "programming_language",
             "suggestionContent": "The full issue description",
-            "existingCode": "Problematic code from PR",
-            "improvedCode": "Fixed code proposal",
+            "existingCode": "Problematic code from PR (only the lines that need to change, plus 1-2 surrounding lines for context)",
+            "improvedCode": "Fixed code proposal (same scope as existingCode — only the changed lines plus 1-2 lines of context, NOT the entire function or block)",
             "oneSentenceSummary": "Concise issue description",
-            "relevantLinesStart": "starting_line",
-            "relevantLinesEnd": "ending_line",
+            "relevantLinesStart": 1,
+            "relevantLinesEnd": 10,
             "label": "bug|performance|security",
             "severity": "low|medium|high|critical",
+            "crossFileEvidence": "true only when the suggestion is based on evidence from a Codebase Context snippet; false or omit otherwise",
             "llmPrompt": "Prompt for LLMs"
         }
     ]
@@ -1102,8 +1216,8 @@ Your final output should be **only** a JSON object with the following structure:
             "existingCode": "Relevant new code from the PR",
             "improvedCode": "Improved proposal",
             "oneSentenceSummary": "Concise summary of the suggestion",
-            "relevantLinesStart": "starting_line",
-            "relevantLinesEnd": "ending_line",
+            "relevantLinesStart": 1,
+            "relevantLinesEnd": 10,
             "label": "selected_label",
             "llmPrompt": "Prompt for LLMs"
         }
@@ -1193,8 +1307,9 @@ export const prompt_codereview_system_gemini = (payload: CodeReviewPayload) => {
             : 'Note: No limit on number of suggestions.';
 
     const languageNote = payload?.languageResultPrompt || 'en-US';
+    const memoriesBlock = formatMemoriesSection(payload?.memories);
 
-    return `# Kody PR-Reviewer: Code Analysis System
+    const basePrompt = `# Kody PR-Reviewer: Code Analysis System
 
 ## Mission
 You are Kody PR-Reviewer, a senior engineer specialized in understanding and reviewing code. Your mission is to provide detailed, constructive, and actionable feedback on code by analyzing it in depth.
@@ -1234,11 +1349,10 @@ A bug is not just a syntax error - it's any code that won't behave as intended i
 DO NOT speculate about:
 - What might happen if external services fail
 - Hypothetical edge cases not evident in the code
-- "What if" scenarios about parts of the system not visible
-
+- "What if" scenarios about parts of the system not visible — **however**, code provided in the "Codebase Context" section IS visible and IS part of this system. If a snippet shows code that will break because of the diff, report it as a concrete bug, not speculation.
 - Understand the purpose of the PR.
-- Focus exclusively on lines marked with '+' for suggestions.
-- Before finalizing a suggestion, ensure it is technically correct, logically sound, beneficial, **and based on clear evidence in the provided code diff.**
+- Focus on lines marked with '+' for suggestions. **Exception for cross-file bugs:** if a Codebase Context snippet shows a consumer that will break because of the diff changes, report the bug anchored to the diff lines that introduced the breaking change — even though the consumer code is in another file.
+- Before finalizing a suggestion, ensure it is technically correct, logically sound, beneficial, **and based on clear evidence in the provided code diff or Codebase Context snippets.**
 - IMPORTANT: Never suggest changes that break the code or introduce regressions.
 - You don't know what today's date is, so don't suggest anything related to it
 - Keep your suggestions concise and clear:
@@ -1249,6 +1363,10 @@ DO NOT speculate about:
 
 ## Analysis Process
 Follow this step-by-step thinking:
+
+0. **Memory Compliance Pre-check**:
+    - If a **Memories** section is present in external context, evaluate each memory rule against the changed '+' lines before other checks.
+    - Prioritize reporting issues that are direct violations of applicable memory rules.
 
 1. **Identify Potential Issues by Category**:
    - Consider how the code behaves with common inputs (empty, null, invalid)
@@ -1314,8 +1432,8 @@ Your final output should be **ONLY** a JSON object with the following structure:
             "existingCode": "Relevant new code from the PR",
             "improvedCode": "Improved proposal",
             "oneSentenceSummary": "Concise summary of the suggestion",
-            "relevantLinesStart": "starting_line",
-            "relevantLinesEnd": "ending_line",
+            "relevantLinesStart": 1,
+            "relevantLinesEnd": 10,
             "label": "selected_label",
             "llmPrompt": "Prompt for LLMs"
         }
@@ -1340,7 +1458,22 @@ Your final output should be **ONLY** a JSON object with the following structure:
    - Your codeSuggestions array should include substantive recommendations when present, but can be empty if no meaningful improvements are identified.
    - Make sure that line numbers (relevantLinesStart and relevantLinesEnd) correspond exactly to the lines where the problematic code appears, not to the beginning of the file or other unrelated locations.
    - Note: No limit on number of suggestions.
+   - The current date is ${new Date().toLocaleDateString('en-GB')}
 `;
+
+    const documentationBlock = formatDocumentationSection(
+        payload?.documentationContext,
+    );
+
+    const contextBlocks = [memoriesBlock, documentationBlock].filter(
+        (block): block is string => Boolean(block),
+    );
+
+    if (!contextBlocks.length) {
+        return basePrompt;
+    }
+
+    return `${basePrompt}\n\n## External Context & Injected Knowledge\n\nThe following information is provided to ground your analysis in the broader system reality. Use this as your source of truth.\n\n---\n\n${contextBlocks.join('\n\n---\n\n')}`;
 };
 
 // NOTE: v2 overrides are applied directly in prompt_codereview_system_gemini_v2
@@ -1428,6 +1561,27 @@ export const prompt_codereview_system_gemini_v2 = (
     );
     if (augmentationBlock) {
         collectExternalContext('augmentations', augmentationBlock);
+    }
+
+    if (payload?.crossFileSnippets?.length) {
+        const snippetLines = payload.crossFileSnippets.map(
+            (s) =>
+                `### ${s.filePath}${s.relatedSymbol ? ` (symbol: ${s.relatedSymbol})` : ''}\n**Rationale:** ${s.rationale}\n\`\`\`\n${s.content}\n\`\`\``,
+        );
+        const codebaseContextBlock = `### Codebase Context (REAL CODE — treat as visible evidence)\n\nThe snippets below are **actual code from the repository** (not hypothetical). They show callers, consumers, or dependents of the code being changed in this PR.\n\n**You MUST check for broken contracts between the diff and these snippets:**\n- A caller passing a string literal (event name, key, enum value) that no longer exists in the mapping/config changed by the diff\n- A consumer relying on a return type, enum value, event name, or config key that the diff renames, changes, or removes\n- A caller passing arguments that no longer match the new function signature\n- A mapping/config that references identifiers renamed or deleted in the diff\n\n**PRIORITY: Runtime-breaking bugs (wrong string literal, removed enum value, renamed key) take absolute priority over type-narrowing or type-safety improvements.** If a snippet shows code that WILL throw an error or silently fail at runtime, ALWAYS report it as a bug — even if you also see type-level improvements to suggest. Do NOT report type improvements instead of a runtime bug.\n\n**HOW TO REPORT cross-file bugs:**\n- Set \`relevantFile\` to the file under review (the diff file), since that is where the breaking change was introduced\n- Set \`relevantLinesStart/End\` to the diff lines that introduced the breaking change\n- In \`suggestionContent\`, explicitly name the cross-file consumer that will break (e.g., "PaymentService.ts still calls send(\\"paymentCaptured\\") but this event no longer exists in the mapping")\n- The proof IS the snippet — you do not need to guess hypothetical inputs. The snippet is real code that will execute\n\n${snippetLines.join('\n\n')}`;
+        collectExternalContext('codebase_context', codebaseContextBlock);
+    }
+
+    const memoriesBlock = formatMemoriesSection(payload?.memories);
+    if (memoriesBlock) {
+        collectExternalContext('memories', memoriesBlock);
+    }
+
+    const documentationBlock = formatDocumentationSection(
+        payload?.documentationContext,
+    );
+    if (documentationBlock) {
+        collectExternalContext('documentation', documentationBlock);
     }
 
     const prompt = buildFinalPrompt(

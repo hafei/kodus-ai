@@ -52,7 +52,7 @@ export class ContextEvidenceAgentProvider extends BaseAgentProvider {
         llmProvider: LLMModelProvider.GEMINI_2_5_PRO,
         temperature: 0,
         maxTokens: 60000,
-        maxReasoningTokens: 1000,
+        maxReasoningTokens: 1024,
         stop: undefined as string[] | undefined,
     };
 
@@ -75,6 +75,20 @@ export class ContextEvidenceAgentProvider extends BaseAgentProvider {
         const mcpManagerServers = await this.mcpManagerService.getConnections(
             organizationAndTeamData,
         );
+
+        if (!mcpManagerServers?.length) {
+            this.logger.warn({
+                message:
+                    'ContextEvidenceAgent: no MCP connections available for this organization/team. Skipping MCP adapter initialization.',
+                context: ContextEvidenceAgentProvider.name,
+                metadata: {
+                    organizationId: organizationAndTeamData?.organizationId,
+                    teamId: organizationAndTeamData?.teamId,
+                },
+            });
+            this.mcpAdapter = undefined;
+            return;
+        }
 
         const servers = [...mcpManagerServers];
 
@@ -326,9 +340,7 @@ Task: Fulfill this request using available tools based on the provided code chan
         }
 
         const text =
-            typeof response === 'string'
-                ? response
-                : JSON.stringify(response);
+            typeof response === 'string' ? response : JSON.stringify(response);
 
         try {
             const parsed: any = EnhancedJSONParser.parse(text);
@@ -501,6 +513,8 @@ My execution plan is:
         promptOverrides?: CodeReviewConfig['v2PromptOverrides'];
         additionalContext?: Record<string, unknown>;
         kodyRule?: Partial<IKodyRule>;
+        /** Per-repo/directory BYOK model override (`codeReviewConfig.byokModel`). */
+        byokModel?: string;
     }): Promise<ContextEvidenceAgentResult | null> {
         const {
             organizationAndTeamData,
@@ -509,6 +523,7 @@ My execution plan is:
             promptOverrides,
             additionalContext,
             kodyRule,
+            byokModel,
         } = params;
 
         this.logger.log({
@@ -534,7 +549,7 @@ My execution plan is:
             return null;
         }
 
-        await this.fetchBYOKConfig(organizationAndTeamData);
+        await this.fetchBYOKConfig(organizationAndTeamData, byokModel);
 
         const orchestration = await this.createEphemeralOrchestrator(
             organizationAndTeamData,

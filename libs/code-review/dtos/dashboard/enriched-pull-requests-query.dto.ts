@@ -1,24 +1,38 @@
 import { Transform, Type } from 'class-transformer';
-import { IsOptional, IsString, Min, Max, IsBoolean, IsInt } from 'class-validator';
+import {
+    IsOptional,
+    IsString,
+    Min,
+    Max,
+    IsBoolean,
+    IsInt,
+    IsIn,
+} from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PULL_REQUEST_AUTHOR_POLICIES } from './pull-request-author-policy.constants';
 
 export class EnrichedPullRequestsQueryDto {
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional()
     repositoryId?: string;
 
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional()
     repositoryName?: string;
 
     @IsOptional()
     @Transform(({ value }) => parseInt(value))
     @Min(1)
     @Max(100)
+    @ApiPropertyOptional()
     limit?: number = 30;
 
     @IsOptional()
     @Transform(({ value }) => parseInt(value))
     @Min(1)
+    @ApiPropertyOptional()
     page?: number = 1;
 
     @IsOptional()
@@ -35,18 +49,32 @@ export class EnrichedPullRequestsQueryDto {
 
         return undefined;
     })
+    @ApiPropertyOptional()
     hasSentSuggestions?: boolean;
 
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional()
     pullRequestTitle?: string;
 
     @IsOptional()
     @Transform(({ value }) => parseInt(value))
     @IsInt()
+    @ApiPropertyOptional()
     pullRequestNumber?: number;
 
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional()
     teamId?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsIn(PULL_REQUEST_AUTHOR_POLICIES)
+    @ApiPropertyOptional({
+        enum: PULL_REQUEST_AUTHOR_POLICIES,
+        description:
+            'Filter pull requests by author policy: all, reviewable (not excluded), or excluded.',
+    })
+    authorPolicy?: (typeof PULL_REQUEST_AUTHOR_POLICIES)[number];
 }

@@ -1,6 +1,33 @@
 import z from 'zod';
 import { getDefaultKodusConfigFile } from '../../validateCodeReviewConfigFile';
-import { getTextOrDefault } from './prompt.helpers';
+import { getTextOrDefault, sanitizePromptText } from './prompt.helpers';
+
+function formatMemoriesSection(
+    memories?: Array<{ title?: string; rule?: string }>,
+): string {
+    if (!Array.isArray(memories) || !memories.length) {
+        return '';
+    }
+
+    const formattedMemories = memories
+        .map((memory) => {
+            const title = getTextOrDefault(memory?.title, '').trim();
+            const rule = getTextOrDefault(memory?.rule, '').trim();
+
+            if (!title || !rule) {
+                return null;
+            }
+
+            return `- Title: ${sanitizePromptText(title)}\n  Rule: ${sanitizePromptText(rule)}`;
+        })
+        .filter((entry): entry is string => Boolean(entry));
+
+    if (!formattedMemories.length) {
+        return '';
+    }
+
+    return `## Memories\n\nAdditional context from past learnings in Kody Rules format.\n\n${formattedMemories.join('\n\n')}`;
+}
 
 //#region classifier
 export const kodyRulesClassifierSchema = z.object({
@@ -23,8 +50,8 @@ export const kodyRulesGeneratorSchema = z.object({
             existingCode: z.string(),
             improvedCode: z.string(),
             oneSentenceSummary: z.string(),
-            relevantLinesStart: z.number(),
-            relevantLinesEnd: z.number(),
+            relevantLinesStart: z.coerce.number().int().positive(),
+            relevantLinesEnd: z.coerce.number().int().positive(),
             label: z.string(),
             llmPrompt: z.string().optional(),
             severity: z.string(),
@@ -34,12 +61,42 @@ export const kodyRulesGeneratorSchema = z.object({
     ),
 });
 
+/**
+ * How the LLM decided on `path`. Drives backend confidence checks and
+ * whether post-LLM scoping should kick in.
+ *
+ *   declared           → glob came verbatim from the source MDC frontmatter
+ *                        or an explicit "Path:" line. Backend should not
+ *                        rewrite it.
+ *   content-inferred   → no declared glob; LLM inferred from the rule body
+ *                        (mentions of TS/Python/API/etc).
+ *   location-inferred  → no declared glob; LLM inferred from where the
+ *                        source MDC lives in the repo.
+ *   default-repo-wide  → LLM had no signal and fell back to "**\/*". Most
+ *                        likely target for backend scoping.
+ */
+export type KodyRulesIDEGeneratorPathSource =
+    | 'declared'
+    | 'content-inferred'
+    | 'location-inferred'
+    | 'default-repo-wide';
+
 export const kodyRulesIDEGeneratorSchema = z.object({
     rules: z.array(
         z.object({
             title: z.string(),
             rule: z.string(),
             path: z.string(),
+            // Optional for backward compatibility with prompt versions
+            // that did not request it. New prompt always asks for it.
+            pathSource: z
+                .enum([
+                    'declared',
+                    'content-inferred',
+                    'location-inferred',
+                    'default-repo-wide',
+                ])
+                .optional(),
             sourcePath: z.string(),
             severity: z.enum(['low', 'medium', 'high', 'critical']),
             scope: z.enum(['file', 'pull-request']).optional(),
@@ -196,8 +253,8 @@ export const kodyRulesUpdateSuggestionsSchema = z.object({
             existingCode: z.string(),
             improvedCode: z.string(),
             oneSentenceSummary: z.string(),
-            relevantLinesStart: z.number(),
-            relevantLinesEnd: z.number(),
+            relevantLinesStart: z.coerce.number().int().positive(),
+            relevantLinesEnd: z.coerce.number().int().positive(),
             label: z.string(),
             severity: z.string(),
             violatedKodyRulesIds: z.array(z.string()).optional(),
@@ -213,6 +270,8 @@ export type KodyRulesUpdateSuggestionsSchema = z.infer<
 export const prompt_kodyrules_updatestdsuggestions_system = () => {
     return `
 You are a senior engineer tasked with reviewing a list of code-review suggestions, ensuring that none of them violate the specific code rules (referred to as **Kody Rules**) and practices followed by your company.
+
+The current date is ${new Date().toLocaleDateString('en-GB')}.
 
 Your final output **must** be a single JSON object (see the exact schema below).
 
@@ -266,8 +325,8 @@ DO NOT under any circumstances provide any sort of code block in this field, lik
       "existingCode": "Snippet from the PR",
       "improvedCode": "Refactored code (if changed)",
       "oneSentenceSummary": "Concise summary of the suggestion",
-      "relevantLinesStart": "number",
-      "relevantLinesEnd": "number",
+      "relevantLinesStart": 1,
+      "relevantLinesEnd": 10,
       "label": "string",
       "severity": "string",
       "llmPrompt": "Prompt for LLMs",
@@ -335,8 +394,8 @@ export const kodyRulesSuggestionGenerationSchema = z.object({
             existingCode: z.string(),
             improvedCode: z.string(),
             oneSentenceSummary: z.string(),
-            relevantLinesStart: z.number(),
-            relevantLinesEnd: z.number(),
+            relevantLinesStart: z.coerce.number().int().positive(),
+            relevantLinesEnd: z.coerce.number().int().positive(),
             label: z.string(),
             brokenKodyRulesIds: z.array(z.string()),
         }),
@@ -349,6 +408,8 @@ export type KodyRulesSuggestionGenerationSchema = z.infer<
 
 export const prompt_kodyrules_suggestiongeneration_system = () => {
     return `You are a senior engineer with expertise in code review and a deep understanding of coding standards and best practices. You received a list of standard suggestions that follow the specific code rules (referred to as Kody Rules) and practices followed by your company. Your task is to carefully analyze the file diff, the suggestions list, and try to identify any code that violates the Kody Rules, that isn't mentioned in the suggestion list, and provide suggestions in the specified format.
+
+The current date is ${new Date().toLocaleDateString('en-GB')}.
 
 Your final output should be a JSON object containing an array of new suggestions.
 
@@ -383,6 +444,8 @@ export const prompt_kodyrules_suggestiongeneration_user = (payload: any) => {
         patchWithLinesStr,
         filteredKodyRules,
         updatedSuggestions,
+        documentationContext,
+        memories,
         externalReferencesMap,
         mcpResultsMap,
     } = payload;
@@ -394,6 +457,8 @@ export const prompt_kodyrules_suggestiongeneration_user = (payload: any) => {
         overrides?.generation?.main,
         defaults?.generation?.main,
     );
+
+    const memoriesBlock = formatMemoriesSection(memories);
 
     let externalReferencesSection = '';
     if (externalReferencesMap && externalReferencesMap.size > 0) {
@@ -437,6 +502,15 @@ export const prompt_kodyrules_suggestiongeneration_user = (payload: any) => {
         mcpResultsSection += '\n</mcpResults>\n';
     }
 
+    const documentationContextSection = Array.isArray(documentationContext)
+        ? documentationContext
+              .map(
+                  (doc: any, index: number) =>
+                      `${index + 1}. ${sanitizePromptText(doc?.title || 'Documentation')}\n   URL: ${sanitizePromptText(doc?.url || 'unknown')}\n   Query: ${sanitizePromptText(doc?.query || '')}\n   Snippet: ${sanitizePromptText(doc?.snippet || '')}`,
+              )
+              .join('\n\n')
+        : '';
+
     return `
 Task: Review the code changes in the pull request (PR) for compliance with the established code rules (kodyRules).
 
@@ -478,6 +552,12 @@ ${patchWithLinesStr}
 kodyRules:
 
 ${JSON.stringify(filteredKodyRules)}
+
+Documentation Context (official docs gathered for this file):
+
+${documentationContextSection || 'No documentation context provided'}
+
+${memoriesBlock}
 ${externalReferencesSection}
 ${mcpResultsSection}
 
@@ -543,8 +623,8 @@ DISCUSSION HERE
             "existingCode": "Relevant code from the PR",
             "improvedCode": "Improved proposal",
             "oneSentenceSummary": "Concise summary",
-            "relevantLinesStart": "starting_line",
-            "relevantLinesEnd": "ending_line",
+            "relevantLinesStart": 1,
+            "relevantLinesEnd": 10,
             "label": "kody_rules",
             "llmPrompt": "Prompt for LLMs",
             "brokenKodyRulesIds": [

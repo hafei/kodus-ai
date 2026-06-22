@@ -9,6 +9,14 @@ import {
 import { Injectable } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 
+import { LabelType } from '@libs/common/utils/codeManagement/labels';
+import {
+    CrossFileAnalysisPayload,
+    CrossFileAnalysisSchema,
+    CrossFileAnalysisSchemaType,
+    CrossFileContextForPrompt,
+    prompt_codereview_cross_file_analysis,
+} from '@libs/common/utils/langchainCommon/prompts/codeReviewCrossFileAnalysis';
 import {
     AnalysisContext,
     CodeSuggestion,
@@ -18,13 +26,6 @@ import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/
 import { TokenChunkingService } from '@libs/core/infrastructure/services/tokenChunking/tokenChunking.service';
 import { BYOKPromptRunnerService } from '@libs/core/infrastructure/services/tokenTracking/byokPromptRunner.service';
 import { ObservabilityService } from '@libs/core/log/observability.service';
-import {
-    CrossFileAnalysisPayload,
-    CrossFileAnalysisSchema,
-    CrossFileAnalysisSchemaType,
-    prompt_codereview_cross_file_analysis,
-} from '@libs/common/utils/langchainCommon/prompts/codeReviewCrossFileAnalysis';
-import { LabelType } from '@libs/common/utils/codeManagement/labels';
 
 //#region Interfaces
 interface BatchProcessingConfig {
@@ -56,7 +57,7 @@ interface PreparedFileData {
 @Injectable()
 export class CrossFileAnalysisService {
     private readonly logger = createLogger(CrossFileAnalysisService.name);
-    private readonly DEFAULT_USAGE_LLM_MODEL_PERCENTAGE = 70;
+    private readonly DEFAULT_USAGE_LLM_MODEL_PERCENTAGE = 90;
     private readonly DEFAULT_BATCH_CONFIG: BatchProcessingConfig = {
         maxConcurrentChunks: 10,
         batchDelay: 2000,
@@ -75,6 +76,7 @@ export class CrossFileAnalysisService {
         prNumber: number,
         context: AnalysisContext,
         preparedFiles: PreparedFileData[],
+        crossFileContexts?: CrossFileContextForPrompt[],
     ): Promise<{ codeSuggestions: CodeSuggestion[] }> {
         if (
             !preparedFiles ||
@@ -128,6 +130,7 @@ export class CrossFileAnalysisService {
                     language,
                     provider,
                     'analyzeCodeWithAI',
+                    crossFileContexts,
                 );
 
             const finalSuggestions: CodeSuggestion[] =
@@ -154,9 +157,7 @@ export class CrossFileAnalysisService {
                 error,
                 metadata: { organizationAndTeamData, prNumber },
             });
-            return {
-                codeSuggestions: [],
-            };
+            throw error;
         }
     }
     //#endregion
@@ -173,11 +174,18 @@ export class CrossFileAnalysisService {
         language: string,
         provider: LLMModelProvider,
         analysisType: AnalysisType,
+        crossFileContexts?: CrossFileContextForPrompt[],
     ): Promise<CodeSuggestion[]> {
+        const byokMaxInputTokens =
+            context?.codeReviewConfig?.byokConfig?.main?.maxInputTokens;
+
         const chunkingResult = this.tokenChunkingService.chunkDataByTokens({
             model: provider,
             data: preparedFiles,
             usagePercentage: this.DEFAULT_USAGE_LLM_MODEL_PERCENTAGE,
+            ...(byokMaxInputTokens && byokMaxInputTokens > 0
+                ? { overrideMaxTokens: byokMaxInputTokens }
+                : {}),
         });
 
         this.logger.log({
@@ -197,6 +205,15 @@ export class CrossFileAnalysisService {
         // 3. Determinar configuração de batch
         const batchConfig = { ...this.DEFAULT_BATCH_CONFIG };
 
+        const byokMaxConcurrent =
+            context?.codeReviewConfig?.byokConfig?.main?.maxConcurrentRequests;
+        if (byokMaxConcurrent && byokMaxConcurrent > 0) {
+            batchConfig.maxConcurrentChunks = Math.min(
+                batchConfig.maxConcurrentChunks,
+                byokMaxConcurrent,
+            );
+        }
+
         // 4. Processar chunks em batches paralelos
         const allSuggestions = await this.processChunksInBatches(
             chunkingResult.chunks,
@@ -207,6 +224,7 @@ export class CrossFileAnalysisService {
             prNumber,
             organizationAndTeamData,
             batchConfig,
+            crossFileContexts,
         );
 
         return allSuggestions;
@@ -224,8 +242,11 @@ export class CrossFileAnalysisService {
         prNumber: number,
         organizationAndTeamData: OrganizationAndTeamData,
         batchConfig: BatchProcessingConfig,
+        crossFileContexts?: CrossFileContextForPrompt[],
     ): Promise<CodeSuggestion[]> {
         const allSuggestions: CodeSuggestion[] = [];
+        let failedChunks = 0;
+        let firstChunkError: Error | undefined;
         const totalChunks = chunks.length;
         const { maxConcurrentChunks, batchDelay } = batchConfig;
 
@@ -257,10 +278,15 @@ export class CrossFileAnalysisService {
                 prNumber,
                 organizationAndTeamData,
                 batchConfig,
+                crossFileContexts,
             );
 
             batchResults.forEach(({ result, error, chunkIndex }) => {
                 if (error) {
+                    failedChunks++;
+                    if (!firstChunkError) {
+                        firstChunkError = error;
+                    }
                     this.logger.error({
                         message: `Error in prepared files batch ${batchNumber}, chunk ${chunkIndex} for ${analysisType}`,
                         context: CrossFileAnalysisService.name,
@@ -283,6 +309,13 @@ export class CrossFileAnalysisService {
             }
         }
 
+        if (failedChunks === totalChunks && totalChunks > 0) {
+            const errorMessage = firstChunkError?.message || 'Unknown error';
+            throw new Error(
+                `Cross-file analysis failed in ${failedChunks}/${totalChunks} chunks: ${errorMessage}`,
+            );
+        }
+
         return allSuggestions;
     }
 
@@ -299,6 +332,7 @@ export class CrossFileAnalysisService {
         prNumber: number,
         organizationAndTeamData: OrganizationAndTeamData,
         batchConfig: BatchProcessingConfig,
+        crossFileContexts?: CrossFileContextForPrompt[],
     ): Promise<ChunkProcessingResult[]> {
         const chunkPromises = batchChunks.map(async (chunk, batchIndex) => {
             const chunkIndex = indexOffset + batchIndex;
@@ -313,6 +347,7 @@ export class CrossFileAnalysisService {
                 prNumber,
                 organizationAndTeamData,
                 batchConfig,
+                crossFileContexts,
             );
         });
 
@@ -332,6 +367,7 @@ export class CrossFileAnalysisService {
         prNumber: number,
         organizationAndTeamData: OrganizationAndTeamData,
         batchConfig: BatchProcessingConfig,
+        crossFileContexts?: CrossFileContextForPrompt[],
     ): Promise<ChunkProcessingResult> {
         const { retryAttempts, retryDelay } = batchConfig;
         const MAX_RETRY_DELAY = 10000;
@@ -360,6 +396,7 @@ export class CrossFileAnalysisService {
                     chunkIndex,
                     prNumber,
                     organizationAndTeamData,
+                    crossFileContexts,
                 );
 
                 return { chunkIndex, result };
@@ -421,6 +458,7 @@ export class CrossFileAnalysisService {
         chunkIndex: number,
         prNumber: number,
         organizationAndTeamData: OrganizationAndTeamData,
+        crossFileContexts?: CrossFileContextForPrompt[],
     ): Promise<CodeSuggestion[] | null> {
         const fileContexts =
             this.convertFilesToFileChangeContext(preparedFilesChunk);
@@ -429,6 +467,12 @@ export class CrossFileAnalysisService {
             files: fileContexts,
             language,
             v2PromptOverrides: context?.codeReviewConfig?.v2PromptOverrides,
+            crossFileContexts,
+            memories: context?.codeReviewConfig?.kodyMemoryRules || [],
+            externalReferences:
+                context?.externalPromptContext?.generation?.main?.references,
+            externalReferenceErrors:
+                context?.externalPromptContext?.generation?.main?.error,
         };
 
         const fallbackProvider = LLMModelProvider.GEMINI_2_5_FLASH;
@@ -491,11 +535,14 @@ export class CrossFileAnalysisService {
                     runName,
                 });
 
+            const byokConfigRef = context?.codeReviewConfig?.byokConfig;
+
             const { result: analysis } =
                 await this.observabilityService.runLLMInSpan({
                     spanName,
                     runName,
                     attrs: spanAttrs,
+                    byokConfig: byokConfigRef,
                     exec: (callbacks) =>
                         analysisBuilder.addCallbacks(callbacks).execute(),
                 });

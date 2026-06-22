@@ -38,8 +38,8 @@ export class WorkflowJobRepository implements IWorkflowJobRepository {
                 priority: job.priority,
                 retryCount: job.retryCount,
                 maxRetries: job.maxRetries,
-                organizationId: job.organizationAndTeam?.organizationId,
-                teamId: job.organizationAndTeam?.teamId,
+                organizationId: job.organizationAndTeamData?.organizationId,
+                teamId: job.organizationAndTeamData?.teamId,
                 errorClassification: job.errorClassification,
                 lastError: job.lastError,
                 scheduledAt: job.scheduledAt,
@@ -53,7 +53,7 @@ export class WorkflowJobRepository implements IWorkflowJobRepository {
 
             const saved = await repo.save(model);
 
-            this.logger.log({
+            this.logger.debug({
                 message: 'Workflow job created',
                 context: WorkflowJobRepository.name,
                 metadata: {
@@ -195,7 +195,7 @@ export class WorkflowJobRepository implements IWorkflowJobRepository {
             priority: model.priority,
             retryCount: model.retryCount,
             maxRetries: model.maxRetries,
-            organizationAndTeam: model.organizationId
+            organizationAndTeamData: model.organizationId
                 ? {
                       organizationId: model.organizationId,
                       teamId: model.teamId,

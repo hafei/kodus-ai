@@ -46,7 +46,16 @@ export interface ValidationResult {
     byokConfig?: BYOKConfig | null;
     errorType?: ValidationErrorType;
     metadata?: Record<string, any>;
+    // Subscription status of the org (e.g. 'trial', 'active'). Exposed so
+    // downstream consumers (the review pipeline) can pick a trial-specific
+    // model without re-validating the license.
+    subscriptionStatus?: string;
 }
+
+export type ExecutionPermissionValidationOptions = {
+    consumeTrialReviewCredit?: boolean;
+    trialReviewCreditUsageKey?: string;
+};
 
 @Injectable()
 export class PermissionValidationService {
@@ -101,24 +110,55 @@ export class PermissionValidationService {
     }
 
     /**
+     * Verifies if the plan requires per-user license validation
+     */
+    private requiresUserLicense(planType: PlanType | null): boolean {
+        return planType === PlanType.BYOK || planType === PlanType.MANAGED;
+    }
+
+    /**
      * Unified permission validation for operations that need license + BYOK
      */
     async validateExecutionPermissions(
         organizationAndTeamData: OrganizationAndTeamData,
         userGitId?: string,
         contextName?: string,
+        options: ExecutionPermissionValidationOptions = {},
     ): Promise<ValidationResult> {
         try {
-            // Self-hosted always allows execution
-            if (!this.isCloud || this.isDevelopment) {
+            // Development mode always allows
+            if (this.isDevelopment) {
                 return { allowed: true };
             }
+
+            // Self-hosted: check if there's a license to enforce seats
+            if (!this.isCloud) {
+                return this.validateSelfHostedPermissions(
+                    organizationAndTeamData,
+                    userGitId,
+                    contextName,
+                );
+            }
+
+            this.logger.log({
+                message:
+                    '@@VALID PERMISSION@@ - Validating execution permissions',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData, userGitId },
+            });
 
             // 1. Validate organization license
             const validation =
                 await this.licenseService.validateOrganizationLicense(
                     organizationAndTeamData,
                 );
+
+            this.logger.log({
+                message:
+                    '@@VALID PERMISSION@@ - Organization license validated',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData, result: validation },
+            });
 
             if (!validation?.valid) {
                 this.logger.warn({
@@ -134,9 +174,135 @@ export class PermissionValidationService {
                 };
             }
 
-            // 2. Trial always allows (no BYOK required and no user validation)
+            // 2. Trial skips user validation, but still honors BYOK and
+            // billing-managed review credits when those fields are present.
             if (validation.subscriptionStatus === 'trial') {
-                return { allowed: true };
+                let trialByokConfig: BYOKConfig | null = null;
+                let byokLookupFailed = false;
+
+                try {
+                    trialByokConfig = await this.getBYOKConfig(
+                        organizationAndTeamData,
+                    );
+                } catch (error) {
+                    byokLookupFailed = true;
+                    this.logger.warn({
+                        message:
+                            'Could not resolve BYOK config for trial; continuing with managed trial validation',
+                        context:
+                            contextName || PermissionValidationService.name,
+                        metadata: { organizationAndTeamData },
+                        error,
+                    });
+                }
+
+                // Only enforce the credit gate when we're CONFIDENT there's no
+                // BYOK. If the lookup threw we can't rule out a connected key,
+                // so a user who burned their credits and then connected BYOK
+                // must not be blocked by a flaky read — fail open on BYOK.
+                const noByok = !trialByokConfig && !byokLookupFailed;
+
+                // Only trials created under the managed-credit model carry
+                // these fields. Legacy trials (started before this shipped)
+                // have no credit data — they must keep the old behaviour:
+                // unlimited reviews for the full trial, no consumption, no gate.
+                const usesTrialCredits =
+                    typeof validation.trialReviewCreditsTotal === 'number' ||
+                    typeof validation.trialReviewCreditsRemaining === 'number';
+
+                if (
+                    usesTrialCredits &&
+                    noByok &&
+                    validation.trialReviewCreditsRemaining === 0
+                ) {
+                    this.logger.warn({
+                        message: 'Trial managed review credits exhausted',
+                        context:
+                            contextName || PermissionValidationService.name,
+                        metadata: {
+                            organizationAndTeamData,
+                            trialReviewCreditsTotal:
+                                validation.trialReviewCreditsTotal,
+                            trialReviewCreditsUsed:
+                                validation.trialReviewCreditsUsed,
+                            trialCreditTier: validation.trialCreditTier,
+                            trialUnlocks: validation.trialUnlocks,
+                        },
+                    });
+
+                    return {
+                        allowed: false,
+                        errorType: ValidationErrorType.PLAN_LIMIT_EXCEEDED,
+                        metadata: { validation },
+                        subscriptionStatus: validation.subscriptionStatus,
+                    };
+                }
+
+                if (
+                    usesTrialCredits &&
+                    noByok &&
+                    options.consumeTrialReviewCredit
+                ) {
+                    const consumeResult =
+                        await this.licenseService.consumeTrialReviewCredit(
+                            organizationAndTeamData,
+                            options.trialReviewCreditUsageKey,
+                        );
+
+                    if (!consumeResult.allowed) {
+                        this.logger.warn({
+                            message: 'Trial review credit consumption denied',
+                            context:
+                                contextName || PermissionValidationService.name,
+                            metadata: {
+                                organizationAndTeamData,
+                                reason: consumeResult.reason,
+                                trialReviewCreditUsageKey:
+                                    options.trialReviewCreditUsageKey,
+                                consumeResult,
+                            },
+                        });
+
+                        return {
+                            allowed: false,
+                            errorType: ValidationErrorType.PLAN_LIMIT_EXCEEDED,
+                            metadata: { validation, consumeResult },
+                            subscriptionStatus: validation.subscriptionStatus,
+                        };
+                    }
+
+                    validation.trialReviewCreditsTotal =
+                        consumeResult.trialReviewCreditsTotal ??
+                        validation.trialReviewCreditsTotal;
+                    validation.trialReviewCreditsUsed =
+                        consumeResult.trialReviewCreditsUsed ??
+                        validation.trialReviewCreditsUsed;
+                    validation.trialReviewCreditsRemaining =
+                        consumeResult.trialReviewCreditsRemaining ??
+                        validation.trialReviewCreditsRemaining;
+                    validation.trialCreditTier =
+                        consumeResult.trialCreditTier ??
+                        validation.trialCreditTier;
+                    validation.trialUnlocks =
+                        consumeResult.trialUnlocks ?? validation.trialUnlocks;
+                }
+
+                return {
+                    allowed: true,
+                    byokConfig: trialByokConfig,
+                    subscriptionStatus: validation.subscriptionStatus,
+                    metadata: {
+                        byok: Boolean(trialByokConfig),
+                        trialReviewCreditsTotal:
+                            validation.trialReviewCreditsTotal,
+                        trialReviewCreditsUsed:
+                            validation.trialReviewCreditsUsed,
+                        trialReviewCreditsRemaining:
+                            validation.trialReviewCreditsRemaining,
+                        trialCreditTier: validation.trialCreditTier,
+                        trialUnlocks: validation.trialUnlocks,
+                    },
+                };
             }
 
             // 3. Identify plan type
@@ -178,9 +344,9 @@ export class PermissionValidationService {
                 }
             }
 
-            if (identifiedPlanType === PlanType.MANAGED && !userGitId) {
+            if (this.requiresUserLicense(identifiedPlanType) && !userGitId) {
                 this.logger.warn({
-                    message: 'Managed plan requires licensed user, NOT_ERROR',
+                    message: 'Plan requires licensed user, NOT_ERROR',
                     context: contextName || PermissionValidationService.name,
                     metadata: { organizationAndTeamData },
                 });
@@ -194,8 +360,8 @@ export class PermissionValidationService {
                 };
             }
 
-            // 6. Validate specific user (ALWAYS validates if userGitId provided, except trial)
-            if (!this.requiresBYOK(identifiedPlanType) && userGitId) {
+            // 6. Validate specific user (ALWAYS validates if userGitId provided, except trial and free)
+            if (this.requiresUserLicense(identifiedPlanType) && userGitId) {
                 const users = await this.licenseService.getAllUsersWithLicense(
                     organizationAndTeamData,
                 );
@@ -225,6 +391,7 @@ export class PermissionValidationService {
             return {
                 allowed: true,
                 byokConfig,
+                subscriptionStatus: validation.subscriptionStatus,
                 metadata: { planType: validation.planType, identifiedPlanType },
             };
         } catch (error) {
@@ -254,6 +421,57 @@ export class PermissionValidationService {
     }
 
     /**
+     * Self-hosted permission validation:
+     * - No license (Community Edition): allow everything
+     * - With license: enforce seat limits and allow auto-assign
+     */
+    private async validateSelfHostedPermissions(
+        organizationAndTeamData: OrganizationAndTeamData,
+        userGitId?: string,
+        contextName?: string,
+    ): Promise<ValidationResult> {
+        const validation =
+            await this.licenseService.validateOrganizationLicense(
+                organizationAndTeamData,
+            );
+
+        // No license or invalid → Community Edition, allow everything
+        if (!validation?.valid) {
+            return { allowed: true };
+        }
+
+        // Licensed self-hosted: enforce seat validation
+        if (!userGitId) {
+            return { allowed: true };
+        }
+
+        const users = await this.licenseService.getAllUsersWithLicense(
+            organizationAndTeamData,
+        );
+
+        const user = users?.find((u) => u?.git_id === userGitId);
+
+        if (!user) {
+            this.logger.warn({
+                message: 'Self-hosted: user not licensed',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData, userGitId },
+            });
+
+            return {
+                allowed: false,
+                errorType: ValidationErrorType.USER_NOT_LICENSED,
+                metadata: {
+                    userGitId,
+                    availableUsers: users?.length || 0,
+                },
+            };
+        }
+
+        return { allowed: true };
+    }
+
+    /**
      * Validação simplificada para operações que só precisam verificar licença
      */
     async validateBasicLicense(
@@ -261,14 +479,42 @@ export class PermissionValidationService {
         contextName?: string,
     ): Promise<ValidationResult> {
         try {
-            if (!this.isCloud || this.isDevelopment) {
+            if (this.isDevelopment) {
                 return { allowed: true };
             }
+
+            // Self-hosted without license: allow; with license: validate it
+            if (!this.isCloud) {
+                const validation =
+                    await this.licenseService.validateOrganizationLicense(
+                        organizationAndTeamData,
+                    );
+                // CE mode (no license): allow
+                if (!validation?.valid) {
+                    return { allowed: true };
+                }
+                return {
+                    allowed: true,
+                    metadata: { planType: validation.planType },
+                };
+            }
+
+            this.logger.log({
+                message: '@@VALID PERMISSION@@ - Validating basic license',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData },
+            });
 
             const validation =
                 await this.licenseService.validateOrganizationLicense(
                     organizationAndTeamData,
                 );
+
+            this.logger.log({
+                message: '@@VALID PERMISSION@@ - Basic license validated',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData, result: validation },
+            });
 
             if (!validation?.valid) {
                 this.logger.warn({
@@ -407,20 +653,27 @@ export class PermissionValidationService {
         contextName?: string,
     ): Promise<boolean> {
         try {
-            // Development mode não limita recursos
+            // Development mode doesn't limit resources
             if (this.isDevelopment) {
                 return false;
             }
 
-            // Self-hosted não limita recursos
-            if (!this.isCloud) {
-                return false;
-            }
+            this.logger.log({
+                message: '@@VALID PERMISSION@@ - Validating resource limits',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData },
+            });
 
             const validation =
                 await this.licenseService.validateOrganizationLicense(
                     organizationAndTeamData,
                 );
+
+            this.logger.log({
+                message: '@@VALID PERMISSION@@ - Resource limits validated',
+                context: contextName || PermissionValidationService.name,
+                metadata: { organizationAndTeamData, result: validation },
+            });
 
             if (!validation?.valid) {
                 this.logger.warn({
@@ -431,6 +684,19 @@ export class PermissionValidationService {
                     },
                 });
 
+                return true;
+            }
+
+            // Self-hosted with valid license: don't limit
+            if (
+                !this.isCloud &&
+                validation.subscriptionStatus === 'licensed-self-hosted'
+            ) {
+                return false;
+            }
+
+            // Self-hosted without license (CE mode): limit resources
+            if (!this.isCloud) {
                 return true;
             }
 
@@ -448,17 +714,28 @@ export class PermissionValidationService {
                 context: contextName || PermissionValidationService.name,
                 error: error,
             });
-            // Em caso de erro, limitar recursos por segurança
+            // In case of error, limit resources for safety
             return true;
         }
     }
 
     /**
-     * Retorna a configuração BYOK da organização (se existir)
+     * Retorna a configuração BYOK da organização (se existir).
+     *
+     * CLI trial requests carry organizationId='trial' (not a UUID) so the
+     * organization_parameters lookup would fail with Postgres' UUID syntax
+     * check. Treat non-UUID org identifiers as "no BYOK config" instead of
+     * letting the query error propagate.
      */
     async getBYOKConfig(
         organizationAndTeamData: OrganizationAndTeamData,
     ): Promise<BYOKConfig | null> {
+        const UUID_RE =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!UUID_RE.test(organizationAndTeamData?.organizationId || '')) {
+            return null;
+        }
+
         const byokConfig = await this.organizationParametersService.findByKey(
             OrganizationParametersKey.BYOK_CONFIG,
             organizationAndTeamData,

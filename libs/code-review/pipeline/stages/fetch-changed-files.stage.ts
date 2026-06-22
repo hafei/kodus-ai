@@ -1,29 +1,44 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
-import {
-    IPullRequestManagerService,
-    PULL_REQUEST_MANAGER_SERVICE_TOKEN,
-} from '@libs/code-review/domain/contracts/PullRequestManagerService.contract';
 import { createLogger } from '@kodus/flow';
 import {
     AutomationMessage,
     AutomationStatus,
 } from '@libs/automation/domain/automation/enum/automation-status';
-import { FileChange } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import {
-    convertToHunksWithLinesNumbers,
+    IPullRequestManagerService,
+    PULL_REQUEST_MANAGER_SERVICE_TOKEN,
+} from '@libs/code-review/domain/contracts/PullRequestManagerService.contract';
+import { isFileMatchingGlob } from '@libs/common/utils/glob-utils';
+import {
+    convertToUnifiedDiffWithLineNumbers,
     handlePatchDeletions,
 } from '@libs/common/utils/patch';
-import { isFileMatchingGlob } from '@libs/common/utils/glob-utils';
+import { FileChange } from '@libs/core/infrastructure/config/types/general/codeReview.type';
+import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
+import { PipelineReasons } from '@libs/core/infrastructure/pipeline/constants/pipeline-reasons.const';
+import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
+import { IStageValidationResult } from '@libs/core/infrastructure/pipeline/interfaces/stage-result.interface';
+import { StageMessageHelper } from '@libs/core/infrastructure/pipeline/utils/stage-message.helper';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 
 @Injectable()
 export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipelineContext> {
     stageName = 'FetchChangedFilesStage';
+    readonly visibility = StageVisibility.PRIMARY;
+    readonly label = 'Loading Files Context';
 
     private readonly logger = createLogger(FetchChangedFilesStage.name);
-    private maxFilesToAnalyze = 500;
+    /** Hard ceiling for the legacy engine (no chunking).
+     *  Lowered from 500 → 350 after the 2026-05-13 rate-limit incident:
+     *  PRs in the 351-500 range hit GitHub /contents once per file with
+     *  no shared cache, dominating quota during commercial hours. The
+     *  agent engine (with sandbox) doesn't suffer from this and keeps
+     *  its higher ceiling. */
+    private static readonly LEGACY_MAX_FILES = 350;
+    /** Higher ceiling for the agent engine, which chunks by token budget.
+     *  Still bounded to prevent abuse (huge auto-generated PRs). */
+    private static readonly AGENT_MAX_FILES = 2000;
 
     constructor(
         @Inject(PULL_REQUEST_MANAGER_SERVICE_TOKEN)
@@ -49,13 +64,18 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
                 draft.statusInfo = {
                     status: AutomationStatus.SKIPPED,
                     message: AutomationMessage.NO_CONFIG_IN_CONTEXT,
-                    jumpToStage: 'FinalizeGithubCheckStage',
                 };
             });
         }
 
         // Reutilizar arquivos do ResolveConfigStage se disponíveis, caso contrário buscar
         let filesToProcess = context.preliminaryFiles;
+        const forceFullRerun = Boolean(
+            context.pipelineMetadata?.forceFullRerun,
+        );
+        const baseCommit = forceFullRerun
+            ? undefined
+            : context?.lastExecution?.lastAnalyzedCommit;
 
         if (!filesToProcess || filesToProcess.length === 0) {
             this.logger.log({
@@ -72,51 +92,71 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
                     context.organizationAndTeamData,
                     context.repository,
                     context.pullRequest,
-                    context?.lastExecution?.lastAnalyzedCommit,
+                    baseCommit,
                 );
         }
 
-        // Aplicar filtro ignorePaths
         const ignorePaths = context.codeReviewConfig.ignorePaths || [];
-        const filteredFiles = filesToProcess?.filter(
-            (file) => !isFileMatchingGlob(file.filename, ignorePaths),
+        const filteredFiles =
+            filesToProcess?.filter(
+                (file) =>
+                    file.status !== 'removed' &&
+                    !isFileMatchingGlob(file.filename, ignorePaths),
+            ) || [];
+        const ignoredList =
+            filesToProcess?.filter(
+                (file) =>
+                    file.status === 'removed' ||
+                    isFileMatchingGlob(file.filename, ignorePaths),
+            ) || [];
+        const filesToAnalyze = filteredFiles;
+
+        const useAgentEngine = !!context.pipelineMetadata?.useAgentEngine;
+        const maxFiles = useAgentEngine
+            ? FetchChangedFilesStage.AGENT_MAX_FILES
+            : FetchChangedFilesStage.LEGACY_MAX_FILES;
+
+        const validation = this.validateFiles(
+            filesToProcess,
+            filesToAnalyze,
+            ignorePaths,
+            maxFiles,
         );
 
-        if (
-            !filteredFiles?.length ||
-            filteredFiles.length > this.maxFilesToAnalyze
-        ) {
-            const msg = !filteredFiles?.length
-                ? AutomationMessage.NO_FILES_AFTER_IGNORE
-                : AutomationMessage.TOO_MANY_FILES;
+        if (!validation.canProceed) {
+            const { message, technicalReason, metadata } =
+                validation.details || {};
 
             this.logger.warn({
-                message: `Skipping code review for PR#${context.pullRequest.number} - ${msg}`,
+                message: `Skipping code review for PR#${context.pullRequest.number} - ${message}`,
                 context: FetchChangedFilesStage.name,
                 metadata: {
                     organizationAndTeamData: context?.organizationAndTeamData,
-                    filesCount: filteredFiles?.length || 0,
+                    filesCount: filesToAnalyze?.length || 0,
                     totalFilesBeforeFilter: filesToProcess?.length || 0,
                     ignorePaths,
+                    technicalReason,
+                    ...metadata,
                 },
             });
+
             return this.updateContext(context, (draft) => {
                 draft.statusInfo = {
                     status: AutomationStatus.SKIPPED,
-                    message: msg,
-                    jumpToStage: 'FinalizeGithubCheckStage',
+                    message: message,
                 };
+                draft.ignoredFiles = ignoredList?.map((f) => f.filename) || [];
             });
         }
 
         this.logger.log({
-            message: `Found ${filteredFiles.length} files to analyze for PR#${context.pullRequest.number} (${filesToProcess?.length || 0} total, ${(filesToProcess?.length || 0) - filteredFiles.length} ignored)`,
+            message: `Found ${filesToAnalyze.length} files to analyze for PR#${context.pullRequest.number} (${filesToProcess?.length || 0} total, ${(filesToProcess?.length || 0) - filteredFiles.length} ignored)`,
             context: this.stageName,
             metadata: {
                 organizationAndTeamData: context.organizationAndTeamData,
                 repository: context.repository.name,
                 pullRequestNumber: context.pullRequest.number,
-                filesCount: filteredFiles.length,
+                filesCount: filesToAnalyze.length,
                 totalFilesBeforeFilter: filesToProcess?.length || 0,
                 ignoredFilesCount:
                     (filesToProcess?.length || 0) - filteredFiles.length,
@@ -129,7 +169,7 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
                 context.organizationAndTeamData,
                 context.repository,
                 context.pullRequest,
-                filteredFiles,
+                filesToAnalyze,
             );
 
         const filesWithLineNumbers =
@@ -139,11 +179,67 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
 
         return this.updateContext(context, (draft) => {
             draft.changedFiles = filesWithLineNumbers;
-            draft.pipelineMetadata = {
-                ...draft.pipelineMetadata,
-            };
             draft.pullRequest.stats = stats;
+            draft.ignoredFiles = ignoredList?.map((f) => f.filename) || [];
         });
+    }
+
+    private validateFiles(
+        filesToProcess: FileChange[],
+        filteredFiles: FileChange[],
+        ignorePaths: string[],
+        maxFilesToAnalyze: number,
+    ): IStageValidationResult {
+        if (!filesToProcess || filesToProcess.length === 0) {
+            return {
+                canProceed: false,
+                details: {
+                    reasonCode: AutomationMessage.NO_FILES_IN_PR,
+                    message: StageMessageHelper.skippedWithReason(
+                        PipelineReasons.FILES.NO_CHANGES,
+                    ),
+                },
+            };
+        }
+
+        if (!filteredFiles || filteredFiles.length === 0) {
+            const ignoredFileNames = filesToProcess.map((f) => f.filename);
+            const messageFiles = ignoredFileNames.slice(0, 5).join(', ');
+            const suffix = ignoredFileNames.length > 5 ? '...' : '';
+
+            return {
+                canProceed: false,
+                details: {
+                    reasonCode: AutomationMessage.NO_FILES_AFTER_IGNORE,
+                    message: StageMessageHelper.skippedWithReason(
+                        PipelineReasons.FILES.ALL_IGNORED,
+                        `Ignored: ${messageFiles}${suffix}`,
+                    ),
+                    technicalReason: `Ignored files: ${ignoredFileNames.join(', ')}`,
+                    metadata: { ignorePaths, ignoredFiles: ignoredFileNames },
+                },
+            };
+        }
+
+        if (filteredFiles.length > maxFilesToAnalyze) {
+            return {
+                canProceed: false,
+                details: {
+                    reasonCode: AutomationMessage.TOO_MANY_FILES,
+                    message: StageMessageHelper.skippedWithReason(
+                        PipelineReasons.FILES.TOO_MANY,
+                        `Count: ${filteredFiles.length}, Limit: ${maxFilesToAnalyze}`,
+                    ),
+                    technicalReason: `Count: ${filteredFiles.length}, Limit: ${maxFilesToAnalyze}`,
+                    metadata: {
+                        count: filteredFiles.length,
+                        limit: maxFilesToAnalyze,
+                    },
+                },
+            };
+        }
+
+        return { canProceed: true };
     }
 
     private prepareFilesWithLineNumbers(files: FileChange[]): FileChange[] {
@@ -167,7 +263,7 @@ export class FetchChangedFilesStage extends BasePipelineStage<CodeReviewPipeline
                     return file;
                 }
 
-                const patchWithLinesStr = convertToHunksWithLinesNumbers(
+                const patchWithLinesStr = convertToUnifiedDiffWithLineNumbers(
                     patchFormatted,
                     file,
                 );

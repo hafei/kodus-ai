@@ -11,6 +11,8 @@ import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfac
 import { LanguageValue } from '@libs/core/domain/enums/language-parameter.enum';
 import { ParametersKey } from '@libs/core/domain/enums/parameters-key.enum';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
+import { getPRDescriptionLimit } from '@libs/code-review/utils/fit-pr-description';
+import { buildCommentFromSuggestion } from '@libs/common/utils/comment-builder.utils';
 import {
     BehaviourForExistingDescription,
     BehaviourForNewCommits,
@@ -19,6 +21,7 @@ import {
     CodeSuggestion,
     Comment,
     CommentResult,
+    FallbackSuggestionsBySeverity,
     FileChange,
     SummaryConfig,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
@@ -38,6 +41,9 @@ import {
 import { ObservabilityService } from '@libs/core/log/observability.service';
 import { CodeManagementService } from '@libs/platform/infrastructure/adapters/services/codeManagement.service';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
+import { byokToVercelModel } from '@libs/code-review/infrastructure/agents/llm/byok-to-vercel';
+import { tracedGenerateText } from '@libs/code-review/infrastructure/agents/llm/agent-loop';
+import { buildLangfuseTelemetry } from '@libs/core/log/langfuse';
 import {
     getTranslationsForLanguageByCategory,
     TranslationsCategory,
@@ -45,6 +51,8 @@ import {
 import { prompt_repeated_suggestion_clustering_system } from '@libs/common/utils/langchainCommon/prompts/repeatedCodeReviewSuggestionClustering';
 import { createLogger } from '@kodus/flow';
 import { DeliveryStatus } from '@libs/platformData/domain/pullRequests/enums/deliveryStatus.enum';
+import { PriorityStatus } from '@libs/platformData/domain/pullRequests/enums/priorityStatus.enum';
+import { estimateTokens, tokensToChars } from './utils/token-estimator';
 
 interface ClusteredSuggestion {
     id: string;
@@ -70,6 +78,68 @@ export class CommentManagerService implements ICommentManagerService {
         this.llmResponseProcessor = new LLMResponseProcessor();
     }
 
+    /**
+     * Run a one-shot text prompt for the PR summary through the v5 (Vercel AI
+     * SDK) path so the user's BYOK model — including Claude-on-Vertex — is
+     * honored. The legacy v2 langchain path (PromptRunnerService) only spoke
+     * Gemini on Vertex, so a Claude-on-Vertex BYOK crashed the summary step
+     * before suggestions could be posted. Falls back to gemini-2.5-flash when
+     * no BYOK is configured (cloud default), matching the previous behavior.
+     */
+    private async runSummaryPromptV5(params: {
+        byokConfig: BYOKConfig | null;
+        systemPrompt: string;
+        userPrompt: string;
+        runName: string;
+        spanName: string;
+        attrs: Record<string, unknown>;
+        metadata?: {
+            organizationId?: string;
+            teamId?: string;
+            pullRequestId?: number;
+        };
+    }): Promise<string> {
+        const {
+            byokConfig,
+            systemPrompt,
+            userPrompt,
+            runName,
+            spanName,
+            attrs,
+            metadata,
+        } = params;
+
+        const { result } = await this.observabilityService.runLLMInSpan<string>(
+            {
+                spanName,
+                runName,
+                attrs,
+                byokConfig: byokConfig ?? undefined,
+                exec: async () => {
+                    const model = byokToVercelModel(
+                        byokConfig ?? undefined,
+                        'main',
+                        {},
+                        'gemini-2.5-flash',
+                    );
+                    const res: any = await tracedGenerateText({
+                        model: model as any,
+                        system: systemPrompt,
+                        prompt: userPrompt,
+                        temperature: byokConfig?.main?.temperature ?? 0,
+                        experimental_telemetry: buildLangfuseTelemetry(
+                            runName,
+                            metadata,
+                        ),
+                    });
+                    return (res?.text as string) ?? '';
+                },
+            },
+        );
+
+        return result;
+    }
+
     async generateSummaryPR(
         pullRequest: any,
         repository: { name: string; id: string },
@@ -81,6 +151,7 @@ export class CommentManagerService implements ICommentManagerService {
         isCommitRun?: boolean,
         prPreview?: boolean,
         externalPromptContext?: any,
+        platformType?: PlatformType,
     ): Promise<string> {
         let byokConfigValue: BYOKConfig | null = byokConfig ?? null;
 
@@ -186,89 +257,185 @@ export class CommentManagerService implements ICommentManagerService {
                     - **Target Branch**: \`${pullRequest?.base?.ref}\`
                     - **Title**: ${pullRequest?.title || 'Untitled'}`;
 
-                const baseContext = {
-                    changedFiles,
-                    pullRequest,
-                    repository,
-                    summaryConfig,
-                    languageResultPrompt,
-                    updatedPR,
-                };
-
-                let userPrompt = '';
-
-                if (
-                    isCommitRun &&
-                    summaryConfig?.behaviourForNewCommits ===
-                        BehaviourForNewCommits.REPLACE
-                ) {
-                    userPrompt = `
-                    This is the updated pull request summary:
-                    <pullRequestSummaryContext>${updatedPR?.body || 'No pull request summary'}</pullRequestSummaryContext>
-                    Use this summary to concatenate the existing pull request summary with the new changed files context:`;
+                if (platformType === PlatformType.AZURE_REPOS) {
+                    const azureLimit = getPRDescriptionLimit(
+                        PlatformType.AZURE_REPOS,
+                    );
+                    if (azureLimit) {
+                        const target = Math.floor(azureLimit * 0.8);
+                        // Pin formatting to en-US so the prompt stays
+                        // deterministic regardless of the server's locale
+                        // (default `toLocaleString()` would render `4.000`
+                        // on pt-BR machines and `4,000` on en-US, which
+                        // also broke the unit test on non-en-US dev boxes).
+                        promptBase += `\n\n**Length Constraint (Azure DevOps)**:
+                    - Azure DevOps rejects pull request descriptions longer than ${azureLimit.toLocaleString('en-US')} characters with HTTP 400.
+                    - Aim for AT MOST ${target.toLocaleString('en-US')} characters in your output. The remaining budget is reserved for the user's existing PR body, summary markers, and separators.
+                    - Be concise. Prioritise the most impactful changes; collapse trivial ones.`;
+                    }
                 }
 
-                const fallbackProvider = LLMModelProvider.OPENAI_GPT_4O;
-                userPrompt += `<changedFilesContext>${JSON.stringify(baseContext?.changedFiles) || 'No files changed'}</changedFilesContext>`;
-
-                const promptRunner = new BYOKPromptRunnerService(
-                    this.promptRunnerService,
-                    LLMModelProvider.GEMINI_2_5_FLASH,
-                    fallbackProvider,
-                    byokConfigValue,
-                );
+                // For REPLACE on commit runs, the caller now provides the full PR
+                // diff (base...head), so the LLM generates a fresh summary from
+                // scratch — no need to inject the previous summary as context.
 
                 const runName = 'generateSummaryPR';
                 const spanName = `${CommentManagerService.name}::${runName}`;
                 const spanAttrs = {
-                    type: promptRunner.executeMode,
+                    type: byokConfigValue ? 'byok' : 'system',
                     organizationId: organizationAndTeamData?.organizationId,
                     prNumber: pullRequest?.number,
                     repositoryId: repository?.id,
                 };
 
-                const { result } =
-                    await this.observabilityService.runLLMInSpan<string>({
-                        spanName,
-                        runName,
-                        attrs: spanAttrs,
-                        exec: async (callbacks) => {
-                            return await promptRunner
-                                .builder()
-                                .setParser(ParserType.STRING)
-                                .setLLMJsonMode(false)
-                                .setPayload(baseContext)
-                                .addPrompt({
-                                    prompt: promptBase,
-                                    role: PromptRole.SYSTEM,
-                                })
-                                .addPrompt({
-                                    prompt: userPrompt,
-                                    role: PromptRole.USER,
-                                })
-                                .addMetadata({
-                                    organizationId:
-                                        organizationAndTeamData?.organizationId,
-                                    teamId: organizationAndTeamData?.teamId,
-                                    pullRequestId: pullRequest?.number,
-                                    repositoryId: repository?.id,
-                                    provider:
-                                        byokConfigValue?.main?.provider ||
-                                        LLMModelProvider.GEMINI_2_5_FLASH,
-                                    fallbackProvider:
-                                        byokConfigValue?.fallback?.provider ||
-                                        fallbackProvider,
-                                    model: byokConfigValue?.main?.model,
-                                    fallbackModel:
-                                        byokConfigValue?.fallback?.model,
-                                    runName,
-                                })
-                                .addCallbacks(callbacks)
-                                .setRunName(runName)
-                                .setTemperature(0)
-                                .execute();
+                const summaryMeta = {
+                    organizationId: organizationAndTeamData?.organizationId,
+                    teamId: organizationAndTeamData?.teamId,
+                    pullRequestId: pullRequest?.number,
+                };
+
+                // --- Chunk changedFiles if maxInputTokens is configured ---
+                const maxInputTokens = byokConfigValue?.main?.maxInputTokens;
+
+                const fileChunks = this.chunkChangedFilesForSummary(
+                    changedFiles,
+                    promptBase,
+                    '',
+                    maxInputTokens,
+                );
+
+                // More than 4 chunks → skip summary generation
+                if (!fileChunks) {
+                    this.logger.warn({
+                        message: `Skipping PR summary generation: changedFiles exceed max 4 chunks for PR#${pullRequest?.number}`,
+                        context: CommentManagerService.name,
+                        metadata: {
+                            organizationAndTeamData,
+                            pullRequestNumber: pullRequest?.number,
+                            maxInputTokens,
                         },
                     });
+                    return null;
+                }
+
+                let result: string;
+
+                if (fileChunks.length === 1) {
+                    // Single chunk — normal path (no chunking needed)
+                    const userPrompt =
+                        `<changedFilesContext>${JSON.stringify(fileChunks[0]) || 'No files changed'}</changedFilesContext>`;
+
+                    result = await this.runSummaryPromptV5({
+                        byokConfig: byokConfigValue,
+                        systemPrompt: promptBase,
+                        userPrompt,
+                        runName,
+                        spanName,
+                        attrs: spanAttrs,
+                        metadata: summaryMeta,
+                    });
+                } else {
+                    // Multiple chunks (2–4) — generate partial summaries then consolidate
+                    this.logger.log({
+                        message: `Generating PR summary in ${fileChunks.length} chunks for PR#${pullRequest?.number}`,
+                        context: CommentManagerService.name,
+                        metadata: {
+                            organizationAndTeamData,
+                            pullRequestNumber: pullRequest?.number,
+                            totalChunks: fileChunks.length,
+                            maxInputTokens,
+                        },
+                    });
+
+                    // Chunk summaries are independent (each summarizes a
+                    // distinct subset of files), so run them concurrently.
+                    // allSettled (not all) so a single chunk failing — e.g. a
+                    // transient LLM / rate-limit error, more likely now that the
+                    // calls run in parallel — doesn't discard the summaries that
+                    // did succeed; the empty-result guard below handles the
+                    // all-failed case. Order is preserved by index. Chunk count
+                    // is small (2–4).
+                    const chunkResults = await Promise.allSettled(
+                        fileChunks.map((chunk, i) => {
+                            const chunkUserPrompt =
+                                `<changedFilesContext>${JSON.stringify(chunk)}</changedFilesContext>`;
+
+                            const chunkRunName = `${runName}_chunk_${i + 1}`;
+                            const chunkSpanName = `${CommentManagerService.name}::${chunkRunName}`;
+
+                            return this.runSummaryPromptV5({
+                                byokConfig: byokConfigValue,
+                                systemPrompt:
+                                    promptBase +
+                                    `\n\n**Note**: This is chunk ${i + 1} of ${fileChunks.length}. Generate a summary for these files only.`,
+                                userPrompt: chunkUserPrompt,
+                                runName: chunkRunName,
+                                spanName: chunkSpanName,
+                                attrs: {
+                                    ...spanAttrs,
+                                    chunkIndex: i,
+                                    totalChunks: fileChunks.length,
+                                },
+                                metadata: summaryMeta,
+                            });
+                        }),
+                    );
+
+                    const partialSummaries: string[] = [];
+                    chunkResults.forEach((chunkResult, i) => {
+                        if (chunkResult.status === 'fulfilled') {
+                            if (chunkResult.value) {
+                                partialSummaries.push(chunkResult.value);
+                            }
+                        } else {
+                            this.logger.warn({
+                                message: `Chunk ${i + 1}/${fileChunks.length} failed for generateSummaryPR: PR#${pullRequest?.number}`,
+                                context: CommentManagerService.name,
+                                error: chunkResult.reason?.message,
+                                metadata: {
+                                    organizationAndTeamData,
+                                    pullRequestNumber: pullRequest?.number,
+                                },
+                            });
+                        }
+                    });
+
+                    if (partialSummaries.length === 0) {
+                        this.logger.error({
+                            message: `All chunks returned empty for generateSummaryPR: PR#${pullRequest?.number}`,
+                            context: CommentManagerService.name,
+                            metadata: { organizationAndTeamData, pullRequest },
+                        });
+                        throw new Error(
+                            'No result returned from generateSummaryPR',
+                        );
+                    }
+
+                    // Consolidation call: merge partial summaries into one
+                    const consolidationRunName = `${runName}_consolidation`;
+                    const consolidationSpanName = `${CommentManagerService.name}::${consolidationRunName}`;
+
+                    const consolidationPrompt = `You are given ${partialSummaries.length} partial pull request summaries generated from different subsets of the changed files.
+Merge them into a single, cohesive pull request description. Remove duplicate information and organize the content logically.
+You must always respond in ${languageResultPrompt}.`;
+
+                    const consolidationUserPrompt = partialSummaries
+                        .map(
+                            (s, i) =>
+                                `<partialSummary index="${i + 1}">\n${s}\n</partialSummary>`,
+                        )
+                        .join('\n\n');
+
+                    result = await this.runSummaryPromptV5({
+                        byokConfig: byokConfigValue,
+                        systemPrompt: consolidationPrompt,
+                        userPrompt: consolidationUserPrompt,
+                        runName: consolidationRunName,
+                        spanName: consolidationSpanName,
+                        attrs: spanAttrs,
+                        metadata: summaryMeta,
+                    });
+                }
 
                 if (!result) {
                     this.logger.error({
@@ -321,8 +488,9 @@ export class CommentManagerService implements ICommentManagerService {
                                     `${startMarker}\n${newSummary}\n${endMarker}`,
                                 );
                             } else {
-                                // No block — replace whole body
-                                finalDescription = `${startMarker}\n${newSummary}\n${endMarker}`;
+                                finalDescription = existingBody
+                                    ? `${existingBody}\n\n${startMarker}\n${newSummary}\n${endMarker}`
+                                    : `${startMarker}\n${newSummary}\n${endMarker}`;
                             }
                             break;
                         case BehaviourForNewCommits.CONCATENATE:
@@ -351,6 +519,21 @@ export class CommentManagerService implements ICommentManagerService {
                         summaryConfig?.behaviourForExistingDescription ===
                             BehaviourForExistingDescription.CONCATENATE
                     ) {
+                        // Re-runs of the same PR shouldn't keep stacking
+                        // `<!-- kody-pr-summary:start --> ... :end -->`
+                        // blocks (issue #1019). Strip any previous block
+                        // — and the `\n\n---\n\n` separator we emit
+                        // before it — from the existing body before
+                        // concatenating the freshly-generated one.
+                        const previousBlockWithSeparator =
+                            /\n*---\n*<!-- kody-pr-summary:start -->[\s\S]*?<!-- kody-pr-summary:end -->/g;
+                        const previousBlockStandalone =
+                            /<!-- kody-pr-summary:start -->[\s\S]*?<!-- kody-pr-summary:end -->/g;
+                        const cleanedBody = updatedPR.body
+                            .replace(previousBlockWithSeparator, '')
+                            .replace(previousBlockStandalone, '')
+                            .trimEnd();
+
                         // Log for debugging
                         this.logger.log({
                             message: `GenerateSummaryPR: Concatenate behavior for PR#${pullRequest?.number}. Before concatenate`,
@@ -361,10 +544,13 @@ export class CommentManagerService implements ICommentManagerService {
                                 repositoryId: repository?.id,
                                 summaryConfig,
                                 body: updatedPR?.body,
+                                cleanedBody,
                             },
                         });
 
-                        finalDescription = `${updatedPR.body}\n\n---\n\n${finalDescription}`;
+                        if (cleanedBody) {
+                            finalDescription = `${cleanedBody}\n\n---\n\n${finalDescription}`;
+                        }
                     }
                 }
 
@@ -635,9 +821,16 @@ export class CommentManagerService implements ICommentManagerService {
         threadId?: number,
         finalCommentBody?: string,
         dryRun?: CodeReviewPipelineContext['dryRun'],
+        reviewFailed?: boolean,
+        reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void> {
         try {
-            let commentBody = finalCommentBody;
+            // When the review failed, we cannot honor a customer-configured
+            // endReviewMessage template — those say "review completed", which
+            // would be a lie. Force the default summary path so the
+            // `withErrors` variant renders the real reason.
+            let commentBody = reviewFailed ? undefined : finalCommentBody;
 
             if (!commentBody || commentBody === '') {
                 commentBody = await this.generateLastReviewCommenBody(
@@ -646,7 +839,27 @@ export class CommentManagerService implements ICommentManagerService {
                     platformType,
                     codeSuggestions,
                     codeReviewConfig,
+                    undefined,
+                    reviewFailed,
+                    reviewErrorMessage,
+                    reviewHasPartialErrors,
                 );
+            } else if (reviewHasPartialErrors) {
+                // Custom end-review template is rendering — the default
+                // path's suffix wiring doesn't run here, so we append the
+                // partial-errors notice ourselves. Without this the user
+                // sees their template's "all good" message + no approval
+                // and assumes auto-approve is broken. Adaptive-fit
+                // fidelity warnings are intentionally NOT rendered in
+                // the PR comment — they surface in the web app's Pull
+                // Requests admin dashboard via dataExecution.reviewWarnings.
+                const notice = this.resolvePartialErrorsNotice(
+                    codeReviewConfig?.languageResultPrompt ??
+                        LanguageValue.ENGLISH,
+                );
+                if (notice) {
+                    commentBody = `${commentBody}${notice}`;
+                }
             }
 
             await this.codeManagementService.updateIssueComment(
@@ -697,6 +910,9 @@ export class CommentManagerService implements ICommentManagerService {
         codeSuggestions?: Array<CommentResult>,
         codeReviewConfig?: CodeReviewConfig,
         prLevelCommentResults?: Array<CommentResult>,
+        reviewFailed?: boolean,
+        reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<string> {
         let commentBody = await this.generatePullRequestFinishSummaryMarkdown(
             organizationAndTeamData,
@@ -704,6 +920,9 @@ export class CommentManagerService implements ICommentManagerService {
             codeSuggestions,
             codeReviewConfig,
             prLevelCommentResults,
+            reviewFailed,
+            reviewErrorMessage,
+            reviewHasPartialErrors,
         );
 
         commentBody = this.sanitizeBitbucketMarkdown(commentBody, platformType);
@@ -719,6 +938,7 @@ export class CommentManagerService implements ICommentManagerService {
         language: string,
         dryRun: CodeReviewPipelineContext['dryRun'],
         suggestionCopyPrompt?: boolean,
+        fallbackSuggestionsBySeverity?: FallbackSuggestionsBySeverity,
     ): Promise<{
         lastAnalyzedCommit: any;
         commits: any[];
@@ -776,38 +996,142 @@ export class CommentManagerService implements ICommentManagerService {
 
             for (const comment of lineComments) {
                 try {
-                    const createdComment =
-                        await this.codeManagementService.createReviewComment(
-                            {
-                                organizationAndTeamData,
-                                repository,
-                                commit: lastAnalyzedCommit,
+                    const { createdComment, attemptUsed } =
+                        await this.createReviewCommentWithRetry({
+                            organizationAndTeamData,
+                            repository,
+                            commit: lastAnalyzedCommit,
+                            prNumber,
+                            lineComment: comment,
+                            language,
+                            dryRun,
+                            suggestionCopyPrompt,
+                        });
+
+                    if (attemptUsed > 1) {
+                        this.logger.log({
+                            message: `Comment created successfully on attempt ${attemptUsed} for PR#${prNumber}`,
+                            context: CommentManagerService.name,
+                            metadata: {
                                 prNumber,
-                                lineComment: comment,
-                                language,
-                                dryRun,
-                                suggestionCopyPrompt,
+                                repository,
+                                suggestionId: comment.suggestion?.id,
+                                attemptUsed,
+                                originalStartLine: comment.start_line,
+                                originalEndLine: comment.line,
                             },
-                            dryRun?.enabled ? PlatformType.INTERNAL : undefined,
-                        );
+                        });
+                    }
+
+                    const commentId = createdComment?.id;
+                    const pullRequestReviewId =
+                        createdComment?.pull_request_review_id ??
+                        createdComment?.pullRequestReviewId;
+
+                    if (!commentId || !pullRequestReviewId) {
+                        this.logger.error({
+                            message: `Comment created but missing critical IDs in response for PR#${prNumber}`,
+                            context: CommentManagerService.name,
+                            metadata: {
+                                prNumber,
+                                repository,
+                                suggestionId: comment.suggestion?.id,
+                                commentId,
+                                pullRequestReviewId,
+                                createdCommentKeys: createdComment
+                                    ? Object.keys(createdComment)
+                                    : [],
+                                organizationAndTeamData,
+                            },
+                        });
+                    }
 
                     commentResults.push({
                         comment,
                         deliveryStatus: DeliveryStatus.SENT,
                         codeReviewFeedbackData: {
-                            commentId: createdComment?.id,
-                            pullRequestReviewId:
-                                createdComment?.pull_request_review_id ??
-                                createdComment?.pullRequestReviewId,
+                            commentId,
+                            pullRequestReviewId,
                             suggestionId: comment.suggestion.id,
                         },
                     });
                 } catch (error) {
-                    commentResults.push({
-                        comment,
-                        deliveryStatus:
-                            error.errorType || DeliveryStatus.FAILED,
+                    // Try fallback suggestion of same severity
+                    const fallbackResult = await this.tryFallbackSuggestion({
+                        originalComment: comment,
+                        originalError: error,
+                        fallbackSuggestionsBySeverity,
+                        organizationAndTeamData,
+                        repository,
+                        commit: lastAnalyzedCommit,
+                        prNumber,
+                        language,
+                        dryRun,
+                        suggestionCopyPrompt,
                     });
+
+                    if (fallbackResult.success) {
+                        // Original suggestion was replaced
+                        commentResults.push({
+                            comment,
+                            deliveryStatus: DeliveryStatus.REPLACED,
+                        });
+
+                        // Fallback suggestion was sent successfully
+                        const fallbackCommentId =
+                            fallbackResult.createdComment?.id;
+                        const fallbackPullRequestReviewId =
+                            fallbackResult.createdComment
+                                ?.pull_request_review_id ??
+                            fallbackResult.createdComment?.pullRequestReviewId;
+
+                        if (
+                            !fallbackCommentId ||
+                            !fallbackPullRequestReviewId
+                        ) {
+                            this.logger.error({
+                                message: `Fallback comment created but missing critical IDs in response for PR#${prNumber}`,
+                                context: CommentManagerService.name,
+                                metadata: {
+                                    prNumber,
+                                    repository,
+                                    suggestionId:
+                                        fallbackResult.fallbackComment
+                                            .suggestion?.id,
+                                    commentId: fallbackCommentId,
+                                    pullRequestReviewId:
+                                        fallbackPullRequestReviewId,
+                                    createdCommentKeys:
+                                        fallbackResult.createdComment
+                                            ? Object.keys(
+                                                  fallbackResult.createdComment,
+                                              )
+                                            : [],
+                                    organizationAndTeamData,
+                                },
+                            });
+                        }
+
+                        commentResults.push({
+                            comment: fallbackResult.fallbackComment,
+                            deliveryStatus: DeliveryStatus.SENT,
+                            codeReviewFeedbackData: {
+                                commentId: fallbackCommentId,
+                                pullRequestReviewId:
+                                    fallbackPullRequestReviewId,
+                                suggestionId:
+                                    fallbackResult.fallbackComment.suggestion
+                                        .id,
+                            },
+                        });
+                    } else {
+                        // No fallback available or all fallbacks failed
+                        commentResults.push({
+                            comment,
+                            deliveryStatus:
+                                error.errorType || DeliveryStatus.FAILED,
+                        });
+                    }
                 }
             }
 
@@ -828,12 +1152,340 @@ export class CommentManagerService implements ICommentManagerService {
         }
     }
 
+    /**
+     * Attempts to create a review comment with resilient retry logic.
+     * Strategy:
+     * - Attempt 1: Normal call with original start_line and line
+     * - If line mismatch error: Attempt 2 with start_line = line (single line at end)
+     * - If still line mismatch error: Attempt 3 with line = start_line (single line at start)
+     * - For transient errors (5xx, network): retry once with 500ms delay
+     * - Definitive errors (401, 403, 404) are not retried
+     */
+    private async createReviewCommentWithRetry(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { name: string; id: string; language: string };
+        commit: any;
+        prNumber: number;
+        lineComment: Comment;
+        language: string;
+        dryRun: CodeReviewPipelineContext['dryRun'];
+        suggestionCopyPrompt?: boolean;
+    }): Promise<{ createdComment: any; attemptUsed: number }> {
+        const { lineComment, dryRun, ...restParams } = params;
+        const NON_RETRYABLE_STATUS_CODES = [401, 403, 404];
+        const TRANSIENT_RETRY_DELAY_MS = 500;
+
+        const isLineMismatchError = (error: any): boolean => {
+            return error?.errorType === 'failed_lines_mismatch';
+        };
+
+        const isTransientError = (error: any): boolean => {
+            const status = error?.status || error?.response?.status;
+            if (status >= 500 && status < 600) return true;
+            if (error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT')
+                return true;
+            return false;
+        };
+
+        const isNonRetryableError = (error: any): boolean => {
+            const status = error?.status || error?.response?.status;
+            return NON_RETRYABLE_STATUS_CODES.includes(status);
+        };
+
+        const sleep = (ms: number) =>
+            new Promise((resolve) => setTimeout(resolve, ms));
+
+        const attemptCreateComment = async (comment: Comment): Promise<any> => {
+            return this.codeManagementService.createReviewComment(
+                {
+                    ...restParams,
+                    lineComment: comment,
+                    dryRun,
+                },
+                dryRun?.enabled ? PlatformType.INTERNAL : undefined,
+            );
+        };
+
+        // Attempt 1: Original lines
+        try {
+            const createdComment = await attemptCreateComment(lineComment);
+            return { createdComment, attemptUsed: 1 };
+        } catch (error) {
+            if (isNonRetryableError(error)) {
+                throw error;
+            }
+
+            // For transient errors, retry once with delay
+            if (isTransientError(error)) {
+                this.logger.warn({
+                    message: `Transient error creating comment, retrying after ${TRANSIENT_RETRY_DELAY_MS}ms`,
+                    context: CommentManagerService.name,
+                    metadata: {
+                        prNumber: params.prNumber,
+                        suggestionId: lineComment.suggestion?.id,
+                        errorCode: error?.code,
+                        errorStatus: error?.status,
+                    },
+                });
+
+                await sleep(TRANSIENT_RETRY_DELAY_MS);
+
+                const createdComment = await attemptCreateComment(lineComment);
+                return { createdComment, attemptUsed: 1 };
+            }
+
+            // For line mismatch errors, try adjusting lines
+            if (!isLineMismatchError(error)) {
+                throw error;
+            }
+
+            this.logger.warn({
+                message: `Line mismatch error on attempt 1, trying with start_line = line`,
+                context: CommentManagerService.name,
+                metadata: {
+                    prNumber: params.prNumber,
+                    suggestionId: lineComment.suggestion?.id,
+                    originalStartLine: lineComment.start_line,
+                    originalEndLine: lineComment.line,
+                },
+            });
+
+            // Attempt 2: Set start_line = line (single line at end position)
+            const commentAttempt2: Comment = {
+                ...lineComment,
+                start_line: lineComment.line,
+            };
+
+            try {
+                const createdComment =
+                    await attemptCreateComment(commentAttempt2);
+                return { createdComment, attemptUsed: 2 };
+            } catch (error2) {
+                if (
+                    isNonRetryableError(error2) ||
+                    !isLineMismatchError(error2)
+                ) {
+                    throw error2;
+                }
+
+                this.logger.warn({
+                    message: `Line mismatch error on attempt 2, trying with line = start_line`,
+                    context: CommentManagerService.name,
+                    metadata: {
+                        prNumber: params.prNumber,
+                        suggestionId: lineComment.suggestion?.id,
+                        originalStartLine: lineComment.start_line,
+                        originalEndLine: lineComment.line,
+                    },
+                });
+
+                // Attempt 3: Set line = start_line (single line at start position)
+                const commentAttempt3: Comment = {
+                    ...lineComment,
+                    line: lineComment.start_line,
+                };
+
+                const createdComment =
+                    await attemptCreateComment(commentAttempt3);
+                return { createdComment, attemptUsed: 3 };
+            }
+        }
+    }
+
+    /**
+     * Attempts to find and comment a fallback suggestion of the same severity
+     * when the original suggestion fails all retry attempts.
+     * Keeps trying until a fallback succeeds or no more fallbacks are available.
+     */
+    private async tryFallbackSuggestion(params: {
+        originalComment: Comment;
+        originalError: any;
+        fallbackSuggestionsBySeverity?: FallbackSuggestionsBySeverity;
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: { name: string; id: string; language: string };
+        commit: any;
+        prNumber: number;
+        language: string;
+        dryRun: CodeReviewPipelineContext['dryRun'];
+        suggestionCopyPrompt?: boolean;
+    }): Promise<{
+        success: boolean;
+        fallbackComment?: Comment;
+        createdComment?: any;
+    }> {
+        const {
+            originalComment,
+            fallbackSuggestionsBySeverity,
+            organizationAndTeamData,
+            repository,
+            commit,
+            prNumber,
+            language,
+            dryRun,
+            suggestionCopyPrompt,
+        } = params;
+
+        // If no fallback suggestions available, return failure
+        if (!fallbackSuggestionsBySeverity) {
+            return { success: false };
+        }
+
+        const originalSeverity =
+            (originalComment.suggestion?.severity?.toLowerCase() as keyof FallbackSuggestionsBySeverity) ||
+            'low';
+
+        const fallbackArray = fallbackSuggestionsBySeverity[originalSeverity];
+
+        // If no fallbacks for this severity, return failure
+        if (!fallbackArray || fallbackArray.length === 0) {
+            this.logger.log({
+                message: `No fallback suggestions available for severity ${originalSeverity}`,
+                context: CommentManagerService.name,
+                metadata: {
+                    prNumber,
+                    originalSuggestionId: originalComment.suggestion?.id,
+                    severity: originalSeverity,
+                },
+            });
+            return { success: false };
+        }
+
+        // Try each available fallback suggestion until one succeeds
+        for (const fallbackSuggestion of fallbackArray) {
+            // Skip if already repriorized (already attempted)
+            if (
+                fallbackSuggestion.priorityStatus === PriorityStatus.REPRIORIZED
+            ) {
+                continue;
+            }
+
+            // Mark as repriorized before attempting (mutate original object)
+            fallbackSuggestion.priorityStatus = PriorityStatus.REPRIORIZED;
+
+            this.logger.log({
+                message: `Attempting fallback suggestion for PR#${prNumber}`,
+                context: CommentManagerService.name,
+                metadata: {
+                    prNumber,
+                    originalSuggestionId: originalComment.suggestion?.id,
+                    fallbackSuggestionId: fallbackSuggestion.id,
+                    severity: originalSeverity,
+                },
+            });
+
+            // Build comment from fallback suggestion
+            const fallbackComment = buildCommentFromSuggestion(
+                fallbackSuggestion,
+                repository.language,
+            );
+
+            try {
+                const { createdComment } =
+                    await this.createReviewCommentWithRetry({
+                        organizationAndTeamData,
+                        repository,
+                        commit,
+                        prNumber,
+                        lineComment: fallbackComment,
+                        language,
+                        dryRun,
+                        suggestionCopyPrompt,
+                    });
+
+                this.logger.log({
+                    message: `Fallback suggestion commented successfully for PR#${prNumber}`,
+                    context: CommentManagerService.name,
+                    metadata: {
+                        prNumber,
+                        originalSuggestionId: originalComment.suggestion?.id,
+                        fallbackSuggestionId: fallbackSuggestion.id,
+                        severity: originalSeverity,
+                    },
+                });
+
+                return {
+                    success: true,
+                    fallbackComment,
+                    createdComment,
+                };
+            } catch (fallbackError) {
+                this.logger.warn({
+                    message: `Fallback suggestion also failed for PR#${prNumber}, trying next`,
+                    context: CommentManagerService.name,
+                    metadata: {
+                        prNumber,
+                        originalSuggestionId: originalComment.suggestion?.id,
+                        fallbackSuggestionId: fallbackSuggestion.id,
+                        severity: originalSeverity,
+                        errorType: fallbackError?.errorType,
+                    },
+                });
+                // Continue to next fallback
+            }
+        }
+
+        // All fallbacks exhausted
+        this.logger.log({
+            message: `All fallback suggestions exhausted for severity ${originalSeverity}`,
+            context: CommentManagerService.name,
+            metadata: {
+                prNumber,
+                originalSuggestionId: originalComment.suggestion?.id,
+                severity: originalSeverity,
+            },
+        });
+
+        return { success: false };
+    }
+
+    /**
+     * Build the localized `partialErrorsNotice` suffix with the dashboard
+     * URL already interpolated. Returns undefined when no notice is
+     * configured for the given language and the en-US fallback is also
+     * missing — caller should treat that as "nothing to append."
+     *
+     * Lives as its own method so the default-path renderer AND the
+     * customer-end-review-template paths can share it: both need the
+     * suffix when reviewHasPartialErrors is true, otherwise the custom
+     * template would render the optimistic copy and silently skip the
+     * "auto-approve was paused" notice — exactly the "looks like a bug"
+     * UX the suffix exists to prevent.
+     */
+    private resolvePartialErrorsNotice(language: string): string | undefined {
+        const translation = getTranslationsForLanguageByCategory(
+            language as LanguageValue,
+            TranslationsCategory.PullRequestFinishSummaryMarkdown,
+        );
+        const notice =
+            translation?.partialErrorsNotice ??
+            getTranslationsForLanguageByCategory(
+                LanguageValue.ENGLISH,
+                TranslationsCategory.PullRequestFinishSummaryMarkdown,
+            )?.partialErrorsNotice;
+        if (!notice) {
+            return undefined;
+        }
+        // Resolve the dashboard URL from the env var, with a public-domain
+        // fallback so the link never breaks even in environments where
+        // the var is missing.
+        const dashboardBase = (
+            process.env.API_USER_INVITE_BASE_URL || 'https://app.kodus.io'
+        ).replace(/\/+$/, '');
+        return notice.replace(
+            /\{\{dashboardUrl\}\}/g,
+            `${dashboardBase}/pull-requests`,
+        );
+    }
+
     private async generatePullRequestFinishSummaryMarkdown(
         organizationAndTeamData: OrganizationAndTeamData,
         prNumber: number,
         commentResults?: Array<CommentResult>,
         codeReviewConfig?: CodeReviewConfig,
         prLevelCommentResults?: Array<CommentResult>,
+        reviewFailed?: boolean,
+        reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<string> {
         try {
             const language =
@@ -859,15 +1511,65 @@ export class CommentManagerService implements ICommentManagerService {
 
             const hasComments = hasPrLevelComments || hasFileComments;
 
-            const resultText = hasComments
-                ? translation.withComments
-                : translation.withoutComments;
+            // Failure variant takes priority: when the agent engine flagged
+            // the review as failed (critical errors on the pipeline) we
+            // cannot honestly tell the user "review completed" — even if
+            // the legacy hasComments path would also produce 0 suggestions.
+            // The dictionary's `withErrors` template includes the
+            // `{{errorMessage}}` placeholder that we fill with the human-
+            // readable reason; older dictionaries may not have the key,
+            // in which case we fall back to en-US.
+            let resultText: string | undefined;
+            if (reviewFailed) {
+                resultText =
+                    translation.withErrors ??
+                    getTranslationsForLanguageByCategory(
+                        LanguageValue.ENGLISH,
+                        TranslationsCategory.PullRequestFinishSummaryMarkdown,
+                    )?.withErrors;
+                if (resultText) {
+                    const errorMessage =
+                        reviewErrorMessage?.trim() ||
+                        'Unexpected error while running the code review.';
+                    resultText = resultText.replace(
+                        /\{\{errorMessage\}\}/g,
+                        errorMessage,
+                    );
+                }
+            }
+
+            if (!resultText) {
+                // Non-failed runs (full SUCCESS and PARTIAL_ERROR where only
+                // auxiliary work failed, e.g. kody-rules) share the same
+                // base copy. For PARTIAL_ERROR we still append a short notice
+                // explaining why auto-approve didn't fire — otherwise the
+                // user sees "review completed" + no approval and thinks
+                // approve is broken.
+                resultText = hasComments
+                    ? translation.withComments
+                    : translation.withoutComments;
+
+                if (reviewHasPartialErrors) {
+                    const notice = this.resolvePartialErrorsNotice(language);
+                    if (notice) {
+                        resultText = `${resultText}${notice}`;
+                    }
+                }
+            }
 
             if (!resultText) {
                 throw new Error(
                     `No result text found for language: ${language}`,
                 );
             }
+
+            // Adaptive-fit fidelity warnings are NOT rendered in the
+            // GitHub PR comment — PR authors don't care that the review
+            // was compacted, only that it failed (and CONTEXT_OVERFLOW
+            // failures already render via the `withErrors` template +
+            // friendlyMessage). The warnings ARE persisted to
+            // automation_execution.dataExecution.reviewWarnings for the
+            // admin-facing Pull Requests dashboard in the Kodus web app.
 
             // Add unique tag with timestamp to identify this comment as completed
             const uniqueId = `completed-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1067,6 +1769,7 @@ ${reviewOptions}
                     spanName,
                     runName,
                     attrs: spanAttrs,
+                    byokConfig,
                     exec: async (callbacks) => {
                         return await promptRunner
                             .builder()
@@ -1658,12 +2361,17 @@ ${reviewOptions}
         pullRequestMessagesConfig?: IPullRequestMessages,
         dryRun?: CodeReviewPipelineContext['dryRun'],
         prLevelCommentResults?: Array<CommentResult>,
+        reviewFailed?: boolean,
+        reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void> {
         let commentBody: string;
 
-        if (endReviewMessage) {
-            commentBody = endReviewMessage;
-
+        // Same rationale as updateOverallComment: customer end-review
+        // templates assert success; when the review failed we override to
+        // the default path so the `withErrors` variant shows the real
+        // reason instead of a misleading "all good" template.
+        if (endReviewMessage && !reviewFailed) {
             const placeholderContext = await this.getTemplateContext(
                 changedFiles,
                 organizationAndTeamData,
@@ -1679,6 +2387,21 @@ ${reviewOptions}
             );
 
             commentBody = this.sanitizeBitbucketMarkdown(rawBody, platformType);
+
+            // Same reason as in updateOverallComment: the custom template
+            // path skips the default suffix wiring, so we append the
+            // partial-errors notice manually to keep the UX consistent
+            // (user sees template message + "auto-approve was paused").
+            if (reviewHasPartialErrors) {
+                const notice = this.resolvePartialErrorsNotice(
+                    language ?? LanguageValue.ENGLISH,
+                );
+                if (notice) {
+                    commentBody = `${commentBody}${notice}`;
+                }
+            }
+            // Adaptive-fit fidelity warnings are NOT appended to the PR
+            // comment (admin-only signal — see updateOverallComment).
         } else {
             commentBody = await this.generateLastReviewCommenBody(
                 organizationAndTeamData,
@@ -1687,6 +2410,9 @@ ${reviewOptions}
                 codeSuggestions,
                 codeReviewConfig,
                 prLevelCommentResults,
+                reviewFailed,
+                reviewErrorMessage,
+                reviewHasPartialErrors,
             );
         }
 
@@ -1733,5 +2459,92 @@ ${reviewOptions}
             language,
             platformType,
         };
+    }
+
+    /**
+     * Splits changedFiles into chunks that fit within the maxInputTokens budget.
+     *
+     * @returns Array of file groups (1–4 chunks), or null if more than 4 chunks
+     *          would be needed (caller should skip summary generation).
+     *          When maxInputTokens is not configured, returns a single chunk
+     *          containing all files.
+     */
+    private chunkChangedFilesForSummary(
+        changedFiles: Partial<FileChange>[],
+        promptBase: string,
+        userPromptPrefix: string,
+        maxInputTokens?: number,
+    ): Partial<FileChange>[][] | null {
+        // No limit configured — return all files as a single chunk
+        if (!maxInputTokens || maxInputTokens <= 0) {
+            return [changedFiles];
+        }
+
+        const MAX_CHUNKS = 4;
+
+        // Apply 90% safety margin
+        const effectiveBudget = Math.floor(maxInputTokens * 0.9);
+
+        // Estimate fixed token cost (system prompt + user prompt wrapper)
+        const fixedTokens =
+            estimateTokens(promptBase) +
+            estimateTokens(userPromptPrefix) +
+            estimateTokens('<changedFilesContext></changedFilesContext>') +
+            50; // tags and minor overhead
+
+        const availableTokens = effectiveBudget - fixedTokens;
+
+        if (availableTokens <= 0) {
+            // Budget consumed by fixed parts alone — send all best-effort
+            return [changedFiles];
+        }
+
+        // Check if all files fit in a single call
+        const allFilesSerialized = JSON.stringify(changedFiles);
+        const totalTokens = estimateTokens(allFilesSerialized);
+
+        if (totalTokens <= availableTokens) {
+            return [changedFiles];
+        }
+
+        // Need to split — group files into chunks by token cost
+        const maxCharsPerChunk = tokensToChars(availableTokens);
+
+        const chunks: Partial<FileChange>[][] = [];
+        let currentChunk: Partial<FileChange>[] = [];
+        let currentChunkChars = 2; // start with "[]" for JSON array wrapper
+
+        for (const file of changedFiles) {
+            const fileSerialized = JSON.stringify(file);
+            // +1 for the comma separator between items in JSON array
+            const fileChars = fileSerialized.length + 1;
+
+            if (
+                currentChunkChars + fileChars > maxCharsPerChunk &&
+                currentChunk.length > 0
+            ) {
+                chunks.push(currentChunk);
+
+                if (chunks.length > MAX_CHUNKS) {
+                    return null;
+                }
+
+                currentChunk = [file];
+                currentChunkChars = 2 + fileSerialized.length;
+            } else {
+                currentChunk.push(file);
+                currentChunkChars += fileChars;
+            }
+        }
+
+        if (currentChunk.length > 0) {
+            chunks.push(currentChunk);
+        }
+
+        if (chunks.length > MAX_CHUNKS) {
+            return null;
+        }
+
+        return chunks;
     }
 }

@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
+import { CentralizedConfigSyncUseCase } from '@libs/centralized-config/application/use-cases/centralized-config-sync.use-case';
 import {
     CODE_BASE_CONFIG_SERVICE_TOKEN,
     ICodeBaseConfigService,
@@ -28,11 +30,13 @@ import {
 } from '@libs/automation/domain/automation/enum/automation-status';
 import { IPullRequestMessages } from '@libs/code-review/domain/pullRequestMessages/interfaces/pullRequestMessages.interface';
 import { ConfigLevel } from '@libs/core/infrastructure/config/types/general/pullRequestMessages.type';
+import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
 
 @Injectable()
 export class ResolveConfigStage extends BasePipelineStage<CodeReviewPipelineContext> {
     readonly stageName = 'ResolveConfigStage';
+    readonly visibility = StageVisibility.SECONDARY;
 
     private readonly logger = createLogger(ResolveConfigStage.name);
 
@@ -48,6 +52,8 @@ export class ResolveConfigStage extends BasePipelineStage<CodeReviewPipelineCont
 
         @Inject(DRY_RUN_SERVICE_TOKEN)
         private readonly dryRunService: IDryRunService,
+
+        private readonly moduleRef: ModuleRef,
     ) {
         super();
     }
@@ -56,6 +62,13 @@ export class ResolveConfigStage extends BasePipelineStage<CodeReviewPipelineCont
         context: CodeReviewPipelineContext,
     ): Promise<CodeReviewPipelineContext> {
         try {
+            const forceFullRerun = Boolean(
+                context.pipelineMetadata?.forceFullRerun,
+            );
+            const baseCommit = forceFullRerun
+                ? undefined
+                : context?.lastExecution?.lastAnalyzedCommit;
+
             // Busca apenas metadados dos arquivos (sem conteúdo) - mais rápido
             // O conteúdo será buscado depois no FetchChangedFilesStage apenas para arquivos não ignorados
             const preliminaryFiles =
@@ -63,7 +76,7 @@ export class ResolveConfigStage extends BasePipelineStage<CodeReviewPipelineCont
                     context.organizationAndTeamData,
                     context.repository,
                     context.pullRequest,
-                    context?.lastExecution?.lastAnalyzedCommit,
+                    baseCommit,
                 );
 
             if (!preliminaryFiles || preliminaryFiles.length === 0) {
@@ -85,6 +98,10 @@ export class ResolveConfigStage extends BasePipelineStage<CodeReviewPipelineCont
                     };
                 });
             }
+
+            await this.syncCentralizedConfigIfEnabled(
+                context.organizationAndTeamData,
+            );
 
             const config = await this.codeBaseConfigService.getConfig(
                 context.organizationAndTeamData,
@@ -135,6 +152,37 @@ export class ResolveConfigStage extends BasePipelineStage<CodeReviewPipelineCont
                     status: AutomationStatus.SKIPPED,
                     message: AutomationMessage.FAILED_RESOLVE_CONFIG,
                 };
+            });
+        }
+    }
+
+    private async syncCentralizedConfigIfEnabled(
+        organizationAndTeamData: CodeReviewPipelineContext['organizationAndTeamData'],
+    ): Promise<void> {
+        try {
+            const centralizedConfig = await this.parametersService.findByKey(
+                ParametersKey.CENTRALIZED_CONFIG,
+                organizationAndTeamData,
+            );
+
+            if (!centralizedConfig?.configValue?.enabled) {
+                return;
+            }
+
+            const syncUseCase = await this.moduleRef.resolve(
+                CentralizedConfigSyncUseCase,
+                undefined,
+                { strict: false },
+            );
+
+            await syncUseCase.execute({ organizationAndTeamData });
+        } catch (error) {
+            this.logger.warn({
+                message:
+                    'Failed to sync centralized config before review; falling back to current DB state',
+                context: this.stageName,
+                error,
+                metadata: { organizationAndTeamData },
             });
         }
     }

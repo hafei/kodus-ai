@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository, In } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 
 import { ICodeReviewExecutionRepository } from '@libs/automation/domain/codeReviewExecutions/contracts/codeReviewExecution.repository.contract';
 import { CodeReviewExecutionEntity } from '@libs/automation/domain/codeReviewExecutions/entities/codeReviewExecution.entity';
@@ -11,6 +11,7 @@ import {
     mapSimpleModelToEntity,
 } from '@libs/core/infrastructure/repositories/mappers';
 import { createNestedConditions } from '@libs/core/infrastructure/repositories/model/filters';
+import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
 
 import { CodeReviewExecutionModel } from './schemas/codeReviewExecution.model';
 
@@ -187,38 +188,97 @@ export class CodeReviewExecutionRepository<
 
     async findManyByAutomationExecutionIds(
         uuids: string[],
+        options?: {
+            visibility?: string;
+        },
     ): Promise<CodeReviewExecutionEntity<T>[]> {
         if (!uuids.length) {
             return [];
         }
 
         try {
-            const found = await this.codeReviewExecutionRepository.find({
-                select: {
-                    uuid: true,
-                    createdAt: true,
-                    updatedAt: true,
-                    status: true,
-                    message: true,
-                    automationExecution: {
-                        uuid: true,
-                    },
-                },
-                relations: ['automationExecution'],
-                where: {
-                    automationExecution: { uuid: In(uuids) },
-                } as FindOptionsWhere<CodeReviewExecutionModel>,
-            });
+            const qb = this.codeReviewExecutionRepository
+                .createQueryBuilder('codeReviewExecution')
+                .leftJoin(
+                    'codeReviewExecution.automationExecution',
+                    'automationExecution',
+                )
+                .select([
+                    'codeReviewExecution.uuid',
+                    'codeReviewExecution.createdAt',
+                    'codeReviewExecution.updatedAt',
+                    'codeReviewExecution.status',
+                    'codeReviewExecution.stageName',
+                    'codeReviewExecution.message',
+                    'codeReviewExecution.metadata',
+                    'codeReviewExecution.finishedAt',
+                    'automationExecution.uuid',
+                ])
+                .where('automationExecution.uuid IN (:...uuids)', { uuids });
+
+            if (options?.visibility) {
+                qb.andWhere(
+                    "(codeReviewExecution.metadata ->> 'visibility' IS NULL OR codeReviewExecution.metadata ->> 'visibility' = :visibility)",
+                    { visibility: options.visibility },
+                );
+            }
+
+            qb.orderBy('codeReviewExecution.createdAt', 'ASC');
+
+            const found = await qb.getMany();
 
             return mapSimpleModelsToEntities(found, CodeReviewExecutionEntity);
         } catch (error) {
             this.logger.error({
-                message: 'Error finding code review executions by automation ids',
+                message:
+                    'Error finding code review executions by automation ids',
                 error,
                 context: CodeReviewExecutionRepository.name,
                 metadata: { uuids },
             });
             return [];
+        }
+    }
+
+    async existsByAutomationExecutionAndStageStatus(
+        executionId: string,
+        stageNames: string[],
+        statuses: AutomationStatus[],
+    ): Promise<boolean> {
+        if (!executionId || stageNames.length === 0 || statuses.length === 0) {
+            return false;
+        }
+
+        try {
+            const found = await this.codeReviewExecutionRepository
+                .createQueryBuilder('codeReviewExecution')
+                .innerJoin(
+                    'codeReviewExecution.automationExecution',
+                    'automationExecution',
+                )
+                .select('1')
+                .where('automationExecution.uuid = :executionId', {
+                    executionId,
+                })
+                .andWhere('codeReviewExecution.stageName IN (:...stageNames)', {
+                    stageNames,
+                })
+                .andWhere('codeReviewExecution.status IN (:...statuses)', {
+                    statuses,
+                })
+                .limit(1)
+                .getRawOne();
+
+            return Boolean(found);
+        } catch (error) {
+            this.logger.error({
+                message:
+                    'Error checking code review execution stage status existence',
+                error,
+                context: CodeReviewExecutionRepository.name,
+                metadata: { executionId, stageNames, statuses },
+            });
+            return false;
         }
     }
 

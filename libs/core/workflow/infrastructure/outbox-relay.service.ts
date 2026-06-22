@@ -1,12 +1,15 @@
 import * as os from 'os';
 import { createLogger } from '@kodus/flow';
 import { ObservabilityService } from '@libs/core/log/observability.service';
+import { IncidentManagerService } from '@libs/core/infrastructure/incident/incident-manager.service';
 import {
     Injectable,
     Inject,
+    Optional,
     OnApplicationBootstrap,
     OnModuleDestroy,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 import {
@@ -24,6 +27,10 @@ import {
 import { JobStatus } from '@libs/core/workflow/domain/enums/job-status.enum';
 import { ErrorClassification } from '@libs/core/workflow/domain/enums/error-classification.enum';
 import { OutboxMessageModel } from './repositories/schemas/outbox-message.model';
+import {
+    DistributedLock,
+    DistributedLockService,
+} from './distributed-lock.service';
 
 import {
     IMessageBrokerService,
@@ -34,6 +41,15 @@ import {
     calculateBackoffInterval,
     BackoffOptions,
 } from '@libs/common/utils/polling';
+import { formatHeartbeatContext } from '@libs/core/infrastructure/incident/heartbeat-context.util';
+import {
+    ISandboxLeaseManager,
+    SANDBOX_LEASE_MANAGER_TOKEN,
+} from '@libs/sandbox/domain/contracts/sandbox-lease-manager.contract';
+import {
+    SANDBOX_INVALIDATE_ROUTING_KEY,
+    SandboxInvalidatePayload,
+} from '@libs/sandbox/domain/events/sandbox-invalidate.event';
 
 /**
  * Backoff configuration for outbox relay.
@@ -46,8 +62,18 @@ const OUTBOX_BACKOFF: BackoffOptions = {
     multiplier: 2, // Exponential
 };
 
-const DEFAULT_OUTBOX_MAX_ATTEMPTS = 3;
+const DEFAULT_OUTBOX_MAX_ATTEMPTS = 10;
 const DEFAULT_OUTBOX_PUBLISH_TIMEOUT_MS = 15000;
+
+export const INBOX_REAPER_CONSUMER_TIMEOUTS = {
+    'workflow-job-consumer.webhook': 20 * 60 * 1000,
+    'workflow-job-consumer.check_implementation': 20 * 60 * 1000,
+    'workflow-job-consumer.code_review': 2.5 * 60 * 60 * 1000,
+    'workflow-job-consumer.ast_graph_build': 30 * 60 * 1000,
+    'workflow-job-consumer.ast_graph_incremental': 15 * 60 * 1000,
+    'workflow-events-stage-completed': 20 * 60 * 1000,
+    'workflow-events-ast': 20 * 60 * 1000,
+} as const;
 
 function parsePositiveIntEnv(envKey: string, fallback: number): number {
     const raw = process.env[envKey];
@@ -98,6 +124,12 @@ export class OutboxRelayService
         @Inject(MESSAGE_BROKER_SERVICE_TOKEN)
         private readonly messageBroker: IMessageBrokerService,
         private readonly observability: ObservabilityService,
+        private readonly configService: ConfigService,
+        private readonly distributedLockService: DistributedLockService,
+        @Inject(SANDBOX_LEASE_MANAGER_TOKEN)
+        private readonly sandboxLeaseManager: ISandboxLeaseManager,
+        @Optional()
+        private readonly incidentManager?: IncidentManagerService,
     ) {}
 
     onApplicationBootstrap() {
@@ -161,6 +193,15 @@ export class OutboxRelayService
      * Returns the number of successfully processed messages (for adaptive polling).
      */
     async processOutbox(): Promise<number> {
+        // Avoid burning retries while broker is known to be disconnected.
+        if (!this.messageBroker.isConnected()) {
+            this.logger.warn({
+                message: 'RabbitMQ disconnected, skipping outbox relay cycle',
+                context: OutboxRelayService.name,
+            });
+            return 0;
+        }
+
         // Claim a batch of messages atomically
         const messages = await this.outboxRepository.claimBatch(
             this.BATCH_SIZE,
@@ -210,17 +251,45 @@ export class OutboxRelayService
      */
     @Cron(CronExpression.EVERY_5_MINUTES)
     async reclaimStaleOutbox(): Promise<void> {
+        const lock = await this.acquireCronLock(
+            'CRON:BETTERSTACK:OUTBOX_RECLAIM',
+            4 * 60 * 1000,
+        );
+        if (!lock) {
+            return;
+        }
+
         const fiveMinutesAgo = new Date();
         fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5);
 
-        const reclaimed =
-            await this.outboxRepository.reclaimStaleMessages(fiveMinutesAgo);
+        try {
+            const reclaimed =
+                await this.outboxRepository.reclaimStaleMessages(
+                    fiveMinutesAgo,
+                );
 
-        if (reclaimed > 0) {
-            this.logger.log({
-                message: `Reclaimed ${reclaimed} stale outbox messages`,
-                context: OutboxRelayService.name,
-            });
+            if (reclaimed > 0) {
+                this.logger.log({
+                    message: `Reclaimed ${reclaimed} stale outbox messages`,
+                    context: OutboxRelayService.name,
+                });
+            }
+
+            // Ping heartbeat to signal outbox relay is alive
+            this.incidentManager
+                ?.pingHeartbeat('API_BETTERSTACK_HEARTBEAT_OUTBOX_URL')
+                .catch((err) => {
+                    this.logger.error({
+                        message: 'Failed to ping outbox heartbeat',
+                        context: OutboxRelayService.name,
+                        error: err instanceof Error ? err : undefined,
+                    });
+                });
+        } finally {
+            await this.releaseCronLock(
+                lock,
+                'Failed to release outbox reclaim lock',
+            );
         }
     }
 
@@ -231,7 +300,9 @@ export class OutboxRelayService
      * Uses consumer-specific timeouts based on the type of work:
      * - Webhooks: 20 minutes (job timeout is 10min + margin)
      * - Check implementation: 20 minutes (job timeout is 10min + margin)
-     * - Code reviews: 12 hours (very conservative to avoid reprocessing without checkpoints)
+     * - Code reviews: 2.5 hours (2h job timeout + margin)
+     * - AST build/incremental: 30/15 minutes (job timeout + margin)
+     * - Workflow events: 20 minutes
      *
      * PERFORMANCE NOTE: Uses separate queries per consumer for better index utilization.
      * Requires partial indexes:
@@ -244,36 +315,68 @@ export class OutboxRelayService
      *   CREATE INDEX CONCURRENTLY idx_inbox_codereview_stale
      *     ON kodus_workflow.inbox_messages (lockedAt)
      *     WHERE consumerId = 'workflow-job-consumer.code_review' AND status = 'PROCESSING';
+     *   Add equivalent partial indexes for AST/event consumers if reclaim volume grows.
      */
     @Cron(CronExpression.EVERY_5_MINUTES)
     async reclaimStaleInbox(): Promise<void> {
+        const lock = await this.acquireCronLock(
+            'CRON:BETTERSTACK:INBOX_RECLAIM',
+            4 * 60 * 1000,
+        );
+        if (!lock) {
+            return;
+        }
+
         return await this.observability.runInSpan(
             'workflow.inbox.reaper',
             async (span) => {
-                let totalReclaimed = 0;
-                const startTime = Date.now();
+                try {
+                    let totalReclaimed = 0;
+                    const startTime = Date.now();
 
-                // Define timeouts per consumer type
-                // Each timeout is ~1.5-2x the actual job timeout to account for overhead
-                const consumerTimeouts = {
-                    'workflow-job-consumer.webhook': 20 * 60 * 1000, // 20 minutes
-                    'workflow-job-consumer.check_implementation':
-                        20 * 60 * 1000, // 20 minutes
-                    'workflow-job-consumer.code_review': 12 * 60 * 60 * 1000, // 12 hours (very conservative to avoid reprocessing without checkpoints)
-                };
+                    const reclaimResults = await Promise.allSettled(
+                        Object.entries(INBOX_REAPER_CONSUMER_TIMEOUTS).map(
+                            async ([consumerId, timeoutMs]) => {
+                                const threshold = new Date(
+                                    Date.now() - timeoutMs,
+                                );
+                                const reclaimed =
+                                    await this.inboxRepository.reclaimStaleMessagesByConsumer(
+                                        consumerId,
+                                        threshold,
+                                    );
 
-                // Reclaim messages for each consumer type with its specific timeout
-                for (const [consumerId, timeoutMs] of Object.entries(
-                    consumerTimeouts,
-                )) {
-                    const threshold = new Date(Date.now() - timeoutMs);
-                    const reclaimed =
-                        await this.inboxRepository.reclaimStaleMessagesByConsumer(
-                            consumerId,
-                            threshold,
-                        );
+                                return {
+                                    consumerId,
+                                    timeoutMs,
+                                    threshold,
+                                    reclaimed,
+                                };
+                            },
+                        ),
+                    );
 
-                    if (reclaimed > 0) {
+                    for (const result of reclaimResults) {
+                        if (result.status === 'rejected') {
+                            this.logger.error({
+                                message:
+                                    'Failed to reclaim stale inbox messages for a consumer',
+                                context: OutboxRelayService.name,
+                                error:
+                                    result.reason instanceof Error
+                                        ? result.reason
+                                        : undefined,
+                            });
+                            continue;
+                        }
+
+                        const { consumerId, timeoutMs, threshold, reclaimed } =
+                            result.value;
+
+                        if (reclaimed <= 0) {
+                            continue;
+                        }
+
                         totalReclaimed += reclaimed;
                         this.logger.warn({
                             message: `Reclaimed ${reclaimed} stale ${consumerId} messages`,
@@ -286,7 +389,6 @@ export class OutboxRelayService
                             },
                         });
 
-                        // Alert if reclaim rate is high (possible systemic issue)
                         if (reclaimed > 5) {
                             this.logger.error({
                                 message: `HIGH RECLAIM RATE: ${reclaimed} ${consumerId} jobs stuck!`,
@@ -298,26 +400,55 @@ export class OutboxRelayService
                                         'Worker crashes, memory issues, or job timeouts',
                                 },
                             });
+
+                            this.incidentManager
+                                ?.failHeartbeat(
+                                    'API_BETTERSTACK_HEARTBEAT_OUTBOX_URL',
+                                    `High inbox reclaim rate for ${consumerId}: ${reclaimed} stale messages reclaimed. Possible cause: worker crashes, memory issues, or job timeouts. ${this.formatContext(
+                                        {
+                                            monitor: 'inbox_reclaim_rate',
+                                            consumerId,
+                                            reclaimed,
+                                        },
+                                    )}`,
+                                )
+                                .catch((err) => {
+                                    this.logger.error({
+                                        message:
+                                            'Failed to report outbox heartbeat failure',
+                                        context: OutboxRelayService.name,
+                                        error:
+                                            err instanceof Error
+                                                ? err
+                                                : undefined,
+                                        metadata: { consumerId, reclaimed },
+                                    });
+                                });
                         }
                     }
-                }
 
-                const duration = Date.now() - startTime;
+                    const duration = Date.now() - startTime;
 
-                span.setAttributes({
-                    'workflow.inbox.reaper.reclaimed': totalReclaimed,
-                    'workflow.inbox.reaper.duration_ms': duration,
-                });
-
-                if (totalReclaimed > 0) {
-                    this.logger.log({
-                        message: `Inbox reaper completed: ${totalReclaimed} messages reclaimed in ${duration}ms`,
-                        context: OutboxRelayService.name,
-                        metadata: {
-                            totalReclaimed,
-                            durationMs: duration,
-                        },
+                    span.setAttributes({
+                        'workflow.inbox.reaper.reclaimed': totalReclaimed,
+                        'workflow.inbox.reaper.duration_ms': duration,
                     });
+
+                    if (totalReclaimed > 0) {
+                        this.logger.log({
+                            message: `Inbox reaper completed: ${totalReclaimed} messages reclaimed in ${duration}ms`,
+                            context: OutboxRelayService.name,
+                            metadata: {
+                                totalReclaimed,
+                                durationMs: duration,
+                            },
+                        });
+                    }
+                } finally {
+                    await this.releaseCronLock(
+                        lock,
+                        'Failed to release inbox reclaim lock',
+                    );
                 }
             },
             {
@@ -373,6 +504,51 @@ export class OutboxRelayService
     }
 
     private async processMessage(message: OutboxMessageModel): Promise<void> {
+        // Sandbox invalidation is consumed in-process — never published to RabbitMQ.
+        // This branch must come BEFORE the observability span to avoid span overhead on
+        // a non-broker path, and before the broker connectivity check below.
+        if (message.routingKey === SANDBOX_INVALIDATE_ROUTING_KEY) {
+            const payload =
+                message.payload as unknown as SandboxInvalidatePayload;
+            try {
+                await this.sandboxLeaseManager.invalidate(payload.prKey);
+                await this.outboxRepository.markAsSent(message.uuid);
+                this.logger.log({
+                    message: '[SANDBOX-RELAY] Sandbox invalidated via outbox',
+                    context: OutboxRelayService.name,
+                    metadata: {
+                        prKey: payload.prKey,
+                        reason: payload.reason,
+                    },
+                });
+            } catch (error) {
+                // Use the standard backoff path — same as publish failures.
+                const delayMs = calculateBackoffInterval(
+                    message.attempts,
+                    OUTBOX_BACKOFF,
+                );
+                const nextAttemptAt = new Date(Date.now() + delayMs);
+                await this.outboxRepository.markAsFailed(
+                    message.uuid,
+                    error instanceof Error ? error.message : String(error),
+                    nextAttemptAt,
+                );
+                this.logger.error({
+                    message:
+                        '[SANDBOX-RELAY] Failed to invalidate sandbox via outbox — retrying',
+                    context: OutboxRelayService.name,
+                    error: error instanceof Error ? error : undefined,
+                    metadata: {
+                        messageUuid: message.uuid,
+                        prKey: payload.prKey,
+                        attempts: message.attempts,
+                    },
+                });
+                throw error;
+            }
+            return;
+        }
+
         return await this.observability.runInSpan(
             'workflow.outbox.publish',
             async (span) => {
@@ -454,12 +630,14 @@ export class OutboxRelayService
                             try {
                                 await this.jobRepository.update(jobId, {
                                     status: JobStatus.FAILED,
-                                    errorClassification: ErrorClassification.PERMANENT,
+                                    errorClassification:
+                                        ErrorClassification.PERMANENT,
                                     lastError: `Outbox message failed after ${this.maxAttemptsOutbox} attempts: ${error.message}`,
                                 });
 
                                 this.logger.log({
-                                    message: 'Job marked as FAILED due to outbox publish failure',
+                                    message:
+                                        'Job marked as FAILED due to outbox publish failure',
                                     context: OutboxRelayService.name,
                                     metadata: {
                                         jobId,
@@ -469,7 +647,8 @@ export class OutboxRelayService
                                 });
                             } catch (updateError) {
                                 this.logger.error({
-                                    message: 'Failed to update job status to FAILED after outbox failure',
+                                    message:
+                                        'Failed to update job status to FAILED after outbox failure',
                                     context: OutboxRelayService.name,
                                     error: updateError,
                                     metadata: {
@@ -493,6 +672,32 @@ export class OutboxRelayService
                                 maxAttempts: this.maxAttemptsOutbox,
                             },
                         });
+
+                        this.incidentManager
+                            ?.failHeartbeat(
+                                'API_BETTERSTACK_HEARTBEAT_OUTBOX_URL',
+                                `Outbox message permanently failed: ${message.uuid} (job: ${jobId || 'N/A'}) after ${this.maxAttemptsOutbox} attempts. Exchange: ${message.exchange}, Routing: ${message.routingKey}. Error: ${error.message}. ${this.formatContext(
+                                    {
+                                        monitor: 'outbox_permanent_failure',
+                                        instanceId: this.instanceId,
+                                        messageId: message.uuid,
+                                        jobId,
+                                    },
+                                )}`,
+                            )
+                            .catch((err) => {
+                                this.logger.error({
+                                    message:
+                                        'Failed to report outbox heartbeat failure',
+                                    context: OutboxRelayService.name,
+                                    error:
+                                        err instanceof Error ? err : undefined,
+                                    metadata: {
+                                        messageId: message.uuid,
+                                        jobId,
+                                    },
+                                });
+                            });
                     } else {
                         // Schedule for retry using centralized backoff
                         const delayMs = calculateBackoffInterval(
@@ -524,6 +729,49 @@ export class OutboxRelayService
                     throw error;
                 }
             },
+        );
+    }
+
+    private async acquireCronLock(
+        key: string,
+        ttl: number,
+    ): Promise<DistributedLock | null> {
+        try {
+            return await this.distributedLockService.acquire(key, { ttl });
+        } catch (error) {
+            this.logger.error({
+                message: `Failed to acquire cron lock: ${key}`,
+                context: OutboxRelayService.name,
+                error: error instanceof Error ? error : undefined,
+            });
+            return null;
+        }
+    }
+
+    private async releaseCronLock(
+        lock: DistributedLock | null,
+        errorMessage: string,
+    ): Promise<void> {
+        if (!lock) {
+            return;
+        }
+
+        try {
+            await lock.release();
+        } catch (error) {
+            this.logger.error({
+                message: errorMessage,
+                context: OutboxRelayService.name,
+                error: error instanceof Error ? error : undefined,
+            });
+        }
+    }
+
+    private formatContext(extra: Record<string, Date | number | string>) {
+        return formatHeartbeatContext(
+            this.configService.get<string>('API_NODE_ENV'),
+            this.configService.get<string>('COMPONENT_TYPE', 'worker'),
+            extra,
         );
     }
 }

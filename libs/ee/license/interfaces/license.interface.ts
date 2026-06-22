@@ -11,7 +11,19 @@ export enum SubscriptionStatus {
     CANCELED = 'canceled',
     EXPIRED = 'expired',
     SELF_HOSTED = 'self-hosted',
+    LICENSED_SELF_HOSTED = 'licensed-self-hosted',
 }
+
+export type SelfHostedLicensePayload = {
+    iss: string;
+    sub: string;
+    iat: number;
+    exp: number;
+    plan: string;
+    seats: number;
+    features: string[];
+    customer: string;
+};
 
 export type OrganizationLicenseValidationResult = {
     valid: boolean;
@@ -19,10 +31,37 @@ export type OrganizationLicenseValidationResult = {
     trialEnd?: Date;
     numberOfLicenses?: number;
     planType?: string;
+    expiresAt?: string;
+    byok?: boolean;
+    trialReviewCreditsTotal?: number;
+    trialReviewCreditsUsed?: number;
+    trialReviewCreditsRemaining?: number;
+    trialCreditTier?: string;
+    trialUnlocks?: TrialUnlock[];
 };
 
 export type UserWithLicense = {
     git_id: string;
+};
+
+export type TrialUnlock = {
+    key: string;
+    status: 'locked' | 'available' | 'completed' | 'claimed' | string;
+    rewardCredits?: number;
+    title?: string;
+    description?: string;
+    completedAt?: string;
+};
+
+export type ConsumeTrialReviewCreditResult = {
+    allowed: boolean;
+    reason?: string;
+    alreadyConsumed?: boolean;
+    trialReviewCreditsTotal?: number;
+    trialReviewCreditsUsed?: number;
+    trialReviewCreditsRemaining?: number;
+    trialCreditTier?: string;
+    trialUnlocks?: TrialUnlock[];
 };
 
 export const LICENSE_SERVICE_TOKEN = Symbol.for('LicenseService');
@@ -61,4 +100,15 @@ export interface ILicenseService {
         userGitId: string,
         provider: string,
     ): Promise<boolean>;
+
+    /**
+     * Atomically consume one Kodus-funded trial review credit.
+     *
+     * @param organizationAndTeamData Organization ID and team ID.
+     * @param usageKey Optional idempotency key for the reviewed PR.
+     */
+    consumeTrialReviewCredit(
+        organizationAndTeamData: OrganizationAndTeamData,
+        usageKey?: string,
+    ): Promise<ConsumeTrialReviewCreditResult>;
 }

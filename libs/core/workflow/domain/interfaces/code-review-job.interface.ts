@@ -12,7 +12,7 @@ export interface ICodeReviewJob {
     repositoryName: string;
     pullRequestNumber: number;
     pullRequestData: Record<string, unknown>;
-    organizationAndTeam?: OrganizationAndTeamData;
+    organizationAndTeamData?: OrganizationAndTeamData;
     status: JobStatus;
     priority: number;
     retryCount: number;

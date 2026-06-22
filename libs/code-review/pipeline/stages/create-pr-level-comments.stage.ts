@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
+import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import {
     COMMENT_MANAGER_SERVICE_TOKEN,
     ICommentManagerService,
@@ -22,6 +23,9 @@ import { createLogger } from '@kodus/flow';
 @Injectable()
 export class CreatePrLevelCommentsStage extends BasePipelineStage<CodeReviewPipelineContext> {
     readonly stageName = 'CreatePrLevelCommentsStage';
+    readonly label = 'Posting PR Comments';
+    readonly visibility = StageVisibility.PRIMARY;
+    readonly errorSeverity = 'partial' as const;
     private readonly logger = createLogger(CreatePrLevelCommentsStage.name);
 
     constructor(
@@ -79,7 +83,10 @@ export class CreatePrLevelCommentsStage extends BasePipelineStage<CodeReviewPipe
             }
 
             // Verificar se há sugestões de nível de PR para processar
-            const prLevelSuggestions = context?.validSuggestionsByPR || [];
+            const prLevelSuggestions = [
+                ...(context?.validSuggestionsByPR ?? []),
+                ...(context?.businessLogicResults ?? []),
+            ];
 
             if (prLevelSuggestions.length === 0) {
                 this.logger.log({
@@ -91,7 +98,7 @@ export class CreatePrLevelCommentsStage extends BasePipelineStage<CodeReviewPipe
                         prNumber: context.pullRequest.number,
                     },
                 });
-                return this.updateContext(context, (draft) => {});
+                return context;
             }
 
             try {

@@ -9,12 +9,15 @@ import {
     CodeSuggestion,
     Comment,
     CommentResult,
+    FallbackSuggestionsBySeverity,
     FileChange,
     SummaryConfig,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
 
-export const COMMENT_MANAGER_SERVICE_TOKEN = Symbol.for('CommentManagerService');
+export const COMMENT_MANAGER_SERVICE_TOKEN = Symbol.for(
+    'CommentManagerService',
+);
 
 export interface ICommentManagerService {
     createInitialComment(
@@ -50,6 +53,7 @@ export interface ICommentManagerService {
         isCommitRun?: boolean,
         prPreview?: boolean,
         externalPromptContext?: any,
+        platformType?: PlatformType,
     ): Promise<string>;
 
     updateOverallComment(
@@ -64,6 +68,9 @@ export interface ICommentManagerService {
         threadId?: number,
         finalCommentBody?: string,
         dryRun?: CodeReviewPipelineContext['dryRun'],
+        reviewFailed?: boolean,
+        reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void>;
 
     updateSummarizationInPR(
@@ -82,6 +89,7 @@ export interface ICommentManagerService {
         language: string,
         dryRun: CodeReviewPipelineContext['dryRun'],
         suggestionCopyPrompt?: boolean,
+        fallbackSuggestionsBySeverity?: FallbackSuggestionsBySeverity,
     ): Promise<{
         lastAnalyzedCommit: any;
         commits: any[];
@@ -137,5 +145,8 @@ export interface ICommentManagerService {
         pullRequestMessagesConfig?: IPullRequestMessages,
         dryRun?: CodeReviewPipelineContext['dryRun'],
         prLevelCommentResults?: Array<CommentResult>,
+        reviewFailed?: boolean,
+        reviewErrorMessage?: string,
+        reviewHasPartialErrors?: boolean,
     ): Promise<void>;
 }

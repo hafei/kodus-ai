@@ -1,10 +1,16 @@
 import { Transform } from 'class-transformer';
-import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import {
+    IsString,
+    IsOptional,
+    IsArray,
+    IsBoolean,
+} from 'class-validator';
 
 import { ProgrammingLanguage } from '@libs/core/domain/enums/programming-language.enum';
 import { KodyRuleFilters } from '@libs/core/infrastructure/config/types/general/kodyRules.type';
 
 import { PaginationDto } from './pagination.dto';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const transformToArray = ({ value }: { value: unknown }): string[] => {
     if (typeof value === 'string') {
@@ -45,34 +51,44 @@ export class FindLibraryKodyRulesDto
 
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional()
     title?: string;
 
     @IsOptional()
     @IsString()
+    @ApiPropertyOptional()
     severity?: string;
 
     @IsOptional()
     @Transform(transformToArray)
     @IsArray()
     @IsString({ each: true })
+    @ApiPropertyOptional()
     tags?: string[];
 
     @IsOptional()
     @IsBoolean()
     @Transform(FindLibraryKodyRulesDto.transformToBoolean)
+    @ApiPropertyOptional()
     plug_and_play?: boolean;
 
     @IsOptional()
     @IsBoolean()
     @Transform(FindLibraryKodyRulesDto.transformToBoolean)
+    @ApiPropertyOptional()
     needMCPS?: boolean;
 
     @IsOptional()
+    @ApiPropertyOptional({
+        enum: ProgrammingLanguage,
+        enumName: 'ProgrammingLanguage',
+    })
     language?: ProgrammingLanguage;
 
     @IsOptional()
     @Transform(transformToArray)
     @IsArray()
     @IsString({ each: true })
+    @ApiPropertyOptional()
     buckets?: string[];
 }

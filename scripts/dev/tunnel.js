@@ -20,7 +20,7 @@ const updateEnvFile = (tunnelUrl) => {
     const envPath = path.join(process.cwd(), '.env');
     
     if (!fs.existsSync(envPath)) {
-        log(colors.red, '❌ .env file not found. Run "yarn setup" first.');
+        log(colors.red, '❌ .env file not found. Run "pnpm run setup" first.');
         process.exit(1);
     }
 
@@ -43,6 +43,10 @@ const updateEnvFile = (tunnelUrl) => {
         {
             key: 'GLOBAL_AZURE_REPOS_CODE_MANAGEMENT_WEBHOOK',
             value: `${tunnelUrl}/azure-repos/webhook`
+        },
+        {
+            key: 'API_FORGEJO_CODE_MANAGEMENT_WEBHOOK',
+            value: `${tunnelUrl}/forgejo/webhook`
         },
         {
             key: 'API_SIGNUP_NOTIFICATION_WEBHOOK',
@@ -89,6 +93,7 @@ const startTunnel = async () => {
         log(colors.yellow, `   GitLab: ${tunnel.url}/gitlab/webhook`);
         log(colors.yellow, `   Bitbucket: ${tunnel.url}/bitbucket/webhook`);
         log(colors.yellow, `   Azure: ${tunnel.url}/azure-repos/webhook`);
+        log(colors.yellow, `   Forgejo: ${tunnel.url}/forgejo/webhook`);
         console.log('');
         log(colors.blue, '💡 Press Ctrl+C to stop the tunnel');
         console.log('');

@@ -1,6 +1,8 @@
 import { createLogger } from '@kodus/flow';
 import { Inject, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
+import { AutomationStatus } from '@libs/automation/domain/automation/enum/automation-status';
 import {
     AUTOMATION_EXECUTION_REPOSITORY_TOKEN,
     IAutomationExecutionRepository,
@@ -12,8 +14,12 @@ import {
     CODE_REVIEW_EXECUTION_SERVICE,
     ICodeReviewExecutionService,
 } from '@libs/automation/domain/codeReviewExecutions/contracts/codeReviewExecution.service.contract';
+import { CodeReviewExecutionEntity } from '@libs/automation/domain/codeReviewExecutions/entities/codeReviewExecution.entity';
+import { CodeReviewExecution } from '@libs/automation/domain/codeReviewExecutions/interfaces/codeReviewExecution.interface';
 import { CacheService } from '@libs/core/cache/cache.service';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
+
+export const PR_EXECUTION_UPDATED_EVENT = 'pr-execution.updated';
 
 @Injectable()
 export class AutomationExecutionService implements IAutomationExecutionService {
@@ -24,7 +30,26 @@ export class AutomationExecutionService implements IAutomationExecutionService {
         @Inject(CODE_REVIEW_EXECUTION_SERVICE)
         private readonly codeReviewExecutionService: ICodeReviewExecutionService<IAutomationExecution>,
         private readonly cacheService: CacheService,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
+
+    private emitExecutionUpdate(execution: AutomationExecutionEntity) {
+        try {
+            const orgId =
+                execution?.dataExecution?.organizationAndTeamData
+                    ?.organizationId;
+            if (orgId) {
+                this.eventEmitter.emit(PR_EXECUTION_UPDATED_EVENT, {
+                    organizationId: orgId,
+                    executionUuid: execution.uuid,
+                    status: execution.status,
+                    timestamp: new Date().toISOString(),
+                });
+            }
+        } catch {
+            // fire-and-forget
+        }
+    }
 
     findLatestExecutionByFilters(
         filters?: Partial<any>,
@@ -75,17 +100,28 @@ export class AutomationExecutionService implements IAutomationExecutionService {
             });
         }
 
+        if (result) {
+            this.emitExecutionUpdate(result);
+        }
+
         return result;
     }
 
-    update(
+    async update(
         filter: Partial<IAutomationExecution>,
         data: Omit<
             Partial<IAutomationExecution>,
             'uuid' | 'createdAt' | 'updatedAt'
         >,
     ): Promise<AutomationExecutionEntity | null> {
-        return this.automationExecutionRepository.update(filter, data);
+        const result = await this.automationExecutionRepository.update(
+            filter,
+            data,
+        );
+        if (result) {
+            this.emitExecutionUpdate(result);
+        }
+        return result;
     }
 
     delete(uuid: string): Promise<void> {
@@ -105,11 +141,31 @@ export class AutomationExecutionService implements IAutomationExecutionService {
     findPullRequestExecutionsByOrganizationAndTeam(params: {
         organizationAndTeamData: OrganizationAndTeamData;
         repositoryIds?: string[];
+        repositoryName?: string;
+        pullRequestNumber?: number;
+        pullRequestTitle?: string;
+        prFilters?: Array<{ number: number; repositoryId: string }>;
         skip?: number;
         take?: number;
         order?: 'ASC' | 'DESC';
+        includeTotal?: boolean;
     }): Promise<{ data: AutomationExecutionEntity[]; total: number }> {
         return this.automationExecutionRepository.findPullRequestExecutionsByOrganizationAndTeam(
+            params,
+        );
+    }
+
+    findCliReviewExecutionsByOrganization(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repositoryId?: string;
+        userEmail?: string;
+        since?: Date;
+        skip?: number;
+        take?: number;
+        order?: 'ASC' | 'DESC';
+        includeTotal?: boolean;
+    }): Promise<{ data: AutomationExecutionEntity[]; total: number }> {
+        return this.automationExecutionRepository.findCliReviewExecutionsByOrganization(
             params,
         );
     }
@@ -128,20 +184,33 @@ export class AutomationExecutionService implements IAutomationExecutionService {
         );
     }
 
+    findEligiblePullRequestRefsForApprovalByPeriodAndTeamAutomationId(
+        startDate: Date,
+        endDate: Date,
+        teamAutomationId: string,
+    ): Promise<Array<{ repositoryId: string; pullRequestNumber: number }>> {
+        return this.automationExecutionRepository.findEligiblePullRequestRefsForApprovalByPeriodAndTeamAutomationId(
+            startDate,
+            endDate,
+            teamAutomationId,
+        );
+    }
+
     async createCodeReview(
         automationExecution: Omit<IAutomationExecution, 'uuid'>,
         message: string,
-    ): Promise<AutomationExecutionEntity | null> {
+        stageName?: string,
+        metadata?: Record<string, any>,
+    ): Promise<{
+        execution: AutomationExecutionEntity;
+        stageLog?: CodeReviewExecutionEntity<IAutomationExecution>;
+    } | null> {
         try {
-            if (
-                !automationExecution ||
-                !automationExecution.status ||
-                !message
-            ) {
+            if (!automationExecution || !automationExecution.status) {
                 this.logger.warn({
                     message: 'Invalid parameters provided to createCodeReview',
                     context: AutomationExecutionService.name,
-                    metadata: { automationExecution, message },
+                    metadata: { automationExecution, message, stageName },
                 });
                 return null;
             }
@@ -156,26 +225,33 @@ export class AutomationExecutionService implements IAutomationExecutionService {
                     message:
                         'Failed to create automation execution before creating code review',
                     context: AutomationExecutionService.name,
-                    metadata: { automationExecution, message },
+                    metadata: { automationExecution, message, stageName },
                 });
                 return null;
             }
 
-            await this.codeReviewExecutionService.create({
+            const stageLog = await this.codeReviewExecutionService.create({
                 automationExecution: {
                     uuid: newAutomationExecution.uuid,
                 },
                 status: automationExecution.status,
                 message,
+                stageName,
+                metadata,
             });
 
-            return newAutomationExecution;
+            this.emitExecutionUpdate(newAutomationExecution);
+
+            return {
+                execution: newAutomationExecution,
+                stageLog: stageLog || undefined,
+            };
         } catch (error) {
             this.logger.error({
                 message: 'Error creating automation execution with code review',
                 error,
                 context: AutomationExecutionService.name,
-                metadata: { automationExecution, message },
+                metadata: { automationExecution, message, stageName },
             });
             return null;
         }
@@ -187,18 +263,27 @@ export class AutomationExecutionService implements IAutomationExecutionService {
             Omit<IAutomationExecution, 'uuid' | 'createdAt' | 'updatedAt'>
         >,
         message: string,
-    ): Promise<AutomationExecutionEntity | null> {
+        stageName?: string,
+        metadata?: Record<string, any>,
+    ): Promise<{
+        execution: AutomationExecutionEntity;
+        stageLog?: CodeReviewExecutionEntity<IAutomationExecution>;
+    } | null> {
         try {
             if (
                 !filter ||
-                !message ||
                 !automationExecution ||
                 !automationExecution.status
             ) {
                 this.logger.warn({
                     message: 'Invalid parameters provided to updateCodeReview',
                     context: AutomationExecutionService.name,
-                    metadata: { filter, message, automationExecution },
+                    metadata: {
+                        filter,
+                        message,
+                        automationExecution,
+                        stageName,
+                    },
                 });
                 return null;
             }
@@ -214,28 +299,92 @@ export class AutomationExecutionService implements IAutomationExecutionService {
                     message:
                         'Failed to update automation execution before updating code review',
                     context: AutomationExecutionService.name,
-                    metadata: { filter, message, automationExecution },
+                    metadata: {
+                        filter,
+                        message,
+                        automationExecution,
+                        stageName,
+                    },
                 });
                 return null;
             }
 
-            await this.codeReviewExecutionService.create({
+            const stageLog = await this.codeReviewExecutionService.create({
                 automationExecution: {
                     uuid: updatedAutomationExecution.uuid,
                 },
                 status: automationExecution.status,
                 message,
+                stageName,
+                metadata,
             });
 
-            return updatedAutomationExecution;
+            this.emitExecutionUpdate(updatedAutomationExecution);
+
+            return {
+                execution: updatedAutomationExecution,
+                stageLog: stageLog || undefined,
+            };
         } catch (error) {
             this.logger.error({
                 message: 'Error updating automation execution with code review',
                 error,
                 context: AutomationExecutionService.name,
-                metadata: { filter, message, automationExecution },
+                metadata: {
+                    filter,
+                    message,
+                    automationExecution,
+                    stageName,
+                },
             });
             return null;
         }
+    }
+
+    async updateStageLog(
+        uuid: string,
+        data: Partial<
+            Omit<
+                CodeReviewExecution<IAutomationExecution>,
+                'uuid' | 'createdAt' | 'updatedAt'
+            >
+        >,
+    ): Promise<void> {
+        try {
+            await this.codeReviewExecutionService.updateById(uuid, data);
+        } catch (error) {
+            this.logger.error({
+                message: 'Error updating stage log',
+                error,
+                context: AutomationExecutionService.name,
+                metadata: { uuid, data },
+            });
+        }
+    }
+
+    async findLatestStageLog(
+        executionId: string,
+        stageName: string,
+    ): Promise<CodeReviewExecutionEntity<IAutomationExecution> | null> {
+        return this.codeReviewExecutionService.findLatestInProgress(
+            executionId,
+            stageName,
+        );
+    }
+
+    async hasStageWithStatus(
+        executionId: string,
+        stageNames: string[],
+        statuses: AutomationStatus[],
+    ): Promise<boolean> {
+        if (!executionId || stageNames.length === 0 || statuses.length === 0) {
+            return false;
+        }
+
+        return this.codeReviewExecutionService.existsByAutomationExecutionAndStageStatus(
+            executionId,
+            stageNames,
+            statuses,
+        );
     }
 }

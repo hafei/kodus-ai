@@ -3,6 +3,7 @@ import type { ContextLayer } from '@kodus/flow';
 
 import { ILoadExternalContextStage } from './contracts/loadExternalContextStage.contract';
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
+import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 
 import { createLogger } from '@kodus/flow';
 import { CodeReviewPipelineContext } from '../context/code-review-pipeline.context';
@@ -22,6 +23,8 @@ export class LoadExternalContextStage
     implements ILoadExternalContextStage
 {
     readonly stageName = 'LoadExternalContextStage';
+    readonly label = 'Loading Context';
+    readonly visibility = StageVisibility.PRIMARY;
 
     private readonly logger = createLogger(LoadExternalContextStage.name);
 

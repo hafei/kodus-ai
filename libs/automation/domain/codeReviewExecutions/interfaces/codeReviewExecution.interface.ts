@@ -7,5 +7,8 @@ export type CodeReviewExecution<TAutomationExecution> = {
 
     automationExecution: Partial<TAutomationExecution>;
     status: AutomationStatus;
+    stageName?: string;
     message?: string | undefined;
+    metadata?: Record<string, any>;
+    finishedAt?: Date;
 };

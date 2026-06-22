@@ -18,11 +18,12 @@ import {
 import {
     IKodyRule,
     KodyRulesStatus,
+    KodyRulesType,
 } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 
-import { enrichRulesWithContextReferences } from './utils/enrich-rules-with-context-references.util';
 import { createLogger } from '@kodus/flow';
 import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
+import { enrichRulesWithContextReferences } from './utils/enrich-rules-with-context-references.util';
 
 @Injectable()
 export class FindRulesInOrganizationByRuleFilterKodyRulesUseCase implements IUseCase {
@@ -51,23 +52,32 @@ export class FindRulesInOrganizationByRuleFilterKodyRulesUseCase implements IUse
         directoryId?: string,
     ) {
         try {
+            let allowedRepoScope: string[] | null | undefined;
+
             if (this.request?.user) {
-                await this.authorizationService.ensure({
-                    user: this.request.user,
-                    action: Action.Read,
-                    resource: ResourceType.KodyRules,
-                    repoIds: [repositoryId],
-                });
+                if (repositoryId) {
+                    await this.authorizationService.ensure({
+                        user: this.request.user,
+                        action: Action.Read,
+                        resource: ResourceType.KodyRules,
+                        repoIds: [repositoryId],
+                    });
+                } else {
+                    allowedRepoScope =
+                        await this.authorizationService.getRepositoryScope({
+                            user: this.request.user,
+                            action: Action.Read,
+                            resource: ResourceType.KodyRules,
+                        });
+                }
             }
 
             const ruleFilters: Partial<IKodyRule>[] = [];
 
             if (repositoryId && directoryId) {
                 ruleFilters.push({ repositoryId, directoryId });
-                ruleFilters.push({ repositoryId: 'global' });
             } else if (repositoryId) {
                 ruleFilters.push({ repositoryId });
-                ruleFilters.push({ repositoryId: 'global' });
             } else if (directoryId) {
                 ruleFilters.push({ directoryId });
             }
@@ -87,15 +97,23 @@ export class FindRulesInOrganizationByRuleFilterKodyRulesUseCase implements IUse
 
             let filteredRules = allRules;
 
+            if (Array.isArray(allowedRepoScope)) {
+                const allowed = new Set([...allowedRepoScope, 'global']);
+                filteredRules = filteredRules.filter(
+                    (rule) =>
+                        !rule.repositoryId || allowed.has(rule.repositoryId),
+                );
+            }
+
             if (repositoryId && !directoryId) {
-                filteredRules = allRules.filter(
+                filteredRules = filteredRules.filter(
                     (rule) =>
                         rule.repositoryId === 'global' ||
                         (rule.repositoryId === repositoryId &&
                             !rule.directoryId),
                 );
             } else if (repositoryId && directoryId) {
-                filteredRules = allRules.filter(
+                filteredRules = filteredRules.filter(
                     (rule) =>
                         rule.repositoryId === 'global' ||
                         (rule.repositoryId === repositoryId &&
@@ -111,12 +129,18 @@ export class FindRulesInOrganizationByRuleFilterKodyRulesUseCase implements IUse
             const filteredByStatus = includeDeleted
                 ? filteredRules
                 : filteredRules.filter(
-                      (rule) => rule.status !== KodyRulesStatus.DELETED,
+                      (rule) =>
+                          rule.status !== KodyRulesStatus.DELETED &&
+                          rule.status !== KodyRulesStatus.APPLIED,
                   );
 
             const rules = filteredByStatus.filter((rule) => {
                 for (const key in filter) {
-                    if (rule[key] !== filter[key]) {
+                    const actual =
+                        key === 'type'
+                            ? (rule.type ?? KodyRulesType.STANDARD)
+                            : rule[key];
+                    if (actual !== filter[key]) {
                         return false;
                     }
                 }

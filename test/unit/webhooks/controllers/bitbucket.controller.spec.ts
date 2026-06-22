@@ -42,7 +42,7 @@ describe('BitbucketController', () => {
             expect(enqueueWebhookUseCase.execute).toHaveBeenCalledWith({
                 platformType: 'BITBUCKET',
                 event: 'pullrequest:created',
-                payload: { pullrequest: { id: 1 } },
+                payload: { pullrequest: { id: 1 }, isDataCenterEvent: false },
             });
         });
 
@@ -62,7 +62,7 @@ describe('BitbucketController', () => {
             expect(enqueueWebhookUseCase.execute).toHaveBeenCalledWith({
                 platformType: 'BITBUCKET',
                 event: 'pullrequest:updated',
-                payload: { pullrequest: { id: 1 } },
+                payload: { pullrequest: { id: 1 }, isDataCenterEvent: false },
             });
         });
 
@@ -101,7 +101,10 @@ describe('BitbucketController', () => {
         it('should enqueue "pullrequest:comment_created" event', async () => {
             mockRequest = {
                 headers: { 'x-event-key': 'pullrequest:comment_created' },
-                body: { pullrequest: { id: 1 }, comment: { content: { raw: '@kody review' } } },
+                body: {
+                    pullrequest: { id: 1 },
+                    comment: { content: { raw: '@kody review' } },
+                },
             };
 
             controller.handleWebhook(
@@ -114,7 +117,11 @@ describe('BitbucketController', () => {
             expect(enqueueWebhookUseCase.execute).toHaveBeenCalledWith({
                 platformType: 'BITBUCKET',
                 event: 'pullrequest:comment_created',
-                payload: { pullrequest: { id: 1 }, comment: { content: { raw: '@kody review' } } },
+                payload: {
+                    pullrequest: { id: 1 },
+                    comment: { content: { raw: '@kody review' } },
+                    isDataCenterEvent: false,
+                },
             });
         });
     });
@@ -223,7 +230,9 @@ describe('BitbucketController', () => {
 
         it('should ignore "pullrequest:changes_request_created" event', async () => {
             mockRequest = {
-                headers: { 'x-event-key': 'pullrequest:changes_request_created' },
+                headers: {
+                    'x-event-key': 'pullrequest:changes_request_created',
+                },
                 body: { pullrequest: { id: 1 } },
             };
 

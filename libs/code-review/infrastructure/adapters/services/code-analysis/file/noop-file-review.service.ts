@@ -12,7 +12,6 @@ import {
     FileChange,
     ReviewModeResponse,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { TaskStatus } from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 
 @Injectable()
 export class FileReviewContextPreparation extends BaseFileReviewContextPreparation {
@@ -20,12 +19,11 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
         options?: ReviewModeOptions,
         byokConfig?: BYOKConfig,
     ): Promise<ReviewModeResponse> {
-        return ReviewModeResponse.LIGHT_MODE;
+        return ReviewModeResponse.HEAVY_MODE;
     }
 
     protected getRelevantFileContent(file: FileChange): Promise<{
         relevantContent: string | null;
-        taskStatus?: TaskStatus;
         hasRelevantContent?: boolean;
     }> {
         // In the standard version, we return the file content directly
@@ -33,7 +31,6 @@ export class FileReviewContextPreparation extends BaseFileReviewContextPreparati
         return Promise.resolve({
             relevantContent: file.content || null,
             hasRelevantContent: false,
-            taskStatus: TaskStatus.TASK_STATUS_FAILED,
         });
     }
 }

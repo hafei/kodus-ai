@@ -1,22 +1,31 @@
+import { BYOKConfig } from '@kodus/kodus-common/llm';
+import { CreateSandboxParams } from '@libs/sandbox/domain/contracts/sandbox.provider';
+import {
+    CrossFileContextSnippet,
+    RemoteCommands,
+} from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import { CodeReviewPipelineContext } from '@libs/code-review/pipeline/context/code-review-pipeline.context';
 import { PlatformType } from '@libs/core/domain/enums/platform-type.enum';
-import { Repository } from '@libs/core/infrastructure/config/types/general/codeReview.type';
-import { BYOKConfig } from '@kodus/kodus-common/llm';
-
-import { PriorityStatus } from '@libs/platformData/domain/pullRequests/enums/priorityStatus.enum';
-import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
 import {
-    CodeSuggestion,
-    SuggestionControlConfig,
+    DocumentationContextItem,
+    Repository,
+} from '@libs/core/infrastructure/config/types/general/codeReview.type';
+
+import {
     CodeReviewConfig,
-    LimitationType,
-    GroupingModeSuggestions,
-    ReviewOptions,
-    ReviewModeResponse,
-    CommentResult,
     CodeReviewVersion,
+    CodeSuggestion,
+    CommentResult,
+    GroupingModeSuggestions,
+    LimitationType,
+    ReviewModeResponse,
+    ReviewOptions,
+    SuggestionControlConfig,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { OrganizationAndTeamData } from '@libs/core/infrastructure/config/types/general/organizationAndTeamData';
+import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
+import { PriorityStatus } from '@libs/platformData/domain/pullRequests/enums/priorityStatus.enum';
+import { ISuggestionByPR } from '@libs/platformData/domain/pullRequests/interfaces/pullRequests.interface';
 
 /**
  * Contract for the service that handles code suggestions lifecycle,
@@ -72,6 +81,13 @@ export interface ISuggestionService {
         languageResultPrompt: string,
         reviewMode: ReviewModeResponse,
         byokConfig: BYOKConfig,
+        crossFileSnippets?: CrossFileContextSnippet[],
+        remoteCommands?: RemoteCommands,
+        memories?: Array<Partial<IKodyRule>>,
+        externalReferences?: unknown[],
+        externalReferenceErrors?: unknown[] | string,
+        getFreshCloneParams?: () => Promise<CreateSandboxParams>,
+        documentationContext?: DocumentationContextItem[],
     ): Promise<any>;
 
     /**
@@ -249,11 +265,37 @@ export interface ISuggestionService {
     ): Promise<Partial<CodeSuggestion>[]>;
 
     /**
+     * Extracts repriorized suggestions from comment results and removes them from discarded suggestions.
+     * This prevents duplicate saves when a fallback suggestion replaces a failed prioritized suggestion.
+     */
+    extractRepriorizedSuggestions(
+        commentResults: CommentResult[],
+        discardedSuggestions: Partial<CodeSuggestion>[],
+    ): {
+        repriorizedSuggestions: Partial<CodeSuggestion>[];
+        filteredDiscardedSuggestions: Partial<CodeSuggestion>[];
+    };
+
+    /**
      * Transforms comment results to PR level suggestions
      */
     transformCommentResultsToPrLevelSuggestions(
         commentResults: CommentResult[],
     ): ISuggestionByPR[];
+
+    /**
+     * Filters persisted review suggestions to only those whose provider comments
+     * are still active in the current review iteration.
+     */
+    filterActiveReviewSuggestions<
+        T extends { comment?: { id?: number | string } },
+    >(params: {
+        organizationAndTeamData: OrganizationAndTeamData;
+        repository: Partial<Repository>;
+        prNumber: number;
+        platformType: PlatformType;
+        suggestions: T[];
+    }): Promise<T[]>;
 
     /**
      * Resolves comments on the platform (GitHub, etc.) for implemented suggestions

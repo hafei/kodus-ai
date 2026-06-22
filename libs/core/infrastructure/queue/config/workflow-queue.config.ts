@@ -1,4 +1,4 @@
-const DEFAULT_WORKFLOW_QUEUE_MAX_RETRIES = 5;
+const DEFAULT_WORKFLOW_QUEUE_MAX_RETRIES = 2;
 
 export const WORKFLOW_QUEUE_MAX_RETRIES = (() => {
     const parsed = Number.parseInt(
@@ -6,5 +6,7 @@ export const WORKFLOW_QUEUE_MAX_RETRIES = (() => {
         10,
     );
 
-    return Number.isFinite(parsed) ? parsed : DEFAULT_WORKFLOW_QUEUE_MAX_RETRIES;
+    return Number.isFinite(parsed)
+        ? parsed
+        : DEFAULT_WORKFLOW_QUEUE_MAX_RETRIES;
 })();

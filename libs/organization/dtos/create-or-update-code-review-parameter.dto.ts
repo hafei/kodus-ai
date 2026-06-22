@@ -3,6 +3,7 @@ import {
     IsArray,
     IsBoolean,
     IsEnum,
+    IsIn,
     IsNumber,
     IsObject,
     IsOptional,
@@ -21,6 +22,7 @@ import {
     ReviewCadenceType,
 } from '@libs/core/infrastructure/config/types/general/codeReview.type';
 import { PullRequestMessageStatus } from '@libs/core/infrastructure/config/types/general/pullRequestMessages.type';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class ReviewOptionsDto {
     @IsBoolean()
@@ -74,6 +76,10 @@ class ReviewOptionsDto {
     @IsOptional()
     @IsBoolean()
     cross_file?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    business_logic?: boolean;
 }
 
 class SummaryConfigDto {
@@ -87,10 +93,18 @@ class SummaryConfigDto {
 
     @IsOptional()
     @IsEnum(BehaviourForExistingDescription)
+    @ApiPropertyOptional({
+        enum: BehaviourForExistingDescription,
+        enumName: 'BehaviourForExistingDescription',
+    })
     behaviourForExistingDescription?: BehaviourForExistingDescription;
 
     @IsOptional()
     @IsEnum(BehaviourForNewCommits)
+    @ApiPropertyOptional({
+        enum: BehaviourForNewCommits,
+        enumName: 'BehaviourForNewCommits',
+    })
     behaviourForNewCommits?: BehaviourForNewCommits;
 }
 
@@ -115,10 +129,15 @@ class SeverityLimitsDto {
 class SuggestionControlConfigDto {
     @IsOptional()
     @IsEnum(GroupingModeSuggestions)
+    @ApiPropertyOptional({
+        enum: GroupingModeSuggestions,
+        enumName: 'GroupingModeSuggestions',
+    })
     groupingMode?: GroupingModeSuggestions;
 
     @IsOptional()
     @IsEnum(LimitationType)
+    @ApiPropertyOptional({ enum: LimitationType, enumName: 'LimitationType' })
     limitationType?: LimitationType;
 
     @IsOptional()
@@ -127,6 +146,7 @@ class SuggestionControlConfigDto {
 
     @IsOptional()
     @IsEnum(SeverityLevel)
+    @ApiPropertyOptional({ enum: SeverityLevel, enumName: 'SeverityLevel' })
     severityLevelFilter?: SeverityLevel;
 
     @IsOptional()
@@ -142,6 +162,10 @@ class SuggestionControlConfigDto {
 class ReviewCadenceDto {
     @IsEnum(ReviewCadenceType)
     @IsOptional()
+    @ApiPropertyOptional({
+        enum: ReviewCadenceType,
+        enumName: 'ReviewCadenceType',
+    })
     type?: ReviewCadenceType;
 
     @IsOptional()
@@ -206,6 +230,20 @@ class V2PromptOverridesGenerationDto {
     main?: string;
 }
 
+class V2PromptOverridesLevelDto {
+    @IsOptional()
+    @IsString()
+    critical?: string;
+
+    @IsOptional()
+    @IsString()
+    issue?: string;
+
+    @IsOptional()
+    @IsString()
+    warning?: string;
+}
+
 class V2PromptOverridesDto {
     @IsOptional()
     @ValidateNested()
@@ -216,6 +254,11 @@ class V2PromptOverridesDto {
     @ValidateNested()
     @Type(() => V2PromptOverridesSeverityDto)
     severity?: V2PromptOverridesSeverityDto;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => V2PromptOverridesLevelDto)
+    level?: V2PromptOverridesLevelDto;
 
     @IsOptional()
     @ValidateNested()
@@ -232,6 +275,10 @@ class CustomMessagesGlobalSettingsDto {
 class CustomMessagesStartReviewMessageDto {
     @IsOptional()
     @IsEnum(PullRequestMessageStatus)
+    @ApiPropertyOptional({
+        enum: PullRequestMessageStatus,
+        enumName: 'PullRequestMessageStatus',
+    })
     status?: PullRequestMessageStatus;
 
     @IsOptional()
@@ -242,6 +289,10 @@ class CustomMessagesStartReviewMessageDto {
 class CustomMessagesEndReviewMessageDto {
     @IsOptional()
     @IsEnum(PullRequestMessageStatus)
+    @ApiPropertyOptional({
+        enum: PullRequestMessageStatus,
+        enumName: 'PullRequestMessageStatus',
+    })
     status?: PullRequestMessageStatus;
 
     @IsOptional()
@@ -305,6 +356,10 @@ class CodeReviewConfigWithoutLLMProviderDto {
     automatedReviewActive?: boolean;
 
     @IsOptional()
+    @IsBoolean()
+    showStatusFeedback?: boolean;
+
+    @IsOptional()
     @ValidateNested()
     @Type(() => SummaryConfigDto)
     summary?: SummaryConfigDto;
@@ -330,9 +385,24 @@ class CodeReviewConfigWithoutLLMProviderDto {
     @IsBoolean()
     ideRulesSyncEnabled?: boolean;
 
+    /**
+     * Only consulted when `ideRulesSyncEnabled` transitions from `true` to
+     * `false`. Picks what happens to imported rules. See
+     * `IdeSyncDisableAction` for semantics. Defaults to `'keep'` (least
+     * destructive) when callers omit it — historically this transition
+     * silently deleted rules, which surprised users.
+     */
+    @IsOptional()
+    @IsIn(['keep', 'pause', 'delete'])
+    ideSyncDisableAction?: 'keep' | 'pause' | 'delete';
+
     @IsOptional()
     @IsBoolean()
     kodyRulesGeneratorEnabled?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    llmGeneratedMemoriesRequireApproval?: boolean;
 
     @IsOptional()
     @ValidateNested()
@@ -345,6 +415,10 @@ class CodeReviewConfigWithoutLLMProviderDto {
 
     @IsOptional()
     @IsEnum(CodeReviewVersion)
+    @ApiPropertyOptional({
+        enum: CodeReviewVersion,
+        enumName: 'CodeReviewVersion',
+    })
     codeReviewVersion?: CodeReviewVersion;
 
     @IsOptional()
@@ -368,25 +442,55 @@ class CodeReviewConfigWithoutLLMProviderDto {
     @IsOptional()
     @IsBoolean()
     enableCommittableSuggestions?: boolean;
+
+    /**
+     * BYOK main-model override for code reviews. Empty string '' means
+     * "inherit" (directory -> repository -> the BYOK-settings main model).
+     */
+    @IsOptional()
+    @IsString()
+    byokModel?: string;
 }
 
 export class CreateOrUpdateCodeReviewParameterDto {
     @IsObject()
+    @ApiProperty({
+        type: OrganizationAndTeamDataDto,
+        example: {
+            teamId: 'c33ef663-70e7-4f43-9605-0bbef979b8e0',
+        },
+    })
     organizationAndTeamData: OrganizationAndTeamDataDto;
 
     @ValidateNested()
     @Type(() => CodeReviewConfigWithoutLLMProviderDto)
+    @ApiProperty({
+        type: CodeReviewConfigWithoutLLMProviderDto,
+        example: {
+            reviewCadence: { type: 'every_pr' },
+            reviewOptions: { security: true, error_handling: true },
+        },
+    })
     configValue: CodeReviewConfigWithoutLLMProviderDto;
 
     @IsString()
     @IsOptional()
+    @ApiPropertyOptional({ example: '1135722979' })
     repositoryId: string;
 
     @IsString()
     @IsOptional()
+    @ApiPropertyOptional({ example: 'src/services' })
     directoryId?: string;
 
     @IsString()
     @IsOptional()
+    @ApiPropertyOptional({ example: 'src/services' })
     directoryPath?: string;
+
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    @ApiPropertyOptional({ example: ['/src/services', '/src/controllers'] })
+    directoryPaths?: string[];
 }

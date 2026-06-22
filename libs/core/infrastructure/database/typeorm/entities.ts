@@ -9,6 +9,7 @@ import { DryRunModel } from '../../../../dryRun/infrastructure/adapters/reposito
 import { CodeReviewSettingsLogModel } from '../../../../ee/codeReviewSettingsLog/infrastructure/adapters/repository/schemas/codeReviewSettingsLog.model';
 import { SSOConfigModel } from '../../../../ee/sso/repositories/ssoConfig.model';
 import { AuthModel } from '../../../../identity/infrastructure/adapters/repositories/schemas/auth.model';
+import { CliAuthSessionModel } from '../../../../identity/infrastructure/adapters/repositories/schemas/cli-auth-session.model';
 import { PermissionsModel } from '../../../../identity/infrastructure/adapters/repositories/schemas/permissions.model';
 import { ProfileModel } from '../../../../identity/infrastructure/adapters/repositories/schemas/profile.model';
 import { ProfileConfigModel } from '../../../../identity/infrastructure/adapters/repositories/schemas/profileConfig.model';
@@ -24,12 +25,21 @@ import { OrganizationModel } from '../../../../organization/infrastructure/adapt
 import { OrganizationParametersModel } from '../../../../organization/infrastructure/adapters/repositories/schemas/organizationParameters.model';
 import { ParametersModel } from '../../../../organization/infrastructure/adapters/repositories/schemas/parameters.model';
 import { TeamCliKeyModel } from '../../../../organization/infrastructure/adapters/repositories/schemas/team-cli-key.model';
+import { CliDeviceModel } from '../../../../organization/infrastructure/adapters/repositories/schemas/cli-device.model';
 import { TeamModel } from '../../../../organization/infrastructure/adapters/repositories/schemas/team.model';
 import { TeamMemberModel } from '../../../../organization/infrastructure/adapters/repositories/schemas/teamMember.model';
 import { PullRequestsModel } from '../../../../platformData/infrastructure/adapters/repositories/schemas/pullRequests.model';
+import { SessionEventModel } from '../../../../cli-review/infrastructure/repositories/schemas/session-event.model';
+import { RepositoryModel } from '../../../../code-review/infrastructure/adapters/repositories/schemas/repository.model';
+import { AstNodeModel } from '../../../../code-review/infrastructure/adapters/repositories/schemas/astNode.model';
+import { AstEdgeModel } from '../../../../code-review/infrastructure/adapters/repositories/schemas/astEdge.model';
 import { InboxMessageModel } from '../../../workflow/infrastructure/repositories/schemas/inbox-message.model';
 import { OutboxMessageModel } from '../../../workflow/infrastructure/repositories/schemas/outbox-message.model';
 import { WorkflowJobModel } from '../../../workflow/infrastructure/repositories/schemas/workflow-job.model';
+import { SSOTestSessionModel } from '@libs/ee/sso/repositories/ssoTestSession.model';
+import { NotificationDeliveryModel } from '../../../../notifications/infrastructure/repositories/schemas/notification-delivery.model';
+import { UserNotificationModel } from '../../../../notifications/infrastructure/repositories/schemas/user-notification.model';
+import { RoutingRuleModel } from '../../../../notifications/infrastructure/repositories/schemas/routing-rule.model';
 
 export const ENTITIES = [
     DryRunModel,
@@ -43,6 +53,7 @@ export const ENTITIES = [
     ParametersModel,
     ObservabilityTelemetryModel,
     AuthModel,
+    CliAuthSessionModel,
     TeamMemberModel,
     TeamCliKeyModel,
     IntegrationConfigModel,
@@ -61,7 +72,16 @@ export const ENTITIES = [
     IntegrationModel,
     KodyRulesModel,
     SSOConfigModel,
+    SSOTestSessionModel,
     ProfileModel,
     CodeReviewExecutionModel,
     InteractionModel,
+    CliDeviceModel,
+    SessionEventModel,
+    RepositoryModel,
+    AstNodeModel,
+    AstEdgeModel,
+    NotificationDeliveryModel,
+    UserNotificationModel,
+    RoutingRuleModel,
 ];

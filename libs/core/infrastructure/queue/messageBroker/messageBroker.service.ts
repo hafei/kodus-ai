@@ -12,6 +12,7 @@ import {
 @Injectable()
 export class MessageBrokerService implements IMessageBrokerService {
     private readonly logger = createLogger(MessageBrokerService.name);
+
     constructor(@Optional() private readonly amqpConnection: AmqpConnection) {
         if (!amqpConnection) {
             this.logger.warn({
@@ -19,6 +20,10 @@ export class MessageBrokerService implements IMessageBrokerService {
                 context: MessageBrokerService.name,
             });
         }
+    }
+
+    isConnected(): boolean {
+        return !!this.amqpConnection?.connected;
     }
 
     async publishMessage(
@@ -51,6 +56,7 @@ export class MessageBrokerService implements IMessageBrokerService {
             await this.amqpConnection.publish(exchange, routingKey, message, {
                 persistent: true,
                 ...options,
+                messageId: options?.messageId ?? message.messageId,
             });
 
             this.logger.debug({
@@ -66,7 +72,8 @@ export class MessageBrokerService implements IMessageBrokerService {
         } catch (error) {
             this.logger.error({
                 message: 'Error publishing message to RabbitMQ',
-                error: error.message,
+                error:
+                    error instanceof Error ? error : new Error(String(error)),
                 context: MessageBrokerService.name,
                 metadata: {
                     exchange: config.exchange,

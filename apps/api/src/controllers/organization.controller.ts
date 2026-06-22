@@ -22,11 +22,29 @@ import { UpdateInfoOrganizationAndPhoneDto } from '../dtos/updateInfoOrgAndPhone
 import { GetOrganizationNameUseCase } from '@libs/organization/application/use-cases/organization/get-organization-name';
 import { UpdateInfoOrganizationAndPhoneUseCase } from '@libs/organization/application/use-cases/organization/update-infos.use-case';
 import { GetOrganizationsByDomainUseCase } from '@libs/organization/application/use-cases/organization/get-organizations-domain.use-case';
+import { GetReleaseTrackUseCase } from '@libs/organization/application/use-cases/organization/get-release-track.use-case';
 import { GetOrganizationLanguageUseCase } from '@libs/platform/application/use-cases/organization/get-organization-language.use-case';
 import { CacheService } from '@libs/core/cache/cache.service';
 import { UserRequest } from '@libs/core/infrastructure/config/types/http/user-request.type';
 import { REQUEST } from '@nestjs/core';
+import {
+    ApiBearerAuth,
+    ApiOkResponse,
+    ApiOperation,
+    ApiQuery,
+    ApiTags,
+} from '@nestjs/swagger';
+import { ApiStandardResponses } from '../docs/api-standard-responses.decorator';
+import {
+    ApiArrayResponseDto,
+    ApiBooleanResponseDto,
+    ApiStringResponseDto,
+} from '../dtos/api-response.dto';
+import { OrganizationLanguageResponseDto } from '../dtos/organization-response.dto';
 
+@ApiTags('Organization')
+@ApiBearerAuth('jwt')
+@ApiStandardResponses()
 @Controller('organization')
 export class OrganizationController {
     constructor(
@@ -34,14 +52,30 @@ export class OrganizationController {
         private readonly getOrganizationLanguageUseCase: GetOrganizationLanguageUseCase,
         private readonly updateInfoOrganizationAndPhoneUseCase: UpdateInfoOrganizationAndPhoneUseCase,
         private readonly getOrganizationsByDomainUseCase: GetOrganizationsByDomainUseCase,
+        private readonly getReleaseTrackUseCase: GetReleaseTrackUseCase,
         private readonly cacheService: CacheService,
         @Inject(REQUEST)
         private readonly request: UserRequest,
     ) {}
 
     @Get('/name')
+    @ApiOperation({
+        summary: 'Get organization name',
+        description: 'Return the name of the authenticated user organization.',
+    })
+    @ApiOkResponse({ type: ApiStringResponseDto })
     public getOrganizationName() {
         return this.getOrganizationNameUseCase.execute();
+    }
+
+    @Get('/release-track')
+    @ApiOperation({
+        summary: 'Get organization release track',
+        description:
+            'Returns the release track (stable | beta | internal) for the authenticated user organization.',
+    })
+    public getReleaseTrack() {
+        return this.getReleaseTrackUseCase.execute();
     }
 
     @Patch('/update-infos')
@@ -52,6 +86,11 @@ export class OrganizationController {
             resource: ResourceType.OrganizationSettings,
         }),
     )
+    @ApiOperation({
+        summary: 'Update organization info',
+        description: 'Update organization details and phone information.',
+    })
+    @ApiOkResponse({ type: ApiBooleanResponseDto })
     public async updateInfoOrganizationAndPhone(
         @Body() body: UpdateInfoOrganizationAndPhoneDto,
     ) {
@@ -59,6 +98,12 @@ export class OrganizationController {
     }
 
     @Get('/domain')
+    @ApiOperation({
+        summary: 'Find organizations by domain',
+        description: 'Return organizations that match a given email domain.',
+    })
+    @ApiQuery({ name: 'domain', type: String, required: true })
+    @ApiOkResponse({ type: ApiArrayResponseDto })
     public async getOrganizationsByDomain(
         @Query('domain')
         domain: string,
@@ -67,6 +112,14 @@ export class OrganizationController {
     }
 
     @Get('/language')
+    @ApiOperation({
+        summary: 'Detect organization language',
+        description: 'Infer primary language based on repository or team data.',
+    })
+    @ApiQuery({ name: 'teamId', type: String, required: true })
+    @ApiQuery({ name: 'repositoryId', type: String, required: false })
+    @ApiQuery({ name: 'sampleSize', type: String, required: false })
+    @ApiOkResponse({ type: OrganizationLanguageResponseDto })
     public async getOrganizationLanguage(
         @Query('teamId') teamId: string,
         @Query('repositoryId') repositoryId?: string,

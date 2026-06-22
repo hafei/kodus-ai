@@ -14,6 +14,8 @@ import {
     isBaseMessage,
 } from '@langchain/core/messages';
 import { BYOKConfig } from './byokProvider.service';
+import { LLMErrorNormalizer } from './utils/llm-error-normalizer';
+import { LLM_TIMEOUT_MS } from './providerAdapters/types';
 
 export type PromptFn<Payload> = (input: Payload) => string;
 
@@ -110,19 +112,53 @@ export class PromptRunnerService {
 
             const chain = this.createChain<Payload, OutputType>(params);
 
-            const response = await chain.invoke(
+            const response = await this.invokeWithTimeout(
+                chain,
                 params.payload ?? ({} as Payload),
+                params.runName,
             );
 
             return response;
         } catch (error) {
+            const normalized = LLMErrorNormalizer.normalize(error);
             this.logger.error({
                 message: `Error running prompt: ${params.runName}`,
-                error: handleError(error),
+                error: normalized,
                 context: PromptRunnerService.name,
                 metadata: params,
             });
-            return null;
+            throw normalized;
+        }
+    }
+
+    /**
+     * Wraps chain.invoke with an application-level timeout.
+     * This is a safety net for cases where the LLM provider SDK timeout
+     * does not fire (e.g. OpenRouter keeping connections alive).
+     */
+    private async invokeWithTimeout<Payload, OutputType>(
+        chain: { invoke: (input: Payload) => Promise<OutputType> },
+        payload: Payload,
+        runName?: string,
+    ): Promise<OutputType> {
+        const timeoutMs = LLM_TIMEOUT_MS; // 5 minutes
+
+        let timeoutHandle: NodeJS.Timeout;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+                reject(
+                    new Error(
+                        `LLM call timed out after ${timeoutMs / 1000}s (runName: ${runName ?? 'unknown'}). ` +
+                            `The provider did not respond within the allowed time.`,
+                    ),
+                );
+            }, timeoutMs);
+        });
+
+        try {
+            return await Promise.race([chain.invoke(payload), timeoutPromise]);
+        } finally {
+            clearTimeout(timeoutHandle!);
         }
     }
 

@@ -21,16 +21,16 @@ You will receive an input in the following JSON format:
 {
     "codeSuggestions": [
         {
-            "id": "string that indicates each suggestion"
+            "id": "string that indicates each suggestion",
             "relevantFile": "path/to/file",
             "language": "programming_language",
             "suggestionContent": "Detailed and insightful suggestion",
             "existingCode": "Relevant new code from the PR",
             "improvedCode": "Improved proposal",
             "oneSentenceSummary": "Concise summary of the suggestion",
-            "relevantLinesStart": "starting_line",
-            "relevantLinesEnd": "ending_line",
-            "label": "selected_label",
+            "relevantLinesStart": 1,
+            "relevantLinesEnd": 10,
+            "label": "selected_label"
         }
     ]
 }

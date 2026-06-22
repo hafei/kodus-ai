@@ -11,6 +11,11 @@ import z from 'zod';
 import type { ContextAugmentationsMap } from '@libs/ai-engine/infrastructure/adapters/services/context/interfaces/code-review-context-pack.interface';
 import { SeverityLevel } from '@libs/common/utils/enums/severityLevel.enum';
 
+import { CreateSandboxParams } from '@libs/sandbox/domain/contracts/sandbox.provider';
+import {
+    CrossFileContextSnippet,
+    RemoteCommands,
+} from '@libs/code-review/infrastructure/adapters/services/collectCrossFileContexts.service';
 import {
     BehaviourForExistingDescription,
     BehaviourForNewCommits,
@@ -25,10 +30,6 @@ import {
     ReviewPreset,
     SuggestionType,
 } from '@libs/core/domain/enums/code-review.enum';
-import {
-    GetImpactAnalysisResponse,
-    TaskStatus,
-} from '@libs/ee/kodyAST/interfaces/code-ast-analysis.interface';
 import { IClusterizedSuggestion } from '@libs/kodyFineTuning/domain/interfaces/kodyFineTuning.interface';
 import { IKodyRule } from '@libs/kodyRules/domain/interfaces/kodyRules.interface';
 import { OrganizationAndTeamData } from './organizationAndTeamData';
@@ -67,25 +68,8 @@ export interface ISafeguardResponse {
     };
 }
 
-export interface FileAST {
-    path: string;
-    duplicateFunctions: Array<{
-        functionName: string;
-        locations: string[];
-    }>;
-    missingImports: string[];
-    unusedImports: Array<{
-        functionName: string;
-        filesWithUnusedImport: string[];
-    }>;
-}
-export interface ChangedFilesWithAST {
-    file: FileChange;
-    astAnalysis: FileAST;
-}
-
 export type Repository = {
-    platform: 'github' | 'gitlab' | 'bitbucket' | 'azure-devops';
+    platform: 'github' | 'gitlab' | 'bitbucket' | 'azure-devops' | 'forgejo';
     id: string;
     name: string;
     fullName?: string;
@@ -102,24 +86,16 @@ export type AnalysisContext<TPullRequest = any> = {
     platformType: string;
     action?: string;
     baseDir?: string;
-    impactASTAnalysis?: GetImpactAnalysisResponse;
+    correlationId?: string;
     reviewModeResponse?: ReviewModeResponse;
     kodyFineTuningConfig?: KodyFineTuningConfig;
     fileChangeContext?: FileChangeContext;
     clusterizedSuggestions?: IClusterizedSuggestion[];
     validCrossFileSuggestions?: CodeSuggestion[];
-    tasks?: {
-        astAnalysis?: {
-            taskId: string;
-            status?: TaskStatus;
-            hasRelevantContent?: boolean;
-        };
-    };
     /** External file content and metadata loaded by PromptContextLoader. */
     externalPromptContext?: any;
     /** Set of layers ready for ContextPack composition (files, instructions). */
     externalPromptLayers?: ContextLayer[];
-    correlationId: string;
     /** Shared ContextPack with instructions and external layers for analysis stages. */
     sharedContextPack?: ContextPack;
     /** Overrides resolved per file, used in context preparation by file. */
@@ -130,20 +106,26 @@ export type AnalysisContext<TPullRequest = any> = {
     fileAugmentations?: ContextAugmentationsMap;
     /** Dynamically generated augmentations during pipeline, mapped by filename. */
     augmentationsByFile?: Record<string, ContextAugmentationsMap>;
+    /** Cross-file context snippets relevant to the current file under review. */
+    crossFileSnippets?: CrossFileContextSnippet[];
+    /** Documentation context grouped by file path, built in previous pipeline stages. */
+    documentationByFile?: Record<string, DocumentationContextItem[]>;
+    /** Documentation context scoped to the current file under analysis. */
+    documentationContext?: DocumentationContextItem[];
+    /** Remote commands for safeguard agent verification (from E2B sandbox) */
+    remoteCommands?: RemoteCommands;
+    /** Parameters used to create the sandbox — kept for renewal if it expires */
+    getFreshCloneParams?: () => Promise<CreateSandboxParams>;
+    /** Graph JSON from kodus-graph parse (nodes + edges) for content formatting */
+    callGraphJson?: { nodes: any[]; edges: any[] };
 };
 
-export type ASTAnalysisResult = {
-    issues: any[];
-    metrics: any;
-    suggestions: any[];
-};
-
-export type CombinedAnalysisResult = {
-    aiAnalysis?: AIAnalysisResult;
-    astAnalysis?: ASTAnalysisResult;
-    lintingAnalysis?: any;
-    securityAnalysis?: any;
-    codeSuggestions: CodeSuggestion[]; // Aggregation of all suggestions
+export type DocumentationContextItem = {
+    query: string;
+    title: string;
+    url: string;
+    snippet: string;
+    source: string;
 };
 
 export type AIAnalysisResult = {
@@ -171,6 +153,7 @@ export type CodeSuggestion = {
     label: string;
     llmPrompt?: string;
     severity?: string;
+    crossFileEvidence?: boolean;
     rankScore?: number;
     priorityStatus?: PriorityStatus;
     deliveryStatus?: DeliveryStatus;
@@ -191,8 +174,14 @@ export type CodeSuggestion = {
     createdAt?: string;
     updatedAt?: string;
     action?: string;
+
     isCommittable?: boolean;
-    validatedCode?: string;
+    validatedData?: {
+        code: string;
+        diff: string;
+        lineStart: number;
+        lineEnd: number;
+    };
 };
 
 export type FileChange = {
@@ -222,6 +211,7 @@ export type FileChange = {
         safeguard?: string;
     };
     patchWithLinesStr?: string;
+    astFormattedContent?: string;
 };
 
 export type FileChangeContext = {
@@ -252,6 +242,13 @@ export type CommentResult = {
     };
 };
 
+export type FallbackSuggestionsBySeverity = {
+    critical: Partial<CodeSuggestion>[];
+    high: Partial<CodeSuggestion>[];
+    medium: Partial<CodeSuggestion>[];
+    low: Partial<CodeSuggestion>[];
+};
+
 export type ReviewComment = {
     id: number;
     pullRequestReviewId: string;
@@ -264,14 +261,16 @@ export const reviewOptionsSchema = z.object({
     bug: z.boolean(),
     performance: z.boolean(),
     security: z.boolean(),
-    cross_file: z.boolean(),
+    cross_file: z.boolean().optional(), // Legacy — no longer shown in UI but kept for backward compat
+    business_logic: z.boolean().optional(),
 });
 
 export interface ReviewOptions {
     bug?: boolean;
     performance?: boolean;
     security?: boolean;
-    cross_file?: boolean;
+    cross_file?: boolean; // Legacy — no longer shown in UI
+    business_logic?: boolean;
 }
 
 export interface SummaryConfig {
@@ -305,29 +304,42 @@ export type ImplementedSuggestionsToAnalyze = {
 
 export type CodeReviewConfig = {
     ignorePaths: string[];
+    reviewMode?: 'fast' | 'normal' | 'deep';
     reviewOptions: ReviewOptions;
     ignoredTitleKeywords: string[];
     baseBranches: string[];
     automatedReviewActive: boolean;
+    showStatusFeedback?: boolean;
     reviewCadence: ReviewCadence;
     summary: SummaryConfig;
     languageResultPrompt: string;
     llmProvider?: LLMModelProvider;
     kodyRules?: Partial<IKodyRule>[];
+    kodyMemoryRules?: Partial<IKodyRule>[];
     suggestionControl?: SuggestionControlConfig;
     pullRequestApprovalActive: boolean;
     kodusConfigFileOverridesWebPreferences: boolean;
     isRequestChangesActive?: boolean;
     kodyRulesGeneratorEnabled?: boolean;
+    llmGeneratedMemoriesRequireApproval?: boolean;
     reviewModeConfig?: ReviewModeConfig;
     ideRulesSyncEnabled?: boolean;
     kodyFineTuningConfig?: KodyFineTuningConfig;
     configLevel?: ConfigLevel;
     directoryId?: string;
     directoryPath?: string;
+    directoryFolders?: Array<{ id: string; name: string; path: string }>;
     runOnDraft?: boolean;
     codeReviewVersion?: CodeReviewVersion;
     byokConfig?: BYOKConfig;
+    /**
+     * Optional override for the BYOK *main* model used to run code reviews.
+     * Empty string '' means "inherit": directory -> repository -> the main
+     * model defined in the BYOK settings page.
+     */
+    byokModel?: string;
+    /** @deprecated Reflection/verify was removed — it hurt recall more than it helped precision. */
+    enableReflection?: boolean;
     /**
      * Optional overrides for v2 prompts (categories and severity guidance only).
      * These influence only the v2 system prompt used during suggestion generation.

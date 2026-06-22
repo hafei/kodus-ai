@@ -13,6 +13,20 @@ function budget(
     return { type: 'budget', options: { min, default: defaultBudget } };
 }
 
+// Anthropic's API rejects thinking.budget_tokens < 1024, so Claude budget
+// models must floor at 1024 regardless of caller-provided value.
+function anthropicBudget(
+    defaultBudget: number = DEFAULT_REASONING_BUDGET,
+): ReasoningConfig {
+    return budget(defaultBudget, 1024);
+}
+
+function adaptive(
+    options: Array<'low' | 'medium' | 'high'> = ['low', 'medium', 'high'],
+): ReasoningConfig {
+    return { type: 'adaptive', options };
+}
+
 function level(
     options: Array<'low' | 'medium' | 'high'> = ['low', 'medium', 'high'],
 ): ReasoningConfig {
@@ -97,13 +111,14 @@ export const MODELS_WITH_REASONING = new Map<string, ReasoningConfig>([
     ['gemini-2.5-pro', budget()],
     ['gemini-2.5-flash', budget()],
     ['gemini-2.5-flash-lite', budget()],
+    ['gemini-3.1-flash-lite-preview', budget()],
 
-    // Anthropic Claude models - reasoning budget (numeric)
-    ['claude-opus-4-1-20250805', budget()],
-    ['claude-opus-4-20250514', budget()],
-    ['claude-sonnet-4-5-20250929', budget()],
-    ['claude-sonnet-4-20250514', budget()],
-    ['claude-3-7-sonnet-20250219', budget()],
+    // Anthropic Claude models - reasoning budget (numeric, min 1024)
+    ['claude-opus-4-1-20250805', anthropicBudget()],
+    ['claude-opus-4-20250514', anthropicBudget()],
+    ['claude-sonnet-4-5-20250929', anthropicBudget()],
+    ['claude-sonnet-4-20250514', anthropicBudget()],
+    ['claude-3-7-sonnet-20250219', anthropicBudget()],
 ]);
 
 // Models that do not support OpenAI Responses API JSON mode (response_format)
@@ -125,8 +140,13 @@ const MODELS_WITHOUT_JSON_MODE = new Set([
 const MODELS_WITHOUT_JSON_MODE_PATTERNS: RegExp[] = [
     /^gpt-5(\b|[-_@])/, // all gpt-5 models
     /glm/i, // all GLM models
-    /(?:azure.*claude|claude.*azure)/i, // only Azure-hosted Claude models
 ];
+
+// Check if model is Azure-hosted Claude (both "azure" and "claude" appear)
+function isAzureHostedClaude(model: string): boolean {
+    const lower = model.toLowerCase();
+    return lower.includes('azure') && lower.includes('claude');
+}
 
 const REASONING_PATTERN_RULES: Array<[RegExp, ReasoningConfig]> = [
     // OpenAI families (level)
@@ -140,13 +160,16 @@ const REASONING_PATTERN_RULES: Array<[RegExp, ReasoningConfig]> = [
     [/^gemini-2\.5-pro(\b|[-_@])/, budget()],
     [/^gemini-2\.5-flash(\b|[-_@])/, budget()],
     [/^gemini-2\.5-flash-lite(\b|[-_@])/, budget()],
+    [/^gemini-3\.1-flash-lite(\b|[-_@])/, budget()],
     // Gemini 2.0 thinking experimental
     [/^gemini-2\.0-.*thinking.*/i, budget()],
 
-    // Anthropic Claude - budget for recent families
-    [/^claude-opus-4(\b|[-_@])/, budget()],
-    [/^claude-sonnet-4(\b|[-_@])/, budget()],
-    [/^claude-3-7-sonnet(\b|[-_@])/, budget()],
+    // Anthropic Claude - adaptive for 4.7+, budget for older families
+    [/^claude-opus-4-7(\b|[-_@])/, adaptive()],
+    [/^claude-sonnet-4-7(\b|[-_@])/, adaptive()],
+    [/^claude-opus-4(\b|[-_@])/, anthropicBudget()],
+    [/^claude-sonnet-4(\b|[-_@])/, anthropicBudget()],
+    [/^claude-3-7-sonnet(\b|[-_@])/, anthropicBudget()],
 ];
 
 // Default max tokens by model (when provider allows setting output tokens)
@@ -155,6 +178,7 @@ export const DEFAULT_MAX_TOKENS_BY_MODEL = new Map<string, number>([
     ['gemini-2.5-pro', 60000],
     ['gemini-2.5-flash', 60000],
     ['gemini-2.5-flash-lite', 30000],
+    ['gemini-3.1-flash-lite-preview', 65536],
 
     // Google Gemini 2.0
     ['gemini-2.0-flash', 8000],
@@ -179,6 +203,7 @@ const DEFAULT_MAX_TOKENS_PATTERN_RULES: Array<[RegExp, number]> = [
     [/^gemini-2\.5-pro(\b|[-_@])/, 60000],
     [/^gemini-2\.5-flash(\b|[-_@])/, 60000],
     [/^gemini-2\.5-flash-lite(\b|[-_@])/, 30000],
+    [/^gemini-3\.1-flash-lite(\b|[-_@])/, 65536],
     [/^gemini-2\.0-flash(\b|[-_@])/, 8000],
 
     // Anthropic Claude 4.x
@@ -237,6 +262,11 @@ export function supportsJsonMode(model: string | undefined | null): boolean {
         return false;
     }
 
+    // Check Azure-hosted Claude separately (avoids ReDoS-vulnerable regex)
+    if (isAzureHostedClaude(model)) {
+        return false;
+    }
+
     for (const re of MODELS_WITHOUT_JSON_MODE_PATTERNS) {
         if (re.test(model)) {
             return false;
@@ -252,7 +282,7 @@ export function supportsReasoning(model: string): boolean {
 
 export function getReasoningType(
     model: string,
-): 'level' | 'budget' | undefined {
+): 'level' | 'budget' | 'adaptive' | undefined {
     return getModelCapabilities(model).reasoningConfig?.type;
 }
 

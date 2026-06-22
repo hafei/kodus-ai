@@ -234,7 +234,12 @@ export class IntegrationConfigRepository implements IIntegrationConfigRepository
                         status: true,
                     },
                 },
-                relations: ['integration', 'team', 'team.organization'],
+                relations: [
+                    'integration',
+                    'integration.authIntegration',
+                    'team',
+                    'team.organization',
+                ],
                 order: {
                     updatedAt: 'DESC',
                 },
@@ -387,6 +392,9 @@ export class IntegrationConfigRepository implements IIntegrationConfigRepository
             await this.integrationConfigRepository.delete(uuid);
         } catch (error) {
             console.log(error);
+            // Surface the failure so the integration delete that depends on
+            // these rows being gone doesn't proceed against a stale config.
+            throw error;
         }
     }
 }

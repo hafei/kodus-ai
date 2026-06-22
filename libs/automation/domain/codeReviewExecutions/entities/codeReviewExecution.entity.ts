@@ -11,7 +11,10 @@ export class CodeReviewExecutionEntity<T> implements Entity<
 
     private readonly _automationExecution: CodeReviewExecution<T>['automationExecution'];
     private readonly _status: CodeReviewExecution<T>['status'];
+    private readonly _stageName?: CodeReviewExecution<T>['stageName'];
     private readonly _message?: CodeReviewExecution<T>['message'];
+    private readonly _metadata?: CodeReviewExecution<T>['metadata'];
+    private readonly _finishedAt?: CodeReviewExecution<T>['finishedAt'];
 
     constructor(codeReviewExecution: CodeReviewExecution<T>) {
         this._uuid = codeReviewExecution.uuid;
@@ -19,7 +22,10 @@ export class CodeReviewExecutionEntity<T> implements Entity<
         this._updatedAt = codeReviewExecution.updatedAt;
         this._automationExecution = codeReviewExecution.automationExecution;
         this._status = codeReviewExecution.status;
+        this._stageName = codeReviewExecution.stageName;
         this._message = codeReviewExecution.message;
+        this._metadata = codeReviewExecution.metadata;
+        this._finishedAt = codeReviewExecution.finishedAt;
     }
 
     toObject(): CodeReviewExecution<T> {
@@ -29,7 +35,10 @@ export class CodeReviewExecutionEntity<T> implements Entity<
             updatedAt: this.updatedAt,
             automationExecution: this.automationExecution,
             status: this.status,
+            stageName: this.stageName,
             message: this.message,
+            metadata: this.metadata,
+            finishedAt: this.finishedAt,
         };
     }
 
@@ -63,7 +72,19 @@ export class CodeReviewExecutionEntity<T> implements Entity<
         return this._status;
     }
 
+    get stageName(): CodeReviewExecution<T>['stageName'] {
+        return this._stageName;
+    }
+
     get message(): CodeReviewExecution<T>['message'] {
         return this._message;
+    }
+
+    get metadata(): CodeReviewExecution<T>['metadata'] {
+        return this._metadata;
+    }
+
+    get finishedAt(): CodeReviewExecution<T>['finishedAt'] {
+        return this._finishedAt;
     }
 }

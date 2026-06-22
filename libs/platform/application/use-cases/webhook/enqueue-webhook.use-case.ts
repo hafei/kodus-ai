@@ -39,6 +39,7 @@ function normalizePlatformType(
         AZUREDEVOPS: PlatformType.AZURE_REPOS,
         AZURE_DEVOPS: PlatformType.AZURE_REPOS,
         AZURE_REPOSITORIES: PlatformType.AZURE_REPOS,
+        FORGEJO: PlatformType.FORGEJO,
     };
 
     const mapped = aliases[normalized];
@@ -64,16 +65,6 @@ export class EnqueueWebhookUseCase implements IUseCase {
             const correlationId =
                 input.correlationId || IdGenerator.correlationId();
 
-            this.logger.log({
-                message: 'Enqueuing raw webhook payload',
-                context: EnqueueWebhookUseCase.name,
-                metadata: {
-                    correlationId,
-                    platformType,
-                    event: input.event,
-                },
-            });
-
             await this.jobQueueService.enqueue({
                 correlationId,
                 workflowType: WorkflowType.WEBHOOK_PROCESSING,
@@ -87,16 +78,6 @@ export class EnqueueWebhookUseCase implements IUseCase {
                 priority: 0,
                 retryCount: 0,
                 maxRetries: 1,
-            });
-
-            this.logger.log({
-                message: 'Raw webhook payload enqueued successfully',
-                context: EnqueueWebhookUseCase.name,
-                metadata: {
-                    correlationId,
-                    platformType,
-                    event: input.event,
-                },
             });
         } catch (error) {
             this.logger.error({

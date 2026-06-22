@@ -2,9 +2,10 @@ import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatNovitaAI } from '@langchain/community/chat_models/novita';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Runnable } from '@langchain/core/runnables';
+import { ChatGoogle } from '@langchain/google-gauth';
 import { ChatVertexAI } from '@langchain/google-vertexai';
 import { ChatOpenAI } from '@langchain/openai';
-import { ChatGoogle } from '@langchain/google-gauth';
+import { LLM_MAX_RETRIES, LLM_TIMEOUT_MS } from './providerAdapters/types';
 
 type ChatAnthropicOptions = ConstructorParameters<typeof ChatAnthropic>[0] & {
     // Anthropic marks these as nullable which is incompatible with the others
@@ -55,6 +56,8 @@ export const getChatGPT = (options?: Partial<FactoryArgs>) => {
         streaming: finalOptions.streaming,
         verbose: finalOptions.verbose,
         callbacks: finalOptions.callbacks,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: LLM_MAX_RETRIES,
         configuration: {
             baseURL: finalOptions.baseURL ?? undefined,
         },
@@ -82,12 +85,28 @@ const getChatAnthropic = (options?: Partial<FactoryArgs>) => {
         model: finalOptions.model,
         apiKey: process.env.API_ANTHROPIC_API_KEY,
         temperature: finalOptions.temperature,
-        maxTokens: finalOptions.maxTokens,
+        ...(finalOptions.maxTokens && finalOptions.maxTokens > 0
+            ? { maxTokens: finalOptions.maxTokens }
+            : {}),
         callbacks: finalOptions.callbacks,
+        maxRetries: LLM_MAX_RETRIES,
+        clientOptions: {
+            timeout: LLM_TIMEOUT_MS,
+        },
     });
 };
 
 const getChatGemini = (options?: Partial<FactoryArgs>) => {
+    // Route to Vertex AI when configured via env (default: gemini)
+    const googleProvider = process.env.API_GOOGLE_AI_PROVIDER || 'gemini';
+    if (googleProvider === 'vertex' && process.env.API_VERTEX_AI_API_KEY) {
+        try {
+            return getChatVertexAI(options);
+        } catch {
+            // Vertex config failed, fall through to AI Studio
+        }
+    }
+
     const defaultOptions = {
         model: MODEL_STRATEGIES[LLMModelProvider.GEMINI_2_5_PRO].modelName,
         temperature: 0,
@@ -107,6 +126,18 @@ const getChatGemini = (options?: Partial<FactoryArgs>) => {
         ? { ...defaultOptions, ...options }
         : defaultOptions;
 
+    let maxReasoningTokens = finalOptions.maxReasoningTokens;
+    if (
+        finalOptions.maxTokens &&
+        maxReasoningTokens &&
+        maxReasoningTokens >= finalOptions.maxTokens
+    ) {
+        maxReasoningTokens = finalOptions.maxTokens - 1;
+        if (maxReasoningTokens < 0) {
+            maxReasoningTokens = undefined;
+        }
+    }
+
     return new ChatGoogle({
         model: finalOptions.model,
         apiKey: process.env.API_GOOGLE_AI_API_KEY,
@@ -115,11 +146,12 @@ const getChatGemini = (options?: Partial<FactoryArgs>) => {
         maxOutputTokens: finalOptions.maxTokens,
         verbose: finalOptions.verbose,
         callbacks: finalOptions.callbacks,
-        maxReasoningTokens: finalOptions.maxReasoningTokens,
+        maxReasoningTokens: maxReasoningTokens,
+        maxRetries: LLM_MAX_RETRIES,
     });
 };
 
-const getChatVertexAI = (options?: Partial<FactoryArgs>) => {
+export const getChatVertexAI = (options?: Partial<FactoryArgs>) => {
     const defaultOptions = {
         model: MODEL_STRATEGIES[LLMModelProvider.VERTEX_GEMINI_2_5_PRO]
             .modelName,
@@ -139,10 +171,25 @@ const getChatVertexAI = (options?: Partial<FactoryArgs>) => {
         ? { ...defaultOptions, ...options }
         : defaultOptions;
 
+    let maxReasoningTokens = finalOptions.maxReasoningTokens;
+    if (
+        finalOptions.maxTokens &&
+        maxReasoningTokens &&
+        maxReasoningTokens >= finalOptions.maxTokens
+    ) {
+        maxReasoningTokens = finalOptions.maxTokens - 1;
+        if (maxReasoningTokens < 0) {
+            maxReasoningTokens = undefined;
+        }
+    }
+
     const credentials = Buffer.from(
         process.env.API_VERTEX_AI_API_KEY || '',
         'base64',
     ).toString('utf-8');
+
+    // Support configurable location via environment variable (default: us-central1)
+    const location = process.env.API_VERTEX_AI_LOCATION || 'us-central1';
 
     return new ChatVertexAI({
         model: finalOptions.model,
@@ -152,12 +199,13 @@ const getChatVertexAI = (options?: Partial<FactoryArgs>) => {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
             projectId: JSON.parse(credentials).project_id,
         },
-        location: 'us-east5',
+        location,
         temperature: finalOptions.temperature,
         maxOutputTokens: finalOptions.maxTokens,
         verbose: finalOptions.verbose,
         callbacks: finalOptions.callbacks,
-        maxReasoningTokens: finalOptions.maxReasoningTokens,
+        maxReasoningTokens: maxReasoningTokens,
+        maxRetries: LLM_MAX_RETRIES,
     });
 };
 
@@ -187,6 +235,8 @@ const getNovitaAI = (options?: Partial<FactoryArgs>) => {
         temperature: finalOptions.temperature,
         maxTokens: finalOptions.maxTokens,
         callbacks: finalOptions.callbacks,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: LLM_MAX_RETRIES,
     });
 };
 
@@ -228,6 +278,8 @@ const getGroq = (options?: Partial<FactoryArgs>) => {
         streaming: finalOptions.streaming,
         verbose: finalOptions.verbose,
         callbacks: finalOptions.callbacks,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: LLM_MAX_RETRIES,
         configuration: {
             baseURL: finalOptions.baseURL ?? undefined,
         },
@@ -272,6 +324,8 @@ const getCerebras = (options?: Partial<FactoryArgs>) => {
         streaming: finalOptions.streaming,
         verbose: finalOptions.verbose,
         callbacks: finalOptions.callbacks,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: LLM_MAX_RETRIES,
         configuration: {
             baseURL: finalOptions.baseURL ?? undefined,
         },
@@ -281,16 +335,25 @@ export enum LLMModelProvider {
     OPENAI_GPT_4O = 'openai:gpt-4o',
     OPENAI_GPT_4O_MINI = 'openai:gpt-4o-mini',
     OPENAI_GPT_4_1 = 'openai:gpt-4.1',
+    OPENAI_GPT_5_1 = 'openai:gpt-5.1',
     OPENAI_GPT_O4_MINI = 'openai:o4-mini',
     CLAUDE_3_5_SONNET = 'anthropic:claude-3-5-sonnet-20241022',
+    CLAUDE_SONNET_4_5 = 'anthropic:claude-sonnet-4-5-20250929',
     GEMINI_2_0_FLASH = 'google:gemini-2.0-flash',
     GEMINI_2_5_PRO = 'google:gemini-2.5-pro',
     GEMINI_2_5_FLASH = 'google:gemini-2.5-flash',
     GEMINI_3_PRO_PREVIEW = 'google:gemini-3-pro-preview',
     GEMINI_3_FLASH_PREVIEW = 'google:gemini-3-flash-preview',
+    GEMINI_3_1_FLASH_LITE_PREVIEW = 'google:gemini-3.1-flash-lite-preview',
     VERTEX_GEMINI_2_0_FLASH = 'vertex:gemini-2.0-flash',
     VERTEX_GEMINI_2_5_PRO = 'vertex:gemini-2.5-pro',
     VERTEX_GEMINI_2_5_FLASH = 'vertex:gemini-2.5-flash',
+    /**
+     * @deprecated Non-functional on the legacy v2 engine: its factory
+     * (`getChatVertexAI` → langchain `ChatVertexAI`) only speaks the Gemini
+     * protocol, so a Claude model id never worked here. Use BYOK (v5) for
+     * Claude on Vertex, which routes via `@ai-sdk/google-vertex/anthropic`.
+     */
     VERTEX_CLAUDE_3_5_SONNET = 'vertex:claude-3-5-sonnet-v2@20241022',
     NOVITA_DEEPSEEK_V3 = 'novita:deepseek-v3',
     NOVITA_DEEPSEEK_V3_0324 = 'novita:deepseek-v3-0324',
@@ -332,6 +395,12 @@ export const MODEL_STRATEGIES: Record<LLMModelProvider, ModelStrategy> = {
         modelName: 'gpt-4.1',
         defaultMaxTokens: -1,
     },
+    [LLMModelProvider.OPENAI_GPT_5_1]: {
+        provider: 'openai',
+        factory: getChatGPT,
+        modelName: 'gpt-5.1',
+        defaultMaxTokens: -1,
+    },
     [LLMModelProvider.OPENAI_GPT_O4_MINI]: {
         provider: 'openai',
         factory: getChatGPT,
@@ -345,6 +414,12 @@ export const MODEL_STRATEGIES: Record<LLMModelProvider, ModelStrategy> = {
         factory: getChatAnthropic,
         modelName: 'claude-3-5-sonnet-20241022',
         defaultMaxTokens: -1,
+    },
+    [LLMModelProvider.CLAUDE_SONNET_4_5]: {
+        provider: 'anthropic',
+        factory: getChatAnthropic,
+        modelName: 'claude-sonnet-4-5-20250929',
+        defaultMaxTokens: 16384,
     },
 
     // Google Gemini
@@ -383,6 +458,14 @@ export const MODEL_STRATEGIES: Record<LLMModelProvider, ModelStrategy> = {
         factory: getChatGemini,
         modelName: 'gemini-3-flash-preview',
         defaultMaxTokens: 60000,
+        maxReasoningTokens: 15000,
+    },
+    [LLMModelProvider.GEMINI_3_1_FLASH_LITE_PREVIEW]: {
+        provider: 'google',
+        factory: getChatGemini,
+        modelName: 'gemini-3.1-flash-lite-preview',
+        defaultMaxTokens: 65536,
+        inputMaxTokens: 1048576,
         maxReasoningTokens: 15000,
     },
     // Vertex AI

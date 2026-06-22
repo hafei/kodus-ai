@@ -54,34 +54,39 @@ export const SUPPORTED_LANGUAGES: Record<SupportedLanguage, LanguageConfig> = {
     },
 };
 
-export interface ASTValidateCodeItem {
+export interface SyntaxCheckItem {
     id: string;
     encodedData: string;
     language?: string;
     filePath: string;
-    diff?: string;
-    suggestion?: string;
 }
 
-export interface ASTValidateCodeRequest {
-    files: ASTValidateCodeItem[];
+export interface SyntaxCheckRequest {
+    files: SyntaxCheckItem[];
 }
 
-export enum ASTValidationStatus {
+export enum SyntaxValidationStatus {
     VALID = 'VALID',
     INVALID_SYNTAX = 'INVALID_SYNTAX',
     UNSUPPORTED_LANGUAGE = 'UNSUPPORTED_LANGUAGE',
     ERROR = 'ERROR',
 }
 
-export interface ASTValidateCodeResult {
+export interface SyntaxCheckResult {
     id: string;
     isValid: boolean;
-    status: ASTValidationStatus;
+    status: SyntaxValidationStatus;
     error?: string;
     filePath?: string;
 }
 
-export interface ASTValidateCodeResponse {
-    results: ASTValidateCodeResult[];
+export interface SyntaxCheckResponse {
+    results: SyntaxCheckResult[];
+}
+
+export interface ValidationCandidate extends SyntaxCheckItem {
+    diff: string;
+    suggestion: string;
+    newLineStart: number;
+    newLineEnd: number;
 }

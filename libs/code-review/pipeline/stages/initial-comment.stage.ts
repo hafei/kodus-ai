@@ -1,5 +1,6 @@
 import { BasePipelineStage } from '@libs/core/infrastructure/pipeline/abstracts/base-stage.abstract';
 import { Inject, Injectable } from '@nestjs/common';
+import { StageVisibility } from '@libs/core/infrastructure/pipeline/enums/stage-visibility.enum';
 import {
     COMMENT_MANAGER_SERVICE_TOKEN,
     ICommentManagerService,
@@ -12,6 +13,8 @@ import { CodeReviewPipelineContext } from '../context/code-review-pipeline.conte
 @Injectable()
 export class InitialCommentStage extends BasePipelineStage<CodeReviewPipelineContext> {
     stageName = 'InitialCommentStage';
+    readonly label = 'Preparing Initial Feedback';
+    readonly visibility = StageVisibility.PRIMARY;
 
     private readonly logger = createLogger(InitialCommentStage.name);
 

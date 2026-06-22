@@ -5,6 +5,7 @@ export enum AutomationStatus {
 
     SUCCESS = 'success',
     ERROR = 'error',
+    PARTIAL_ERROR = 'partial_error',
     SKIPPED = 'skipped',
 }
 
@@ -26,4 +27,6 @@ export enum AutomationMessage {
     CONFIG_VALIDATION_ERROR = 'Error during configuration validation.',
     NO_NEW_COMMITS_SINCE_LAST = 'No new commits since the last run.',
     ONLY_MERGE_COMMITS_SINCE_LAST = 'Only merge commits since the last run.',
+    USER_IGNORED = 'User is ignored by configuration.',
+    VALIDATION_FAILED = 'Prerequisites validation failed.',
 }

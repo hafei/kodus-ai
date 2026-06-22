@@ -73,10 +73,12 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
     async processClosedPr(params: contextToGenerateIssues): Promise<void> {
         try {
             // Validação centralizada de permissões
+            const userGitId = params.pullRequest?.user?.id?.toString();
+
             const validationResult =
                 await this.permissionValidationService.validateExecutionPermissions(
                     params.organizationAndTeamData,
-                    undefined, // sem validação de usuário específico
+                    userGitId,
                     KodyIssuesManagementService.name,
                 );
 
@@ -363,7 +365,9 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
             const updatePromises: Promise<any>[] = [];
 
             for (const file of files) {
-                const currentCode = prChangedFilesMap.get(file.path)?.fileContent;
+                const currentCode = prChangedFilesMap.get(
+                    file.path,
+                )?.fileContent;
 
                 // file is already the current item from the loop, no need to find it again
                 const fileData = file;
@@ -498,9 +502,7 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
         }
 
         // PERF: Create lookup map for O(1) access instead of O(n) find per iteration
-        const suggestionsMap = new Map(
-            newSuggestions.map((s) => [s.id, s]),
-        );
+        const suggestionsMap = new Map(newSuggestions.map((s) => [s.id, s]));
 
         const unmatchedSuggestions: Partial<CodeSuggestion>[] = [];
 
@@ -568,6 +570,7 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
             'category',
             'organizationId',
             'filePath',
+            'status',
         ];
         exactMatchFields.forEach((field) => {
             if (filters[field]) {
@@ -649,8 +652,9 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
                         );
                     }
 
-                    const suggestionsMap =
-                        suggestionsCache.get(contributingSuggestion.prNumber);
+                    const suggestionsMap = suggestionsCache.get(
+                        contributingSuggestion.prNumber,
+                    );
 
                     const fullSuggestion = suggestionsMap?.get(
                         contributingSuggestion.id,
@@ -716,6 +720,10 @@ export class KodyIssuesManagementService implements IKodyIssuesManagementService
     ): CodeSuggestion[] {
         if (!issuesConfigValue) {
             return allSuggestions;
+        }
+
+        if (typeof issuesConfigValue === 'boolean') {
+            return issuesConfigValue ? allSuggestions : [];
         }
 
         const { severityFilters, sourceFilters } = issuesConfigValue;
